@@ -9,9 +9,19 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@react-pdf/renderer": "^4.3.2",
+    "clsx": "^2.1.1",
+    "dotenv": "^17.2.3",
+    "firebase": "^12.7.0",
+    "firebase-admin": "^13.6.0",
+    "framer-motion": "^12.26.1",
+    "lucide-react": "^0.468.0",
     "next": "16.1.1",
+    "openai": "^6.16.0",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "tailwind-merge": "^2.6.0",
+    "zod": "^4.3.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
