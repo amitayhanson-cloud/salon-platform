@@ -35,7 +35,11 @@ function tryBuildServiceAccountFromSplitEnv(): any | null {
 
   if (!projectId || !clientEmail || !privateKeyRaw) return null;
 
-  const privateKey = privateKeyRaw.replace(/\\n/g, "\n");
+  const privateKey = privateKeyRaw
+  .replace(/\\n/g, "\n")
+  .replace(/\r\n/g, "\n")
+  .trim();
+
 
   return {
     project_id: projectId,
