@@ -6,7 +6,8 @@ import { query, where, orderBy, onSnapshot, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
 import { bookingsCollection } from "@/lib/firestorePaths";
 import { ChemicalCard } from "./ChemicalCard";
-import { AdminTabs } from "@/components/ui/AdminTabs";
+import AdminTabs from "@/components/ui/AdminTabs";
+
 
 interface Client {
   id: string; // phone number (unique identifier)

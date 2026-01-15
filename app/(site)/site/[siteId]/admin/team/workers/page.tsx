@@ -16,7 +16,8 @@ import {
   workerDoc,
 } from "@/lib/firestorePaths";
 import { subscribeServices } from "@/lib/firestoreServices";
-import { AdminTabs } from "@/components/ui/AdminTabs";
+import AdminTabs from "@/components/ui/AdminTabs";
+
 import type { Service } from "@/types/service";
 import type { OpeningHours } from "@/types/booking";
 
@@ -482,7 +483,7 @@ export default function WorkersPage() {
                       { key: "services", label: "שירותים" },
                     ]}
                     activeKey={activeWorkerTab}
-                    onChange={(key) => setActiveWorkerTab(key as WorkerTabType)}
+                    onChange={setActiveWorkerTab}
                   />
 
                   {/* Tab Content */}

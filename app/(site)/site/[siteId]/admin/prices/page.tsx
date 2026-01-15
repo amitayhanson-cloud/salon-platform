@@ -18,7 +18,8 @@ import {
   deleteService,
 } from "@/lib/firestoreServices";
 import { AccordionItem } from "@/components/admin/Accordion";
-import { AdminTabs } from "@/components/ui/AdminTabs";
+import AdminTabs from "@/components/ui/AdminTabs";
+
 
 export default function PricesPage() {
   const params = useParams();
@@ -349,7 +350,7 @@ export default function PricesPage() {
               { key: "pricing", label: "מחירים" },
             ]}
             activeKey={activeTab}
-            onChange={(key) => setActiveTab(key as PricesTabType)}
+            onChange={setActiveTab}
           />
 
           {/* Tab Content */}

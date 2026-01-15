@@ -9,7 +9,13 @@ interface AdminTabsProps<T extends string> {
   className?: string;
 }
 
-export function AdminTabs<T extends string>({ tabs, activeKey, onChange, className }: AdminTabsProps<T>) {
+export default function AdminTabs<T extends string>({
+    tabs,
+    activeKey,
+    onChange,
+    className,
+  }: AdminTabsProps<T>) {
+  
   return (
     <div className={`border-b border-slate-200 mb-6 ${className || ""}`}>
       <div className="flex gap-4">
