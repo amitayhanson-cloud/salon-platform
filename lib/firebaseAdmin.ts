@@ -22,7 +22,7 @@ function tryParseServiceAccountFromEnv(): any | null {
 
     return obj;
   } catch {
-    // Don’t crash here. Fall back to other strategies.
+    // Don't crash here. Fall back to other strategies.
     console.warn("FIREBASE_SERVICE_ACCOUNT_JSON is set but not usable, falling back.");
     return null;
   }
@@ -36,10 +36,9 @@ function tryBuildServiceAccountFromSplitEnv(): any | null {
   if (!projectId || !clientEmail || !privateKeyRaw) return null;
 
   const privateKey = privateKeyRaw
-  .replace(/\\n/g, "\n")
-  .replace(/\r\n/g, "\n")
-  .trim();
-
+    .replace(/\\n/g, "\n")
+    .replace(/\r\n/g, "\n")
+    .trim();
 
   return {
     project_id: projectId,
@@ -79,19 +78,33 @@ function getServiceAccount(): any {
   );
 }
 
-const serviceAccount = getServiceAccount();
+// Lazy initialization - only initialize when getAdmin() or getAdminDb() is called
+let _admin: typeof admin | null = null;
 
-if (!serviceAccount) {
-  throw new Error(
-    "No Firebase credentials found. Set FIREBASE_SERVICE_ACCOUNT_JSON, or split env vars, or put the JSON file in the project root."
-  );
+export function getAdmin(): typeof admin {
+  if (_admin) return _admin;
+
+  const serviceAccount = getServiceAccount();
+
+  if (!serviceAccount) {
+    throw new Error(
+      "No Firebase credentials found. Set FIREBASE_SERVICE_ACCOUNT_JSON, or split env vars, or put the JSON file in the project root."
+    );
+  }
+
+  if (admin.apps.length === 0) {
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+    });
+  }
+
+  _admin = admin;
+  return _admin;
 }
 
-if (admin.apps.length === 0) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
+export function getAdminDb() {
+  return getAdmin().firestore();
 }
 
-export const adminDb = admin.firestore();
+// For backward compatibility, export default admin (but don't initialize at import time)
 export default admin;

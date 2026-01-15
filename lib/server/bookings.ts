@@ -1,4 +1,4 @@
-import { adminDb } from "@/lib/firebaseAdmin";
+import { getAdminDb } from "@/lib/firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
 
 export type BookingDTO = {
@@ -18,6 +18,7 @@ export type BookingDTO = {
  * Get bookings collection reference for a site
  */
 export function bookingsCol(siteId: string) {
+  const adminDb = getAdminDb();
   return adminDb.collection("sites").doc(siteId).collection("bookings");
 }
 

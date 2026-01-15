@@ -1,7 +1,9 @@
+export const runtime = "nodejs";
+
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import OpenAI from "openai";
-import { adminDb } from "@/lib/firebaseAdmin";
+import { getAdminDb } from "@/lib/firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
 
 const requestSchema = z.object({
@@ -17,6 +19,7 @@ const requestSchema = z.object({
 // Worker lookup helpers
 async function listWorkers(siteId: string) {
   try {
+    const adminDb = getAdminDb();
     // Get workers from workers collection
     const workersSnapshot = await adminDb
       .collection("sites")
@@ -149,6 +152,7 @@ async function getBookingsForDayAnyStorage(
 ): Promise<BookingDTO[]> {
   console.log("[getBookingsForDayAnyStorage] querying", { siteId, dateISO });
 
+  const adminDb = getAdminDb();
   const allBookings: BookingDTO[] = [];
   const seenIds = new Set<string>();
 
@@ -496,6 +500,7 @@ async function createBooking(
       updatedAt: Timestamp.now(),
     };
 
+    const adminDb = getAdminDb();
     const docRef = await adminDb
       .collection("sites")
       .doc(siteId)
@@ -526,6 +531,7 @@ async function getRevenueThisMonth(siteId: string, monthISO?: string) {
   const endOfMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0, 23, 59, 59, 999);
 
   try {
+    const adminDb = getAdminDb();
     const snapshot = await adminDb
       .collection("sites")
       .doc(siteId)
@@ -568,6 +574,7 @@ async function getRevenueThisMonth(siteId: string, monthISO?: string) {
 
 async function loadSiteContext(siteId: string) {
   try {
+    const adminDb = getAdminDb();
     // Load site config
     const siteDoc = await adminDb.collection("sites").doc(siteId).get();
     const siteData = siteDoc.exists ? siteDoc.data() : null;
@@ -650,6 +657,7 @@ async function loadSiteContext(siteId: string) {
 
 async function validateWorkerBelongsToSite(siteId: string, workerId: string): Promise<boolean> {
   try {
+    const adminDb = getAdminDb();
     const workerDoc = await adminDb
       .collection("sites")
       .doc(siteId)

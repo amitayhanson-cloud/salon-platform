@@ -1,4 +1,4 @@
-import { adminDb } from "./firebaseAdmin";
+import { getAdminDb } from "./firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
 
 export interface BookingData {
@@ -38,6 +38,7 @@ export async function listBookingsForDate(
       endOfDay: endOfDay.toISOString(),
     });
 
+    const adminDb = getAdminDb();
     const bookingsRef = adminDb
       .collection("sites")
       .doc(siteId)
