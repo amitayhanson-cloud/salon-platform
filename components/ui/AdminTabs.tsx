@@ -1,14 +1,17 @@
 "use client";
 
-interface AdminTabsProps {
-  tabs: Array<{ key: string; label: string }>;
-  activeKey: string;
-  onChange: (key: string) => void;
+type TabDef<T extends string> = { key: T; label: string };
+
+interface AdminTabsProps<T extends string> {
+  tabs: TabDef<T>[];
+  activeKey: T;
+  onChange: (key: T) => void;
+  className?: string;
 }
 
-export function AdminTabs({ tabs, activeKey, onChange }: AdminTabsProps) {
+export function AdminTabs<T extends string>({ tabs, activeKey, onChange, className }: AdminTabsProps<T>) {
   return (
-    <div className="border-b border-slate-200 mb-6">
+    <div className={`border-b border-slate-200 mb-6 ${className || ""}`}>
       <div className="flex gap-4">
         {tabs.map((tab) => (
           <button
