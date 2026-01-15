@@ -26,14 +26,12 @@ import {
 import type { BookingSettings } from "@/types/bookingSettings";
 import { defaultBookingSettings } from "@/types/bookingSettings";
 import { defaultThemeColors } from "@/types/siteConfig";
+import { subscribeServices } from "@/lib/firestoreServices";
+import type { Service } from "@/types/service";
+import { subscribePricingItems } from "@/lib/firestorePricing";
+import type { PricingItem } from "@/types/pricingItem";
 
 type BookingStep = 1 | 2 | 3 | 4 | 5 | 6; // 6 = success
-
-interface ServiceOption {
-  id: string;
-  name: string;
-  price: number;
-}
 
 export default function BookingPage() {
   const params = useParams();
@@ -44,9 +42,13 @@ export default function BookingPage() {
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<BookingStep>(1);
   
+  // Services and pricing items from Firestore
+  const [services, setServices] = useState<Service[]>([]);
+  const [pricingItems, setPricingItems] = useState<PricingItem[]>([]);
+  
   // Booking settings from Firestore
   const [bookingSettings, setBookingSettings] = useState<BookingSettings>(defaultBookingSettings);
-  const [workers, setWorkers] = useState<Array<{ id: string; name: string; role?: string }>>([]);
+  const [workers, setWorkers] = useState<Array<{ id: string; name: string; role?: string; services?: string[] }>>([]);
   const [workersLoading, setWorkersLoading] = useState<boolean>(true);
   const [workersError, setWorkersError] = useState<string | null>(null);
   
@@ -54,7 +56,8 @@ export default function BookingPage() {
   const [bookingsForDate, setBookingsForDate] = useState<Array<{ workerId: string | null; time: string; status: string }>>([]);
 
   // Booking form state
-  const [selectedService, setSelectedService] = useState<ServiceOption | null>(null);
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [selectedPricingItem, setSelectedPricingItem] = useState<PricingItem | null>(null);
   const [selectedWorker, setSelectedWorker] = useState<{ id: string; name: string } | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string>("");
@@ -117,6 +120,53 @@ export default function BookingPage() {
     };
   }, [siteId]);
 
+  // Load services from Firestore (same source as Prices page)
+  useEffect(() => {
+    if (!siteId) return;
+
+    const unsubscribeServices = subscribeServices(
+      siteId,
+      (svcs) => {
+        // Only show active services
+        const activeServices = svcs.filter((s) => s.active !== false);
+        setServices(activeServices);
+      },
+      (err) => {
+        console.error("[Booking] Failed to load services", err);
+        setServices([]);
+      }
+    );
+
+    return () => {
+      unsubscribeServices();
+    };
+  }, [siteId]);
+
+  // Load pricing items from Firestore
+  useEffect(() => {
+    if (!siteId) return;
+
+    const unsubscribePricing = subscribePricingItems(
+      siteId,
+      (items) => {
+        // Filter out items without serviceId
+        const validItems = items.filter((item) => {
+          const serviceId = item.serviceId || item.service;
+          return !!serviceId;
+        });
+        setPricingItems(validItems);
+      },
+      (err) => {
+        console.error("[Booking] Failed to load pricing items", err);
+        setPricingItems([]);
+      }
+    );
+
+    return () => {
+      unsubscribePricing();
+    };
+  }, [siteId]);
+
   // Load booking settings and workers (only if booking is enabled)
   useEffect(() => {
     if (!siteId || !db || typeof window === "undefined") return;
@@ -151,7 +201,7 @@ export default function BookingPage() {
     const workersUnsubscribe = onSnapshot(
       workersQuery,
       (snapshot) => {
-        const workersList: Array<{ id: string; name: string; role?: string }> = [];
+        const workersList: Array<{ id: string; name: string; role?: string; services?: string[] }> = [];
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
           if (data.active !== false) {
@@ -159,6 +209,7 @@ export default function BookingPage() {
               id: docSnap.id,
               name: data.name || "",
               role: data.role,
+              services: data.services || [], // Include services array
             });
           }
         });
@@ -217,34 +268,81 @@ export default function BookingPage() {
     return () => unsubscribe();
   }, [siteId, selectedDate]);
 
-  // Convert services from config to ServiceOption format
-  // Services are now string[] format, with prices in servicePricing
-  const servicePricing = config?.servicePricing || {};
-  const serviceOptions: ServiceOption[] =
-    (config?.services || []).map((serviceName, index) => {
-      // Handle both string[] format (new) and ServiceItem[] format (backwards compatibility)
-      const name = typeof serviceName === 'string' ? serviceName : (serviceName as any).name || '';
-      const price = servicePricing[name] ?? (typeof serviceName === 'object' ? ((serviceName as any).price || 0) : 0);
-      // Generate stable ID for service
-      const id = typeof serviceName === 'string' 
-        ? name.replace(/\s+/g, '-').toLowerCase()
-        : (serviceName as any).id || `service-${index}`;
-      return {
-        id: id,
-        name: name,
-        price: price,
-      };
-    }).filter(s => s.name.trim()) || [];
+  // Get pricing items for selected service
+  const pricingItemsForService = selectedService
+    ? pricingItems.filter((item) => {
+        const itemServiceId = item.serviceId || item.service;
+        return itemServiceId === selectedService.name;
+      })
+    : [];
+
+  // Get services that have pricing items (only show services with pricing options)
+  const servicesWithPricing = services.filter((service) => {
+    return pricingItems.some((item) => {
+      const itemServiceId = item.serviceId || item.service;
+      return itemServiceId === service.name;
+    });
+  });
 
   const availableDates = getNext14Days();
+
+  // Filter eligible workers based on selected service
+  const eligibleWorkers = (() => {
+    if (!selectedService) {
+      console.log("[Booking] No service selected, no eligible workers");
+      return [];
+    }
+    const serviceId = selectedService.name; // Service name is the ID
+    
+    const filtered = workers.filter((worker) => {
+      // If worker has no services set, don't show them
+      if (!Array.isArray(worker.services) || worker.services.length === 0) {
+        console.log(`[Booking] Worker ${worker.name}: no services set, excluding`);
+        return false;
+      }
+      // Check if worker.services includes the serviceId (service name)
+      const isEligible = worker.services.includes(serviceId);
+      console.log(`[Booking] Worker ${worker.name}: services=${JSON.stringify(worker.services)}, serviceId="${serviceId}", eligible=${isEligible}`);
+      return isEligible;
+    });
+    
+    console.log(`[Booking] Service "${serviceId}" - Total workers: ${workers.length}, Eligible: ${filtered.length}`);
+    return filtered;
+  })();
+
+  // Reset worker and pricing item selection when service changes
+  useEffect(() => {
+    if (selectedService) {
+      // Reset pricing item if it doesn't belong to the selected service
+      if (selectedPricingItem) {
+        const itemServiceId = selectedPricingItem.serviceId || selectedPricingItem.service;
+        if (itemServiceId !== selectedService.name) {
+          setSelectedPricingItem(null);
+        }
+      }
+      // Reset worker if not eligible
+      if (selectedWorker) {
+        const isEligible = eligibleWorkers.some((w) => w.id === selectedWorker.id);
+        if (!isEligible) {
+          console.log("[Booking] Current worker not eligible for service, resetting selection");
+          setSelectedWorker(null);
+        }
+      }
+    } else {
+      // Reset both if service is deselected
+      setSelectedPricingItem(null);
+    }
+  }, [selectedService, eligibleWorkers, selectedWorker, selectedPricingItem]);
 
   const isStepValid = (): boolean => {
     switch (step) {
       case 1:
-        return selectedService !== null;
+        // Service and pricing item must be selected
+        return selectedService !== null && selectedPricingItem !== null;
       case 2:
-        // Worker selection is optional (can be null)
-        return true;
+        // Worker selection is optional, but we need at least one eligible worker available
+        // If no eligible workers, disable next step
+        return eligibleWorkers.length > 0;
       case 3:
         return selectedDate !== null;
       case 4:
@@ -272,7 +370,7 @@ export default function BookingPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
-    if (!isStepValid() || !selectedService || !selectedDate || !selectedTime) {
+    if (!isStepValid() || !selectedService || !selectedPricingItem || !selectedDate || !selectedTime) {
       return;
     }
 
@@ -288,18 +386,24 @@ export default function BookingPage() {
       const bookingDate = ymdLocal(selectedDate);
       console.log("[BookingSubmit] date:", bookingDate, "time:", selectedTime);
       
-      await saveBooking(siteId, {
-        serviceId: selectedService.id,
-        serviceName: selectedService.name,
-        workerId: selectedWorker?.id || null,
-        workerName: selectedWorker?.name || null,
-        date: bookingDate,
-        time: selectedTime,
-        name: clientName.trim(),
-        phone: clientPhone.trim(),
-        note: clientNote.trim() || undefined,
-        createdAt: new Date().toISOString(),
-      });
+      await saveBooking(
+        siteId,
+        {
+          serviceId: selectedService.name, // Use service name as ID
+          serviceName: selectedService.name,
+          serviceType: selectedPricingItem.type || null, // Include type if selected
+          pricingItemId: selectedPricingItem.id || null, // Include pricing item ID
+          workerId: selectedWorker?.id || null,
+          workerName: selectedWorker?.name || null,
+          date: bookingDate,
+          time: selectedTime,
+          name: clientName.trim(),
+          phone: clientPhone.trim(),
+          note: clientNote.trim() || undefined,
+          createdAt: new Date().toISOString(),
+        },
+        selectedPricingItem // Pass pricing item for duration calculation
+      );
       setStep(6); // Show success
     } catch (err) {
       console.error("Failed to save booking", err);
@@ -618,50 +722,115 @@ export default function BookingPage() {
 
         {/* Step content */}
         <div className="rounded-3xl shadow-lg p-6 sm:p-8" style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)", borderWidth: "1px" }}>
-          {/* Step 1: Service selection */}
+          {/* Step 1: Service and pricing selection */}
           {step === 1 && (
             <div className="space-y-4">
               <h2 className="text-xl font-bold mb-4 text-right" style={{ color: "var(--text)" }}>
-                בחרו שירות
+                בחרו שירות ואפשרות מחיר
               </h2>
-              <div className="space-y-3">
-                {serviceOptions.length === 0 ? (
-                  <p className="text-sm text-right" style={{ color: "var(--muted)" }}>
-                    אין שירותים זמינים כרגע
+              
+              {servicesWithPricing.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-sm text-right mb-2" style={{ color: "var(--muted)" }}>
+                    אין אפשרויות הזמנה אונליין זמינות כרגע
                   </p>
-                ) : (
-                  serviceOptions.map((service) => (
-                    <button
-                      key={service.id}
-                      type="button"
-                      onClick={() => setSelectedService(service)}
-                      className="w-full text-right p-4 rounded-2xl border-2 transition-all hover:opacity-90"
-                      style={{
-                        borderColor: selectedService?.id === service.id ? "var(--primary)" : "var(--border)",
-                        backgroundColor: selectedService?.id === service.id ? "var(--bg)" : "var(--surface)",
-                      }}
-                    >
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <h3 className="font-semibold mb-1" style={{ color: "var(--text)" }}>
-                            {service.name}
-                          </h3>
-                          {service.price > 0 && (
-                            <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-                              החל מ־₪{service.price}
-                            </p>
-                          )}
-                        </div>
-                        {service.price > 0 && (
-                          <span className="text-lg font-bold" style={{ color: "var(--text)" }}>
-                            החל מ־₪{service.price}
-                          </span>
+                  <p className="text-xs text-right" style={{ color: "var(--muted)" }}>
+                    אנא הוסף שירותים ומחירים בעמוד המחירון
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {servicesWithPricing.map((service) => {
+                    const servicePricingItems = pricingItems.filter((item) => {
+                      const itemServiceId = item.serviceId || item.service;
+                      return itemServiceId === service.name;
+                    });
+                    
+                    const isServiceSelected = selectedService?.id === service.id;
+                    
+                    return (
+                      <div key={service.id} className="space-y-3">
+                        {/* Service Header */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isServiceSelected) {
+                              setSelectedService(null);
+                              setSelectedPricingItem(null);
+                            } else {
+                              setSelectedService(service);
+                              setSelectedPricingItem(null);
+                            }
+                          }}
+                          className="w-full text-right p-4 rounded-2xl border-2 transition-all hover:opacity-90"
+                          style={{
+                            borderColor: isServiceSelected ? "var(--primary)" : "var(--border)",
+                            backgroundColor: isServiceSelected ? "var(--bg)" : "var(--surface)",
+                          }}
+                        >
+                          <div className="flex justify-between items-center">
+                            <h3 className="font-semibold text-lg" style={{ color: "var(--text)" }}>
+                              {service.name}
+                            </h3>
+                            <span className="text-sm" style={{ color: "var(--muted)" }}>
+                              {servicePricingItems.length} אפשרויות
+                            </span>
+                          </div>
+                        </button>
+                        
+                        {/* Pricing Options for this service */}
+                        {isServiceSelected && servicePricingItems.length > 0 && (
+                          <div className="pr-4 space-y-2">
+                            {servicePricingItems.map((item) => {
+                              const isSelected = selectedPricingItem?.id === item.id;
+                              const displayName = item.type && item.type.trim() 
+                                ? `${service.name} - ${item.type}`
+                                : service.name;
+                              const displayPrice = item.priceRangeMin && item.priceRangeMax
+                                ? `₪${item.priceRangeMin}-${item.priceRangeMax}`
+                                : item.price
+                                ? `₪${item.price}`
+                                : "מחיר לפי בקשה";
+                              const displayDuration = item.durationMinMinutes === item.durationMaxMinutes
+                                ? `${item.durationMinMinutes} דק'`
+                                : `${item.durationMinMinutes}-${item.durationMaxMinutes} דק'`;
+                              
+                              return (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  onClick={() => setSelectedPricingItem(item)}
+                                  className="w-full text-right p-3 rounded-xl border transition-all hover:opacity-90"
+                                  style={{
+                                    borderColor: isSelected ? "var(--primary)" : "var(--border)",
+                                    backgroundColor: isSelected ? "var(--bg)" : "var(--surface)",
+                                  }}
+                                >
+                                  <div className="flex justify-between items-start">
+                                    <div className="text-right">
+                                      <h4 className="font-medium mb-1" style={{ color: "var(--text)" }}>
+                                        {displayName}
+                                      </h4>
+                                      <div className="flex gap-3 text-xs" style={{ color: "var(--muted)" }}>
+                                        <span>{displayPrice}</span>
+                                        <span>•</span>
+                                        <span>{displayDuration}</span>
+                                      </div>
+                                    </div>
+                                    {isSelected && (
+                                      <span className="text-lg">✓</span>
+                                    )}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
                         )}
                       </div>
-                    </button>
-                  ))
-                )}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -681,48 +850,71 @@ export default function BookingPage() {
                   <div className="p-3 border rounded-xl text-right" style={{ backgroundColor: "#fef2f2", borderColor: "#fecaca" }}>
                     <p className="text-sm" style={{ color: "#991b1b" }}>{workersError}</p>
                   </div>
-                ) : workers.length === 0 ? (
-                  <div className="space-y-4 text-center">
-                    <p className="text-sm text-right" style={{ color: "var(--muted)" }}>
-                      אין עובדים במערכת עדיין
+                ) : eligibleWorkers.length === 0 ? (
+                  <div className="p-4 border rounded-xl text-right" style={{ backgroundColor: "#fef2f2", borderColor: "#fecaca" }}>
+                    <p className="text-sm font-semibold mb-2" style={{ color: "#991b1b" }}>
+                      אין עובדים זמינים לשירות זה
                     </p>
-                    <Link
-                      href={`/site/${siteId}/admin/bookings`}
-                      className="inline-block px-6 py-3 font-semibold rounded-lg transition-colors hover:opacity-90"
-                      style={{ backgroundColor: "var(--primary)", color: "var(--primaryText)" }}
-                    >
-                      הוסף עובדים בפאנל ניהול
-                    </Link>
+                    <p className="text-xs" style={{ color: "#991b1b" }}>
+                      אנא פנה למנהל המערכת כדי להגדיר עובדים לשירות "{selectedService?.name}"
+                    </p>
                   </div>
                 ) : (
-                  workers.map((worker) => (
+                  <>
+                    {/* "No preference" option */}
                     <button
-                      key={worker.id}
                       type="button"
-                      onClick={() =>
-                        setSelectedWorker({ id: worker.id, name: worker.name })
-                      }
+                      onClick={() => setSelectedWorker(null)}
                       className="w-full text-right p-4 rounded-2xl border-2 transition-all hover:opacity-90"
                       style={{
-                        borderColor: selectedWorker?.id === worker.id ? "var(--primary)" : "var(--border)",
-                        backgroundColor: selectedWorker?.id === worker.id ? "var(--bg)" : "var(--surface)",
+                        borderColor: selectedWorker === null ? "var(--primary)" : "var(--border)",
+                        backgroundColor: selectedWorker === null ? "var(--bg)" : "var(--surface)",
                       }}
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-full flex items-center justify-center font-semibold" style={{ backgroundColor: "var(--border)", color: "var(--text)" }}>
-                          {worker.name[0]}
+                          ?
                         </div>
                         <div className="flex-1">
                           <h3 className="font-semibold mb-1" style={{ color: "var(--text)" }}>
-                            {worker.name}
+                            ללא העדפה
                           </h3>
-                          {worker.role && (
-                            <p className="text-xs" style={{ color: "var(--muted)" }}>{worker.role}</p>
-                          )}
+                          <p className="text-xs" style={{ color: "var(--muted)" }}>
+                            כל עובד זמין
+                          </p>
                         </div>
                       </div>
                     </button>
-                  ))
+                    {/* Eligible workers */}
+                    {eligibleWorkers.map((worker) => (
+                      <button
+                        key={worker.id}
+                        type="button"
+                        onClick={() =>
+                          setSelectedWorker({ id: worker.id, name: worker.name })
+                        }
+                        className="w-full text-right p-4 rounded-2xl border-2 transition-all hover:opacity-90"
+                        style={{
+                          borderColor: selectedWorker?.id === worker.id ? "var(--primary)" : "var(--border)",
+                          backgroundColor: selectedWorker?.id === worker.id ? "var(--bg)" : "var(--surface)",
+                        }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-full flex items-center justify-center font-semibold" style={{ backgroundColor: "var(--border)", color: "var(--text)" }}>
+                            {worker.name[0]}
+                          </div>
+                          <div className="flex-1">
+                            <h3 className="font-semibold mb-1" style={{ color: "var(--text)" }}>
+                              {worker.name}
+                            </h3>
+                            {worker.role && (
+                              <p className="text-xs" style={{ color: "var(--muted)" }}>{worker.role}</p>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </>
                 )}
               </div>
             </div>

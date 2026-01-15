@@ -31,3 +31,13 @@ export function bookingSettingsDoc(siteId: string) {
   return doc(db, "sites", siteId, "settings", "booking");
 }
 
+export function clientsCollection(siteId: string) {
+  if (!db) throw new Error("Firestore db not initialized");
+  return collection(db, "sites", siteId, "clients");
+}
+
+export function clientDoc(siteId: string, clientId: string) {
+  if (!db) throw new Error("Firestore db not initialized");
+  return doc(db, "sites", siteId, "clients", clientId);
+}
+

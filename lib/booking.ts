@@ -6,6 +6,8 @@ export interface BookingData {
   id: string;
   serviceId: string;
   serviceName: string;
+  serviceType?: string | null; // Optional type/variant from pricing item
+  pricingItemId?: string | null; // Optional pricing item ID
   workerId: string | null;
   workerName: string | null;
   date: string; // YYYY-MM-DD
@@ -35,7 +37,7 @@ export function getBookings(siteId: string): BookingData[] {
 /**
  * Save booking to Firestore
  */
-export async function saveBooking(siteId: string, booking: Omit<BookingData, "id">): Promise<string> {
+export async function saveBooking(siteId: string, booking: Omit<BookingData, "id">, pricingItem?: { durationMaxMinutes?: number; durationMinMinutes?: number; durationMinutes?: number }): Promise<string> {
   if (!db) {
     throw new Error("Firestore db not initialized");
   }
@@ -72,6 +74,9 @@ export async function saveBooking(siteId: string, booking: Omit<BookingData, "id
       note: booking.note || null,
       status: "confirmed",
       durationMin,
+      // Include service type and pricing item ID if available
+      serviceType: booking.serviceType || null,
+      pricingItemId: booking.pricingItemId || null,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });

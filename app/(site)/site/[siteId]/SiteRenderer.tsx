@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import type { SiteConfig } from "@/types/siteConfig";
 import { defaultThemeColors } from "@/types/siteConfig";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
+import { subscribeServices } from "@/lib/firestoreServices";
+import type { Service } from "@/types/service";
 import {
   getTemplateForConfig,
 } from "@/lib/templateLibrary";
@@ -11,6 +13,7 @@ import HairLuxurySite from "./HairLuxurySite";
 
 export default function SiteRenderer({ siteId }: { siteId: string }) {
   const [config, setConfig] = useState<SiteConfig | null>(null);
+  const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -108,6 +111,30 @@ export default function SiteRenderer({ siteId }: { siteId: string }) {
     };
   }, [siteId]);
 
+  // Load services from Firestore (same source as Prices page)
+  useEffect(() => {
+    if (!siteId) return;
+
+    const unsubscribeServices = subscribeServices(
+      siteId,
+      (svcs) => {
+        // Only show active services, sorted by name
+        const activeServices = svcs
+          .filter((s) => s.active !== false)
+          .sort((a, b) => a.name.localeCompare(b.name));
+        setServices(activeServices);
+      },
+      (err) => {
+        console.error("[SiteRenderer] Failed to load services", err);
+        setServices([]); // Fallback to empty array
+      }
+    );
+
+    return () => {
+      unsubscribeServices();
+    };
+  }, [siteId]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: defaultThemeColors.background }}>
@@ -132,6 +159,6 @@ export default function SiteRenderer({ siteId }: { siteId: string }) {
   // Get template and render
   const template = getTemplateForConfig(config);
 
-  return <HairLuxurySite config={config} template={template} siteId={siteId} />;
+  return <HairLuxurySite config={config} template={template} siteId={siteId} services={services} />;
 }
 

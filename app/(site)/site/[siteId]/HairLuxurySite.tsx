@@ -6,6 +6,7 @@ import Image from "next/image";
 import type { SiteConfig } from "@/types/siteConfig";
 import type { TemplateDefinition } from "@/lib/templateLibrary";
 import { bookingEnabled } from "@/lib/bookingEnabled";
+import type { Service } from "@/types/service";
 import {
   HAIR_HERO_IMAGES,
   HAIR_ABOUT_IMAGES,
@@ -155,10 +156,12 @@ export default function HairLuxurySite({
   config,
   template,
   siteId,
+  services,
 }: {
   config: SiteConfig;
   template: TemplateDefinition;
   siteId: string;
+  services: Service[];
 }) {
   const { colors, images } = template.assets;
 
@@ -178,9 +181,12 @@ export default function HairLuxurySite({
     }
   };
 
-  // Sample services if config.services is empty
+  // Use services from Firestore (same source as Prices page)
+  // Fallback to config.services for backward compatibility, then to hardcoded list
   const displayServices =
-    config.services.length > 0
+    services.length > 0
+      ? services.map((s) => s.name)
+      : config.services.length > 0
       ? config.services
       : ["תספורת נשים", "גוונים", "החלקה"];
 
