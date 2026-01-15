@@ -8,7 +8,8 @@ import type { SalonBookingState } from "@/types/booking";
 import { defaultBookingState } from "@/types/booking";
 import { normalizeServices } from "@/lib/normalizeServices";
 import { useSiteConfig } from "@/hooks/useSiteConfig";
-import { AdminTabs } from "@/components/ui/AdminTabs";
+import AdminTabs from "@/components/ui/AdminTabs";
+
 
 const SERVICE_OPTIONS: Record<SiteConfig["salonType"], string[]> = {
   hair: ["תספורת", "צבע", "פן", "החלקה", "טיפולי שיער"],
@@ -1246,8 +1247,9 @@ export default function SettingsPage() {
   const [bookingState, setBookingState] = useState<SalonBookingState | null>(null);
   
   // Tab state for settings sections - MUST be declared before any early returns
-  type SettingsTabType = "basic" | "style" | "contact" | "booking" | "reviews" | "faq" | "hours";
+  
   const [activeTab, setActiveTab] = useState<SettingsTabType>("basic");
+
 
   // Load booking state
   useEffect(() => {
@@ -1298,15 +1300,27 @@ export default function SettingsPage() {
   })();
 
   // Build tabs list (conditionally include reviews/faq)
-  const settingsTabs = [
-    { key: "basic", label: "מידע בסיסי" },
-    { key: "style", label: "סגנון אתר" },
-    { key: "contact", label: "פרטי יצירת קשר" },
-    { key: "booking", label: "הזמנות אונליין" },
-    ...(siteConfig.extraPages.includes("reviews") ? [{ key: "reviews", label: "ביקורות" }] : []),
-    ...(siteConfig.extraPages.includes("faq") ? [{ key: "faq", label: "שאלות נפוצות" }] : []),
-    { key: "hours", label: "שעות פעילות" },
-  ];
+  type SettingsTabType =
+  | "basic"
+  | "services"
+  | "style"
+  | "contact"
+  | "booking"
+  | "reviews"
+  | "faq"
+  | "hours";
+
+const settingsTabs: { key: SettingsTabType; label: string }[] = [
+  { key: "basic", label: "מידע בסיסי" },
+  { key: "services", label: "שירותים" },
+  { key: "style", label: "סגנון אתר" },
+  { key: "contact", label: "פרטי יצירת קשר" },
+  { key: "booking", label: "הזמנה אונליין" },
+  { key: "reviews", label: "ביקורות" },
+  { key: "faq", label: "FAQ" },
+  { key: "hours", label: "שעות פעילות" },
+];
+
 
   return (
     <div dir="rtl" className="space-y-6">
@@ -1335,11 +1349,12 @@ export default function SettingsPage() {
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 p-6">
-        <AdminTabs
-          tabs={settingsTabs}
-          activeKey={activeTab}
-          onChange={(key) => setActiveTab(key as SettingsTabType)}
-        />
+      <AdminTabs
+  tabs={settingsTabs}
+  activeKey={activeTab}
+  onChange={(key) => setActiveTab(key)}
+/>
+
 
         {/* Tab Content */}
         <div>
