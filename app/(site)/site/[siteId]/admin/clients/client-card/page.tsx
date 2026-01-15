@@ -315,6 +315,15 @@ export default function ClientCardPage() {
     });
   }, [clientBookings]);
 
+  // Build tabs array with proper typing
+  const clientTabs = useMemo<Array<{ key: TabType; label: string }>>(() => {
+    return [
+      { key: "bookings" as TabType, label: "היסטוריית תורים" },
+      ...(serviceHistory.length > 0 ? [{ key: "services" as TabType, label: "היסטוריית שירותים" }] : []),
+      { key: "chemistry" as TabType, label: "כרטיס כימיה" },
+    ];
+  }, [serviceHistory.length]);
+
   const handleClientSelect = (clientId: string) => {
     setSelectedClientId(clientId);
     // Update URL without page reload
@@ -446,12 +455,8 @@ export default function ClientCardPage() {
                 </div>
 
                 {/* Tabs Navigation */}
-                <AdminTabs
-                  tabs={[
-                    { key: "bookings", label: "היסטוריית תורים" },
-                    ...(serviceHistory.length > 0 ? [{ key: "services", label: "היסטוריית שירותים" }] : []),
-                    { key: "chemistry", label: "כרטיס כימיה" },
-                  ]}
+                <AdminTabs<TabType>
+                  tabs={clientTabs}
                   activeKey={activeTab}
                   onChange={setActiveTab}
                 />
