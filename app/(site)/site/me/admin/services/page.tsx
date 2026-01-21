@@ -23,7 +23,7 @@ import AdminTabs from "@/components/ui/AdminTabs";
 
 
 export default function ServicesPage() {
-  const { user } = useAuth();
+  const { user, authReady } = useAuth();
   const userId = user?.id;
 
   const [services, setServices] = useState<SiteService[]>([]);
@@ -214,8 +214,15 @@ export default function ServicesPage() {
 
   const handleDeleteItem = async (itemId: string) => {
     if (!confirm("האם אתה בטוח שברצונך למחוק את הפריט?")) return;
+    
+    const uid = userId;
+    if (!uid) {
+      setError("יש להתחבר מחדש");
+      return;
+    }
+    
     try {
-      await deletePricingItem(userId, itemId);
+      await deletePricingItem(uid, itemId);
     } catch (err) {
       console.error("Failed to delete pricing item", err);
       setError("שגיאה במחיקת הפריט");
@@ -313,10 +320,16 @@ export default function ServicesPage() {
       console.log("[Pricing] hasFollowUp:", cleanItemData.hasFollowUp);
       console.log("[Pricing] followUpServiceId:", cleanItemData.followUpServiceId);
 
+      const uid = userId;
+      if (!uid) {
+        setError("יש להתחבר מחדש");
+        return;
+      }
+      
       if (editingItem.id === "new") {
-        await createPricingItem(userId, cleanItemData);
+        await createPricingItem(uid, cleanItemData);
       } else {
-        await updatePricingItem(userId, editingItem.id, cleanItemData);
+        await updatePricingItem(uid, editingItem.id, cleanItemData);
       }
       setEditingItem(null);
     } catch (err) {
@@ -338,9 +351,16 @@ export default function ServicesPage() {
   };
 
   const handleAddService = async () => {
-    if (!newServiceName.trim() || !userId) return;
+    if (!newServiceName.trim()) return;
+    
+    const uid = userId;
+    if (!uid) {
+      setError("יש להתחבר מחדש");
+      return;
+    }
+    
     try {
-      await addSiteService(userId, {
+      await addSiteService(uid, {
         name: newServiceName.trim(),
         enabled: true,
       });
@@ -357,9 +377,16 @@ export default function ServicesPage() {
   };
 
   const handleSaveService = async () => {
-    if (!editingService || !editingService.name.trim() || !userId) return;
+    if (!editingService || !editingService.name.trim()) return;
+    
+    const uid = userId;
+    if (!uid) {
+      setError("יש להתחבר מחדש");
+      return;
+    }
+    
     try {
-      await updateSiteService(userId, editingService.id, {
+      await updateSiteService(uid, editingService.id, {
         name: editingService.name.trim(),
         enabled: editingService.enabled !== false,
       });
@@ -372,27 +399,46 @@ export default function ServicesPage() {
 
   const handleDeleteService = async (serviceId: string) => {
     const service = services.find((s) => s.id === serviceId);
-    if (!service || !userId) return;
+    if (!service) return;
+    
+    const uid = userId;
+    if (!uid) {
+      setError("יש להתחבר מחדש");
+      return;
+    }
     
     if (!confirm(`האם אתה בטוח שברצונך למחוק את השירות "${service.name}"? כל פריטי המחיר של שירות זה יימחקו.`)) return;
     
     try {
       // Delete all pricing items for this service
       const itemsToDelete = itemsByService[service.name] || [];
-      await Promise.all(itemsToDelete.map((item) => deletePricingItem(userId, item.id)));
+      await Promise.all(itemsToDelete.map((item) => deletePricingItem(uid, item.id)));
       
       // Delete service
-      await deleteSiteService(userId, serviceId);
+      await deleteSiteService(uid, serviceId);
     } catch (err) {
       console.error("Failed to delete service", err);
       setError("שגיאה במחיקת שירות");
     }
   };
 
-  if (loading) {
+  // Wait for auth to be ready before rendering
+  if (!authReady || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <p className="text-slate-600 text-sm">טוען מחירים…</p>
+      </div>
+    );
+  }
+  
+  // If no user after auth is ready, show error
+  if (!userId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <p className="text-slate-900 font-semibold mb-2">יש להתחבר מחדש</p>
+          <p className="text-sm text-slate-600">נדרשת התחברות כדי לגשת לדף זה</p>
+        </div>
       </div>
     );
   }
