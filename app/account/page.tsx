@@ -32,12 +32,6 @@ export default function AccountPage() {
     return null; // Will redirect
   }
 
-  const roleLabels: Record<string, string> = {
-    owner: "בעל סלון",
-    stylist: "עובדת",
-    admin: "מנהל",
-  };
-
   return (
     <div dir="rtl" className="min-h-screen bg-slate-50 py-12">
       <div className="container mx-auto px-4 max-w-2xl">
@@ -49,14 +43,9 @@ export default function AccountPage() {
           <div className="space-y-6">
             <div>
               <h2 className="text-lg font-semibold text-slate-900 mb-2">
-                שלום, {user.name}
+                שלום, {user.name || user.email}
               </h2>
               <p className="text-slate-600">{user.email}</p>
-              {user.role && (
-                <p className="text-sm text-slate-500 mt-1">
-                  {roleLabels[user.role] || user.role}
-                </p>
-              )}
             </div>
 
             <div className="pt-6 border-t border-slate-200">
