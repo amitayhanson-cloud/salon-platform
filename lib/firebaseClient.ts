@@ -184,14 +184,19 @@ function getStorageLazy(): FirebaseStorage | null {
   return _storage;
 }
 
-// Export as functions that return the instances (lazy initialization)
-// IMPORTANT: These are functions, not direct exports, to prevent build-time initialization
-// However, for backward compatibility, we also export as constants that call the functions
+// Export lazy getters - Firebase only initializes when these are accessed
+// IMPORTANT: Do NOT call initializeFirebase() at module level (removed)
+// This prevents Firebase from initializing during Next.js build time
+// 
+// Note: These are still evaluated at import time, but they check for initialization
 // The real fix is marking routes as dynamic (see page.tsx files with export const dynamic = "force-dynamic")
-export const auth = (() => {
-  // Return a proxy that initializes on access
+
+// Create a non-null object to use as Proxy target (Proxy requires object, not null)
+const createAuthProxy = (): Auth | null => {
   let cached: Auth | null = null;
-  return new Proxy({} as Auth | null, {
+  // Use a dummy object as the target - Proxy requires a non-null object
+  const dummyTarget = {} as Auth;
+  return new Proxy(dummyTarget, {
     get(_target, prop) {
       if (!cached) {
         cached = getAuthLazy();
@@ -201,13 +206,14 @@ export const auth = (() => {
       }
       return undefined;
     }
-  });
-})() as Auth | null;
+  }) as Auth | null;
+};
 
-export const db = (() => {
-  // Return a proxy that initializes on access
+const createDbProxy = (): Firestore | null => {
   let cached: Firestore | null = null;
-  return new Proxy({} as Firestore | null, {
+  // Use a dummy object as the target - Proxy requires a non-null object
+  const dummyTarget = {} as Firestore;
+  return new Proxy(dummyTarget, {
     get(_target, prop) {
       if (!cached) {
         cached = getDbLazy();
@@ -217,13 +223,14 @@ export const db = (() => {
       }
       return undefined;
     }
-  });
-})() as Firestore | null;
+  }) as Firestore | null;
+};
 
-export const storage = (() => {
-  // Return a proxy that initializes on access
+const createStorageProxy = (): FirebaseStorage | null => {
   let cached: FirebaseStorage | null = null;
-  return new Proxy({} as FirebaseStorage | null, {
+  // Use a dummy object as the target - Proxy requires a non-null object
+  const dummyTarget = {} as FirebaseStorage;
+  return new Proxy(dummyTarget, {
     get(_target, prop) {
       if (!cached) {
         cached = getStorageLazy();
@@ -233,5 +240,9 @@ export const storage = (() => {
       }
       return undefined;
     }
-  });
-})() as FirebaseStorage | null;
+  }) as FirebaseStorage | null;
+};
+
+export const auth = createAuthProxy();
+export const db = createDbProxy();
+export const storage = createStorageProxy();

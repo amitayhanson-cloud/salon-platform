@@ -6,6 +6,27 @@ const TEMPLATE_SITE_ID = "amitay-hair-mk6krumy";
 const SITES_COLLECTION = "sites";
 
 /**
+ * Site metadata type for ownership checks
+ * Represents the minimal fields needed from a site document
+ */
+type SiteMeta = {
+  id: string;
+  ownerUid?: string | null;
+};
+
+/**
+ * Full site document type (what's stored in Firestore)
+ */
+type SiteDoc = {
+  id: string;
+  ownerUid?: string | null;
+  config?: SiteConfig;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+  [key: string]: any; // Allow other fields from template
+};
+
+/**
  * Get site document reference
  * Path: sites/{siteId}
  */
@@ -16,8 +37,9 @@ export function siteDoc(siteId: string) {
 
 /**
  * Get site document
+ * Returns the full site document with all fields
  */
-export async function getSite(siteId: string) {
+export async function getSite(siteId: string): Promise<SiteDoc | null> {
   if (!db) throw new Error("Firestore db not initialized");
   
   const siteRef = siteDoc(siteId);
@@ -27,10 +49,11 @@ export async function getSite(siteId: string) {
     return null;
   }
   
+  const data = siteSnap.data() as Partial<SiteDoc>;
   return {
     id: siteSnap.id,
-    ...siteSnap.data(),
-  };
+    ...data,
+  } as SiteDoc;
 }
 
 /**
@@ -101,7 +124,7 @@ export async function verifySiteOwnership(
   }
   
   // Check ownerUid (primary field)
-  const siteOwnerUid = (site as any).ownerUid;
+  const siteOwnerUid = site.ownerUid ?? null;
   const isOwner = siteOwnerUid === currentUid;
   
   if (process.env.NODE_ENV === "development") {
@@ -140,10 +163,13 @@ export async function backfillSiteOwnerUid(userId: string): Promise<void> {
       return;
     }
     
+    // Extract ownerUid safely (handle undefined/null)
+    const currentOwner = site.ownerUid ?? null;
+    
     // Check if ownerUid is missing or incorrect
-    if (!site.ownerUid || site.ownerUid !== userId) {
+    if (!currentOwner || currentOwner !== userId) {
       if (process.env.NODE_ENV === "development") {
-        console.log(`[backfillSiteOwnerUid] Backfilling ownerUid for site ${siteId}: ${site.ownerUid || "missing"} -> ${userId}`);
+        console.log(`[backfillSiteOwnerUid] Backfilling ownerUid for site ${siteId}: ${currentOwner || "missing"} -> ${userId}`);
       }
       
       const siteRef = siteDoc(siteId);

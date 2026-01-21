@@ -29,6 +29,29 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
+## Development
+
+### Pre-push Hook
+
+This repository includes a pre-push hook that runs `npm run build` before allowing pushes. This prevents pushing broken code.
+
+**Setup (one-time):**
+```bash
+chmod +x .git/hooks/pre-push
+```
+
+**To skip the hook (not recommended):**
+```bash
+git push --no-verify
+```
+
+### Verify Script
+
+Run `npm run verify` to check linting and build before committing:
+```bash
+npm run verify
+```
+
 ## Deploy on Vercel
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
