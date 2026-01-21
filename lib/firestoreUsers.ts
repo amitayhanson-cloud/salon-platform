@@ -105,6 +105,9 @@ export async function updateUserSiteId(
   console.log(`[updateUserSiteId] Updated users/${userId}.siteId = ${siteId}`);
 }
 
+// Alias for backward compatibility (used by create-website route)
+export const updateUserWebsiteId = updateUserSiteId;
+
 // Create a new website document
 export async function createWebsiteDocument(
   ownerUserId: string,

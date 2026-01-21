@@ -106,5 +106,14 @@ export function getAdminDb() {
   return getAdmin().firestore();
 }
 
+// Export admin auth instance (lazy initialization)
+export function getAdminAuth() {
+  return getAdmin().auth();
+}
+
+// Export as `auth` for convenience (matches the import in route files)
+// This is lazy because getAdmin() is lazy - it only initializes when first called
+export const auth = getAdminAuth();
+
 // For backward compatibility, export default admin (but don't initialize at import time)
 export default admin;
