@@ -69,13 +69,16 @@ export function getFirebaseConfigStatus() {
 
 // Initialize Firebase on both client and server
 let app: FirebaseApp | null = null;
-let auth: Auth | null = null;
-let db: Firestore | null = null;
-let storage: FirebaseStorage | null = null;
+let _auth: Auth | null = null;
+let _db: Firestore | null = null;
+let _storage: FirebaseStorage | null = null;
 let initializationError: string | null = null;
+let initialized = false;
 
 // Initialize Firebase (works on both client and server)
 function initializeFirebase() {
+  if (initialized) return; // Already initialized
+  
   const missing = missingKeys(firebaseConfig as any);
   const apiKeyValid = validateApiKey(firebaseConfig.apiKey);
 
@@ -87,6 +90,7 @@ function initializeFirebase() {
       console.error("💡 Tip: After updating .env.local, restart your dev server (npm run dev)");
     }
     initializationError = errorMsg;
+    initialized = true;
     return;
   }
 
@@ -100,6 +104,7 @@ function initializeFirebase() {
       console.error("💡 Then update NEXT_PUBLIC_FIREBASE_API_KEY in .env.local and restart dev server");
     }
     initializationError = errorMsg;
+    initialized = true;
     return;
   }
 
@@ -124,39 +129,109 @@ function initializeFirebase() {
     
     // Auth only works on client side
     if (isClient) {
-      auth = getAuth(app);
+      _auth = getAuth(app);
     }
     
     // Firestore works on both client and server
-    db = getFirestore(app);
+    _db = getFirestore(app);
     
     // Storage only works on client side
     if (isClient) {
-      storage = getStorage(app);
+      _storage = getStorage(app);
     }
     
     // Debug logging
     if (isClient) {
       console.log("✅ Firebase initialized successfully");
-      console.log("🔍 Firestore db:", typeof db, db ? `initialized (app: ${db.app.name})` : "null");
+      console.log("🔍 Firestore db:", typeof _db, _db ? `initialized (app: ${_db.app.name})` : "null");
     } else {
       console.log("✅ Firebase initialized on server");
-      console.log("🔍 Firestore db:", typeof db, db ? `initialized (app: ${db.app.name})` : "null");
+      console.log("🔍 Firestore db:", typeof _db, _db ? `initialized (app: ${_db.app.name})` : "null");
     }
+    
+    initialized = true;
   } catch (error: any) {
     const errorMsg = `Firebase initialization failed: ${error.message || String(error)}`;
     console.error("❌", errorMsg);
     console.error("Full error:", error);
     initializationError = errorMsg;
+    initialized = true;
   }
 }
 
-// Initialize Firebase immediately
-initializeFirebase();
-
-// Export error status
+// Export error status (lazy)
 export function getFirebaseError(): string | null {
+  initializeFirebase();
   return initializationError;
 }
 
-export { auth, db, storage };
+// Lazy getters - Firebase only initializes when these are accessed
+// This prevents initialization during Next.js build time
+function getAuthLazy(): Auth | null {
+  if (typeof window === "undefined") return null; // Auth only works on client
+  initializeFirebase();
+  return _auth;
+}
+
+function getDbLazy(): Firestore | null {
+  initializeFirebase();
+  return _db;
+}
+
+function getStorageLazy(): FirebaseStorage | null {
+  if (typeof window === "undefined") return null; // Storage only works on client
+  initializeFirebase();
+  return _storage;
+}
+
+// Export as functions that return the instances (lazy initialization)
+// IMPORTANT: These are functions, not direct exports, to prevent build-time initialization
+// However, for backward compatibility, we also export as constants that call the functions
+// The real fix is marking routes as dynamic (see page.tsx files with export const dynamic = "force-dynamic")
+export const auth = (() => {
+  // Return a proxy that initializes on access
+  let cached: Auth | null = null;
+  return new Proxy({} as Auth | null, {
+    get(_target, prop) {
+      if (!cached) {
+        cached = getAuthLazy();
+      }
+      if (cached && prop in cached) {
+        return (cached as any)[prop];
+      }
+      return undefined;
+    }
+  });
+})() as Auth | null;
+
+export const db = (() => {
+  // Return a proxy that initializes on access
+  let cached: Firestore | null = null;
+  return new Proxy({} as Firestore | null, {
+    get(_target, prop) {
+      if (!cached) {
+        cached = getDbLazy();
+      }
+      if (cached && prop in cached) {
+        return (cached as any)[prop];
+      }
+      return undefined;
+    }
+  });
+})() as Firestore | null;
+
+export const storage = (() => {
+  // Return a proxy that initializes on access
+  let cached: FirebaseStorage | null = null;
+  return new Proxy({} as FirebaseStorage | null, {
+    get(_target, prop) {
+      if (!cached) {
+        cached = getStorageLazy();
+      }
+      if (cached && prop in cached) {
+        return (cached as any)[prop];
+      }
+      return undefined;
+    }
+  });
+})() as FirebaseStorage | null;

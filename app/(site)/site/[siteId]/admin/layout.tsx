@@ -2,6 +2,9 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter, usePathname } from "next/navigation";
+
+// Admin routes are dynamic - they require authentication and load user data
+export const dynamic = "force-dynamic";
 import AdminHeader from "@/components/admin/AdminHeader";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { verifySiteOwnership } from "@/lib/firestoreSites";

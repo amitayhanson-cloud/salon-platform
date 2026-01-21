@@ -3,6 +3,9 @@
 import { useParams } from "next/navigation";
 import SiteRenderer from "./SiteRenderer";
 
+// This page is dynamic - it loads site data from Firestore
+export const dynamic = "force-dynamic";
+
 export default function SalonSitePage() {
   const params = useParams();
   const siteId = params?.siteId as string;
