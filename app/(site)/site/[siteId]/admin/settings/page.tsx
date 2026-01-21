@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import DeleteAccountButton from "@/components/admin/DeleteAccountButton";
 import type { SiteConfig } from "@/types/siteConfig";
 import type { SalonBookingState } from "@/types/booking";
 import { defaultBookingState } from "@/types/booking";
-import { normalizeServices } from "@/lib/normalizeServices";
 import { useSiteConfig } from "@/hooks/useSiteConfig";
+import { useAuth } from "@/components/auth/AuthProvider";
 import AdminTabs from "@/components/ui/AdminTabs";
+import { deleteUserAccount } from "@/lib/deleteUserAccount";
 
 
 const SERVICE_OPTIONS: Record<SiteConfig["salonType"], string[]> = {
@@ -702,115 +704,6 @@ function AdminSiteTab({
   onChange: (updates: Partial<SiteConfig>) => void;
   renderSections?: string[];
 }) {
-  // Convert services to string[] format if needed (backwards compatibility)
-  const currentServices = Array.isArray(siteConfig.services) 
-    ? siteConfig.services.map((s) => typeof s === 'string' ? s : (s as any).name || '').filter(Boolean)
-    : [];
-  
-  const currentPricing = siteConfig.servicePricing || {};
-  
-  // Local state for services editing - track by index to handle renames
-  const [serviceRows, setServiceRows] = useState<Array<{ id: string; name: string; price: number }>>(() => {
-    return currentServices.map((name, idx) => ({
-      id: `service-${idx}-${name}`, // Stable ID based on index and name
-      name: name,
-      price: currentPricing[name] || 0,
-    }));
-  });
-
-  // Track if we're updating internally to avoid sync loops
-  const [isInternalUpdate, setIsInternalUpdate] = useState(false);
-
-  // Sync with siteConfig changes only when it changes externally (not from our updates)
-  useEffect(() => {
-    if (isInternalUpdate) {
-      setIsInternalUpdate(false);
-      return;
-    }
-    const normalized = normalizeServices(currentServices);
-    const rows = normalized.map((name, idx) => ({
-      id: `service-${idx}-${name}`,
-      name: name,
-      price: currentPricing[name] || 0,
-    }));
-    setServiceRows(rows);
-  }, [siteConfig.services, siteConfig.servicePricing]);
-
-  const updateServiceRow = (index: number, updates: { name?: string; price?: number }) => {
-    setIsInternalUpdate(true);
-    const newRows = [...serviceRows];
-    const oldRow = newRows[index];
-    const newRow = { ...oldRow, ...updates };
-    newRows[index] = newRow;
-    setServiceRows(newRows);
-    
-    // Update siteConfig immediately
-    const normalizedServices = normalizeServices(newRows.map(r => r.name.trim()).filter(Boolean));
-    const newPricing: Record<string, number> = {};
-    
-    // Map prices: if renamed, carry over price by index
-    newRows.forEach((row, idx) => {
-      const trimmedName = row.name.trim();
-      if (trimmedName) {
-        // If this is a rename (same index), carry over the old price
-        if (idx === index && oldRow.name !== trimmedName && oldRow.price > 0) {
-          newPricing[trimmedName] = updates.price !== undefined ? updates.price : oldRow.price;
-        } else {
-          newPricing[trimmedName] = row.price || 0;
-        }
-      }
-    });
-    
-    onChange({
-      services: normalizedServices,
-      servicePricing: newPricing,
-    });
-  };
-
-  const removeService = (index: number) => {
-    setIsInternalUpdate(true);
-    const newRows = serviceRows.filter((_, idx) => idx !== index);
-    setServiceRows(newRows);
-    
-    const normalizedServices = normalizeServices(newRows.map(r => r.name.trim()).filter(Boolean));
-    const newPricing: Record<string, number> = {};
-    newRows.forEach((row) => {
-      const trimmedName = row.name.trim();
-      if (trimmedName) {
-        newPricing[trimmedName] = row.price || 0;
-      }
-    });
-    
-    onChange({
-      services: normalizedServices,
-      servicePricing: newPricing,
-    });
-  };
-
-  const addService = () => {
-    setIsInternalUpdate(true);
-    const newRows = [...serviceRows, { id: `service-${Date.now()}`, name: '', price: 0 }];
-    setServiceRows(newRows);
-    // Update siteConfig to include empty row for validation
-    // Include empty strings so validation can catch them
-    onChange({
-      services: newRows.map(r => r.name),
-      servicePricing: (() => {
-        const pricing: Record<string, number> = {};
-        newRows.forEach(row => {
-          if (row.name.trim()) {
-            pricing[row.name.trim()] = row.price || 0;
-          }
-        });
-        return pricing;
-      })(),
-    });
-  };
-
-  // Validation
-  const hasEmptyNames = serviceRows.some(r => !r.name.trim());
-  const serviceNames = serviceRows.map(r => r.name.trim().toLowerCase()).filter(Boolean);
-  const hasDuplicates = new Set(serviceNames).size !== serviceNames.length;
 
   const toggleExtraPage = (page: SiteConfig["extraPages"][number]) => {
     const exists = siteConfig.extraPages.includes(page);
@@ -914,86 +807,6 @@ function AdminSiteTab({
       </div>
       )}
 
-      {/* Services */}
-      {shouldRender("services") && (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-slate-900">שירותים</h2>
-          <button
-            type="button"
-            onClick={addService}
-            className="px-3 py-1.5 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-xs font-medium transition-colors"
-          >
-            הוסף שירות
-          </button>
-        </div>
-
-        {/* Validation errors */}
-        {(hasEmptyNames || hasDuplicates) && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-right">
-            {hasEmptyNames && (
-              <p className="text-xs text-red-700 mb-1">יש למלא שם לכל השירותים</p>
-            )}
-            {hasDuplicates && (
-              <p className="text-xs text-red-700">יש שירותים כפולים. אנא הסר כפילויות</p>
-            )}
-          </div>
-        )}
-
-        {/* Service rows */}
-        <div className="space-y-3">
-          {serviceRows.map((row, index) => (
-            <div
-              key={row.id}
-              className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg bg-white hover:border-slate-300 transition-colors"
-            >
-              {/* Service name input */}
-              <input
-                type="text"
-                value={row.name}
-                onChange={(e) => updateServiceRow(index, { name: e.target.value })}
-                className={`flex-1 rounded-lg border px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 ${
-                  !row.name.trim()
-                    ? "border-red-300 focus:ring-red-500 focus:border-red-500"
-                    : "border-slate-300 focus:ring-sky-500 focus:border-sky-500"
-                }`}
-                placeholder="שם השירות"
-              />
-
-              {/* Price input - aligned to the left */}
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <span className="text-xs text-slate-500 whitespace-nowrap">החל מ־₪</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="10"
-                  value={row.price || ""}
-                  onChange={(e) => updateServiceRow(index, { price: Number(e.target.value) || 0 })}
-                  className="w-24 rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
-                  placeholder="0"
-                />
-              </div>
-
-              {/* Remove button */}
-              <button
-                type="button"
-                onClick={() => removeService(index)}
-                className="flex-shrink-0 w-8 h-8 flex items-center justify-center text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-                title="הסר שירות"
-              >
-                ×
-              </button>
-            </div>
-          ))}
-
-          {serviceRows.length === 0 && (
-            <p className="text-xs text-slate-500 text-center py-4">
-              אין שירותים. לחץ על "הוסף שירות" כדי להתחיל
-            </p>
-          )}
-        </div>
-      </div>
-      )}
 
       {/* Vibe / Style */}
       {shouldRender("style") && (
@@ -1242,13 +1055,18 @@ function AdminSiteTab({
 
 export default function SettingsPage() {
   const params = useParams();
+  const router = useRouter();
   const siteId = params?.siteId as string;
   const { siteConfig, isSaving, saveMessage, handleConfigChange, handleSaveConfig } = useSiteConfig(siteId);
+  const { user, firebaseUser, logout } = useAuth();
   const [bookingState, setBookingState] = useState<SalonBookingState | null>(null);
   
   // Tab state for settings sections - MUST be declared before any early returns
-  
   const [activeTab, setActiveTab] = useState<SettingsTabType>("basic");
+  
+  // Delete account state
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
 
   // Load booking state
@@ -1274,6 +1092,54 @@ export default function SettingsPage() {
     }
   };
 
+  // Delete account handler
+  const handleDeleteAccount = async () => {
+    if (!firebaseUser) {
+      setDeleteError("לא נמצא משתמש מחובר");
+      throw new Error("לא נמצא משתמש מחובר");
+    }
+
+    setIsDeleting(true);
+    setDeleteError(null);
+
+    try {
+      // Delete account (Firestore + Auth)
+      await deleteUserAccount(firebaseUser);
+      
+      // Clear localStorage
+      if (typeof window !== "undefined") {
+        // Clear all user-related localStorage items
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < window.localStorage.length; i++) {
+          const key = window.localStorage.key(i);
+          if (key && (key.startsWith(`siteConfig:${firebaseUser.uid}`) || 
+                      key.startsWith(`bookingState:${firebaseUser.uid}`))) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(key => window.localStorage.removeItem(key));
+      }
+
+      // Sign out first (clears auth state)
+      await logout();
+      
+      // Small delay to ensure auth state is cleared before redirect
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Redirect to landing page (public route, no guards)
+      // Use window.location for a hard redirect to prevent any route guard interference
+      if (typeof window !== "undefined") {
+        window.location.href = "/";
+      }
+    } catch (error: any) {
+      console.error("[SettingsPage] Failed to delete account:", error);
+      setDeleteError(
+        error.message || "שגיאה במחיקת החשבון. אנא נסה שוב או פנה לתמיכה."
+      );
+      setIsDeleting(false);
+    }
+  };
+
   // Early return AFTER all hooks are declared
   if (!siteConfig || !bookingState) {
     return (
@@ -1283,26 +1149,9 @@ export default function SettingsPage() {
     );
   }
 
-  // Check for validation errors in services
-  const hasServiceValidationErrors = (() => {
-    const services = siteConfig?.services || [];
-    if (!Array.isArray(services)) return true;
-    
-    const serviceNames = services
-      .map((s) => typeof s === 'string' ? s : (s as any).name || '')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    
-    if (serviceNames.length !== services.length) return true;
-    
-    const lowerNames = serviceNames.map(n => n.toLowerCase());
-    return new Set(lowerNames).size !== lowerNames.length;
-  })();
-
   // Build tabs list (conditionally include reviews/faq)
   type SettingsTabType =
   | "basic"
-  | "services"
   | "style"
   | "contact"
   | "booking"
@@ -1312,7 +1161,6 @@ export default function SettingsPage() {
 
 const settingsTabs: { key: SettingsTabType; label: string }[] = [
   { key: "basic", label: "מידע בסיסי" },
-  { key: "services", label: "שירותים" },
   { key: "style", label: "סגנון אתר" },
   { key: "contact", label: "פרטי יצירת קשר" },
   { key: "booking", label: "הזמנה אונליין" },
@@ -1337,14 +1185,11 @@ const settingsTabs: { key: SettingsTabType; label: string }[] = [
           )}
           <button
             onClick={handleSaveConfig}
-            disabled={isSaving || hasServiceValidationErrors}
+            disabled={isSaving}
             className="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
           >
             {isSaving ? "שומר…" : "שמור שינויים"}
           </button>
-          {hasServiceValidationErrors && (
-            <span className="text-xs text-red-600">יש שגיאות בשירותים - אנא תקן לפני שמירה</span>
-          )}
         </div>
       </div>
 
@@ -1406,6 +1251,13 @@ const settingsTabs: { key: SettingsTabType; label: string }[] = [
           )}
         </div>
       </div>
+
+      {/* Delete Account Section - Only button by default */}
+      <DeleteAccountButton
+        onDelete={handleDeleteAccount}
+        isDeleting={isDeleting}
+        deleteError={deleteError}
+      />
     </div>
   );
 }

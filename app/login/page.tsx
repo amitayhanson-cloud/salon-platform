@@ -1,17 +1,26 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthProvider";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const searchParams = useSearchParams();
+  const { login, user, loading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (!authLoading && user) {
+      // Redirect logic is handled by login function's redirectPath
+      // This effect will be triggered after login completes
+    }
+  }, [user, authLoading, router]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -21,8 +30,24 @@ export default function LoginPage() {
     try {
       const result = await login(email, password);
       if (result.success) {
-        router.push("/account");
-      } else {
+        // Check if there's a returnTo parameter (e.g., from admin guard)
+        const returnTo = searchParams.get("returnTo");
+        if (returnTo) {
+          // Verify the returnTo is a valid admin path before redirecting
+          // This prevents open redirect vulnerabilities
+          if (returnTo.startsWith("/site/") && returnTo.includes("/admin")) {
+            // Redirect to the intended admin URL
+            router.replace(returnTo);
+          } else {
+            // Invalid returnTo - use default redirect
+            router.replace(result.redirectPath || "/builder");
+          }
+        } else if (result.redirectPath) {
+          // Use the default redirect path from login function
+          // This will be /site/{siteId}/admin if user has siteId, or /builder if not
+          router.replace(result.redirectPath);
+        }
+      } else if (!result.success) {
         setError(result.error || "פרטי ההתחברות אינם נכונים");
       }
     } catch (err) {
@@ -93,21 +118,24 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-6 pt-6 border-t border-slate-200 text-center">
+            <p className="text-sm text-slate-600">
+              אין לך חשבון?{" "}
+              <Link
+                href="/signup"
+                className="text-sky-600 hover:text-sky-700 font-medium transition-colors"
+              >
+                הירשם כאן
+              </Link>
+            </p>
+          </div>
+
+          <div className="mt-4 text-center">
             <Link
               href="/"
               className="text-sm text-sky-600 hover:text-sky-700 transition-colors"
             >
               חזרה לדף הבית
             </Link>
-          </div>
-
-          <div className="mt-4 p-3 bg-slate-50 rounded-lg text-right">
-            <p className="text-xs text-slate-600 mb-2">לצורכי פיתוח:</p>
-            <p className="text-xs text-slate-500">
-              owner@example.com / 123456
-              <br />
-              stylist@example.com / 123456
-            </p>
           </div>
         </div>
       </div>

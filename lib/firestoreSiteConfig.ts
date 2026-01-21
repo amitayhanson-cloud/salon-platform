@@ -14,12 +14,18 @@ export function siteDoc(siteId: string) {
 /**
  * Save site config to Firestore
  * Stores config as a nested field on the site document
+ * Path: sites/{siteId}.config
+ * Note: services array is stored separately at sites/{siteId}.services
  */
 export async function saveSiteConfig(siteId: string, config: SiteConfig): Promise<void> {
   if (!db) throw new Error("Firestore db not initialized");
   const siteRef = doc(db, "sites", siteId);
-  await setDoc(siteRef, { config }, { merge: true });
-  console.log("[AdminServices] saved config to sites/" + siteId);
+  
+  // Don't save services in config - they're stored separately in services array
+  const { siteServices, ...configWithoutServices } = config as any;
+  
+  await setDoc(siteRef, { config: configWithoutServices }, { merge: true });
+  console.log(`[saveSiteConfig] saved config to sites/${siteId}`);
 }
 
 /**

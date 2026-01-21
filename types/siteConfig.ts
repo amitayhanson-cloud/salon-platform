@@ -24,14 +24,27 @@ export type ServiceItem = {
   price: number; // ILS
 };
 
+// Service object stored in users/{uid}/site/main.services array
+export type SiteService = {
+  id: string; // stable id (generated)
+  name: string; // Hebrew name
+  description?: string;
+  price?: number | string;
+  category?: string;
+  duration?: number;
+  enabled?: boolean; // Default: true
+  sortOrder?: number; // Default: 0
+};
+
 export type SiteConfig = {
   salonName: string;
   salonType: "hair" | "nails" | "barber" | "spa" | "mixed" | "other";
-  city: string;
-  neighborhood?: string;
-  address?: string; // Full business address for map display
+  city?: string; // Deprecated - kept for backward compatibility, use address instead
+  neighborhood?: string; // Deprecated - kept for backward compatibility, use address instead
+  address?: string; // Full business address for map display (required in builder)
   mainGoals: MainGoal[]; // array instead of single value
-  services: string[]; // e.g. ["תספורת", "צבע", "פן"] - deduped, trimmed, no blanks
+  services: string[]; // DEPRECATED - kept for backward compatibility, use siteServices instead
+  siteServices?: SiteService[]; // Canonical services array - single source of truth
   vibe: "clean" | "luxury" | "colorful" | "spa" | "surprise";
   photosOption: "own" | "ai" | "mixed";
   contactOptions: Array<
@@ -80,8 +93,8 @@ export const defaultThemeColors = {
 export const defaultSiteConfig: SiteConfig = {
   salonName: "",
   salonType: "hair",
-  city: "",
-  neighborhood: "",
+  city: "", // Deprecated - kept for backward compatibility
+  neighborhood: "", // Deprecated - kept for backward compatibility
   mainGoals: [], // array
   services: [], // string[]
   vibe: "clean",

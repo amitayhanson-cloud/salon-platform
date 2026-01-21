@@ -3,10 +3,11 @@
 import { useState, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
+// Removed useRouter and useAuth - public site has no admin access
 import type { SiteConfig } from "@/types/siteConfig";
 import type { TemplateDefinition } from "@/lib/templateLibrary";
 import { bookingEnabled } from "@/lib/bookingEnabled";
-import type { Service } from "@/types/service";
+import type { SiteService } from "@/types/siteConfig";
 import {
   HAIR_HERO_IMAGES,
   HAIR_ABOUT_IMAGES,
@@ -161,8 +162,10 @@ export default function HairLuxurySite({
   config: SiteConfig;
   template: TemplateDefinition;
   siteId: string;
-  services: Service[];
+  services: SiteService[];
 }) {
+  // Public site - no admin access, no auth needed
+
   const { colors, images } = template.assets;
 
   // Use config images if set, otherwise use defaults
@@ -181,14 +184,17 @@ export default function HairLuxurySite({
     }
   };
 
-  // Use services from Firestore (same source as Prices page)
-  // Fallback to config.services for backward compatibility, then to hardcoded list
-  const displayServices =
-    services.length > 0
-      ? services.map((s) => s.name)
-      : config.services.length > 0
-      ? config.services
-      : ["תספורת נשים", "גוונים", "החלקה"];
+  // Use services from services array (same source as admin Services page)
+  // ONLY use services from Firestore - no fallback to config.services or defaults
+  // Filter to only enabled services with valid names
+  const visibleServices = services.filter(
+    (s) => s && s.enabled !== false && s.name && s.name.trim()
+  );
+  
+  const displayServices = visibleServices.map((s) => s.name.trim());
+  
+  // Don't render services section if no services
+  const hasServices = displayServices.length > 0;
 
   // Build address string for map and Waze
   const buildAddressString = (): string | null => {
@@ -227,19 +233,12 @@ export default function HairLuxurySite({
     >
       {/* Simple salon header */}
       <header className="py-4" style={{ backgroundColor: "var(--primary)", color: "var(--primaryText)" }}>
-        <div className="max-w-5xl mx-auto px-4 flex items-center justify-between">
+        <div className="max-w-5xl mx-auto px-4 flex items-center justify-end">
           <div className="flex flex-col items-end">
             <h1 className="text-xl sm:text-2xl font-bold">
               {config.salonName || "שם הסלון"}
             </h1>
           </div>
-          <Link
-            href={`/site/${siteId}/admin`}
-            className="text-[11px] transition-colors opacity-80 hover:opacity-100"
-            style={{ color: "var(--primaryText)" }}
-          >
-            כניסה לאיזור ניהול
-          </Link>
         </div>
       </header>
 
@@ -372,7 +371,8 @@ export default function HairLuxurySite({
         </div>
       </section>
 
-      {/* Services Section */}
+      {/* Services Section - Only render if services exist */}
+      {hasServices && (
       <section
         id="services-section"
         className="py-16 lg:py-24"
@@ -419,6 +419,7 @@ export default function HairLuxurySite({
           </div>
         </div>
       </section>
+      )}
 
       {/* Gallery Section - same background as Services, no divider needed */}
       <section

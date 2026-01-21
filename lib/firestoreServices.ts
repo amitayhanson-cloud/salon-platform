@@ -15,21 +15,21 @@ import {
 } from "firebase/firestore";
 import type { Service } from "@/types/service";
 
-export function servicesCollection(siteId: string) {
+export function servicesCollection(userId: string) {
   if (!db) throw new Error("Firestore db not initialized");
-  return collection(db, "sites", siteId, "services");
+  return collection(db, "users", userId, "site", "main", "services");
 }
 
-export function serviceDoc(siteId: string, serviceId: string) {
+export function serviceDoc(userId: string, serviceId: string) {
   if (!db) throw new Error("Firestore db not initialized");
-  return doc(db, "sites", siteId, "services", serviceId);
+  return doc(db, "users", userId, "site", "main", "services", serviceId);
 }
 
-export async function getServices(siteId: string): Promise<Service[]> {
-  if (!db || !siteId) return [];
+export async function getServices(userId: string): Promise<Service[]> {
+  if (!db || !userId) return [];
   
   try {
-    const q = query(servicesCollection(siteId), orderBy("name", "asc"));
+    const q = query(servicesCollection(userId), orderBy("name", "asc"));
     const snapshot = await getDocs(q);
     return snapshot.docs.map((d) => {
       const data = d.data();
@@ -48,14 +48,14 @@ export async function getServices(siteId: string): Promise<Service[]> {
 }
 
 export function subscribeServices(
-  siteId: string,
+  userId: string,
   onUpdate: (services: Service[]) => void,
   onError?: (error: Error) => void
 ): () => void {
-  if (!db || !siteId) return () => {};
+  if (!db || !userId) return () => {};
 
   try {
-    const q = query(servicesCollection(siteId), orderBy("name", "asc"));
+    const q = query(servicesCollection(userId), orderBy("name", "asc"));
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
@@ -85,13 +85,13 @@ export function subscribeServices(
 }
 
 export async function createService(
-  siteId: string,
+  userId: string,
   service: Omit<Service, "id" | "createdAt" | "updatedAt">
 ): Promise<string> {
-  if (!db || !siteId) throw new Error("Firebase not initialized");
+  if (!db || !userId) throw new Error("Firebase not initialized");
 
   const now = new Date().toISOString();
-  const docRef = await addDoc(servicesCollection(siteId), {
+  const docRef = await addDoc(servicesCollection(userId), {
     name: service.name,
     active: service.active !== false, // Default to true
     createdAt: Timestamp.fromDate(new Date(now)),
@@ -101,11 +101,11 @@ export async function createService(
 }
 
 export async function updateService(
-  siteId: string,
+  userId: string,
   serviceId: string,
   updates: Partial<Omit<Service, "id" | "createdAt">>
 ): Promise<void> {
-  if (!db || !siteId) throw new Error("Firebase not initialized");
+  if (!db || !userId) throw new Error("Firebase not initialized");
 
   const updateData: any = {
     ...updates,
@@ -117,10 +117,10 @@ export async function updateService(
     updateData.createdAt = Timestamp.fromDate(new Date(updateData.createdAt));
   }
 
-  await updateDoc(serviceDoc(siteId, serviceId), updateData);
+  await updateDoc(serviceDoc(userId, serviceId), updateData);
 }
 
-export async function deleteService(siteId: string, serviceId: string): Promise<void> {
-  if (!db || !siteId) throw new Error("Firebase not initialized");
-  await deleteDoc(serviceDoc(siteId, serviceId));
+export async function deleteService(userId: string, serviceId: string): Promise<void> {
+  if (!db || !userId) throw new Error("Firebase not initialized");
+  await deleteDoc(serviceDoc(userId, serviceId));
 }

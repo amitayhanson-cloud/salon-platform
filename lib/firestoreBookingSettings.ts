@@ -5,7 +5,7 @@ import { defaultBookingSettings } from "@/types/bookingSettings";
 
 export function bookingSettingsDoc(siteId: string) {
   if (!db) throw new Error("Firestore db not initialized");
-  return doc(db, "sites", siteId, "bookingSettings", "main");
+  return doc(db, "sites", siteId, "settings", "booking");
 }
 
 export async function ensureBookingSettings(siteId: string) {

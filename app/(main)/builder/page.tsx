@@ -1,16 +1,23 @@
 "use client";
 
-import { doc, setDoc } from "firebase/firestore";
-import { db } from "@/lib/firebaseClient";
-
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
+import { useAuth } from "@/components/auth/AuthProvider";
 import type { MainGoal, SiteConfig } from "@/types/siteConfig";
 import { defaultSiteConfig } from "@/types/siteConfig";
-import { createSiteIdFromName } from "@/lib/siteId";
 import { defaultBookingState } from "@/types/booking";
 import { HAIR_HERO_IMAGES, HAIR_ABOUT_IMAGES } from "@/lib/hairImages";
+import { Timestamp } from "firebase/firestore";
+
+// Reusable component for the "editable later" hint
+function EditableLaterHint() {
+  return (
+    <p className="text-sm text-slate-500 text-right mt-2 mb-4">
+      אפשר לערוך הכל אחר כך בפאנל הניהול.
+    </p>
+  );
+}
 
 const SERVICE_OPTIONS: Record<SiteConfig["salonType"], string[]> = {
   hair: ["תספורת", "צבע", "פן", "החלקה", "טיפולי שיער"],
@@ -32,6 +39,92 @@ const SERVICE_OPTIONS: Record<SiteConfig["salonType"], string[]> = {
 
 export default function BuilderPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const { user, authReady, loading: authLoading } = useAuth();
+  
+  // Redirect guard: prevent users with site from accessing builder
+  const didRedirect = useRef(false);
+  
+  useEffect(() => {
+    // Wait for auth to be ready
+    if (!authReady || authLoading) {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[BUILDER GUARD] Waiting for auth", { 
+          authReady, 
+          authLoading, 
+          pathname,
+          uid: user?.id || "null"
+        });
+      }
+      return;
+    }
+
+    // Not logged in - redirect to login (only if not already on login)
+    if (!user) {
+      if (pathname === "/login") {
+        // Already on login page, don't redirect
+        if (process.env.NODE_ENV === "development") {
+          console.log("[BUILDER GUARD] Already on /login, skipping redirect");
+        }
+        return;
+      }
+      
+      if (!didRedirect.current) {
+        didRedirect.current = true;
+        if (process.env.NODE_ENV === "development") {
+          console.log("[BUILDER GUARD] Not logged in, redirecting to /login", {
+            pathname,
+            authReady,
+            authLoading
+          });
+        }
+        router.replace("/login");
+      }
+      return;
+    }
+
+    // Check if user has a siteId
+    const checkSiteId = async () => {
+      try {
+        const { getUserDocument } = await import("@/lib/firestoreUsers");
+        const userDoc = await getUserDocument(user.id);
+        
+        if (userDoc?.siteId) {
+          // User has a siteId - redirect to admin (only if not already there)
+          const targetPath = `/site/${userDoc.siteId}/admin`;
+          if (pathname === targetPath) {
+            // Already on target page, don't redirect
+            if (process.env.NODE_ENV === "development") {
+              console.log(`[BUILDER GUARD] Already on ${targetPath}, skipping redirect`);
+            }
+            return;
+          }
+          
+          if (!didRedirect.current) {
+            didRedirect.current = true;
+            if (process.env.NODE_ENV === "development") {
+              console.log(`[BUILDER GUARD] authReady=true, uid=${user.id}, siteId=${userDoc.siteId} -> redirect to ${targetPath}`, {
+                currentPath: pathname
+              });
+            }
+            router.replace(targetPath);
+          }
+          return;
+        }
+
+        // User exists but no siteId - allow builder access
+        if (process.env.NODE_ENV === "development") {
+          console.log(`[BUILDER GUARD] authReady=true, uid=${user.id}, no siteId -> allow builder`);
+        }
+        didRedirect.current = false; // Reset flag if no siteId
+      } catch (error) {
+        console.error("[BUILDER GUARD] Error checking siteId:", error);
+      }
+    };
+
+    checkSiteId();
+  }, [user, authReady, authLoading, router, pathname]);
+  
   const [config, setConfig] = useState<SiteConfig>(() => {
     // Initialize with random hero image and default about image
     const randomHeroIndex = Math.floor(Math.random() * HAIR_HERO_IMAGES.length);
@@ -59,7 +152,7 @@ export default function BuilderPage() {
       case 1:
         return config.salonName.trim() !== "";
       case 2:
-        return config.city.trim() !== "";
+        return !!(config.address && config.address.trim() !== "");
       case 3:
         return config.mainGoals.length > 0;
       case 4:
@@ -110,70 +203,73 @@ export default function BuilderPage() {
   const handleFinish = async () => {
     if (!config.salonName.trim()) return;
 
-    if (!db) {
-      setSaveError("Firebase לא מאותחל. אנא רענן את הדף.");
+    if (!user) {
+      setSaveError("משתמש לא מחובר. אנא רענן את הדף.");
       return;
     }
 
-    const siteId = createSiteIdFromName(config.salonName);
     setIsSaving(true);
     setSaveError(null);
 
     try {
-      const now = new Date().toISOString();
+      // Check if user already has a siteId
+      const { getUserDocument } = await import("@/lib/firestoreUsers");
+      const userDoc = await getUserDocument(user.id);
+      
+      if (userDoc?.siteId) {
+        // User already has a site - redirect to it
+        console.log(`[handleFinish] User already has siteId=${userDoc.siteId}, redirecting`);
+        router.replace(`/site/${userDoc.siteId}/admin`);
+        return;
+      }
 
-      // Save to Firestore - uses nested config field on site document
-      const { saveSiteConfig } = await import("@/lib/firestoreSiteConfig");
+      // Convert selected services (strings) to SiteService objects
+      const { saveSiteServices } = await import("@/lib/firestoreSiteServices");
+      const siteServices = config.services.map((serviceName, index) => ({
+        id: `svc_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`,
+        name: serviceName,
+        enabled: true,
+        sortOrder: index,
+      }));
+
+      // Create new site from template with builder config
+      const { createSiteFromTemplate } = await import("@/lib/firestoreSites");
+      const newSiteId = await createSiteFromTemplate(user.id, config);
       
-      // Save config to sites/{siteId}.config (nested field)
-      await saveSiteConfig(siteId, config);
+      // Save services to the new site
+      await saveSiteServices(newSiteId, siteServices);
       
-      // Also save additional site metadata to sites/{siteId}
-      await setDoc(
-        doc(db, "sites", siteId),
-        {
-          siteId,
-          createdAt: now,
-          updatedAt: now,
-          templateKey: "hair/luxury",
-        },
-        { merge: true }
-      );
+      // Update user document with siteId
+      const { updateUserSiteId } = await import("@/lib/firestoreUsers");
+      await updateUserSiteId(user.id, newSiteId);
+
+      console.log(`[handleFinish] Created site ${newSiteId} for user ${user.id}`);
+
+      if (process.env.NODE_ENV === "development") {
+        console.log(`[handleFinish] Redirecting to /site/${newSiteId}/admin`);
+      }
 
       // Also save to localStorage for backward compatibility
       if (typeof window !== "undefined") {
-        // Save per-site config
+        // Save per-site config (using siteId as key)
         window.localStorage.setItem(
-          `siteConfig:${siteId}`,
+          `siteConfig:${newSiteId}`,
           JSON.stringify(config)
         );
 
         // Save per-site booking state (initialize with default if not exists)
-        const existingBookingState = window.localStorage.getItem(`bookingState:${siteId}`);
+        const existingBookingState = window.localStorage.getItem(`bookingState:${newSiteId}`);
         if (!existingBookingState) {
           window.localStorage.setItem(
-            `bookingState:${siteId}`,
+            `bookingState:${newSiteId}`,
             JSON.stringify(defaultBookingState)
           );
         }
-
-        // Optionally keep a list of created sites for later admin
-        const listRaw = window.localStorage.getItem("siteList");
-        const list = listRaw ? JSON.parse(listRaw) : [];
-        const newEntry = {
-          siteId,
-          salonName: config.salonName,
-          city: config.city,
-          createdAt: now,
-        };
-        window.localStorage.setItem(
-          "siteList",
-          JSON.stringify([...list, newEntry])
-        );
       }
 
-      // Navigate to the public site
-      router.push(`/site/${siteId}`);
+      // Navigate to admin dashboard after wizard completion
+      // Use replace to prevent going back to builder
+      router.replace(`/site/${newSiteId}/admin`);
     } catch (err) {
       console.error("Failed to save site config to Firestore", err);
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -273,9 +369,33 @@ export default function BuilderPage() {
   };
 
 
+  // Show loading while auth initializes
+  if (!authReady || authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-500 mx-auto mb-4"></div>
+          <p className="text-slate-600">טוען...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading if redirecting
+  if (user && user.siteId && didRedirect.current) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-500 mx-auto mb-4"></div>
+          <p className="text-slate-600">מעביר...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 py-8">
-      <div className="container mx-auto px-4 max-w-2xl">
+        <div className="container mx-auto px-4 max-w-2xl">
         <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-6 sm:p-8 mt-8 mb-16 text-right">
           {/* Step indicator */}
           <div className="mb-8">
@@ -304,6 +424,7 @@ export default function BuilderPage() {
               <h2 className="text-2xl font-bold text-slate-900 mb-6">
                 פרטים בסיסיים
               </h2>
+              <EditableLaterHint />
               <div>
                 <label
                   htmlFor="salonName"
@@ -343,46 +464,13 @@ export default function BuilderPage() {
           {step === 2 && (
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-slate-900 mb-6">מיקום</h2>
-              <div>
-                <label
-                  htmlFor="city"
-                  className="block text-sm font-medium text-slate-700 mb-2"
-                >
-                  עיר *
-                </label>
-                <input
-                  type="text"
-                  id="city"
-                  value={config.city}
-                  onChange={(e) => updateConfig({ city: e.target.value })}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
-                  placeholder="הזן את שם העיר"
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="neighborhood"
-                  className="block text-sm font-medium text-slate-700 mb-2"
-                >
-                  שכונה (לא חובה)
-                </label>
-                <input
-                  type="text"
-                  id="neighborhood"
-                  value={config.neighborhood || ""}
-                  onChange={(e) =>
-                    updateConfig({ neighborhood: e.target.value })
-                  }
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
-                  placeholder="הזן את שם השכונה"
-                />
-              </div>
+              <EditableLaterHint />
               <div>
                 <label
                   htmlFor="address"
                   className="block text-sm font-medium text-slate-700 mb-2"
                 >
-                  כתובת מלאה (להצגה במפה)
+                  כתובת *
                 </label>
                 <input
                   type="text"
@@ -391,6 +479,7 @@ export default function BuilderPage() {
                   onChange={(e) => updateConfig({ address: e.target.value })}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
                   placeholder="למשל: רחוב בן יהודה 10, תל אביב"
+                  required
                 />
                 <p className="text-xs text-slate-500 mt-1 text-right">
                   הכתובת תוצג במפה באתר. אם לא מוגדר, המפה לא תוצג.
@@ -405,6 +494,7 @@ export default function BuilderPage() {
               <h2 className="text-2xl font-bold text-slate-900 mb-6">
                 מה המטרה העיקרית של האתר? *
               </h2>
+              <EditableLaterHint />
               <div className="space-y-3">
                 {(Object.keys(mainGoalLabels) as MainGoal[]).map((goal) => (
                   <label
@@ -430,6 +520,7 @@ export default function BuilderPage() {
               <h2 className="text-2xl font-bold text-slate-900 mb-6">
                 איזה שירותים יש בסלון? *
               </h2>
+              <EditableLaterHint />
               <div className="space-y-3">
                 {(SERVICE_OPTIONS[config.salonType] ?? []).map((serviceName) => {
                   const isChecked = config.services.includes(serviceName);
@@ -514,6 +605,7 @@ export default function BuilderPage() {
               <h2 className="text-2xl font-bold text-slate-900 mb-6">
                 איזה סגנון אתר אתה רוצה?
               </h2>
+              <EditableLaterHint />
               <div className="space-y-3">
                 {(["luxury", "clean", "colorful"] as Array<keyof typeof vibeLabels>).map(
                   (vibe) => (
@@ -547,6 +639,7 @@ export default function BuilderPage() {
               <h2 className="text-2xl font-bold text-slate-900 mb-6">
                 מה לגבי תמונות?
               </h2>
+              <EditableLaterHint />
               <div className="space-y-3">
                 {(
                   Object.keys(photosOptionLabels) as Array<
@@ -607,6 +700,7 @@ export default function BuilderPage() {
               <h2 className="text-2xl font-bold text-slate-900 mb-6">
                 איך לקוחות יכולים ליצור קשר? *
               </h2>
+              <EditableLaterHint />
               
               {/* Contact details */}
               <div className="space-y-4">
@@ -736,6 +830,7 @@ export default function BuilderPage() {
               <h2 className="text-2xl font-bold text-slate-900 mb-6">
                 איזה עמודים נוספים תרצה באתר?
               </h2>
+              <EditableLaterHint />
               <div className="space-y-3">
                 {(
                   Object.keys(extraPageLabels) as Array<

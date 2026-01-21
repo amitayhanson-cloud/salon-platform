@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { SiteConfig } from "@/types/siteConfig";
+import type { SiteConfig, SiteService } from "@/types/siteConfig";
 import { defaultThemeColors } from "@/types/siteConfig";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
-import { subscribeServices } from "@/lib/firestoreServices";
-import type { Service } from "@/types/service";
+import { subscribeSiteServices, migrateServicesFromSubcollection } from "@/lib/firestoreSiteServices";
 import {
   getTemplateForConfig,
 } from "@/lib/templateLibrary";
@@ -13,7 +12,7 @@ import HairLuxurySite from "./HairLuxurySite";
 
 export default function SiteRenderer({ siteId }: { siteId: string }) {
   const [config, setConfig] = useState<SiteConfig | null>(null);
-  const [services, setServices] = useState<Service[]>([]);
+  const [services, setServices] = useState<SiteService[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -25,6 +24,7 @@ export default function SiteRenderer({ siteId }: { siteId: string }) {
     console.log("[Site] rendering siteId", siteId);
 
     // Subscribe to Firestore config (realtime updates)
+    // siteId is the site document ID (loads from sites/{siteId}.config)
     const unsubscribe = subscribeSiteConfig(
       siteId,
       (cfg) => {
@@ -111,18 +111,32 @@ export default function SiteRenderer({ siteId }: { siteId: string }) {
     };
   }, [siteId]);
 
-  // Load services from Firestore (same source as Prices page)
+  // Load services from services array (same source as admin Services page)
   useEffect(() => {
     if (!siteId) return;
 
-    const unsubscribeServices = subscribeServices(
+    // Run migration on first load (non-blocking)
+    migrateServicesFromSubcollection(siteId).catch((err) => {
+      console.error("[SiteRenderer] Migration error (non-fatal)", err);
+    });
+
+    const unsubscribeServices = subscribeSiteServices(
       siteId,
       (svcs) => {
-        // Only show active services, sorted by name
-        const activeServices = svcs
-          .filter((s) => s.active !== false)
-          .sort((a, b) => a.name.localeCompare(b.name));
-        setServices(activeServices);
+        console.log(`[SiteRenderer] Loaded services from PATH=sites/${siteId}, count=${svcs.length}, items:`, svcs.map(s => ({ id: s?.id, name: s?.name, enabled: s?.enabled })));
+        
+        // Only show enabled services, sorted by sortOrder then name
+        const enabledServices = svcs
+          .filter((s) => s.enabled !== false)
+          .sort((a, b) => {
+            if (a.sortOrder !== undefined && b.sortOrder !== undefined) {
+              return a.sortOrder - b.sortOrder;
+            }
+            return a.name.localeCompare(b.name);
+          });
+        
+        console.log(`[SiteRenderer] After filtering enabled services, count=${enabledServices.length}`);
+        setServices(enabledServices);
       },
       (err) => {
         console.error("[SiteRenderer] Failed to load services", err);

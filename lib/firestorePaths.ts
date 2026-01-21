@@ -4,6 +4,7 @@ import { db } from "./firebaseClient";
 /**
  * Standardized Firestore path helpers for multi-tenant salon platform
  * All paths follow: sites/{siteId}/...
+ * Note: siteId is the site document ID, not userId
  */
 
 export function workersCollection(siteId: string) {

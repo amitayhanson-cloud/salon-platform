@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { usePathname, useParams } from "next/navigation";
-import { ChevronDown, Menu, X } from "lucide-react";
+import { usePathname, useParams, useRouter } from "next/navigation";
+import { ChevronDown, Menu, X, ExternalLink } from "lucide-react";
+import { useAuth } from "@/components/auth/AuthProvider";
 
 type MenuItem = {
   label: string;
@@ -11,33 +12,36 @@ type MenuItem = {
   items?: { label: string; href: string }[];
 };
 
-function getMenuItems(siteId: string): MenuItem[] {
+function getMenuItems(siteId: string | null): MenuItem[] {
+  // Use /site/me/admin for routes if siteId is null or "me"
+  const basePath = !siteId || siteId === "me" ? "/site/me/admin" : `/site/${siteId}/admin`;
+  
   return [
     {
       label: "ניהול אתר",
       items: [
-        { label: "הגדרות", href: `/site/${siteId}/admin/settings` },
-        { label: "מחירים", href: `/site/${siteId}/admin/prices` },
-        { label: "צבעים", href: `/site/${siteId}/admin/colours` },
-        { label: "תמונות", href: `/site/${siteId}/admin/pictures` },
+        { label: "הגדרות", href: `${basePath}/settings` },
+        { label: "שירותים", href: `${basePath}/services` },
+        { label: "צבעים", href: `${basePath}/colours` },
+        { label: "תמונות", href: `${basePath}/pictures` },
       ],
     },
     {
       label: "צוות",
       items: [
-        { label: "עובדים", href: `/site/${siteId}/admin/team/workers` },
-        { label: "משכורות", href: `/site/${siteId}/admin/team/salary` },
+        { label: "עובדים", href: `${basePath}/team/workers` },
+        { label: "משכורות", href: `${basePath}/team/salary` },
       ],
     },
     {
       label: "לקוחות",
       items: [
-        { label: "כרטיס לקוח", href: `/site/${siteId}/admin/clients/client-card` },
+        { label: "כרטיס לקוח", href: `${basePath}/clients/client-card` },
       ],
     },
   {
     label: "יומן",
-    href: `/site/${siteId}/admin/bookings`,
+    href: `${basePath}/bookings`,
   },
   ];
 }
@@ -45,11 +49,30 @@ function getMenuItems(siteId: string): MenuItem[] {
 export default function AdminHeader() {
   const pathname = usePathname();
   const params = useParams();
-  const siteId = params?.siteId as string;
-  const menuItems = siteId ? getMenuItems(siteId) : [];
+  const router = useRouter();
+  const siteId = params?.siteId as string | null;
+  const { user, loading: authLoading } = useAuth();
+  const menuItems = getMenuItems(siteId || null);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
+
+  // Get public site URL by removing /admin from current pathname
+  const getPublicPath = (): string => {
+    // Remove /admin and everything after it
+    const publicPath = pathname.replace(/\/admin(\/.*)?$/, "");
+    // If result is empty, fallback to root
+    return publicPath || "/";
+  };
+
+  // Handle button click - open public site in NEW TAB
+  const handleViewWebsite = () => {
+    const publicPath = getPublicPath();
+    const fullUrl = `${window.location.origin}${publicPath}`;
+    window.open(fullUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const canViewSite = !authLoading && !!user;
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -112,7 +135,7 @@ export default function AdminHeader() {
           {/* Logo/Brand */}
           <div className="flex-shrink-0">
             <Link
-              href={siteId ? `/site/${siteId}/admin` : "/admin"}
+              href={siteId && siteId !== "me" ? `/site/${siteId}/admin` : "/site/me/admin"}
               className="text-xl font-bold text-slate-900 hover:text-sky-600 transition-colors"
             >
               פאנל ניהול
@@ -121,6 +144,17 @@ export default function AdminHeader() {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-1 space-x-reverse">
+            {/* View Website Button */}
+            {canViewSite && (
+              <button
+                onClick={handleViewWebsite}
+                className="px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400 flex items-center gap-2"
+                title="צפייה באתר הציבורי"
+              >
+                <span>צפייה באתר</span>
+                <ExternalLink className="w-4 h-4" />
+              </button>
+            )}
             {menuItems.map((item) => (
               <div key={item.label} className="relative">
                 {item.href ? (
@@ -192,6 +226,21 @@ export default function AdminHeader() {
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
           <nav className="md:hidden pb-4 animate-[dropdown_0.2s_ease-out_forwards]">
+            {/* View Website Button (Mobile) */}
+            {canViewSite && (
+              <div className="border-b border-slate-100 pb-3 mb-3">
+                <button
+                  onClick={() => {
+                    handleViewWebsite();
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full px-4 py-3 text-sm font-medium transition-colors border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg flex items-center justify-between"
+                >
+                  <span>צפייה באתר</span>
+                  <ExternalLink className="w-4 h-4" />
+                </button>
+              </div>
+            )}
             {menuItems.map((item) => (
               <div key={item.label} className="border-b border-slate-100 last:border-0">
                 {item.href ? (

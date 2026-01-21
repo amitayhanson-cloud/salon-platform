@@ -2,8 +2,13 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { useRouter } from "next/navigation";
+import { routeAfterAuth } from "@/lib/authRedirect";
 
 export default function Home() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
   const [formData, setFormData] = useState({
     fullName: "",
     phone: "",
@@ -13,6 +18,31 @@ export default function Home() {
     interest: "",
   });
   const [formSubmitted, setFormSubmitted] = useState(false);
+
+  const handleLogin = () => {
+    router.push("/login");
+  };
+
+  const handleSignup = () => {
+    router.push("/signup");
+  };
+
+  const handleGoToDashboard = async () => {
+    if (!user) return;
+    
+    try {
+      const redirectPath = await routeAfterAuth(user.id);
+      router.replace(redirectPath);
+    } catch (error) {
+      console.error("Error determining redirect path:", error);
+      // Fallback: check if user has siteId directly
+      if (user.siteId) {
+        router.replace(`/site/${user.siteId}/admin`);
+      } else {
+        router.replace("/builder");
+      }
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -58,12 +88,32 @@ export default function Home() {
                 בינה מלאכותית עושה את העבודה הקשה עבורך.
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
-                <Link
-                  href="/builder"
-                  className="inline-block px-6 py-3 bg-sky-500 hover:bg-sky-600 text-white font-semibold rounded-full shadow-sm shadow-sky-100 transition-colors text-center"
-                >
-                  התחל לבנות את האתר שלך
-                </Link>
+                {user ? (
+                  // User is logged in - show "Go to Dashboard" button
+                  <button
+                    onClick={handleGoToDashboard}
+                    disabled={loading}
+                    className="inline-block px-6 py-3 bg-sky-500 hover:bg-sky-600 text-white font-semibold rounded-full shadow-sm shadow-sky-100 transition-colors text-center disabled:opacity-50"
+                  >
+                    {loading ? "טוען..." : "לדשבורד"}
+                  </button>
+                ) : (
+                  // User not logged in - show login and signup buttons
+                  <>
+                    <button
+                      onClick={handleLogin}
+                      className="inline-block px-6 py-3 bg-white border border-sky-200 text-sky-700 hover:bg-sky-50 rounded-full font-medium transition-colors text-center"
+                    >
+                      התחברות
+                    </button>
+                    <button
+                      onClick={handleSignup}
+                      className="inline-block px-6 py-3 bg-sky-500 hover:bg-sky-600 text-white font-semibold rounded-full shadow-sm shadow-sky-100 transition-colors text-center"
+                    >
+                      הרשמה
+                    </button>
+                  </>
+                )}
                 <Link
                   href="#how-it-works"
                   className="inline-block px-6 py-3 bg-white border border-sky-200 text-sky-700 hover:bg-sky-50 rounded-full font-medium transition-colors text-center"
