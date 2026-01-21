@@ -18,8 +18,8 @@ export function ProtectedRoute({ children, requireWebsite = false }: ProtectedRo
       if (!user) {
         // Not logged in, redirect to login
         router.push("/login");
-      } else if (requireWebsite && !user.websiteId) {
-        // User doesn't have a website yet
+      } else if (requireWebsite && !user.siteId) {
+        // User doesn't have a site yet
         router.push("/builder");
       }
     }
@@ -38,7 +38,7 @@ export function ProtectedRoute({ children, requireWebsite = false }: ProtectedRo
   }
 
   // Don't render children if not authenticated
-  if (!user || (requireWebsite && !user.websiteId)) {
+  if (!user || (requireWebsite && !user.siteId)) {
     return null;
   }
 

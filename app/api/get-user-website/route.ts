@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        websiteId: userDoc.websiteId || null,
+        siteId: userDoc.siteId || null,
       });
     } catch (verifyError) {
       return NextResponse.json(

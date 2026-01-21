@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createWebsiteDocument, updateUserWebsiteId } from "@/lib/firestoreUsers";
+import { createWebsiteDocument, updateUserSiteId } from "@/lib/firestoreUsers";
 import { doc, setDoc, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
 import { defaultSiteConfig } from "@/types/siteConfig";
@@ -52,8 +52,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update user document with website ID
-    await updateUserWebsiteId(userId, website.id);
+    // Update user document with site ID
+    await updateUserSiteId(userId, website.id);
 
     // Create initial site config for the website
     if (!db) {
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      websiteId: website.id,
+      siteId: website.id,
       subdomain: website.subdomain,
     });
   } catch (error: any) {

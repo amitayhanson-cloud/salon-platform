@@ -217,7 +217,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
     name?: string
-  ): Promise<{ success: boolean; error?: string; userId?: string; websiteId?: string }> => {
+  ): Promise<{ success: boolean; error?: string; userId?: string }> => {
     if (!auth) {
       console.error("Firebase Auth not initialized");
       return { success: false, error: "Firebase לא מאותחל. אנא בדוק את הגדרות Firebase שלך." };
