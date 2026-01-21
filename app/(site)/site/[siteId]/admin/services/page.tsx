@@ -690,9 +690,9 @@ export default function ServicesPage() {
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  checked={editingService.active !== false}
+                  checked={editingService.enabled !== false}
                   onChange={(e) =>
-                    setEditingService({ ...editingService, active: e.target.checked })
+                    setEditingService({ ...editingService, enabled: e.target.checked })
                   }
                   className="w-4 h-4 text-sky-500 rounded focus:ring-sky-500"
                 />

@@ -23,7 +23,11 @@ export async function getSiteServices(siteId: string): Promise<SiteService[]> {
       return [];
     }
     
-    return services as SiteService[];
+    // Map services and handle backward compatibility: active -> enabled
+    return services.map((s: any) => ({
+      ...s,
+      enabled: s.enabled ?? s.active ?? true, // Map old 'active' to 'enabled', default to true
+    })) as SiteService[];
   } catch (err) {
     console.error("[getSiteServices] Failed to get services", err);
     return [];
@@ -171,8 +175,14 @@ export function subscribeSiteServices(
         return;
       }
       
-      console.log(`[subscribeSiteServices] PATH=${path} - Loaded ${services.length} services:`, services.map(s => ({ id: s?.id, name: s?.name, enabled: s?.enabled })));
-      onUpdate(services as SiteService[]);
+      // Map services and handle backward compatibility: active -> enabled
+      const mappedServices = services.map((s: any) => ({
+        ...s,
+        enabled: s.enabled ?? s.active ?? true, // Map old 'active' to 'enabled', default to true
+      })) as SiteService[];
+      
+      console.log(`[subscribeSiteServices] PATH=${path} - Loaded ${mappedServices.length} services:`, mappedServices.map(s => ({ id: s?.id, name: s?.name, enabled: s?.enabled })));
+      onUpdate(mappedServices);
     },
     (err) => {
       console.error("[subscribeSiteServices] error", err);
