@@ -1063,23 +1063,18 @@ export default function SettingsPage() {
     );
   }
 
-  // Build tabs list (conditionally include reviews/faq)
-  type SettingsTabType =
-  | "basic"
-  | "contact"
-  | "booking"
-  | "reviews"
-  | "faq"
-  | "hours";
+  // Build tabs list - single source of truth for tab keys
+  const settingsTabs = [
+    { key: "basic", label: "מידע בסיסי" },
+    { key: "contact", label: "פרטי יצירת קשר" },
+    { key: "booking", label: "הזמנה אונליין" },
+    { key: "reviews", label: "ביקורות" },
+    { key: "faq", label: "FAQ" },
+    { key: "hours", label: "שעות פעילות" },
+] as const;
 
-const settingsTabs: { key: SettingsTabType; label: string }[] = [
-  { key: "basic", label: "מידע בסיסי" },
-  { key: "contact", label: "פרטי יצירת קשר" },
-  { key: "booking", label: "הזמנה אונליין" },
-  { key: "reviews", label: "ביקורות" },
-  { key: "faq", label: "FAQ" },
-  { key: "hours", label: "שעות פעילות" },
-];
+  // Derive type from tabs config to ensure type safety
+  type SettingsTabType = typeof settingsTabs[number]["key"];
 
 
   return (
@@ -1120,13 +1115,6 @@ const settingsTabs: { key: SettingsTabType; label: string }[] = [
               siteConfig={siteConfig}
               onChange={handleConfigChange}
               renderSections={["basic", "location", "specialNote"]}
-            />
-          )}
-          {activeTab === "style" && (
-            <AdminSiteTab
-              siteConfig={siteConfig}
-              onChange={handleConfigChange}
-              renderSections={["style"]}
             />
           )}
           {activeTab === "contact" && (
