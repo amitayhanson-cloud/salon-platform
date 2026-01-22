@@ -25,7 +25,8 @@ const SERVICE_OPTIONS: Record<SiteConfig["salonType"], string[]> = {
 };
 
 
-const vibeLabels: Record<SiteConfig["vibe"], string> = {
+// vibeLabels kept for backwards compatibility but no longer used in UI
+const vibeLabels: Record<NonNullable<SiteConfig["vibe"]>, string> = {
   luxury: "סגנון יוקרתי",
   clean: "סגנון נקי ורך",
   colorful: "סגנון צבעוני וכיפי",
@@ -33,7 +34,8 @@ const vibeLabels: Record<SiteConfig["vibe"], string> = {
   surprise: "לא בשימוש כרגע",
 };
 
-const photosOptionLabels: Record<SiteConfig["photosOption"], string> = {
+// photosOptionLabels kept for backwards compatibility but no longer used in UI
+const photosOptionLabels: Record<NonNullable<SiteConfig["photosOption"]>, string> = {
   own: "אני מעלה תמונות שלי",
   ai: "AI ייצור תמונות בשבילי",
   mixed: "שילוב של שניהם",
