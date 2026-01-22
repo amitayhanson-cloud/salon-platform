@@ -79,12 +79,15 @@ export function normalizeFirebaseError(error: unknown): NormalizedError {
     "auth/network-request-failed": "בעיית רשת. בדוק את החיבור לאינטרנט",
     "auth/too-many-requests": "יותר מדי ניסיונות. נסה שוב מאוחר יותר",
     "auth/user-disabled": "החשבון הושבת. אנא פנה לתמיכה",
-    "auth/invalid-credential": "אימייל או סיסמה שגויים",
-    "auth/wrong-password": "סיסמה שגויה",
-    "auth/user-not-found": "משתמש לא קיים",
+    "auth/invalid-credential": "אימייל או סיסמה שגויים. אם נרשמת עם Google, השתמש בכפתור 'התחברות עם Google'",
+    "auth/wrong-password": "אימייל או סיסמה שגויים",
+    "auth/user-not-found": "חשבון לא נמצא. אם נרשמת עם Google, השתמש בכפתור 'התחברות עם Google'. אחרת, הירשם תחילה",
     "auth/invalid-verification-code": "קוד האימות שגוי",
     "auth/invalid-verification-id": "מזהה האימות שגוי",
     "auth/code-expired": "קוד האימות פג תוקף",
+    "auth/popup-closed-by-user": "חלון ההתחברות נסגר",
+    "auth/popup-blocked": "חלון ההתחברות נחסם. אנא אפשר חלונות קופצים בדפדפן",
+    "auth/account-exists-with-different-credential": "חשבון קיים עם שיטת התחברות אחרת. נסה להתחבר עם Google או אימייל/סיסמה",
   };
 
   // Return normalized error with Hebrew message if available
@@ -105,30 +108,36 @@ export function normalizeFirebaseError(error: unknown): NormalizedError {
 /**
  * Log error with full details for debugging
  * Safe to use with any error type
+ * Returns error info for further processing
  */
-export function logFirebaseError(context: string, error: unknown): void {
+export function logFirebaseError(context: string, error: unknown): { code?: string; message?: string } {
   const info = extractErrorInfo(error);
   
-  console.error(`[${context}] Firebase error (raw):`, error);
-  console.error(`[${context}] Firebase error (string):`, String(error));
+  // Only log in development
+  if (process.env.NODE_ENV === "development") {
+    console.error(`[${context}] Firebase error (raw):`, error);
+    console.error(`[${context}] Firebase error (string):`, String(error));
+    
+    if (info.code) {
+      console.error(`[${context}] Error code:`, info.code);
+    }
+    if (info.message) {
+      console.error(`[${context}] Error message:`, info.message);
+    }
+    if (info.name) {
+      console.error(`[${context}] Error name:`, info.name);
+    }
+    if (info.stack) {
+      console.error(`[${context}] Error stack:`, info.stack);
+    }
+    if (info.stringified) {
+      console.error(`[${context}] Error (stringified):`, info.stringified);
+    }
+    
+    // Also log the normalized error
+    const normalized = normalizeFirebaseError(error);
+    console.error(`[${context}] Normalized error:`, normalized);
+  }
   
-  if (info.code) {
-    console.error(`[${context}] Error code:`, info.code);
-  }
-  if (info.message) {
-    console.error(`[${context}] Error message:`, info.message);
-  }
-  if (info.name) {
-    console.error(`[${context}] Error name:`, info.name);
-  }
-  if (info.stack) {
-    console.error(`[${context}] Error stack:`, info.stack);
-  }
-  if (info.stringified) {
-    console.error(`[${context}] Error (stringified):`, info.stringified);
-  }
-  
-  // Also log the normalized error
-  const normalized = normalizeFirebaseError(error);
-  console.error(`[${context}] Normalized error:`, normalized);
+  return { code: info.code, message: info.message };
 }

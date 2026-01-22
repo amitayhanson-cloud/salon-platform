@@ -5,6 +5,8 @@ import { auth, isFirebaseConfigValid, getFirebaseError, getFirebaseConfigStatus 
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
   type User as FirebaseUser,
@@ -18,6 +20,7 @@ type AuthContextType = {
   user: User | null;
   firebaseUser: FirebaseUser | null;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string; redirectPath?: string }>;
+  loginWithGoogle: () => Promise<{ success: boolean; error?: string; redirectPath?: string }>;
   signup: (email: string, password: string, name?: string) => Promise<{ success: boolean; error?: string; userId?: string }>;
   logout: () => Promise<void>;
   loading: boolean;
@@ -140,7 +143,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setFirebaseUser(firebaseUser);
         // Fetch user document from Firestore
         try {
-          const userDoc = await getUserDocument(firebaseUser.uid);
+          let userDoc = await getUserDocument(firebaseUser.uid);
+          
+          // If user doc doesn't exist, create it (e.g., for Google users who signed in before we created docs)
+          if (!userDoc) {
+            if (process.env.NODE_ENV === "development") {
+              console.log("[AuthProvider] User doc missing, creating...", { 
+                uid: firebaseUser.uid, 
+                email: firebaseUser.email,
+                provider: firebaseUser.providerData[0]?.providerId || "unknown"
+              });
+            }
+            try {
+              userDoc = await createUserDocument(
+                firebaseUser.uid,
+                firebaseUser.email || "",
+                firebaseUser.displayName || undefined
+              );
+            } catch (createError) {
+              console.error("[AuthProvider] Error creating user document:", createError);
+            }
+          }
+          
           if (isMounted) {
             setUser(userDoc);
             if (process.env.NODE_ENV === "development" && userDoc) {
@@ -189,8 +213,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[AuthProvider.login] Attempting email/password login", { email, provider: "password" });
+      }
+      
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const userDoc = await getUserDocument(userCredential.user.uid);
+      
+      if (process.env.NODE_ENV === "development") {
+        console.log("[AuthProvider.login] Login successful", { uid: userCredential.user.uid, provider: userCredential.user.providerData[0]?.providerId || "password" });
+      }
+      
+      // Ensure Firestore user doc exists
+      let userDoc = await getUserDocument(userCredential.user.uid);
+      if (!userDoc) {
+        // Create user doc if missing (shouldn't happen for email/password, but handle gracefully)
+        if (process.env.NODE_ENV === "development") {
+          console.log("[AuthProvider.login] User doc missing, creating...", { uid: userCredential.user.uid });
+        }
+        userDoc = await createUserDocument(
+          userCredential.user.uid,
+          userCredential.user.email || email,
+          userCredential.user.displayName || undefined
+        );
+      }
+      
       setUser(userDoc);
       
       // Get redirect path using single source of truth: user.siteId
@@ -204,10 +250,76 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: true, redirectPath };
     } catch (error: unknown) {
       // Log full error details for debugging
-      logFirebaseError("login", error);
+      const errorInfo = logFirebaseError("login", error);
       
       // Normalize error to get user-friendly message
       const normalized = normalizeFirebaseError(error);
+      
+      if (process.env.NODE_ENV === "development") {
+        console.log("[AuthProvider.login] Login failed", { errorCode: normalized.code, errorMessage: normalized.message, provider: "password" });
+      }
+      
+      return { success: false, error: normalized.message };
+    }
+  };
+
+  const loginWithGoogle = async (): Promise<{ success: boolean; error?: string; redirectPath?: string }> => {
+    if (!auth) {
+      console.error("Firebase Auth not initialized");
+      return { success: false, error: "Firebase לא מאותחל. אנא בדוק את הגדרות Firebase שלך." };
+    }
+
+    try {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[AuthProvider.loginWithGoogle] Attempting Google login", { provider: "google" });
+      }
+      
+      const provider = new GoogleAuthProvider();
+      const userCredential = await signInWithPopup(auth, provider);
+      
+      if (process.env.NODE_ENV === "development") {
+        console.log("[AuthProvider.loginWithGoogle] Google login successful", { 
+          uid: userCredential.user.uid, 
+          email: userCredential.user.email,
+          provider: userCredential.user.providerData[0]?.providerId || "google.com"
+        });
+      }
+      
+      // Ensure Firestore user doc exists (create if missing)
+      let userDoc = await getUserDocument(userCredential.user.uid);
+      if (!userDoc) {
+        if (process.env.NODE_ENV === "development") {
+          console.log("[AuthProvider.loginWithGoogle] User doc missing, creating...", { uid: userCredential.user.uid });
+        }
+        // Create user doc for Google user
+        userDoc = await createUserDocument(
+          userCredential.user.uid,
+          userCredential.user.email || "",
+          userCredential.user.displayName || undefined
+        );
+      }
+      
+      setUser(userDoc);
+      
+      // Get redirect path using single source of truth: user.siteId
+      const redirectPath = await routeAfterAuth(userCredential.user.uid);
+      
+      if (process.env.NODE_ENV === "development") {
+        const siteId = userDoc ? userDoc.siteId || "null" : "null";
+        console.log(`[AuthProvider.loginWithGoogle] uid=${userCredential.user.uid}, siteId=${siteId} -> redirectPath=${redirectPath}`);
+      }
+      
+      return { success: true, redirectPath };
+    } catch (error: unknown) {
+      // Log full error details for debugging
+      const errorInfo = logFirebaseError("loginWithGoogle", error);
+      
+      // Normalize error to get user-friendly message
+      const normalized = normalizeFirebaseError(error);
+      
+      if (process.env.NODE_ENV === "development") {
+        console.log("[AuthProvider.loginWithGoogle] Google login failed", { errorCode: normalized.code, errorMessage: normalized.message, provider: "google" });
+      }
       
       return { success: false, error: normalized.message };
     }
@@ -269,7 +381,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Show fallback UI if Firebase config is invalid
   if (!configValid) {
     return (
-      <AuthContext.Provider value={{ user: null, firebaseUser: null, login, signup, logout, loading: false, authReady: true }}>
+      <AuthContext.Provider value={{ user: null, firebaseUser: null, login, loginWithGoogle, signup, logout, loading: false, authReady: true }}>
         <FirebaseConfigErrorBanner />
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg shadow-lg p-6 max-w-md text-right">
@@ -289,7 +401,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, firebaseUser, login, signup, logout, loading, authReady }}>
+    <AuthContext.Provider value={{ user, firebaseUser, login, loginWithGoogle, signup, logout, loading, authReady }}>
       {children}
     </AuthContext.Provider>
   );
