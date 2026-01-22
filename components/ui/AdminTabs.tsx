@@ -3,7 +3,7 @@
 type TabDef<T extends string> = { key: T; label: string };
 
 interface AdminTabsProps<T extends string> {
-  tabs: TabDef<T>[];
+  tabs: readonly TabDef<T>[];
   activeKey: T;
   onChange: (key: T) => void;
   className?: string;
