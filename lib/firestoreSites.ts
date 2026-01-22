@@ -1,4 +1,4 @@
-import { db } from "@/lib/firebaseClient";
+import { getDb } from "@/lib/firebaseClient";
 import { doc, getDoc, setDoc, collection, getDocs, Timestamp } from "firebase/firestore";
 import type { SiteConfig } from "@/types/siteConfig";
 
@@ -31,7 +31,7 @@ type SiteDoc = {
  * Path: sites/{siteId}
  */
 export function siteDoc(siteId: string) {
-  if (!db) throw new Error("Firestore db not initialized");
+  const db = getDb(); // Always get a fresh, valid Firestore instance
   return doc(db, SITES_COLLECTION, siteId);
 }
 
@@ -40,8 +40,7 @@ export function siteDoc(siteId: string) {
  * Returns the full site document with all fields
  */
 export async function getSite(siteId: string): Promise<SiteDoc | null> {
-  if (!db) throw new Error("Firestore db not initialized");
-  
+  const db = getDb(); // Always get a fresh, valid Firestore instance
   const siteRef = siteDoc(siteId);
   const siteSnap = await getDoc(siteRef);
   
@@ -65,8 +64,7 @@ export async function createSiteFromTemplate(
   ownerUid: string,
   builderConfig: SiteConfig
 ): Promise<string> {
-  if (!db) throw new Error("Firestore db not initialized");
-  
+  const db = getDb(); // Always get a fresh, valid Firestore instance
   // Load template site
   const templateSiteRef = doc(db, SITES_COLLECTION, TEMPLATE_SITE_ID);
   const templateSiteSnap = await getDoc(templateSiteRef);
@@ -113,8 +111,6 @@ export async function verifySiteOwnership(
   siteId: string,
   currentUid: string
 ): Promise<boolean> {
-  if (!db) throw new Error("Firestore db not initialized");
-  
   const site = await getSite(siteId);
   if (!site) {
     if (process.env.NODE_ENV === "development") {
@@ -139,8 +135,6 @@ export async function verifySiteOwnership(
  * This is a one-time migration function
  */
 export async function backfillSiteOwnerUid(userId: string): Promise<void> {
-  if (!db) throw new Error("Firestore db not initialized");
-  
   try {
     // Get user's siteId
     const { getUserDocument } = await import("@/lib/firestoreUsers");
@@ -198,8 +192,6 @@ export async function backfillSiteOwnerUid(userId: string): Promise<void> {
  * Get site config from sites/{siteId}.config
  */
 export async function getSiteConfig(siteId: string): Promise<SiteConfig | null> {
-  if (!db) throw new Error("Firestore db not initialized");
-  
   const site = await getSite(siteId);
   if (!site) {
     return null;
@@ -215,8 +207,6 @@ export async function saveSiteConfig(
   siteId: string,
   config: SiteConfig
 ): Promise<void> {
-  if (!db) throw new Error("Firestore db not initialized");
-  
   const siteRef = siteDoc(siteId);
   await setDoc(
     siteRef,
@@ -238,10 +228,7 @@ export function subscribeSiteConfig(
   onData: (config: SiteConfig | null) => void,
   onError?: (e: unknown) => void
 ): () => void {
-  if (!db) {
-    throw new Error("Firestore db not initialized");
-  }
-  
+  const db = getDb(); // Always get a fresh, valid Firestore instance
   const { onSnapshot } = require("firebase/firestore");
   const siteRef = siteDoc(siteId);
   

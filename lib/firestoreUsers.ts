@@ -1,4 +1,4 @@
-import { db } from "./firebaseClient";
+import { getDb } from "./firebaseClient";
 import {
   collection,
   doc,
@@ -28,13 +28,7 @@ export async function createUserDocument(
   email: string,
   name?: string
 ): Promise<User> {
-  if (!db) {
-    const error = "Firestore db not initialized. Check Firebase configuration.";
-    console.error("❌", error);
-    console.error("🔍 db type:", typeof db, "value:", db);
-    throw new Error(error);
-  }
-
+  const db = getDb(); // Always get a fresh, valid Firestore instance
   const userRef = doc(db, USERS_COLLECTION, userId);
   const userData: User = {
     id: userId,
@@ -55,13 +49,7 @@ export async function createUserDocument(
 
 // Get user document
 export async function getUserDocument(userId: string): Promise<User | null> {
-  if (!db) {
-    const error = "Firestore db not initialized. Check Firebase configuration.";
-    console.error("❌", error);
-    console.error("🔍 db type:", typeof db, "value:", db);
-    throw new Error(error);
-  }
-
+  const db = getDb(); // Always get a fresh, valid Firestore instance
   const userRef = doc(db, USERS_COLLECTION, userId);
   const userSnap = await getDoc(userRef);
 
@@ -85,13 +73,7 @@ export async function updateUserSiteId(
   userId: string,
   siteId: string
 ): Promise<void> {
-  if (!db) {
-    const error = "Firestore db not initialized. Check Firebase configuration.";
-    console.error("❌", error);
-    console.error("🔍 db type:", typeof db, "value:", db);
-    throw new Error(error);
-  }
-
+  const db = getDb(); // Always get a fresh, valid Firestore instance
   const userRef = doc(db, USERS_COLLECTION, userId);
   await setDoc(
     userRef,
@@ -114,13 +96,7 @@ export async function createWebsiteDocument(
   subdomain: string,
   templateId: string = "luxury"
 ): Promise<Website> {
-  if (!db) {
-    const error = "Firestore db not initialized. Check Firebase configuration.";
-    console.error("❌", error);
-    console.error("🔍 db type:", typeof db, "value:", db);
-    throw new Error(error);
-  }
-
+  const db = getDb(); // Always get a fresh, valid Firestore instance
   // Check if subdomain is already taken
   const websitesRef = collection(db, WEBSITES_COLLECTION);
   const q = query(websitesRef, where("subdomain", "==", subdomain));
@@ -156,13 +132,7 @@ export async function createWebsiteDocument(
 export async function getWebsiteByOwnerId(
   ownerUserId: string
 ): Promise<Website | null> {
-  if (!db) {
-    const error = "Firestore db not initialized. Check Firebase configuration.";
-    console.error("❌", error);
-    console.error("🔍 db type:", typeof db, "value:", db);
-    throw new Error(error);
-  }
-
+  const db = getDb(); // Always get a fresh, valid Firestore instance
   const websitesRef = collection(db, WEBSITES_COLLECTION);
   const q = query(websitesRef, where("ownerUserId", "==", ownerUserId));
   const querySnapshot = await getDocs(q);
@@ -191,13 +161,7 @@ export async function getWebsiteByOwnerId(
 export async function getWebsiteById(
   websiteId: string
 ): Promise<Website | null> {
-  if (!db) {
-    const error = "Firestore db not initialized. Check Firebase configuration.";
-    console.error("❌", error);
-    console.error("🔍 db type:", typeof db, "value:", db);
-    throw new Error(error);
-  }
-
+  const db = getDb(); // Always get a fresh, valid Firestore instance
   const websiteRef = doc(db, WEBSITES_COLLECTION, websiteId);
   const websiteSnap = await getDoc(websiteRef);
 

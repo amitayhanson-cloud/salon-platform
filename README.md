@@ -52,6 +52,26 @@ Run `npm run verify` to check linting and build before committing:
 npm run verify
 ```
 
+## Firebase Admin Setup (Required for Production)
+
+For API routes that use Firebase Admin SDK, you need to set up service account credentials.
+
+### Development
+- Option 1: Place `salon-platform-34cec-firebase-adminsdk-fbsvc-f73cb413cd.json` in the project root
+- Option 2: Set `FIREBASE_SERVICE_ACCOUNT_JSON` in `.env.local` (see `env.local.example`)
+
+### Production (Vercel)
+**REQUIRED:** Set `FIREBASE_SERVICE_ACCOUNT_JSON` environment variable in Vercel:
+
+1. Go to Firebase Console → Project Settings → Service Accounts
+2. Click "Generate New Private Key"
+3. Copy the entire JSON content
+4. In Vercel Dashboard → Project Settings → Environment Variables:
+   - Add `FIREBASE_SERVICE_ACCOUNT_JSON` with the full JSON as the value
+   - Vercel will handle newlines automatically
+
+**Important:** Without this variable, production builds will fail with "Missing FIREBASE_SERVICE_ACCOUNT_JSON" error.
+
 ## Deploy on Vercel
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.

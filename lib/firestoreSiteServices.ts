@@ -1,4 +1,4 @@
-import { db } from "@/lib/firebaseClient";
+import { getDb } from "@/lib/firebaseClient";
 import { doc, getDoc, setDoc, onSnapshot, Timestamp } from "firebase/firestore";
 import type { SiteService } from "@/types/siteConfig";
 
@@ -6,9 +6,10 @@ import type { SiteService } from "@/types/siteConfig";
  * Get services array from sites/{siteId}.services
  */
 export async function getSiteServices(siteId: string): Promise<SiteService[]> {
-  if (!db || !siteId) return [];
+  if (!siteId) return [];
   
   try {
+    const db = getDb(); // Always get a fresh, valid Firestore instance
     const siteRef = doc(db, "sites", siteId);
     const siteSnap = await getDoc(siteRef);
     
@@ -41,8 +42,7 @@ export async function saveSiteServices(
   siteId: string,
   services: SiteService[]
 ): Promise<void> {
-  if (!db) throw new Error("Firestore db not initialized");
-  
+  const db = getDb(); // Always get a fresh, valid Firestore instance
   const siteRef = doc(db, "sites", siteId);
   const path = `sites/${siteId}`;
   
@@ -63,8 +63,6 @@ export async function addSiteService(
   siteId: string,
   service: Omit<SiteService, "id">
 ): Promise<string> {
-  if (!db) throw new Error("Firestore db not initialized");
-  
   const existingServices = await getSiteServices(siteId);
   const path = `sites/${siteId}`;
   
@@ -98,8 +96,6 @@ export async function updateSiteService(
   serviceId: string,
   updates: Partial<Omit<SiteService, "id">>
 ): Promise<void> {
-  if (!db) throw new Error("Firestore db not initialized");
-  
   const existingServices = await getSiteServices(siteId);
   const serviceIndex = existingServices.findIndex((s) => s.id === serviceId);
   
@@ -123,8 +119,6 @@ export async function deleteSiteService(
   siteId: string,
   serviceId: string
 ): Promise<void> {
-  if (!db) throw new Error("Firestore db not initialized");
-  
   const existingServices = await getSiteServices(siteId);
   const updatedServices = existingServices.filter((s) => s.id !== serviceId);
   
@@ -140,55 +134,57 @@ export function subscribeSiteServices(
   onUpdate: (services: SiteService[]) => void,
   onError?: (error: Error) => void
 ): () => void {
-  if (!db) {
-    if (onError) onError(new Error("Firestore db not initialized"));
-    return () => {};
-  }
-  
-  const siteRef = doc(db, "sites", siteId);
-  
-  return onSnapshot(
-    siteRef,
-    async (snap) => {
-      if (!snap.exists()) {
-        onUpdate([]);
-        return;
-      }
-      
-      const siteData = snap.data();
-      const services = siteData?.services;
-      const path = `sites/${siteId}`;
-      
-      if (!Array.isArray(services)) {
-        console.log(`[subscribeSiteServices] PATH=${path} - services is not an array, type:`, typeof services, services);
-        // Try migration if services array doesn't exist (backward compatibility)
-        try {
-          await migrateServicesFromSubcollection(siteId);
-          // Re-fetch after migration
-          const migratedServices = await getSiteServices(siteId);
-          console.log(`[subscribeSiteServices] PATH=${path} - After migration, loaded ${migratedServices.length} services`);
-          onUpdate(migratedServices);
-        } catch (err) {
-          console.error("[subscribeSiteServices] Migration failed", err);
+  try {
+    const db = getDb(); // Always get a fresh, valid Firestore instance
+    const siteRef = doc(db, "sites", siteId);
+    
+    return onSnapshot(
+      siteRef,
+      async (snap) => {
+        if (!snap.exists()) {
           onUpdate([]);
+          return;
         }
-        return;
+        
+        const siteData = snap.data();
+        const services = siteData?.services;
+        const path = `sites/${siteId}`;
+        
+        if (!Array.isArray(services)) {
+          console.log(`[subscribeSiteServices] PATH=${path} - services is not an array, type:`, typeof services, services);
+          // Try migration if services array doesn't exist (backward compatibility)
+          try {
+            await migrateServicesFromSubcollection(siteId);
+            // Re-fetch after migration
+            const migratedServices = await getSiteServices(siteId);
+            console.log(`[subscribeSiteServices] PATH=${path} - After migration, loaded ${migratedServices.length} services`);
+            onUpdate(migratedServices);
+          } catch (err) {
+            console.error("[subscribeSiteServices] Migration failed", err);
+            onUpdate([]);
+          }
+          return;
+        }
+        
+        // Map services and handle backward compatibility: active -> enabled
+        const mappedServices = services.map((s: any) => ({
+          ...s,
+          enabled: s.enabled ?? s.active ?? true, // Map old 'active' to 'enabled', default to true
+        })) as SiteService[];
+        
+        console.log(`[subscribeSiteServices] PATH=${path} - Loaded ${mappedServices.length} services:`, mappedServices.map(s => ({ id: s?.id, name: s?.name, enabled: s?.enabled })));
+        onUpdate(mappedServices);
+      },
+      (err) => {
+        console.error("[subscribeSiteServices] error", err);
+        if (onError) onError(err as Error);
       }
-      
-      // Map services and handle backward compatibility: active -> enabled
-      const mappedServices = services.map((s: any) => ({
-        ...s,
-        enabled: s.enabled ?? s.active ?? true, // Map old 'active' to 'enabled', default to true
-      })) as SiteService[];
-      
-      console.log(`[subscribeSiteServices] PATH=${path} - Loaded ${mappedServices.length} services:`, mappedServices.map(s => ({ id: s?.id, name: s?.name, enabled: s?.enabled })));
-      onUpdate(mappedServices);
-    },
-    (err) => {
-      console.error("[subscribeSiteServices] error", err);
-      if (onError) onError(err as Error);
-    }
-  );
+    );
+  } catch (err) {
+    console.error("[subscribeSiteServices] Failed to initialize subscription", err);
+    if (onError) onError(err as Error);
+    return () => {}; // Return no-op unsubscribe function
+  }
 }
 
 /**
@@ -196,8 +192,6 @@ export function subscribeSiteServices(
  * This is a one-time migration function (for backward compatibility)
  */
 export async function migrateServicesFromSubcollection(siteId: string): Promise<void> {
-  if (!db) throw new Error("Firestore db not initialized");
-  
   try {
     // Check if services array already exists
     const existingServices = await getSiteServices(siteId);

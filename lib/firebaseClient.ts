@@ -1,9 +1,9 @@
 "use client";
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
-import { getAuth, type Auth } from "firebase/auth";
+import { getAuth as firebaseGetAuth, type Auth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
-import { getStorage, type FirebaseStorage } from "firebase/storage";
+import { getStorage as firebaseGetStorage, type FirebaseStorage } from "firebase/storage";
 
 // Helper to clean API key (remove any trailing ":1" or other suffixes)
 function cleanApiKey(apiKey: string | undefined): string | undefined {
@@ -129,7 +129,7 @@ function initializeFirebase() {
     
     // Auth only works on client side
     if (isClient) {
-      _auth = getAuth(app);
+      _auth = firebaseGetAuth(app);
     }
     
     // Firestore works on both client and server
@@ -137,7 +137,7 @@ function initializeFirebase() {
     
     // Storage only works on client side
     if (isClient) {
-      _storage = getStorage(app);
+      _storage = firebaseGetStorage(app);
     }
     
     // Debug logging
@@ -165,84 +165,101 @@ export function getFirebaseError(): string | null {
   return initializationError;
 }
 
-// Lazy getters - Firebase only initializes when these are accessed
-// This prevents initialization during Next.js build time
-function getAuthLazy(): Auth | null {
-  if (typeof window === "undefined") return null; // Auth only works on client
+/**
+ * Get Firebase App instance
+ * Lazy initialization - only initializes when first called
+ */
+export function getFirebaseApp(): FirebaseApp {
   initializeFirebase();
+  if (!app) {
+    throw new Error("Firebase App not initialized. Check your Firebase configuration.");
+  }
+  return app;
+}
+
+/**
+ * Get Firebase Auth instance (client-side only)
+ * Lazy initialization - only initializes when first called
+ */
+export function getClientAuth(): Auth {
+  if (typeof window === "undefined") {
+    throw new Error("Firebase Auth is only available on the client side");
+  }
+  initializeFirebase();
+  if (!_auth) {
+    throw new Error("Firebase Auth not initialized. Check your Firebase configuration.");
+  }
   return _auth;
 }
 
-function getDbLazy(): Firestore | null {
+/**
+ * Get Firestore instance (works on both client and server)
+ * Lazy initialization - only initializes when first called
+ * This is the SAFE way to get db - always returns a real Firestore instance
+ */
+export function getDb(): Firestore {
   initializeFirebase();
+  if (!_db) {
+    // Log env var presence (not values) for debugging
+    const envVars = {
+      hasApiKey: !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+      hasAuthDomain: !!process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+      hasProjectId: !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+      hasStorageBucket: !!process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+      hasMessagingSenderId: !!process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+      hasAppId: !!process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+    };
+    
+    const errorMsg = `Firestore db not initialized. Check Firebase configuration. Env vars present: ${JSON.stringify(envVars)}`;
+    console.error("❌", errorMsg);
+    if (initializationError) {
+      console.error("❌ Initialization error:", initializationError);
+    }
+    throw new Error(errorMsg);
+  }
   return _db;
 }
 
-function getStorageLazy(): FirebaseStorage | null {
-  if (typeof window === "undefined") return null; // Storage only works on client
+/**
+ * Get Firebase Storage instance (client-side only)
+ * Lazy initialization - only initializes when first called
+ */
+export function getClientStorage(): FirebaseStorage {
+  if (typeof window === "undefined") {
+    throw new Error("Firebase Storage is only available on the client side");
+  }
   initializeFirebase();
+  if (!_storage) {
+    throw new Error("Firebase Storage not initialized. Check your Firebase configuration.");
+  }
   return _storage;
 }
 
-// Export lazy getters - Firebase only initializes when these are accessed
-// IMPORTANT: Do NOT call initializeFirebase() at module level (removed)
-// This prevents Firebase from initializing during Next.js build time
-// 
-// Note: These are still evaluated at import time, but they check for initialization
-// The real fix is marking routes as dynamic (see page.tsx files with export const dynamic = "force-dynamic")
+// Legacy exports for backward compatibility
+// These use getters to ensure lazy initialization
+// IMPORTANT: Prefer using getClientAuth(), getDb(), getClientStorage() directly for better error handling
+export const auth = (() => {
+  if (typeof window === "undefined") return null;
+  try {
+    return getClientAuth();
+  } catch {
+    return null;
+  }
+})() as Auth | null;
 
-// Create a non-null object to use as Proxy target (Proxy requires object, not null)
-const createAuthProxy = (): Auth | null => {
-  let cached: Auth | null = null;
-  // Use a dummy object as the target - Proxy requires a non-null object
-  const dummyTarget = {} as Auth;
-  return new Proxy(dummyTarget, {
-    get(_target, prop) {
-      if (!cached) {
-        cached = getAuthLazy();
-      }
-      if (cached && prop in cached) {
-        return (cached as any)[prop];
-      }
-      return undefined;
-    }
-  }) as Auth | null;
-};
+export const db = (() => {
+  try {
+    return getDb();
+  } catch {
+    return null;
+  }
+})() as Firestore | null;
 
-const createDbProxy = (): Firestore | null => {
-  let cached: Firestore | null = null;
-  // Use a dummy object as the target - Proxy requires a non-null object
-  const dummyTarget = {} as Firestore;
-  return new Proxy(dummyTarget, {
-    get(_target, prop) {
-      if (!cached) {
-        cached = getDbLazy();
-      }
-      if (cached && prop in cached) {
-        return (cached as any)[prop];
-      }
-      return undefined;
-    }
-  }) as Firestore | null;
-};
-
-const createStorageProxy = (): FirebaseStorage | null => {
-  let cached: FirebaseStorage | null = null;
-  // Use a dummy object as the target - Proxy requires a non-null object
-  const dummyTarget = {} as FirebaseStorage;
-  return new Proxy(dummyTarget, {
-    get(_target, prop) {
-      if (!cached) {
-        cached = getStorageLazy();
-      }
-      if (cached && prop in cached) {
-        return (cached as any)[prop];
-      }
-      return undefined;
-    }
-  }) as FirebaseStorage | null;
-};
-
-export const auth = createAuthProxy();
-export const db = createDbProxy();
-export const storage = createStorageProxy();
+export const storage = (() => {
+  if (typeof window === "undefined") return null;
+  try {
+    return getClientStorage();
+  } catch {
+    return null;
+  }
+})() as FirebaseStorage | null;
