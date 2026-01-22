@@ -1,9 +1,53 @@
 import { getDb } from "@/lib/firebaseClient";
 import { doc, getDoc, setDoc, collection, getDocs, Timestamp } from "firebase/firestore";
-import type { SiteConfig } from "@/types/siteConfig";
+import type { SiteConfig, FaqItem, ReviewItem } from "@/types/siteConfig";
 
 const TEMPLATE_SITE_ID = "amitay-hair-mk6krumy";
 const SITES_COLLECTION = "sites";
+
+/**
+ * Generate demo FAQ items (2 items)
+ */
+function generateDemoFaqs(): FaqItem[] {
+  return [
+    {
+      id: `faq_${Date.now()}_1`,
+      question: "מה מדיניות הביטולים?",
+      answer: "ניתן לבטל תור עד 24 שעות מראש ללא תשלום. ביטול ברגע האחרון או אי הגעה יחייבו תשלום של 50% מעלות השירות.",
+    },
+    {
+      id: `faq_${Date.now()}_2`,
+      question: "כמה זמן לוקח טיפול?",
+      answer: "משך הטיפול תלוי בסוג השירות. תספורת נשים אורכת כ-45-60 דקות, צבע שיער כ-2-3 שעות, וטיפולי פן או החלקה כ-2-4 שעות. נשמח לספק הערכה מדויקת בעת קביעת התור.",
+    },
+  ];
+}
+
+/**
+ * Generate demo Review items (3 items)
+ */
+function generateDemoReviews(): ReviewItem[] {
+  return [
+    {
+      id: `review_${Date.now()}_1`,
+      name: "שרה כהן",
+      rating: 5,
+      text: "חוויה מדהימה! הצוות מקצועי מאוד, האווירה נעימה והתוצאה מעבר למצופה. בהחלט אחזור שוב.",
+    },
+    {
+      id: `review_${Date.now()}_2`,
+      name: "מיכל לוי",
+      rating: 5,
+      text: "הסלון נקי ומסודר, המעצבת הקשיבה לכל הבקשות שלי והתוצאה מושלמת. ממליצה בחום!",
+    },
+    {
+      id: `review_${Date.now()}_3`,
+      name: "דני רוזן",
+      rating: 4,
+      text: "שירות מעולה ומקצועי. התור התחיל בזמן, הטיפול היה איכותי והמחיר הוגן. אמליץ לחברים.",
+    },
+  ];
+}
 
 /**
  * Site metadata type for ownership checks
@@ -84,12 +128,37 @@ export async function createSiteFromTemplate(
   // Remove any existing owner fields from template (ownerUid, ownerUserId, etc.)
   const { ownerUid: _, ownerUserId: __, ...templateDataToCopy } = templateData;
   
+  // Prepare final config with demo content if needed
+  const finalConfig: SiteConfig = { ...builderConfig };
+  
+  // Generate demo FAQs if FAQ page is selected and no FAQs exist
+  if (builderConfig.extraPages.includes("faq")) {
+    const existingFaqs = builderConfig.faqs || [];
+    if (existingFaqs.length === 0) {
+      finalConfig.faqs = generateDemoFaqs();
+      console.log(`[createSiteFromTemplate] Generated ${finalConfig.faqs.length} demo FAQs for site ${newSiteId}`);
+    } else {
+      console.log(`[createSiteFromTemplate] Site ${newSiteId} already has ${existingFaqs.length} FAQs, skipping demo generation`);
+    }
+  }
+  
+  // Generate demo Reviews if Reviews page is selected and no reviews exist
+  if (builderConfig.extraPages.includes("reviews")) {
+    const existingReviews = builderConfig.reviews || [];
+    if (existingReviews.length === 0) {
+      finalConfig.reviews = generateDemoReviews();
+      console.log(`[createSiteFromTemplate] Generated ${finalConfig.reviews.length} demo reviews for site ${newSiteId}`);
+    } else {
+      console.log(`[createSiteFromTemplate] Site ${newSiteId} already has ${existingReviews.length} reviews, skipping demo generation`);
+    }
+  }
+  
   // Merge builder config into template data
   // IMPORTANT: Always set ownerUid explicitly (don't rely on template)
   const siteData = {
     ...templateDataToCopy,
     ownerUid, // Explicitly set ownerUid to the current user's UID
-    config: builderConfig,
+    config: finalConfig,
     createdAt: now,
     updatedAt: now,
     initializedFromTemplate: true,

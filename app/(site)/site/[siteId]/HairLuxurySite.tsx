@@ -494,7 +494,7 @@ export default function HairLuxurySite({
       })()}
 
       {/* FAQ Section */}
-      {(config.extraPages?.includes("faq") ?? false) && (config.faqs?.length ?? 0) > 0 && (
+      {(config.faqs?.length ?? 0) > 0 && (
         <>
           <section
             id="faq-section"

@@ -45,8 +45,8 @@ export type SiteConfig = {
   mainGoals: MainGoal[]; // array instead of single value
   services: string[]; // DEPRECATED - kept for backward compatibility, use siteServices instead
   siteServices?: SiteService[]; // Canonical services array - single source of truth
-  vibe: "clean" | "luxury" | "colorful" | "spa" | "surprise";
-  photosOption: "own" | "ai" | "mixed";
+  vibe?: "clean" | "luxury" | "colorful" | "spa" | "surprise"; // Optional - kept for backwards compatibility, default is "clean"
+  photosOption?: "own" | "ai" | "mixed"; // Optional - kept for backwards compatibility, default is "own"
   contactOptions: Array<
     "phone" | "whatsapp" | "instagram" | "facebook" | "contact_form"
   >;

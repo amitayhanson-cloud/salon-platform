@@ -140,11 +140,10 @@ export default function BuilderPage() {
   });
   const [step, setStep] = useState(1);
   const [customService, setCustomService] = useState("");
-  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const totalSteps = 8;
+  const totalSteps = 6;
 
   const updateConfig = (updates: Partial<SiteConfig>) => {
     setConfig((prev) => ({ ...prev, ...updates }));
@@ -160,11 +159,7 @@ export default function BuilderPage() {
         return config.mainGoals.length > 0;
       case 4:
         return config.services.length > 0;
-      case 5:
-        return true; // vibe has a default value
-      case 6:
-        return true; // photosOption has a default value
-      case 7: {
+      case 5: {
         const hasContact =
           (config.phoneNumber && config.phoneNumber.trim() !== "") ||
           (config.whatsappNumber && config.whatsappNumber.trim() !== "") ||
@@ -184,8 +179,8 @@ export default function BuilderPage() {
         // simple_form or none are fine as long as we have at least one contact method
         return true;
       }
-      case 8:
-        return true; // Step 8 is optional
+      case 6:
+        return true; // Step 6 is optional
       default:
         return false;
     }
@@ -345,7 +340,8 @@ export default function BuilderPage() {
     info_only: "לתת מידע בסיסי בלבד",
   };
 
-  const vibeLabels: Record<SiteConfig["vibe"], string> = {
+  // vibeLabels kept for backwards compatibility but no longer used in UI
+  const vibeLabels: Record<NonNullable<SiteConfig["vibe"]>, string> = {
     luxury: "סגנון יוקרתי",
     clean: "סגנון נקי ורך",
     colorful: "סגנון צבעוני וכיפי",
@@ -353,7 +349,8 @@ export default function BuilderPage() {
     surprise: "לא בשימוש כרגע",
   };
 
-  const photosOptionLabels: Record<SiteConfig["photosOption"], string> = {
+  // photosOptionLabels kept for backwards compatibility but no longer used in UI
+  const photosOptionLabels: Record<NonNullable<SiteConfig["photosOption"]>, string> = {
     own: "אני מעלה תמונות שלי",
     ai: "AI ייצור תמונות בשבילי",
     mixed: "שילוב של שניהם",
@@ -602,103 +599,8 @@ export default function BuilderPage() {
             </div>
           )}
 
-          {/* Step 5 - Style / Vibe */}
+          {/* Step 5 - Contact & booking */}
           {step === 5 && (
-            <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-slate-900 mb-6">
-                איזה סגנון אתר אתה רוצה?
-              </h2>
-              <EditableLaterHint />
-              <div className="space-y-3">
-                {(["luxury", "clean", "colorful"] as Array<keyof typeof vibeLabels>).map(
-                  (vibe) => (
-                    <label
-                      key={vibe}
-                      className="flex items-center gap-3 p-4 border border-slate-200 rounded-lg cursor-pointer hover:border-sky-300 hover:bg-sky-50 transition-colors"
-                    >
-                      <input
-                        type="radio"
-                        name="vibe"
-                        value={vibe}
-                        checked={config.vibe === vibe}
-                        onChange={(e) =>
-                          updateConfig({
-                            vibe: e.target.value as SiteConfig["vibe"],
-                          })
-                        }
-                        className="w-4 h-4 text-sky-500 focus:ring-sky-500"
-                      />
-                      <span className="text-slate-700">{vibeLabels[vibe]}</span>
-                    </label>
-                  )
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Step 6 - Photos */}
-          {step === 6 && (
-            <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-slate-900 mb-6">
-                מה לגבי תמונות?
-              </h2>
-              <EditableLaterHint />
-              <div className="space-y-3">
-                {(
-                  Object.keys(photosOptionLabels) as Array<
-                    keyof typeof photosOptionLabels
-                  >
-                ).map((option) => (
-                  <label
-                    key={option}
-                    className="flex items-center gap-3 p-4 border border-slate-200 rounded-lg cursor-pointer hover:border-sky-300 hover:bg-sky-50 transition-colors"
-                  >
-                    <input
-                      type="radio"
-                      name="photosOption"
-                      value={option}
-                      checked={config.photosOption === option}
-                      onChange={(e) =>
-                        updateConfig({
-                          photosOption: e.target.value as SiteConfig["photosOption"],
-                        })
-                      }
-                      className="w-4 h-4 text-sky-500 focus:ring-sky-500"
-                    />
-                    <span className="text-slate-700">
-                      {photosOptionLabels[option]}
-                    </span>
-                  </label>
-                ))}
-              </div>
-              {(config.photosOption === "own" ||
-                config.photosOption === "mixed") && (
-                <div className="mt-4 pt-4 border-t border-slate-200">
-                  <label className="block text-sm font-medium mb-2 text-right text-slate-700">
-                    העלאת תמונות מהסלון
-                  </label>
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    className="w-full text-sm text-slate-700 file:mr-2 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100 file:cursor-pointer"
-                    onChange={(e) => {
-                      const files = Array.from(e.target.files || []);
-                      setPhotoFiles(files);
-                    }}
-                  />
-                  {photoFiles.length > 0 && (
-                    <p className="mt-2 text-xs text-slate-500 text-right">
-                      נבחרו {photoFiles.length} קבצים.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Step 7 - Contact & booking */}
-          {step === 7 && (
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-slate-900 mb-6">
                 איך לקוחות יכולים ליצור קשר? *
@@ -827,8 +729,8 @@ export default function BuilderPage() {
             </div>
           )}
 
-          {/* Step 8 - Extra pages and note */}
-          {step === 8 && (
+          {/* Step 6 - Extra pages and note */}
+          {step === 6 && (
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-slate-900 mb-6">
                 איזה עמודים נוספים תרצה באתר?

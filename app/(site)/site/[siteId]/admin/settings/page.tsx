@@ -53,10 +53,6 @@ const bookingOptionLabels: Record<SiteConfig["bookingOption"], string> = {
   booking_system: "יש לי כבר מערכת הזמנות ואני רוצה לחבר אותה",
 };
 
-const extraPageLabels: Record<SiteConfig["extraPages"][number], string> = {
-  reviews: "ביקורות מלקוחות",
-  faq: "שאלות נפוצות",
-};
 
 const salonTypeLabels: Record<SiteConfig["salonType"], string> = {
   hair: "ספרות / עיצוב שיער",
@@ -705,14 +701,6 @@ function AdminSiteTab({
   renderSections?: string[];
 }) {
 
-  const toggleExtraPage = (page: SiteConfig["extraPages"][number]) => {
-    const exists = siteConfig.extraPages.includes(page);
-    onChange({
-      extraPages: exists
-        ? siteConfig.extraPages.filter((p) => p !== page)
-        : [...siteConfig.extraPages, page],
-    });
-  };
 
   // If renderSections is provided, only render those sections
   const shouldRender = (section: string) => !renderSections || renderSections.includes(section);
@@ -808,34 +796,6 @@ function AdminSiteTab({
       )}
 
 
-      {/* Vibe / Style */}
-      {shouldRender("style") && (
-      <div className="space-y-4">
-        <h2 className="text-sm font-semibold text-slate-900">סגנון אתר</h2>
-        <div className="space-y-2">
-          {(["luxury", "clean", "colorful"] as Array<keyof typeof vibeLabels>).map(
-            (vibe) => (
-              <label
-                key={vibe}
-                className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:border-sky-300 hover:bg-sky-50 transition-colors"
-              >
-                <input
-                  type="radio"
-                  name="vibe"
-                  value={vibe}
-                  checked={siteConfig.vibe === vibe}
-                  onChange={(e) =>
-                    onChange({ vibe: e.target.value as SiteConfig["vibe"] })
-                  }
-                  className="w-4 h-4 text-sky-500 focus:ring-sky-500"
-                />
-                <span className="text-sm text-slate-700">{vibeLabels[vibe]}</span>
-              </label>
-            )
-          )}
-        </div>
-      </div>
-      )}
 
       {/* Contact Details */}
       {shouldRender("contact") && (
@@ -979,32 +939,6 @@ function AdminSiteTab({
       </div>
       )}
 
-      {/* Extra Pages */}
-      {shouldRender("extraPages") && (
-      <div className="space-y-4">
-        <h2 className="text-sm font-semibold text-slate-900">עמודים נוספים</h2>
-        <div className="space-y-2">
-          {(
-            Object.keys(extraPageLabels) as Array<keyof typeof extraPageLabels>
-          ).map((page) => (
-            <label
-              key={page}
-              className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:border-sky-300 hover:bg-sky-50 transition-colors"
-            >
-              <input
-                type="checkbox"
-                checked={siteConfig.extraPages.includes(page)}
-                onChange={() => toggleExtraPage(page)}
-                className="w-4 h-4 text-sky-500 rounded focus:ring-sky-500"
-              />
-              <span className="text-sm text-slate-700">
-                {extraPageLabels[page]}
-              </span>
-            </label>
-          ))}
-        </div>
-      </div>
-      )}
 
       {/* Special Note */}
       {shouldRender("specialNote") && (
@@ -1025,27 +959,6 @@ function AdminSiteTab({
       </div>
       )}
 
-      {/* Reviews Editor - handled separately in accordion */}
-      {false && siteConfig.extraPages.includes("reviews") && (
-        <div className="space-y-4 border-t border-slate-200 pt-6">
-          <h2 className="text-sm font-semibold text-slate-900">ביקורות</h2>
-          <AdminReviewsEditor
-            reviews={siteConfig.reviews || []}
-            onChange={(reviews) => onChange({ reviews })}
-          />
-        </div>
-      )}
-
-      {/* FAQ Editor - handled separately in accordion */}
-      {false && siteConfig.extraPages.includes("faq") && (
-        <div className="space-y-4 border-t border-slate-200 pt-6">
-          <h2 className="text-sm font-semibold text-slate-900">שאלות נפוצות</h2>
-          <AdminFaqEditor
-            faqs={siteConfig.faqs || []}
-            onChange={(faqs) => onChange({ faqs })}
-          />
-        </div>
-      )}
     </div>
   );
 }
@@ -1152,7 +1065,6 @@ export default function SettingsPage() {
   // Build tabs list (conditionally include reviews/faq)
   type SettingsTabType =
   | "basic"
-  | "style"
   | "contact"
   | "booking"
   | "reviews"
@@ -1161,7 +1073,6 @@ export default function SettingsPage() {
 
 const settingsTabs: { key: SettingsTabType; label: string }[] = [
   { key: "basic", label: "מידע בסיסי" },
-  { key: "style", label: "סגנון אתר" },
   { key: "contact", label: "פרטי יצירת קשר" },
   { key: "booking", label: "הזמנה אונליין" },
   { key: "reviews", label: "ביקורות" },
@@ -1207,7 +1118,7 @@ const settingsTabs: { key: SettingsTabType; label: string }[] = [
             <AdminSiteTab
               siteConfig={siteConfig}
               onChange={handleConfigChange}
-              renderSections={["basic", "location", "extraPages", "specialNote"]}
+              renderSections={["basic", "location", "specialNote"]}
             />
           )}
           {activeTab === "style" && (
@@ -1231,13 +1142,13 @@ const settingsTabs: { key: SettingsTabType; label: string }[] = [
               renderSections={["booking"]}
             />
           )}
-          {activeTab === "reviews" && siteConfig.extraPages.includes("reviews") && (
+          {activeTab === "reviews" && (
             <AdminReviewsEditor
               reviews={siteConfig.reviews || []}
               onChange={(reviews) => handleConfigChange({ reviews })}
             />
           )}
-          {activeTab === "faq" && siteConfig.extraPages.includes("faq") && (
+          {activeTab === "faq" && (
             <AdminFaqEditor
               faqs={siteConfig.faqs || []}
               onChange={(faqs) => handleConfigChange({ faqs })}
