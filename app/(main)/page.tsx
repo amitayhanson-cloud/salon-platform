@@ -74,56 +74,76 @@ export default function Home() {
   return (
     <>
       {/* Section A - Hero */}
-      <section className="bg-gradient-to-l from-sky-50 to-white py-8 md:py-16">
-        <div className="container mx-auto px-4 max-w-6xl">
-          <div className="flex flex-col md:flex-row gap-8 md:gap-12 items-center">
-            <div className="flex-1 text-right">
-              <h1 className="text-3xl md:text-5xl font-bold text-slate-900 mb-4 md:mb-6 leading-tight">
-                בונים אתר מושלם לסלון שלך בדקות
-              </h1>
-              <p className="text-base md:text-lg text-slate-600 mb-6 md:mb-8 leading-relaxed">
-                בלי צורך בידע טכני או תכנות. בנו במיוחד לספריות, מכוני יופי
-                וספא.
-                <br />
-                בינה מלאכותית עושה את העבודה הקשה עבורך.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4">
-                {user ? (
-                  // User is logged in - show "Go to Dashboard" button
-                  <button
-                    onClick={handleGoToDashboard}
-                    disabled={loading}
-                    className="inline-block px-6 py-3 bg-sky-500 hover:bg-sky-600 text-white font-semibold rounded-full shadow-sm shadow-sky-100 transition-colors text-center disabled:opacity-50"
-                  >
-                    {loading ? "טוען..." : "לדשבורד"}
-                  </button>
-                ) : (
-                  // User not logged in - show login and signup buttons
-                  <>
-                    <button
-                      onClick={handleLogin}
-                      className="inline-block px-6 py-3 bg-white border border-sky-200 text-sky-700 hover:bg-sky-50 rounded-full font-medium transition-colors text-center"
-                    >
-                      התחברות
-                    </button>
-                    <button
-                      onClick={handleSignup}
-                      className="inline-block px-6 py-3 bg-sky-500 hover:bg-sky-600 text-white font-semibold rounded-full shadow-sm shadow-sky-100 transition-colors text-center"
-                    >
-                      הרשמה
-                    </button>
-                  </>
-                )}
-                <Link
-                  href="#how-it-works"
-                  className="inline-block px-6 py-3 bg-white border border-sky-200 text-sky-700 hover:bg-sky-50 rounded-full font-medium transition-colors text-center"
-                >
-                  צפה בדוגמת אתר
-                </Link>
-              </div>
+      <section className="relative bg-gradient-to-b from-sky-50 via-white to-slate-50 py-16 md:py-24 overflow-hidden">
+        {/* Subtle background pattern */}
+        <div className="absolute inset-0 opacity-30">
+          <div className="absolute inset-0" style={{
+            backgroundImage: `radial-gradient(circle at 1px 1px, rgba(14, 165, 233, 0.1) 1px, transparent 0)`,
+            backgroundSize: '24px 24px'
+          }}></div>
+        </div>
+        
+        <div className="container mx-auto px-4 max-w-5xl relative z-10">
+          <div className="text-center" dir="rtl">
+            {/* Badge / Pill */}
+            <div className="inline-flex items-center px-4 py-1.5 bg-sky-100/80 border border-sky-200/60 rounded-full mb-6">
+              <span className="text-sm font-medium text-sky-700">
+                פתרון מושלם לבעלי סלונים
+              </span>
             </div>
-            <div className="flex-1 w-full md:w-auto">
-              <div className="bg-white rounded-lg p-6 md:p-8 h-64 md:h-80 flex flex-col justify-between border border-sky-100 shadow-sm">
+
+            {/* Main Heading */}
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-slate-900 mb-6 leading-tight max-w-4xl mx-auto">
+              בונים אתר מושלם לסלון שלך בדקות
+            </h1>
+
+            {/* Supporting Paragraph */}
+            <p className="text-base md:text-lg text-slate-600 mb-8 leading-relaxed max-w-2xl mx-auto">
+              בלי צורך בידע טכני או תכנות. בנו במיוחד לספריות, מכוני יופי
+              וספא.
+              <br />
+              בינה מלאכותית עושה את העבודה הקשה עבורך.
+            </p>
+
+            {/* CTA Buttons Row */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
+              {user ? (
+                // User is logged in - show "Go to Dashboard" button
+                <button
+                  onClick={handleGoToDashboard}
+                  disabled={loading}
+                  className="inline-block px-6 py-3 bg-sky-500 hover:bg-sky-600 text-white font-semibold rounded-full shadow-sm shadow-sky-100 transition-colors text-center disabled:opacity-50"
+                >
+                  {loading ? "טוען..." : "לדשבורד"}
+                </button>
+              ) : (
+                // User not logged in - show login and signup buttons
+                <>
+                  <button
+                    onClick={handleLogin}
+                    className="inline-block px-6 py-3 bg-white border border-sky-200 text-sky-700 hover:bg-sky-50 rounded-full font-medium transition-colors text-center"
+                  >
+                    התחברות
+                  </button>
+                  <button
+                    onClick={handleSignup}
+                    className="inline-block px-6 py-3 bg-sky-500 hover:bg-sky-600 text-white font-semibold rounded-full shadow-sm shadow-sky-100 transition-colors text-center"
+                  >
+                    הרשמה
+                  </button>
+                </>
+              )}
+              <Link
+                href="#how-it-works"
+                className="inline-block px-6 py-3 bg-white border border-sky-200 text-sky-700 hover:bg-sky-50 rounded-full font-medium transition-colors text-center"
+              >
+                צפה בדוגמת אתר
+              </Link>
+            </div>
+
+            {/* Preview Card */}
+            <div className="max-w-md mx-auto">
+              <div className="bg-white rounded-lg p-6 md:p-8 h-64 md:h-80 flex flex-col justify-between border border-sky-100 shadow-md">
                 <div>
                   <div className="bg-sky-100 h-1 w-16 rounded-full mb-3"></div>
                   <h3 className="text-xl font-bold text-slate-900 mb-2 text-right">

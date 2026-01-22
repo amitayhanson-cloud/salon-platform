@@ -4,9 +4,10 @@ import { useEffect, useState, useMemo } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { query, where, orderBy, onSnapshot, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
-import { bookingsCollection } from "@/lib/firestorePaths";
+import { bookingsCollection, clientsCollection } from "@/lib/firestorePaths";
 import { ChemicalCard } from "./ChemicalCard";
 import AdminTabs from "@/components/ui/AdminTabs";
+import { createClient, checkClientExists, getAllClients, type ClientData } from "@/lib/firestoreClients";
 
 
 interface Client {
@@ -61,6 +62,19 @@ export default function ClientCardPage() {
   type TabType = "bookings" | "services" | "chemistry";
   const [activeTab, setActiveTab] = useState<TabType>("bookings");
 
+  // Add Client Modal State
+  const [isAddClientModalOpen, setIsAddClientModalOpen] = useState(false);
+  const [newClientForm, setNewClientForm] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    notes: "",
+  });
+  const [isSubmittingClient, setIsSubmittingClient] = useState(false);
+  const [clientFormError, setClientFormError] = useState<string | null>(null);
+  const [clientFormSuccess, setClientFormSuccess] = useState(false);
+  const [existingClientData, setExistingClientData] = useState<ClientData | null>(null);
+
   // Extract clientId from URL as a primitive (stable dependency)
   const clientIdFromUrl = searchParams.get("clientId");
   
@@ -78,7 +92,7 @@ export default function ClientCardPage() {
     }
   }, [clientIdFromUrl]); // Only depend on the primitive value, not the searchParams object
 
-  // Load all bookings to extract unique clients
+  // Load clients from both bookings and clients collection
   useEffect(() => {
     if (!db || !siteId) return;
 
@@ -93,61 +107,93 @@ export default function ClientCardPage() {
       bookingsQuery = bookingsCollection(siteId);
     }
 
-    const unsubscribe = onSnapshot(
+    // Store manual clients from clients collection
+    let manualClientsMap = new Map<string, ClientData>();
+    
+    // Function to merge clients from both sources
+    const mergeClients = (bookingsSnapshot: any, manualClients: ClientData[]) => {
+      const clientMap = new Map<string, Client>();
+      
+      // Process bookings
+      if (bookingsSnapshot) {
+        bookingsSnapshot.docs.forEach((doc: any) => {
+          const data = doc.data();
+          const phone = data.customerPhone || "";
+          const name = data.customerName || "";
+          
+          if (!phone || !name) return;
+          
+          const normalizedPhone = phone.replace(/\s|-|\(|\)/g, "");
+          
+          if (!clientMap.has(normalizedPhone)) {
+            const createdAt = data.createdAt?.toDate?.()?.toISOString() || data.createdAt || new Date().toISOString();
+            clientMap.set(normalizedPhone, {
+              id: normalizedPhone,
+              name,
+              phone: normalizedPhone,
+              email: data.customerEmail || undefined,
+              createdAt,
+              lastVisit: data.date || undefined,
+              totalBookings: 1,
+            });
+          } else {
+            const client = clientMap.get(normalizedPhone)!;
+            client.totalBookings += 1;
+            const bookingDate = data.date || "";
+            if (bookingDate && (!client.lastVisit || bookingDate > client.lastVisit)) {
+              client.lastVisit = bookingDate;
+            }
+            const bookingCreatedAt = data.createdAt?.toDate?.()?.toISOString() || data.createdAt;
+            if (bookingCreatedAt && client.createdAt && bookingCreatedAt < client.createdAt) {
+              client.createdAt = bookingCreatedAt;
+            }
+          }
+        });
+      }
+      
+      // Merge with manual clients
+      manualClients.forEach((manualClient) => {
+        const normalizedPhone = manualClient.phone.replace(/\s|-|\(|\)/g, "");
+        if (clientMap.has(normalizedPhone)) {
+          const existing = clientMap.get(normalizedPhone)!;
+          if (manualClient.email) existing.email = manualClient.email;
+          const manualDate = typeof manualClient.createdAt === 'string' 
+            ? manualClient.createdAt 
+            : manualClient.createdAt?.toDate?.()?.toISOString();
+          if (manualDate && existing.createdAt && manualDate < existing.createdAt) {
+            existing.createdAt = manualDate;
+          }
+        } else {
+          clientMap.set(normalizedPhone, {
+            id: normalizedPhone,
+            name: manualClient.name,
+            phone: normalizedPhone,
+            email: manualClient.email,
+            createdAt: typeof manualClient.createdAt === 'string' 
+              ? manualClient.createdAt 
+              : manualClient.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+            totalBookings: 0,
+          });
+        }
+      });
+      
+      return Array.from(clientMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+    };
+
+    let bookingsSnapshot: any = null;
+    
+    const unsubscribeBookings = onSnapshot(
       bookingsQuery,
       (snapshot) => {
+        bookingsSnapshot = snapshot;
+        const manualClients = Array.from(manualClientsMap.values());
         try {
-          // Extract unique clients from bookings
-          const clientMap = new Map<string, Client>();
-          
-          snapshot.docs.forEach((doc) => {
-            const data = doc.data();
-            const phone = data.customerPhone || "";
-            const name = data.customerName || "";
-            
-            if (!phone || !name) return; // Skip bookings without phone/name
-            
-            if (!clientMap.has(phone)) {
-              // First booking for this client
-              const createdAt = data.createdAt?.toDate?.()?.toISOString() || data.createdAt || new Date().toISOString();
-              clientMap.set(phone, {
-                id: phone,
-                name,
-                phone,
-                email: data.customerEmail || undefined,
-                createdAt,
-                lastVisit: data.date || undefined,
-                totalBookings: 1,
-              });
-            } else {
-              // Update existing client
-              const client = clientMap.get(phone)!;
-              client.totalBookings += 1;
-              
-              // Update lastVisit if this booking is more recent
-              const bookingDate = data.date || "";
-              if (bookingDate && (!client.lastVisit || bookingDate > client.lastVisit)) {
-                client.lastVisit = bookingDate;
-              }
-              
-              // Update createdAt if this booking is older
-              const bookingCreatedAt = data.createdAt?.toDate?.()?.toISOString() || data.createdAt;
-              if (bookingCreatedAt && client.createdAt && bookingCreatedAt < client.createdAt) {
-                client.createdAt = bookingCreatedAt;
-              }
-            }
-          });
-          
-          const clientsList = Array.from(clientMap.values()).sort((a, b) => {
-            // Sort by name (Hebrew-friendly)
-            return a.name.localeCompare(b.name);
-          });
-          
+          const clientsList = mergeClients(bookingsSnapshot, manualClients);
           setClients(clientsList);
+          setClientsLoading(false);
         } catch (err) {
           console.error("[ClientCard] Failed to process clients", err);
           setClientsError("שגיאה בעיבוד רשימת הלקוחות");
-        } finally {
           setClientsLoading(false);
         }
       },
@@ -158,8 +204,46 @@ export default function ClientCardPage() {
       }
     );
 
+    // Subscribe to manual clients collection for real-time updates
+    const unsubscribeManualClients = onSnapshot(
+      clientsCollection(siteId),
+      (snapshot) => {
+        manualClientsMap.clear();
+        snapshot.docs.forEach((doc) => {
+          const data = doc.data();
+          const normalizedPhone = (data.phone || "").replace(/\s|-|\(|\)/g, "");
+          if (normalizedPhone) {
+            manualClientsMap.set(normalizedPhone, {
+              id: doc.id,
+              name: data.name || "",
+              phone: normalizedPhone,
+              email: data.email || undefined,
+              notes: data.notes || undefined,
+              createdAt: data.createdAt,
+              updatedAt: data.updatedAt,
+            });
+          }
+        });
+        
+        // Re-merge with current bookings snapshot
+        if (bookingsSnapshot) {
+          try {
+            const manualClients = Array.from(manualClientsMap.values());
+            const clientsList = mergeClients(bookingsSnapshot, manualClients);
+            setClients(clientsList);
+          } catch (err) {
+            console.error("[ClientCard] Failed to merge clients", err);
+          }
+        }
+      },
+      (err) => {
+        console.error("[ClientCard] Failed to subscribe to clients collection", err);
+      }
+    );
+
     return () => {
-      unsubscribe();
+      unsubscribeBookings();
+      unsubscribeManualClients();
     };
   }, [siteId]); // Only depend on siteId - this effect should run once per site
 
@@ -333,6 +417,109 @@ export default function ClientCardPage() {
     window.history.pushState({}, "", url.toString());
   };
 
+  // Handle Add Client Modal
+  const handleOpenAddClientModal = () => {
+    setIsAddClientModalOpen(true);
+    setNewClientForm({ name: "", phone: "", email: "", notes: "" });
+    setClientFormError(null);
+    setClientFormSuccess(false);
+    setExistingClientData(null);
+  };
+
+  const handleCloseAddClientModal = () => {
+    setIsAddClientModalOpen(false);
+    setNewClientForm({ name: "", phone: "", email: "", notes: "" });
+    setClientFormError(null);
+    setClientFormSuccess(false);
+    setExistingClientData(null);
+  };
+
+  const handleClientFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setNewClientForm((prev) => ({ ...prev, [name]: value }));
+    setClientFormError(null);
+    setClientFormSuccess(false);
+  };
+
+  const validatePhone = (phone: string): boolean => {
+    // Remove spaces, dashes, parentheses for validation
+    const normalized = phone.replace(/\s|-|\(|\)/g, "");
+    // Israeli phone: 9-10 digits, may start with 0 or country code
+    return /^(\+972|0)?[1-9]\d{8}$/.test(normalized) || normalized.length >= 9;
+  };
+
+  const handleSubmitNewClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setClientFormError(null);
+    setClientFormSuccess(false);
+    setExistingClientData(null);
+
+    // Validation
+    if (!newClientForm.name.trim()) {
+      setClientFormError("שם הלקוח הוא שדה חובה");
+      return;
+    }
+
+    if (!newClientForm.phone.trim()) {
+      setClientFormError("מספר טלפון הוא שדה חובה");
+      return;
+    }
+
+    // Basic phone format check
+    if (!validatePhone(newClientForm.phone)) {
+      setClientFormError("מספר טלפון לא תקין. אנא הזן מספר טלפון תקין");
+      return;
+    }
+
+    // Email validation (if provided)
+    if (newClientForm.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newClientForm.email)) {
+      setClientFormError("כתובת אימייל לא תקינה");
+      return;
+    }
+
+    setIsSubmittingClient(true);
+
+    try {
+      // Check if client already exists
+      const normalizedPhone = newClientForm.phone.replace(/\s|-|\(|\)/g, "");
+      const existing = await checkClientExists(siteId, normalizedPhone);
+
+      if (existing.exists && existing.clientData) {
+        // Client exists - show option to view existing
+        setExistingClientData(existing.clientData);
+        setClientFormError(`לקוח עם מספר טלפון ${normalizedPhone} כבר קיים במערכת`);
+        setIsSubmittingClient(false);
+        return;
+      }
+
+      // Create new client
+      await createClient(siteId, {
+        name: newClientForm.name.trim(),
+        phone: normalizedPhone,
+        email: newClientForm.email.trim() || undefined,
+        notes: newClientForm.notes.trim() || undefined,
+      });
+
+      setClientFormSuccess(true);
+      
+      // Reset form and close modal after a short delay
+      setTimeout(() => {
+        handleCloseAddClientModal();
+        // Refresh clients list by selecting the new client
+        handleClientSelect(normalizedPhone);
+      }, 1500);
+    } catch (error: any) {
+      console.error("[AddClient] Error creating client", error);
+      if (error.message === "CLIENT_EXISTS") {
+        setClientFormError("לקוח עם מספר טלפון זה כבר קיים במערכת");
+      } else {
+        setClientFormError(`שגיאה ביצירת הלקוח: ${error.message || "שגיאה לא ידועה"}`);
+      }
+    } finally {
+      setIsSubmittingClient(false);
+    }
+  };
+
   return (
     <div dir="rtl" className="min-h-screen bg-slate-50">
       <div className="max-w-7xl mx-auto px-4 py-6">
@@ -353,7 +540,15 @@ export default function ClientCardPage() {
           {/* Clients List */}
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
-              <h2 className="text-lg font-bold text-slate-900 mb-4">רשימת לקוחות</h2>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-bold text-slate-900">רשימת לקוחות</h2>
+                <button
+                  onClick={handleOpenAddClientModal}
+                  className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  הוסף/י לקוח
+                </button>
+              </div>
               
               {/* Search Input */}
               <div className="mb-4">
@@ -588,6 +783,129 @@ export default function ClientCardPage() {
           </div>
         </div>
       </div>
+
+      {/* Add Client Modal */}
+      {isAddClientModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" dir="rtl">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-bold text-slate-900">הוסף/י לקוח חדש</h2>
+                <button
+                  onClick={handleCloseAddClientModal}
+                  className="text-slate-400 hover:text-slate-600 text-2xl leading-none"
+                >
+                  ×
+                </button>
+              </div>
+
+              {clientFormSuccess && (
+                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-right">
+                  <p className="text-sm text-green-700">הלקוח נוצר בהצלחה!</p>
+                </div>
+              )}
+
+              {clientFormError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-right">
+                  <p className="text-sm text-red-700">{clientFormError}</p>
+                  {existingClientData && (
+                    <button
+                      onClick={() => {
+                        handleCloseAddClientModal();
+                        handleClientSelect(existingClientData.phone.replace(/\s|-|\(|\)/g, ""));
+                      }}
+                      className="mt-2 text-sm text-sky-600 hover:text-sky-700 underline"
+                    >
+                      פתח לקוח קיים
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <form onSubmit={handleSubmitNewClient} className="space-y-4">
+                <div>
+                  <label htmlFor="name" className="block text-sm font-medium text-slate-700 mb-1">
+                    שם מלא <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    id="name"
+                    name="name"
+                    value={newClientForm.name}
+                    onChange={handleClientFormChange}
+                    required
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
+                    placeholder="לדוגמה: יוסי כהן"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="phone" className="block text-sm font-medium text-slate-700 mb-1">
+                    מספר טלפון <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    id="phone"
+                    name="phone"
+                    value={newClientForm.phone}
+                    onChange={handleClientFormChange}
+                    required
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
+                    placeholder="לדוגמה: 050-1234567"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">
+                    אימייל
+                  </label>
+                  <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    value={newClientForm.email}
+                    onChange={handleClientFormChange}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
+                    placeholder="לדוגמה: client@example.com"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="notes" className="block text-sm font-medium text-slate-700 mb-1">
+                    הערות
+                  </label>
+                  <textarea
+                    id="notes"
+                    name="notes"
+                    value={newClientForm.notes}
+                    onChange={handleClientFormChange}
+                    rows={3}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm resize-none"
+                    placeholder="הערות נוספות על הלקוח..."
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={handleCloseAddClientModal}
+                    className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium"
+                  >
+                    ביטול
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingClient}
+                    className="flex-1 px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSubmittingClient ? "שומר..." : "שמור"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
