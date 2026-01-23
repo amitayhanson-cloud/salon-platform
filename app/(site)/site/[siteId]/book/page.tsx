@@ -314,6 +314,26 @@ export default function BookingPage() {
     });
   }
 
+  // Helper: Check if a time slot fits within a worker's working hours
+  // Returns true only if slotStartMinutes >= startMinutes AND slotEndMinutes <= endMinutes
+  function isWithinWorkingHours(
+    dayConfig: OpeningHours | null,
+    slotStartMinutes: number,
+    slotEndMinutes: number
+  ): boolean {
+    // If dayConfig is missing or closed, slot is not available
+    if (!dayConfig || !dayConfig.open || !dayConfig.close) {
+      return false;
+    }
+
+    // Parse dayConfig.start and dayConfig.end (strings like "09:00") into minutes
+    const startMinutes = timeToMinutes(dayConfig.open);
+    const endMinutes = timeToMinutes(dayConfig.close);
+
+    // Return true only if slot fits fully within working hours
+    return slotStartMinutes >= startMinutes && slotEndMinutes <= endMinutes;
+  }
+
   // Load site config from Firestore
   useEffect(() => {
     if (!siteId) return;
