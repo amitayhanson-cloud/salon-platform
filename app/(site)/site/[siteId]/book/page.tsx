@@ -1772,19 +1772,10 @@ export default function BookingPage() {
               {process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true" && debugInfo && (
                 <div className="mb-4 p-4 rounded-lg border text-right text-xs font-mono" style={{ backgroundColor: "var(--bg)", borderColor: "var(--border)" }}>
                   <div className="space-y-1" style={{ color: "var(--text)" }}>
-                    <div><strong>selectedDate:</strong> {debugInfo.selectedDate}</div>
-                    <div><strong>dayIndex:</strong> {debugInfo.dayIndex}</div>
-                    <div><strong>dayKey:</strong> "{debugInfo.dayKey}"</div>
-                    <div><strong>dayConfig:</strong> <pre className="whitespace-pre-wrap">{debugInfo.dayConfig}</pre></div>
-                    <div><strong>slotMinutes:</strong> {debugInfo.slotMinutes}</div>
-                    <div><strong>generatedSlots count:</strong> {debugInfo.generatedSlotsCount}</div>
-                    <div><strong>bookingsForDate count:</strong> {debugInfo.bookingsForDateCount}</div>
-                    <div><strong>availableSlots count:</strong> {debugInfo.availableSlotsCount}</div>
-                    <div><strong>workers count:</strong> {debugInfo.workersCount}</div>
-                    <div><strong>eligibleWorkers count:</strong> {debugInfo.eligibleWorkersCount}</div>
-                    <div><strong>serviceDurationMinutes:</strong> {debugInfo.serviceDurationMinutes}</div>
-                    <div><strong>weekdayKey:</strong> {debugInfo.weekdayKey}</div>
-                    <div><strong>workerAvailabilityInfo:</strong> <pre className="whitespace-pre-wrap">{debugInfo.workerAvailabilityInfo}</pre></div>
+                    <div className="mb-2"><strong>Debug Info (Dev Only):</strong></div>
+                    <pre className="whitespace-pre-wrap text-xs" style={{ color: "var(--text)" }}>
+                      {JSON.stringify(debugInfo, null, 2)}
+                    </pre>
                   </div>
                 </div>
               )}
