@@ -8,7 +8,9 @@ export interface PricingItem {
   durationMaxMinutes: number; // Maximum duration in minutes
   // Legacy field (for backward compatibility - deprecated, use durationMinMinutes/durationMaxMinutes)
   durationMinutes?: number; // Deprecated: kept for backward compatibility
-  waitMinutes?: number; // How long to wait until next round can start
+  waitMinutes?: number; // Single waiting time (deprecated - use waitTimeMin/waitTimeMax for range)
+  waitTimeMin?: number; // Minimum waiting time in minutes (for range mode)
+  waitTimeMax?: number; // Maximum waiting time in minutes (for range mode)
   price?: number; // Single price
   priceRangeMin?: number; // Range start (if using range)
   priceRangeMax?: number; // Range end (if using range)

@@ -1,6 +1,7 @@
 import { addDoc, getDocs, query, where, orderBy, serverTimestamp, Timestamp, deleteDoc } from "firebase/firestore";
 import { db } from "./firebaseClient";
 import { bookingsCollection, bookingDoc } from "./firestorePaths";
+import { getOrCreateClient } from "./firestoreClients";
 
 export interface BookingData {
   id: string;
@@ -43,6 +44,14 @@ export async function saveBooking(siteId: string, booking: Omit<BookingData, "id
   }
 
   try {
+    // Get or create client record (ensures single source of truth)
+    const clientId = await getOrCreateClient(siteId, {
+      name: booking.name,
+      phone: booking.phone,
+      email: undefined, // Email not collected in booking flow
+      notes: booking.note,
+    });
+
     // Parse date and time to create startAt Timestamp in LOCAL time
     // Use local Date constructor to avoid timezone issues
     const [y, m, d] = booking.date.split("-").map(Number);
@@ -61,6 +70,8 @@ export async function saveBooking(siteId: string, booking: Omit<BookingData, "id
       serviceName: booking.serviceName,
       workerId: booking.workerId || null,
       workerName: booking.workerName || null,
+      // Client reference (canonical)
+      clientId: clientId,
       // Legacy fields (keep for backward compatibility)
       date: booking.date,
       time: booking.time,
@@ -84,6 +95,7 @@ export async function saveBooking(siteId: string, booking: Omit<BookingData, "id
     console.log("[saveBooking] wrote booking", {
       siteId,
       bookingId: ref.id,
+      clientId,
       date: booking.date,
       time: booking.time,
       workerId: booking.workerId,

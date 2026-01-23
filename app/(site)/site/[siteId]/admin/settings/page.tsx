@@ -11,6 +11,8 @@ import { useSiteConfig } from "@/hooks/useSiteConfig";
 import { useAuth } from "@/components/auth/AuthProvider";
 import AdminTabs from "@/components/ui/AdminTabs";
 import { deleteUserAccount } from "@/lib/deleteUserAccount";
+import { saveBookingSettings, convertSalonBookingStateToBookingSettings, subscribeBookingSettings } from "@/lib/firestoreBookingSettings";
+import { defaultBookingSettings } from "@/types/bookingSettings";
 
 
 const SERVICE_OPTIONS: Record<SiteConfig["salonType"], string[]> = {
@@ -752,32 +754,6 @@ function AdminSiteTab({
       {shouldRender("location") && (
       <div className="space-y-4">
         <h2 className="text-sm font-semibold text-slate-900">מיקום</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">
-              עיר *
-            </label>
-            <input
-              type="text"
-              value={siteConfig.city}
-              onChange={(e) => onChange({ city: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
-              placeholder="למשל: תל אביב"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">
-              שכונה (לא חובה)
-            </label>
-            <input
-              type="text"
-              value={siteConfig.neighborhood || ""}
-              onChange={(e) => onChange({ neighborhood: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
-              placeholder="הזן את שם השכונה"
-            />
-          </div>
-        </div>
         <div>
           <label className="block text-xs font-medium text-slate-700 mb-1">
             כתובת מלאה (להצגה במפה)
@@ -790,7 +766,7 @@ function AdminSiteTab({
             placeholder="למשל: רחוב בן יהודה 10, תל אביב"
           />
           <p className="text-xs text-slate-500 mt-1 text-right">
-            הכתובת הזו תשמש למפה ולכפתור Waze. אם לא מוגדר, ייעשה שימוש בעיר ושכונה.
+            הכתובת הזו תשמש למפה ולכפתור Waze.
           </p>
         </div>
       </div>
@@ -983,26 +959,81 @@ export default function SettingsPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
 
-  // Load booking state
+  // Load booking state from Firestore (source of truth) and sync with localStorage
   useEffect(() => {
     if (typeof window === "undefined" || !siteId) return;
-    try {
-      const bookingRaw = window.localStorage.getItem(`bookingState:${siteId}`);
-      if (bookingRaw) {
-        setBookingState(JSON.parse(bookingRaw));
-      } else {
-        setBookingState(defaultBookingState);
+    
+    // Subscribe to Firestore booking settings (source of truth)
+    const unsubscribe = subscribeBookingSettings(
+      siteId,
+      (firestoreSettings) => {
+        // Convert Firestore BookingSettings to SalonBookingState for admin UI
+        const convertedState: SalonBookingState = {
+          defaultSlotMinutes: firestoreSettings.slotMinutes,
+          openingHours: [
+            { day: "sun", label: "ראשון", open: firestoreSettings.days["0"].enabled ? firestoreSettings.days["0"].start : null, close: firestoreSettings.days["0"].enabled ? firestoreSettings.days["0"].end : null },
+            { day: "mon", label: "שני", open: firestoreSettings.days["1"].enabled ? firestoreSettings.days["1"].start : null, close: firestoreSettings.days["1"].enabled ? firestoreSettings.days["1"].end : null },
+            { day: "tue", label: "שלישי", open: firestoreSettings.days["2"].enabled ? firestoreSettings.days["2"].start : null, close: firestoreSettings.days["2"].enabled ? firestoreSettings.days["2"].end : null },
+            { day: "wed", label: "רביעי", open: firestoreSettings.days["3"].enabled ? firestoreSettings.days["3"].start : null, close: firestoreSettings.days["3"].enabled ? firestoreSettings.days["3"].end : null },
+            { day: "thu", label: "חמישי", open: firestoreSettings.days["4"].enabled ? firestoreSettings.days["4"].start : null, close: firestoreSettings.days["4"].enabled ? firestoreSettings.days["4"].end : null },
+            { day: "fri", label: "שישי", open: firestoreSettings.days["5"].enabled ? firestoreSettings.days["5"].start : null, close: firestoreSettings.days["5"].enabled ? firestoreSettings.days["5"].end : null },
+            { day: "sat", label: "שבת", open: firestoreSettings.days["6"].enabled ? firestoreSettings.days["6"].start : null, close: firestoreSettings.days["6"].enabled ? firestoreSettings.days["6"].end : null },
+          ],
+          workers: [],
+          bookings: [],
+        };
+        
+        setBookingState(convertedState);
+        
+        // Sync to localStorage for offline access
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(`bookingState:${siteId}`, JSON.stringify(convertedState));
+        }
+        
+        if (process.env.NODE_ENV !== "production") {
+          console.log(`[Admin] Loaded booking settings from Firestore for site ${siteId}:`, firestoreSettings);
+        }
+      },
+      (err) => {
+        console.error("[Admin] Failed to load booking settings from Firestore, falling back to localStorage", err);
+        // Fallback to localStorage if Firestore fails
+        try {
+          const bookingRaw = window.localStorage.getItem(`bookingState:${siteId}`);
+          if (bookingRaw) {
+            setBookingState(JSON.parse(bookingRaw));
+          } else {
+            setBookingState(defaultBookingState);
+          }
+        } catch (e) {
+          console.error("Failed to parse booking state from localStorage", e);
+          setBookingState(defaultBookingState);
+        }
       }
-    } catch (e) {
-      console.error("Failed to parse booking state", e);
-      setBookingState(defaultBookingState);
-    }
+    );
+    
+    return () => {
+      unsubscribe();
+    };
   }, [siteId]);
 
-  const saveBookingState = (next: SalonBookingState) => {
+  const saveBookingState = async (next: SalonBookingState) => {
     setBookingState(next);
     if (typeof window !== "undefined" && siteId) {
+      // Save to localStorage for immediate UI update
       window.localStorage.setItem(`bookingState:${siteId}`, JSON.stringify(next));
+      
+      // Save to Firestore so booking page can read it
+      try {
+        const bookingSettings = convertSalonBookingStateToBookingSettings(next);
+        await saveBookingSettings(siteId, bookingSettings);
+        
+        if (process.env.NODE_ENV !== "production") {
+          console.log(`[Admin] Saved booking settings to Firestore for site ${siteId}:`, bookingSettings);
+        }
+      } catch (error) {
+        console.error("[Admin] Failed to save booking settings to Firestore:", error);
+        // Don't block UI - localStorage save already succeeded
+      }
     }
   };
 

@@ -15,11 +15,14 @@ import {
   workersCollection,
   workerDoc,
 } from "@/lib/firestorePaths";
-import { subscribeServices } from "@/lib/firestoreServices";
+import { subscribeSiteServices } from "@/lib/firestoreSiteServices";
+import { subscribeBookingSettings } from "@/lib/firestoreBookingSettings";
 import AdminTabs from "@/components/ui/AdminTabs";
 
-import type { Service } from "@/types/service";
+import type { SiteService } from "@/types/siteConfig";
 import type { OpeningHours } from "@/types/booking";
+import type { BookingSettings } from "@/types/bookingSettings";
+import { defaultBookingSettings } from "@/types/bookingSettings";
 
 interface Worker {
   id: string;
@@ -84,7 +87,85 @@ export default function WorkersPage() {
   }, [selectedWorkerId]);
   
   // Services from Firestore (same source as Pricing/Services page)
-  const [services, setServices] = useState<Service[]>([]);
+  const [services, setServices] = useState<SiteService[]>([]);
+  
+  // Business hours from Firestore (site-level booking settings)
+  const [businessHours, setBusinessHours] = useState<BookingSettings>(defaultBookingSettings);
+
+  // Helper: Convert weekday key ("sun", "mon", etc.) to business hours day key ("0", "1", etc.)
+  const weekdayToBusinessDayKey = (weekday: "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat"): "0" | "1" | "2" | "3" | "4" | "5" | "6" => {
+    const mapping: Record<string, "0" | "1" | "2" | "3" | "4" | "5" | "6"> = {
+      sun: "0",
+      mon: "1",
+      tue: "2",
+      wed: "3",
+      thu: "4",
+      fri: "5",
+      sat: "6",
+    };
+    return mapping[weekday] || "0";
+  };
+
+  // Helper: Get business hours config for a weekday
+  const getBusinessDayConfig = (weekday: "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat") => {
+    const dayKey = weekdayToBusinessDayKey(weekday);
+    return businessHours.days[dayKey];
+  };
+
+  // Helper: Clamp time value within business hours range
+  const clampTime = (time: string | null, businessStart: string, businessEnd: string, isStart: boolean): string => {
+    if (!time) return isStart ? businessStart : businessEnd;
+    
+    // Compare times as strings (HH:MM format)
+    if (isStart) {
+      // For start time, ensure it's >= business start
+      return time < businessStart ? businessStart : time;
+    } else {
+      // For end time, ensure it's <= business end
+      return time > businessEnd ? businessEnd : time;
+    }
+  };
+
+  // Helper: Clamp worker availability to business hours
+  const clampWorkerAvailability = (availability: OpeningHours[]): OpeningHours[] => {
+    return availability.map((day) => {
+      const businessDay = getBusinessDayConfig(day.day);
+      
+      // If business is closed on this day, force worker to be closed
+      if (!businessDay.enabled) {
+        return {
+          ...day,
+          open: null,
+          close: null,
+        };
+      }
+      
+      // If worker day is closed, keep it closed
+      if (!day.open || !day.close) {
+        return day;
+      }
+      
+      // Clamp worker hours within business hours
+      const clampedOpen = clampTime(day.open, businessDay.start, businessDay.end, true);
+      const clampedClose = clampTime(day.close, businessDay.start, businessDay.end, false);
+      
+      // Ensure start < end
+      if (clampedOpen >= clampedClose) {
+        // If clamped values are invalid, use business hours
+        return {
+          ...day,
+          open: businessDay.start,
+          close: businessDay.end,
+        };
+      }
+      
+      return {
+        ...day,
+        open: clampedOpen,
+        close: clampedClose,
+      };
+    });
+  };
 
   // Selected worker form state
   const [formData, setFormData] = useState<Partial<Worker>>({
@@ -101,21 +182,59 @@ export default function WorkersPage() {
   useEffect(() => {
     if (!siteId) return;
 
-    const unsubscribeServices = subscribeServices(
+    const unsubscribeServices = subscribeSiteServices(
       siteId,
       (svcs) => {
-        // Only show active services
-        const activeServices = svcs.filter((s) => s.active !== false);
-        setServices(activeServices);
+        // Only show enabled services (enabled !== false)
+        // Note: service.name is used as the identifier for worker.services matching
+        const enabledServices = svcs.filter((s) => s.enabled !== false);
+        
+        if (process.env.NODE_ENV !== "production") {
+          console.log(`[Workers] Loaded ${enabledServices.length} services from sites/${siteId}.services`);
+          console.log(`[Workers] Services:`, enabledServices.map(s => ({ id: s.id, name: s.name, enabled: s.enabled })));
+        }
+        
+        setServices(enabledServices);
       },
       (err) => {
         console.error("[Workers] Failed to load services", err);
+        console.error("[Workers] siteId:", siteId, "path: sites/" + siteId + ".services");
         setServices([]);
       }
     );
 
     return () => {
       unsubscribeServices();
+    };
+  }, [siteId]);
+
+  // Load business hours from Firestore (site-level booking settings)
+  useEffect(() => {
+    if (!siteId) return;
+
+    const unsubscribeBusinessHours = subscribeBookingSettings(
+      siteId,
+      (settings) => {
+        if (process.env.NODE_ENV !== "production") {
+          console.log(`[Workers] Loaded business hours from Firestore for site ${siteId}:`, {
+            slotMinutes: settings.slotMinutes,
+            days: Object.entries(settings.days).map(([key, day]) => ({
+              dayKey: key,
+              enabled: day.enabled,
+              hours: `${day.start}-${day.end}`,
+            })),
+          });
+        }
+        setBusinessHours(settings);
+      },
+      (err) => {
+        console.error("[Workers] Failed to load business hours", err);
+        setBusinessHours(defaultBookingSettings);
+      }
+    );
+
+    return () => {
+      unsubscribeBusinessHours();
     };
   }, [siteId]);
 
@@ -187,29 +306,54 @@ export default function WorkersPage() {
     if (selectedWorkerId) {
       const worker = workers.find((w) => w.id === selectedWorkerId);
       if (worker) {
+        // Normalize worker services to ensure they match current services
+        const normalizedServices = normalizeWorkerServices(worker.services || []);
+        
+        // Clamp worker availability to business hours (backwards compatibility)
+        let normalizedAvailability = worker.availability || defaultAvailability;
+        normalizedAvailability = clampWorkerAvailability(normalizedAvailability);
+        
         setFormData({
           name: worker.name || "",
           role: worker.role || "",
           phone: worker.phone || "",
           email: worker.email || "",
-          services: worker.services || [],
-          availability: worker.availability || defaultAvailability,
+          services: normalizedServices,
+          availability: normalizedAvailability,
           active: worker.active !== false,
         });
       }
     } else {
-      // Reset form for new worker
+      // Reset form for new worker - initialize with business hours constraints
+      const initialAvailability = defaultAvailability.map((day) => {
+        const businessDay = getBusinessDayConfig(day.day);
+        if (!businessDay.enabled) {
+          // Business is closed on this day
+          return {
+            ...day,
+            open: null,
+            close: null,
+          };
+        }
+        // Use business hours as default
+        return {
+          ...day,
+          open: businessDay.start,
+          close: businessDay.end,
+        };
+      });
+      
       setFormData({
         name: "",
         role: "",
         phone: "",
         email: "",
         services: [],
-        availability: defaultAvailability,
+        availability: initialAvailability,
         active: true,
       });
     }
-  }, [selectedWorkerId, workers]);
+  }, [selectedWorkerId, workers, services, businessHours]);
 
   const handleAddWorker = async () => {
     if (!db || !siteId || !formData.name?.trim()) {
@@ -219,13 +363,19 @@ export default function WorkersPage() {
     try {
       setSaving(true);
       setError(null);
+      // Normalize services before saving to ensure only valid service names are stored
+      const normalizedServices = normalizeWorkerServices(formData.services || []);
+      
+      // Clamp availability to business hours before saving
+      const clampedAvailability = clampWorkerAvailability(formData.availability || defaultAvailability);
+      
       const newWorker = {
         name: formData.name.trim(),
         role: formData.role?.trim() || null,
         phone: formData.phone?.trim() || null,
         email: formData.email?.trim() || null,
-        services: formData.services || [],
-        availability: formData.availability || defaultAvailability,
+        services: normalizedServices,
+        availability: clampedAvailability,
         active: formData.active !== false,
         createdAt: new Date().toISOString(),
       };
@@ -249,13 +399,19 @@ export default function WorkersPage() {
     try {
       setSaving(true);
       setError(null);
+      // Normalize services before saving to ensure only valid service names are stored
+      const normalizedServices = normalizeWorkerServices(formData.services || []);
+      
+      // Clamp availability to business hours before saving
+      const clampedAvailability = clampWorkerAvailability(formData.availability || defaultAvailability);
+      
       await updateDoc(workerDoc(siteId, selectedWorkerId), {
         name: formData.name.trim(),
         role: formData.role?.trim() || null,
         phone: formData.phone?.trim() || null,
         email: formData.email?.trim() || null,
-        services: formData.services || [],
-        availability: formData.availability || defaultAvailability,
+        services: normalizedServices,
+        availability: clampedAvailability,
         active: formData.active !== false,
       });
       setSaveMessage("השינויים נשמרו בהצלחה");
@@ -290,50 +446,88 @@ export default function WorkersPage() {
     }
   };
 
-  // Helper: Convert old service names to IDs (backward compatibility)
-  // If a worker has service names (strings) that match service.name, convert them to service.name (which is the ID)
+  // Helper: Normalize worker services to use service.name as identifier
+  // Worker services array stores service names (not IDs) to match booking logic
   // This ensures backward compatibility with workers that have old service names stored
   const normalizeWorkerServices = (workerServices: string[]): string[] => {
     if (!workerServices || workerServices.length === 0) return [];
     if (services.length === 0) return workerServices; // No services loaded yet, keep as-is
     
-    // Check if services are already IDs (match service.name) or old names
-    return workerServices.map((serviceValue) => {
-      // Try to find a service with matching name (service.name is the ID)
-      const matchingService = services.find((s) => s.name === serviceValue);
-      if (matchingService) {
-        // Already an ID (service.name), return as-is
-        return matchingService.name;
+    // Worker services should be service names (service.name), not service IDs
+    // Filter to only include services that exist in the current services list
+    return workerServices.filter((serviceName) => {
+      // Check if this service name exists in the current services
+      const exists = services.some((s) => s.name === serviceName);
+      if (!exists && process.env.NODE_ENV !== "production") {
+        console.log(`[Workers] Filtering out invalid service name: "${serviceName}" (not found in current services)`);
       }
-      // If not found, it might be a legacy name or invalid service
-      // For now, keep it (will be filtered out on next save if service doesn't exist)
-      return serviceValue;
-    }).filter((id) => {
-      // Filter out any IDs that don't match existing services
-      return services.some((s) => s.name === id);
+      return exists;
     });
   };
 
   const updateAvailability = (dayIndex: number, field: "open" | "close", value: string | null) => {
     const availability = [...(formData.availability || defaultAvailability)];
+    const day = availability[dayIndex];
+    const businessDay = getBusinessDayConfig(day.day);
+    
+    // If business is closed on this day, don't allow changes
+    if (!businessDay.enabled) {
+      return;
+    }
+    
+    let newValue = value;
+    
+    // Clamp the value within business hours
+    if (newValue) {
+      if (field === "open") {
+        // Start time must be >= business start
+        newValue = clampTime(newValue, businessDay.start, businessDay.end, true);
+      } else {
+        // End time must be <= business end
+        newValue = clampTime(newValue, businessDay.start, businessDay.end, false);
+      }
+    }
+    
     availability[dayIndex] = {
-      ...availability[dayIndex],
-      [field]: value,
+      ...day,
+      [field]: newValue,
     };
+    
+    // Ensure start < end after update
+    if (availability[dayIndex].open && availability[dayIndex].close) {
+      if (availability[dayIndex].open >= availability[dayIndex].close) {
+        // If invalid, use business hours
+        availability[dayIndex] = {
+          ...day,
+          open: businessDay.start,
+          close: businessDay.end,
+        };
+      }
+    }
+    
     setFormData({ ...formData, availability });
   };
 
   const toggleDayAvailability = (dayIndex: number) => {
     const availability = [...(formData.availability || defaultAvailability)];
     const day = availability[dayIndex];
+    const businessDay = getBusinessDayConfig(day.day);
+    
+    // If business is closed on this day, don't allow enabling
+    if (!businessDay.enabled) {
+      return;
+    }
+    
     const isClosed = !day.open && !day.close;
     if (isClosed) {
+      // Enable with business hours
       availability[dayIndex] = {
         ...day,
-        open: "09:00",
-        close: "18:00",
+        open: businessDay.start,
+        close: businessDay.end,
       };
     } else {
+      // Disable
       availability[dayIndex] = {
         ...day,
         open: null,
@@ -344,7 +538,7 @@ export default function WorkersPage() {
   };
 
   // Use services from Firestore (same source as Pricing/Services page)
-  // Services are already filtered to active only
+  // Services are already filtered to enabled only (enabled !== false)
 
   return (
     <div dir="rtl" className="min-h-screen bg-slate-50">
@@ -552,32 +746,48 @@ export default function WorkersPage() {
                     {/* Availability Tab */}
                     {activeWorkerTab === "availability" && (
                       <div>
+                        <p className="text-xs text-slate-500 mb-4 text-right">
+                          שעות העובד חייבות להיות בתוך שעות הפתיחה של העסק. ימים שהעסק סגור בהם לא ניתן להגדיר.
+                        </p>
                         <div className="space-y-3">
                           {(formData.availability || defaultAvailability).map((day, index) => {
                             const isClosed = !day.open && !day.close;
+                            const businessDay = getBusinessDayConfig(day.day);
+                            const isBusinessClosed = !businessDay.enabled;
+                            
                             return (
                               <div
                                 key={day.day}
-                                className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg"
+                                className={`flex items-center gap-3 p-3 border rounded-lg ${
+                                  isBusinessClosed 
+                                    ? "border-slate-200 bg-slate-50 opacity-60" 
+                                    : "border-slate-200"
+                                }`}
                               >
-                                <div className="w-20 text-sm font-medium text-slate-700">
+                                <div className={`w-20 text-sm font-medium ${isBusinessClosed ? "text-slate-400" : "text-slate-700"}`}>
                                   {day.label}
+                                  {isBusinessClosed && (
+                                    <span className="block text-xs text-slate-400 mt-1">(סגור)</span>
+                                  )}
                                 </div>
                                 <label className="flex items-center gap-2">
                                   <input
                                     type="checkbox"
                                     checked={!isClosed}
                                     onChange={() => toggleDayAvailability(index)}
-                                    className="w-4 h-4 text-sky-500 rounded focus:ring-sky-500"
+                                    disabled={isBusinessClosed}
+                                    className="w-4 h-4 text-sky-500 rounded focus:ring-sky-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                   />
-                                  <span className="text-xs text-slate-600">פעיל</span>
+                                  <span className={`text-xs ${isBusinessClosed ? "text-slate-400" : "text-slate-600"}`}>פעיל</span>
                                 </label>
-                                {!isClosed && (
+                                {!isClosed && !isBusinessClosed && (
                                   <>
                                     <input
                                       type="time"
                                       value={day.open || ""}
                                       onChange={(e) => updateAvailability(index, "open", e.target.value)}
+                                      min={businessDay.start}
+                                      max={businessDay.end}
                                       className="px-2 py-1 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
                                     />
                                     <span className="text-xs text-slate-600">עד</span>
@@ -585,9 +795,19 @@ export default function WorkersPage() {
                                       type="time"
                                       value={day.close || ""}
                                       onChange={(e) => updateAvailability(index, "close", e.target.value)}
+                                      min={businessDay.start}
+                                      max={businessDay.end}
                                       className="px-2 py-1 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
                                     />
+                                    {businessDay.enabled && (
+                                      <span className="text-xs text-slate-400">
+                                        (עסק: {businessDay.start}-{businessDay.end})
+                                      </span>
+                                    )}
                                   </>
+                                )}
+                                {!isClosed && isBusinessClosed && (
+                                  <span className="text-xs text-slate-400">העסק סגור ביום זה</span>
                                 )}
                               </div>
                             );

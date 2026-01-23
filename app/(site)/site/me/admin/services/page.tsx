@@ -20,6 +20,8 @@ import {
 } from "@/lib/firestoreSiteServices";
 import { AccordionItem } from "@/components/admin/Accordion";
 import AdminTabs from "@/components/ui/AdminTabs";
+import { parseNumberOrRange, formatNumberOrRange } from "@/lib/parseNumberOrRange";
+import { formatPriceDisplay } from "@/lib/formatPrice";
 
 
 export default function ServicesPage() {
@@ -35,6 +37,10 @@ export default function ServicesPage() {
   const [editingService, setEditingService] = useState<SiteService | null>(null);
   const [showAddService, setShowAddService] = useState(false);
   const [newServiceName, setNewServiceName] = useState("");
+  const [durationInputValue, setDurationInputValue] = useState<string>("");
+  const [waitTimeInputValue, setWaitTimeInputValue] = useState<string>("");
+  const [priceInputValue, setPriceInputValue] = useState<string>("");
+  const [followUpDurationInputValue, setFollowUpDurationInputValue] = useState<string>("");
   
   // Tab state for services page
   type ServicesTabType = "services" | "pricing";
@@ -198,7 +204,7 @@ export default function ServicesPage() {
       hasFollowUp: false,
       followUpServiceId: null,
       followUpDurationMinutes: null,
-      followUpWaitMinutes: null,
+      followUpWaitMinutes: null, // Deprecated - kept for backwards compatibility
     };
     setEditingItem({
       ...newItem,
@@ -206,10 +212,37 @@ export default function ServicesPage() {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
+    // Initialize all input values with defaults
+    setDurationInputValue("30");
+    setWaitTimeInputValue("0");
+    setPriceInputValue("0");
+    setFollowUpDurationInputValue("");
   };
 
   const handleEditItem = (item: PricingItem) => {
-    setEditingItem(item);
+    // Convert range values to single values for backwards compatibility
+    const convertedItem = { ...item };
+    
+    // Keep price ranges as-is - no conversion needed
+    
+    // Convert waiting time range to single: prefer min, else max, else existing waitMinutes
+    if (convertedItem.waitTimeMin !== undefined || convertedItem.waitTimeMax !== undefined) {
+      convertedItem.waitMinutes = convertedItem.waitTimeMin ?? convertedItem.waitTimeMax ?? convertedItem.waitMinutes ?? undefined;
+      convertedItem.waitTimeMin = undefined;
+      convertedItem.waitTimeMax = undefined;
+    }
+    
+    // Initialize all input values for display
+    setDurationInputValue(formatNumberOrRange(convertedItem.durationMinMinutes, convertedItem.durationMaxMinutes));
+    setWaitTimeInputValue(formatNumberOrRange(convertedItem.waitMinutes));
+    // Format price: use range if available, otherwise single price
+    setPriceInputValue(formatNumberOrRange(
+      convertedItem.priceRangeMin ?? convertedItem.price,
+      convertedItem.priceRangeMax
+    ));
+    setFollowUpDurationInputValue(formatNumberOrRange(convertedItem.followUpDurationMinutes));
+    
+    setEditingItem(convertedItem);
   };
 
   const handleDeleteItem = async (itemId: string) => {
@@ -245,20 +278,18 @@ export default function ServicesPage() {
       setError("בחר שירות");
       return;
     }
-    if (!editingItem.durationMinMinutes || editingItem.durationMinMinutes <= 0) {
-      setError("משך מינימום חייב להיות גדול מ-0");
+    // Early validation guard - prevent saving if button should be disabled
+    if (!editingItem.durationMinMinutes || editingItem.durationMinMinutes < 1) {
+      setError("משך השירות חייב להיות גדול או שווה ל-1 דקה");
       return;
     }
-    if (!editingItem.durationMaxMinutes || editingItem.durationMaxMinutes <= 0) {
-      setError("משך מקסימום חייב להיות גדול מ-0");
-      return;
-    }
-    if (editingItem.durationMaxMinutes < editingItem.durationMinMinutes) {
-      setError("משך מקסימום חייב להיות גדול או שווה למינימום");
+    // Validate waiting time: must be >= 0 if provided
+    if (editingItem.waitMinutes !== undefined && editingItem.waitMinutes !== null && editingItem.waitMinutes < 0) {
+      setError("זמן המתנה חייב להיות גדול או שווה ל-0");
       return;
     }
     if (editingItem.hasFollowUp) {
-      if (!editingItem.followUpServiceId || !editingItem.followUpDurationMinutes || editingItem.followUpDurationMinutes <= 0) {
+      if (!editingItem.followUpServiceId || !editingItem.followUpDurationMinutes || editingItem.followUpDurationMinutes < 1) {
         setError("שירות המשך ומשך המשך נדרשים כאשר המשך טיפול מופעל");
         return;
       }
@@ -268,11 +299,19 @@ export default function ServicesPage() {
       setError(null);
       
       // Build payload - only include defined values, use null for optional empty values
+      // Duration fields: use the service duration value (both min and max set to same value)
+      const durationMin = editingItem.durationMinMinutes && editingItem.durationMinMinutes >= 1 
+        ? editingItem.durationMinMinutes 
+        : 30; // Fallback default
+      const durationMax = editingItem.durationMaxMinutes && editingItem.durationMaxMinutes >= 1
+        ? editingItem.durationMaxMinutes
+        : durationMin; // Use same as min for single service duration
+      
       const itemData: any = {
         serviceId: serviceId, // Required field
         service: serviceId, // Set for backward compatibility
-        durationMinMinutes: editingItem.durationMinMinutes,
-        durationMaxMinutes: editingItem.durationMaxMinutes,
+        durationMinMinutes: durationMin,
+        durationMaxMinutes: durationMax,
         order: editingItem.order || 0,
         hasFollowUp: editingItem.hasFollowUp || false,
       };
@@ -283,17 +322,30 @@ export default function ServicesPage() {
       } else {
         itemData.type = null; // Explicitly set to null if empty
       }
+      // Handle waiting time: single value only
       if (editingItem.waitMinutes !== undefined && editingItem.waitMinutes !== null) {
         itemData.waitMinutes = editingItem.waitMinutes;
       }
-      if (editingItem.price !== undefined && editingItem.price !== null) {
-        itemData.price = editingItem.price;
-      }
-      if (editingItem.priceRangeMin !== undefined && editingItem.priceRangeMin !== null) {
+      // Clear range fields for backwards compatibility
+      itemData.waitTimeMin = undefined;
+      itemData.waitTimeMax = undefined;
+      
+      // Handle price: support both single and range
+      if (editingItem.priceRangeMin !== undefined && editingItem.priceRangeMax !== undefined) {
+        // Range price
         itemData.priceRangeMin = editingItem.priceRangeMin;
-      }
-      if (editingItem.priceRangeMax !== undefined && editingItem.priceRangeMax !== null) {
         itemData.priceRangeMax = editingItem.priceRangeMax;
+        itemData.price = undefined; // Clear single price when using range
+      } else if (editingItem.price !== undefined && editingItem.price !== null) {
+        // Single price
+        itemData.price = editingItem.price;
+        itemData.priceRangeMin = undefined;
+        itemData.priceRangeMax = undefined;
+      } else {
+        // No price
+        itemData.price = undefined;
+        itemData.priceRangeMin = undefined;
+        itemData.priceRangeMax = undefined;
       }
       if (editingItem.notes) {
         itemData.notes = editingItem.notes;
@@ -303,12 +355,12 @@ export default function ServicesPage() {
       if (editingItem.hasFollowUp) {
         itemData.followUpServiceId = editingItem.followUpServiceId || null;
         itemData.followUpDurationMinutes = editingItem.followUpDurationMinutes || null;
-        itemData.followUpWaitMinutes = editingItem.followUpWaitMinutes || null;
+        itemData.followUpWaitMinutes = null; // Deprecated - always set to null for backwards compatibility
       } else {
         // Explicitly set to null when disabled
         itemData.followUpServiceId = null;
         itemData.followUpDurationMinutes = null;
-        itemData.followUpWaitMinutes = null;
+        itemData.followUpWaitMinutes = null; // Deprecated - always set to null
       }
 
       // Remove any undefined values that might have slipped through
@@ -332,6 +384,10 @@ export default function ServicesPage() {
         await updatePricingItem(uid, editingItem.id, cleanItemData);
       }
       setEditingItem(null);
+      setDurationInputValue("");
+      setWaitTimeInputValue("");
+      setPriceInputValue("");
+      setFollowUpDurationInputValue("");
     } catch (err) {
       console.error("Failed to save pricing item", err);
       setError("שגיאה בשמירת הפריט");
@@ -644,14 +700,14 @@ export default function ServicesPage() {
                                       : `${item.durationMinMinutes}-${item.durationMaxMinutes}`}
                                   </td>
                                   <td className="px-3 py-2 text-slate-600">
-                                    {item.waitMinutes ?? "-"}
+                                    {/* Backwards compatibility: convert range to single for display */}
+                                    {(() => {
+                                      const waitTime = item.waitMinutes ?? item.waitTimeMin ?? item.waitTimeMax;
+                                      return waitTime !== undefined && waitTime !== null ? `${waitTime}` : "-";
+                                    })()}
                                   </td>
                                   <td className="px-3 py-2 text-slate-900 font-medium">
-                                    {item.priceRangeMin && item.priceRangeMax
-                                      ? `₪${item.priceRangeMin}–${item.priceRangeMax}`
-                                      : item.price
-                                      ? `₪${item.price}`
-                                      : "-"}
+                                    {formatPriceDisplay(item)}
                                   </td>
                                   <td className="px-3 py-2 text-slate-600 text-xs">
                                     <div className="space-y-1">
@@ -831,154 +887,195 @@ export default function ServicesPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    משך מינימום (דקות) *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={editingItem.durationMinMinutes || 0}
-                    onChange={(e) =>
-                      setEditingItem({
-                        ...editingItem,
-                        durationMinMinutes: parseInt(e.target.value) || 0,
-                      })
-                    }
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    משך מקסימום (דקות) *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={editingItem.durationMaxMinutes || 0}
-                    onChange={(e) =>
-                      setEditingItem({
-                        ...editingItem,
-                        durationMaxMinutes: parseInt(e.target.value) || 0,
-                      })
-                    }
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
-                  />
-                </div>
-              </div>
-
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  המתנה (דקות)
+                  משך השירות (בדקות) *
                 </label>
                 <input
-                  type="number"
-                  min="0"
-                  value={editingItem.waitMinutes || ""}
-                  onChange={(e) =>
-                    setEditingItem({
-                      ...editingItem,
-                      waitMinutes: e.target.value ? parseInt(e.target.value) : undefined,
-                    })
-                  }
+                  type="text"
+                  inputMode="numeric"
+                  value={durationInputValue}
+                  onChange={(e) => {
+                    // Allow typing freely - store raw input
+                    setDurationInputValue(e.target.value);
+                    // Clear error while typing
+                    setError(null);
+                  }}
+                  onBlur={(e) => {
+                    const inputValue = e.target.value.trim();
+                    // Parse the input: single number or range
+                    const rangeMatch = inputValue.match(/^(\d+)\s*-\s*(\d+)$/);
+                    const singleMatch = inputValue.match(/^(\d+)$/);
+                    
+                    if (rangeMatch) {
+                      // Range format: "30-60"
+                      const min = parseInt(rangeMatch[1], 10);
+                      const max = parseInt(rangeMatch[2], 10);
+                      if (min >= 1 && max > min) {
+                        setEditingItem({
+                          ...editingItem,
+                          durationMinMinutes: min,
+                          durationMaxMinutes: max,
+                        });
+                        setDurationInputValue(`${min}-${max}`);
+                        setError(null);
+                      } else {
+                        // Invalid range
+                        setError("טווח לא תקין: הערך המינימלי חייב להיות קטן מהמקסימלי");
+                        // Restore previous valid value
+                        if (editingItem?.durationMinMinutes && editingItem?.durationMaxMinutes) {
+                          if (editingItem.durationMinMinutes === editingItem.durationMaxMinutes) {
+                            setDurationInputValue(`${editingItem.durationMinMinutes}`);
+                          } else {
+                            setDurationInputValue(`${editingItem.durationMinMinutes}-${editingItem.durationMaxMinutes}`);
+                          }
+                        }
+                      }
+                    } else if (singleMatch) {
+                      // Single number: "30"
+                      const value = parseInt(singleMatch[1], 10);
+                      if (value >= 1) {
+                        setEditingItem({
+                          ...editingItem,
+                          durationMinMinutes: value,
+                          durationMaxMinutes: value,
+                        });
+                        setDurationInputValue(`${value}`);
+                        setError(null);
+                      } else {
+                        setError("משך השירות חייב להיות גדול או שווה ל-1 דקה");
+                        // Restore previous valid value
+                        if (editingItem?.durationMinMinutes) {
+                          setDurationInputValue(`${editingItem.durationMinMinutes}`);
+                        }
+                      }
+                    } else if (inputValue === "") {
+                      // Empty - validation will catch it on save
+                      setError(null);
+                    } else {
+                      // Invalid format
+                      setError("פורמט לא תקין: השתמש במספר (למשל: 30) או טווח (למשל: 30-60)");
+                      // Restore previous valid value
+                      if (editingItem?.durationMinMinutes && editingItem?.durationMaxMinutes) {
+                        if (editingItem.durationMinMinutes === editingItem.durationMaxMinutes) {
+                          setDurationInputValue(`${editingItem.durationMinMinutes}`);
+                        } else {
+                          setDurationInputValue(`${editingItem.durationMinMinutes}-${editingItem.durationMaxMinutes}`);
+                        }
+                      }
+                    }
+                  }}
+                  placeholder="0"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  זמן המתנה (דקות)
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={waitTimeInputValue}
+                  onChange={(e) => {
+                    setWaitTimeInputValue(e.target.value);
+                    setError(null);
+                  }}
+                  onBlur={(e) => {
+                    const inputValue = e.target.value.trim();
+                    if (!inputValue) {
+                      setEditingItem({
+                        ...editingItem,
+                        waitMinutes: undefined,
+                      });
+                      setWaitTimeInputValue("");
+                      return;
+                    }
+                    
+                    const parsed = parseNumberOrRange(inputValue);
+                    if (parsed.kind === "single") {
+                      setEditingItem({
+                        ...editingItem,
+                        waitMinutes: parsed.value,
+                      });
+                      setWaitTimeInputValue(`${parsed.value}`);
+                      setError(null);
+                    } else if (parsed.kind === "range") {
+                      // For waiting time, store as single (use min) but display range
+                      setEditingItem({
+                        ...editingItem,
+                        waitMinutes: parsed.min,
+                      });
+                      setWaitTimeInputValue(`${parsed.min}-${parsed.max}`);
+                      setError(null);
+                    } else {
+                      setError(parsed.error || "פורמט לא תקין");
+                      // Restore previous value
+                      setWaitTimeInputValue(formatNumberOrRange(editingItem.waitMinutes));
+                    }
+                  }}
+                  placeholder="0"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   מחיר
                 </label>
-                <div className="space-y-3">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="priceType"
-                      checked={!editingItem.priceRangeMin}
-                      onChange={() =>
-                        setEditingItem({
-                          ...editingItem,
-                          priceRangeMin: undefined,
-                          priceRangeMax: undefined,
-                        })
-                      }
-                      className="w-4 h-4 text-sky-500"
-                    />
-                    <span className="text-sm text-slate-700">מחיר יחיד</span>
-                  </label>
-                  {!editingItem.priceRangeMin && (
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={editingItem.price || ""}
-                      onChange={(e) =>
-                        setEditingItem({
-                          ...editingItem,
-                          price: e.target.value ? parseFloat(e.target.value) : undefined,
-                        })
-                      }
-                      placeholder="₪0"
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
-                    />
-                  )}
-
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="priceType"
-                      checked={!!editingItem.priceRangeMin}
-                      onChange={() =>
-                        setEditingItem({
-                          ...editingItem,
-                          price: undefined,
-                          priceRangeMin: editingItem.priceRangeMin || 0,
-                          priceRangeMax: editingItem.priceRangeMax || 0,
-                        })
-                      }
-                      className="w-4 h-4 text-sky-500"
-                    />
-                    <span className="text-sm text-slate-700">טווח מחירים</span>
-                  </label>
-                  {editingItem.priceRangeMin !== undefined && (
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-slate-600 mb-1">מינימום</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={editingItem.priceRangeMin || ""}
-                          onChange={(e) =>
-                            setEditingItem({
-                              ...editingItem,
-                              priceRangeMin: e.target.value ? parseFloat(e.target.value) : 0,
-                            })
-                          }
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-slate-600 mb-1">מקסימום</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={editingItem.priceRangeMax || ""}
-                          onChange={(e) =>
-                            setEditingItem({
-                              ...editingItem,
-                              priceRangeMax: e.target.value ? parseFloat(e.target.value) : 0,
-                            })
-                          }
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={priceInputValue}
+                  onChange={(e) => {
+                    setPriceInputValue(e.target.value);
+                    setError(null);
+                  }}
+                  onBlur={(e) => {
+                    const inputValue = e.target.value.trim();
+                    if (!inputValue) {
+                      setEditingItem({
+                        ...editingItem,
+                        price: undefined,
+                        priceRangeMin: undefined,
+                        priceRangeMax: undefined,
+                      });
+                      setPriceInputValue("");
+                      return;
+                    }
+                    
+                    const parsed = parseNumberOrRange(inputValue);
+                    if (parsed.kind === "single") {
+                      setEditingItem({
+                        ...editingItem,
+                        price: parsed.value,
+                        priceRangeMin: undefined,
+                        priceRangeMax: undefined,
+                      });
+                      setPriceInputValue(`${parsed.value}`);
+                      setError(null);
+                    } else if (parsed.kind === "range") {
+                      // Store range in priceRangeMin/priceRangeMax
+                      setEditingItem({
+                        ...editingItem,
+                        price: undefined, // Clear single price when using range
+                        priceRangeMin: parsed.min,
+                        priceRangeMax: parsed.max,
+                      });
+                      setPriceInputValue(`${parsed.min}-${parsed.max}`);
+                      setError(null);
+                    } else {
+                      setError(parsed.error || "מחיר חייב להיות מספר (למשל: 100) או טווח (למשל: 100-200)");
+                      // Restore previous value
+                      const prevPrice = editingItem.price ?? editingItem.priceRangeMin;
+                      const prevPriceMax = editingItem.priceRangeMax;
+                      setPriceInputValue(formatNumberOrRange(prevPrice, prevPriceMax));
+                    }
+                  }}
+                  placeholder="0"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                />
               </div>
 
               <div>
@@ -1002,15 +1099,41 @@ export default function ServicesPage() {
                   <input
                     type="checkbox"
                     checked={editingItem.hasFollowUp || false}
-                    onChange={(e) =>
-                      setEditingItem({
+                    onChange={(e) => {
+                      const newHasFollowUp = e.target.checked;
+                      const updatedItem = {
                         ...editingItem,
-                        hasFollowUp: e.target.checked,
+                        hasFollowUp: newHasFollowUp,
                         followUpServiceId: null, // Reset to null when toggled
                         followUpDurationMinutes: null,
                         followUpWaitMinutes: null,
-                      })
-                    }
+                      };
+                      
+                      // Debug logging (dev only)
+                      if (process.env.NODE_ENV === 'development') {
+                        console.log('[Follow-up Toggle]', {
+                          newHasFollowUp,
+                          followUpServiceId: updatedItem.followUpServiceId,
+                          followUpDurationMinutes: updatedItem.followUpDurationMinutes,
+                          beforeUpdate: {
+                            hasFollowUp: editingItem?.hasFollowUp,
+                            followUpServiceId: editingItem?.followUpServiceId,
+                            followUpDurationMinutes: editingItem?.followUpDurationMinutes,
+                          },
+                        });
+                      }
+                      
+                      // Update state immediately
+                      setEditingItem(updatedItem);
+                      // Also reset input values
+                      if (!newHasFollowUp) {
+                        setFollowUpDurationInputValue("");
+                      }
+                      
+                      // Force immediate re-render by clearing any error state
+                      // This ensures the Save button state is recalculated immediately
+                      setError(null);
+                    }}
                     className="w-4 h-4 text-sky-500 rounded focus:ring-sky-500"
                   />
                   <span className="text-sm font-medium text-slate-700">המשך טיפול</span>
@@ -1041,46 +1164,54 @@ export default function ServicesPage() {
                       </select>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                          משך המשך (דקות) *
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          value={editingItem.followUpDurationMinutes || ""}
-                          onChange={(e) =>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        משך המשך (דקות) *
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={followUpDurationInputValue}
+                        onChange={(e) => {
+                          setFollowUpDurationInputValue(e.target.value);
+                          setError(null);
+                        }}
+                        onBlur={(e) => {
+                          const inputValue = e.target.value.trim();
+                          if (!inputValue) {
                             setEditingItem({
                               ...editingItem,
-                              followUpDurationMinutes: e.target.value
-                                ? parseInt(e.target.value)
-                                : null,
-                            })
+                              followUpDurationMinutes: null,
+                            });
+                            setFollowUpDurationInputValue("");
+                            return;
                           }
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                          המתנת המשך (דקות)
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          value={editingItem.followUpWaitMinutes || ""}
-                          onChange={(e) =>
+                          
+                          const parsed = parseNumberOrRange(inputValue);
+                          if (parsed.kind === "single" && parsed.value >= 1) {
                             setEditingItem({
                               ...editingItem,
-                              followUpWaitMinutes: e.target.value
-                                ? parseInt(e.target.value)
-                                : null,
-                            })
+                              followUpDurationMinutes: parsed.value,
+                            });
+                            setFollowUpDurationInputValue(`${parsed.value}`);
+                            setError(null);
+                          } else if (parsed.kind === "range" && parsed.min >= 1) {
+                            // Store as single (use min) but display range
+                            setEditingItem({
+                              ...editingItem,
+                              followUpDurationMinutes: parsed.min,
+                            });
+                            setFollowUpDurationInputValue(`${parsed.min}-${parsed.max}`);
+                            setError(null);
+                          } else {
+                            setError(parsed.error || "משך המשך חייב להיות גדול או שווה ל-1 דקה");
+                            // Restore previous value
+                            setFollowUpDurationInputValue(formatNumberOrRange(editingItem.followUpDurationMinutes));
                           }
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
-                        />
-                      </div>
+                        }}
+                        placeholder="0"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      />
                     </div>
                   </div>
                 )}
@@ -1094,22 +1225,92 @@ export default function ServicesPage() {
               >
                 ביטול
               </button>
-              <button
-                onClick={handleSaveItem}
-                disabled={
-                  (!editingItem.serviceId && !editingItem.service) ||
-                  !editingItem.durationMinMinutes ||
-                  editingItem.durationMinMinutes <= 0 ||
-                  !editingItem.durationMaxMinutes ||
-                  editingItem.durationMaxMinutes <= 0 ||
-                  editingItem.durationMaxMinutes < editingItem.durationMinMinutes ||
-                  (editingItem.hasFollowUp &&
-                    (!editingItem.followUpServiceId || !editingItem.followUpDurationMinutes || editingItem.followUpDurationMinutes <= 0))
+              {(() => {
+                // Single source of truth for disabled state - computed from current editingItem
+                // This IIFE runs on every render, so it always uses the latest editingItem state
+                const serviceId = editingItem?.serviceId || editingItem?.service;
+                const hasService = !!serviceId && serviceId.trim().length > 0;
+                const hasValidDuration = editingItem?.durationMinMinutes !== undefined && 
+                                         editingItem.durationMinMinutes !== null && 
+                                         editingItem.durationMinMinutes >= 1;
+                
+                // Follow-up validation: if hasFollowUp is true, all follow-up fields must be valid
+                const hasFollowUp = editingItem?.hasFollowUp === true;
+                const hasValidFollowUp = !hasFollowUp || 
+                                        (hasFollowUp &&
+                                         !!editingItem.followUpServiceId &&
+                                         editingItem.followUpServiceId.trim().length > 0 &&
+                                         editingItem.followUpDurationMinutes !== undefined &&
+                                         editingItem.followUpDurationMinutes !== null &&
+                                         editingItem.followUpDurationMinutes >= 1);
+                
+                const isSaveDisabled = !hasService || !hasValidDuration || !hasValidFollowUp;
+                
+                // Debug logging (dev only) - log after toggle to verify state updates
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('[Save Button Debug]', {
+                    serviceId,
+                    hasService,
+                    durationMinMinutes: editingItem?.durationMinMinutes,
+                    hasValidDuration,
+                    hasFollowUp,
+                    followUpServiceId: editingItem?.followUpServiceId,
+                    followUpDurationMinutes: editingItem?.followUpDurationMinutes,
+                    hasValidFollowUp,
+                    isSaveDisabled,
+                    editingItemState: editingItem ? 'exists' : 'null',
+                    timestamp: Date.now(), // Add timestamp to track render order
+                  });
                 }
-                className="px-4 py-2 bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
-              >
-                שמור
-              </button>
+                
+                // Explicit button classes - no conditional logic in className
+                const buttonClasses = isSaveDisabled
+                  ? "px-4 py-2 bg-sky-300 text-white rounded-lg text-sm font-medium cursor-not-allowed opacity-75"
+                  : "px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium cursor-pointer opacity-100 transition-colors";
+                
+                // Create a safe click handler that double-checks disabled state using current editingItem
+                const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+                  // Re-check disabled state at click time to prevent stale closures
+                  const currentServiceId = editingItem?.serviceId || editingItem?.service;
+                  const currentHasService = !!currentServiceId && currentServiceId.trim().length > 0;
+                  const currentHasValidDuration = editingItem?.durationMinMinutes !== undefined && 
+                                                  editingItem.durationMinMinutes !== null && 
+                                                  editingItem.durationMinMinutes >= 1;
+                  const currentHasFollowUp = editingItem?.hasFollowUp === true;
+                  const currentHasValidFollowUp = !currentHasFollowUp || 
+                                                  (currentHasFollowUp &&
+                                                   !!editingItem.followUpServiceId &&
+                                                   editingItem.followUpServiceId.trim().length > 0 &&
+                                                   editingItem.followUpDurationMinutes !== undefined &&
+                                                   editingItem.followUpDurationMinutes !== null &&
+                                                   editingItem.followUpDurationMinutes >= 1);
+                  const currentIsSaveDisabled = !currentHasService || !currentHasValidDuration || !currentHasValidFollowUp;
+                  
+                  if (currentIsSaveDisabled) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                  }
+                  handleSaveItem();
+                };
+                
+                return (
+                  <button
+                    key={`save-btn-${editingItem?.id || 'new'}-${editingItem?.hasFollowUp ? 'followup' : 'no-followup'}`}
+                    type="button"
+                    onClick={handleClick}
+                    disabled={isSaveDisabled}
+                    className={buttonClasses}
+                    style={{
+                      pointerEvents: isSaveDisabled ? 'none' : 'auto',
+                      cursor: isSaveDisabled ? 'not-allowed' : 'pointer',
+                    }}
+                    aria-disabled={isSaveDisabled}
+                  >
+                    שמור
+                  </button>
+                );
+              })()}
             </div>
           </div>
         </div>

@@ -11,7 +11,6 @@ import { defaultSiteConfig } from "@/types/siteConfig";
 import { saveBooking } from "@/lib/booking";
 import { bookingsCollection, bookingSettingsDoc } from "@/lib/firestorePaths";
 import {
-  getNext14Days,
   formatDateForDisplay,
   formatDateShort,
 } from "@/lib/timeSlots";
@@ -26,10 +25,11 @@ import {
 import type { BookingSettings } from "@/types/bookingSettings";
 import { defaultBookingSettings } from "@/types/bookingSettings";
 import { defaultThemeColors } from "@/types/siteConfig";
-import { subscribeServices } from "@/lib/firestoreServices";
-import type { Service } from "@/types/service";
+import { subscribeSiteServices } from "@/lib/firestoreSiteServices";
+import type { SiteService } from "@/types/siteConfig";
 import { subscribePricingItems } from "@/lib/firestorePricing";
 import type { PricingItem } from "@/types/pricingItem";
+import type { OpeningHours } from "@/types/booking";
 
 type BookingStep = 1 | 2 | 3 | 4 | 5 | 6; // 6 = success
 
@@ -43,12 +43,12 @@ export default function BookingPage() {
   const [step, setStep] = useState<BookingStep>(1);
   
   // Services and pricing items from Firestore
-  const [services, setServices] = useState<Service[]>([]);
+  const [services, setServices] = useState<SiteService[]>([]);
   const [pricingItems, setPricingItems] = useState<PricingItem[]>([]);
   
   // Booking settings from Firestore
   const [bookingSettings, setBookingSettings] = useState<BookingSettings>(defaultBookingSettings);
-  const [workers, setWorkers] = useState<Array<{ id: string; name: string; role?: string; services?: string[] }>>([]);
+  const [workers, setWorkers] = useState<Array<{ id: string; name: string; role?: string; services?: string[]; availability?: OpeningHours[]; active?: boolean }>>([]);
   const [workersLoading, setWorkersLoading] = useState<boolean>(true);
   const [workersError, setWorkersError] = useState<string | null>(null);
   
@@ -56,7 +56,7 @@ export default function BookingPage() {
   const [bookingsForDate, setBookingsForDate] = useState<Array<{ workerId: string | null; time: string; status: string }>>([]);
 
   // Booking form state
-  const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [selectedService, setSelectedService] = useState<SiteService | null>(null);
   const [selectedPricingItem, setSelectedPricingItem] = useState<PricingItem | null>(null);
   const [selectedWorker, setSelectedWorker] = useState<{ id: string; name: string } | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -65,6 +65,254 @@ export default function BookingPage() {
   const [clientPhone, setClientPhone] = useState("");
   const [clientNote, setClientNote] = useState("");
 
+  // Date picker navigation state
+  const [dateWindowStart, setDateWindowStart] = useState<Date>(() => {
+    // Start from today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  });
+  const DATE_WINDOW_SIZE = 14; // Show 14 days at a time
+
+  // ============================================================================
+  // SHARED HELPER FUNCTIONS (Single Source of Truth)
+  // Must be defined before use in computed values (eligibleWorkers, etc.)
+  // ============================================================================
+
+  // Helper functions for time conversion
+  function timeToMinutes(timeStr: string): number {
+    const [hours, minutes] = timeStr.split(":").map(Number);
+    return hours * 60 + minutes;
+  }
+
+  function minutesToTime(minutes: number): string {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
+  }
+
+  // Helper: Get JavaScript weekday index (0=Sunday, 6=Saturday)
+  function getJsWeekday(date: Date): number {
+    return date.getDay(); // JavaScript: 0=Sunday, 6=Saturday
+  }
+
+  // Helper: Convert JavaScript day index (0=Sunday, 6=Saturday) to weekday key for worker availability
+  function getWeekdayKey(dayIndex: number): "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat" {
+    const mapping: Record<number, "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat"> = {
+      0: "sun",
+      1: "mon",
+      2: "tue",
+      3: "wed",
+      4: "thu",
+      5: "fri",
+      6: "sat",
+    };
+    return mapping[dayIndex] || "sun";
+  }
+
+  // Helper: Get weekday key for BookingSettings format ("0"=Sunday, "6"=Saturday)
+  function getBookingWeekdayKey(date: Date): "0" | "1" | "2" | "3" | "4" | "5" | "6" {
+    const dayIndex = getJsWeekday(date);
+    return String(dayIndex) as "0" | "1" | "2" | "3" | "4" | "5" | "6";
+  }
+
+  // Shared helper: Resolve business day config for a date
+  // Returns the day configuration (enabled, start, end) for the given date from BookingSettings
+  function resolveBusinessDayConfig(date: Date): { enabled: boolean; start: string; end: string } | null {
+    const dayKey = getBookingWeekdayKey(date);
+    const dayConfig = bookingSettings.days[dayKey];
+    
+    if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+      console.log(`[Booking] resolveBusinessDayConfig:`, {
+        date: ymdLocal(date),
+        jsDayIndex: getJsWeekday(date),
+        configDayKey: dayKey,
+        dayConfig: dayConfig ? {
+          enabled: dayConfig.enabled,
+          start: dayConfig.start,
+          end: dayConfig.end,
+        } : null,
+      });
+    }
+    
+    return dayConfig || null;
+  }
+
+  // Shared helper: Resolve worker day config for a date
+  // Returns the worker's day configuration (day, open, close) for the given date
+  function resolveWorkerDayConfig(
+    worker: { availability?: OpeningHours[] },
+    date: Date
+  ): OpeningHours | null {
+    if (!worker.availability || !Array.isArray(worker.availability) || worker.availability.length === 0) {
+      return null; // No availability config
+    }
+
+    const dayIndex = getJsWeekday(date);
+    const weekdayKey = getWeekdayKey(dayIndex);
+    
+    // Find worker's schedule for this day
+    const workerDayConfig = worker.availability.find((day) => day.day === weekdayKey);
+    
+    if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+      console.log(`[Booking] resolveWorkerDayConfig:`, {
+        date: ymdLocal(date),
+        jsDayIndex: dayIndex,
+        weekdayKey,
+        hasAvailability: Array.isArray(worker.availability) && worker.availability.length > 0,
+        allWorkerDays: worker.availability.map(d => d.day),
+        foundConfig: workerDayConfig ? {
+          day: workerDayConfig.day,
+          open: workerDayConfig.open,
+          close: workerDayConfig.close,
+          isClosed: !workerDayConfig.open || !workerDayConfig.close,
+        } : null,
+      });
+    }
+    
+    return workerDayConfig || null;
+  }
+
+  // ============================================================================
+  // FILTERING FUNCTIONS (Single Responsibility)
+  // ============================================================================
+
+  // Filter 1: Check if worker can perform a service
+  function workerCanDoService(
+    worker: { services?: string[]; active?: boolean },
+    serviceId: string
+  ): boolean {
+    // Worker must be active
+    if (worker.active === false) {
+      return false;
+    }
+
+    // If worker has no services assigned, they are available for ALL services (backward compatibility)
+    if (!Array.isArray(worker.services) || worker.services.length === 0) {
+      return true;
+    }
+
+    // Worker must be assigned to this service
+    return worker.services.includes(serviceId);
+  }
+
+  // Filter 2: Check if worker is working on a date (business hours + worker availability)
+  function isWorkerWorkingOnDate(
+    worker: { availability?: OpeningHours[]; active?: boolean },
+    date: Date
+  ): boolean {
+    // Worker must be active
+    if (worker.active === false) {
+      return false;
+    }
+
+    // Business must be open on this date (Rank 1: Business hours)
+    const businessDayConfig = resolveBusinessDayConfig(date);
+    if (!businessDayConfig || !businessDayConfig.enabled) {
+      return false; // Business closed
+    }
+
+    // Worker must be available on this date (Rank 2: Worker availability)
+    const workerDayConfig = resolveWorkerDayConfig(worker, date);
+    if (!workerDayConfig) {
+      // No config = assume available (backward compatibility)
+      return true;
+    }
+
+    // Worker day must be open (not closed)
+    if (!workerDayConfig.open || !workerDayConfig.close) {
+      return false; // Worker day is closed
+    }
+
+    return true;
+  }
+
+  // Filter 3: Get worker's working window for a date (in minutes)
+  function getWorkerWorkingWindow(
+    worker: { availability?: OpeningHours[] },
+    date: Date
+  ): { startMin: number; endMin: number } | null {
+    const workerDayConfig = resolveWorkerDayConfig(worker, date);
+    if (!workerDayConfig || !workerDayConfig.open || !workerDayConfig.close) {
+      return null; // Worker day is closed or no config
+    }
+
+    return {
+      startMin: timeToMinutes(workerDayConfig.open),
+      endMin: timeToMinutes(workerDayConfig.close),
+    };
+  }
+
+  // Filter 4: Get business working window for a date (in minutes)
+  function getBusinessWindow(date: Date): { startMin: number; endMin: number } | null {
+    const businessDayConfig = resolveBusinessDayConfig(date);
+    if (!businessDayConfig || !businessDayConfig.enabled) {
+      return null; // Business closed
+    }
+
+    return {
+      startMin: timeToMinutes(businessDayConfig.start),
+      endMin: timeToMinutes(businessDayConfig.end),
+    };
+  }
+
+  // Filter 5: Check if slot fits within both business and worker windows
+  function isSlotWithinWindows(
+    slotStartMinutes: number,
+    slotEndMinutes: number,
+    businessWindow: { startMin: number; endMin: number } | null,
+    workerWindow: { startMin: number; endMin: number } | null
+  ): boolean {
+    // Business window is required (Rank 1)
+    if (!businessWindow) {
+      return false;
+    }
+
+    // Worker window is required if worker has availability config (Rank 2)
+    // If worker has no config, only check business window (backward compatibility)
+    if (workerWindow) {
+      // Slot must fit within BOTH windows (intersection)
+      const effectiveStart = Math.max(businessWindow.startMin, workerWindow.startMin);
+      const effectiveEnd = Math.min(businessWindow.endMin, workerWindow.endMin);
+      
+      if (effectiveEnd <= effectiveStart) {
+        return false; // No overlap
+      }
+      
+      return slotStartMinutes >= effectiveStart && slotEndMinutes <= effectiveEnd;
+    } else {
+      // No worker config: only check business window
+      return slotStartMinutes >= businessWindow.startMin && slotEndMinutes <= businessWindow.endMin;
+    }
+  }
+
+  // Filter 6: Check if slot conflicts with existing bookings
+  function doesSlotConflictWithBookings(
+    slotStartMinutes: number,
+    slotEndMinutes: number,
+    workerId: string,
+    bookingsForDate: Array<{ workerId: string | null; time: string; status: string }>
+  ): boolean {
+    return bookingsForDate.some((booking) => {
+      // Only check confirmed bookings
+      if (booking.status !== "confirmed") {
+        return false;
+      }
+
+      // Only check bookings for this worker
+      if (booking.workerId !== workerId) {
+        return false;
+      }
+
+      // Check time overlap
+      const bookingStartMinutes = timeToMinutes(booking.time);
+      // Assume booking duration is at least 30 minutes (or use service duration if available)
+      const bookingEndMinutes = bookingStartMinutes + 30; // Default duration
+
+      // Check if slots overlap
+      return !(slotEndMinutes <= bookingStartMinutes || slotStartMinutes >= bookingEndMinutes);
+    });
+  }
 
   // Load site config from Firestore
   useEffect(() => {
@@ -120,16 +368,19 @@ export default function BookingPage() {
     };
   }, [siteId]);
 
-  // Load services from Firestore (same source as Prices page)
+  // Load services from Firestore (same source as admin Services page)
   useEffect(() => {
     if (!siteId) return;
 
-    const unsubscribeServices = subscribeServices(
+    console.log(`[Booking] Loading services for siteId=${siteId}`);
+    const unsubscribeServices = subscribeSiteServices(
       siteId,
       (svcs) => {
-        // Only show active services
-        const activeServices = svcs.filter((s) => s.active !== false);
-        setServices(activeServices);
+        console.log(`[Booking] Loaded ${svcs.length} services from sites/${siteId}.services`);
+        // Only show enabled services
+        const enabledServices = svcs.filter((s) => s.enabled !== false);
+        console.log(`[Booking] Filtered to ${enabledServices.length} enabled services:`, enabledServices.map(s => ({ id: s.id, name: s.name, enabled: s.enabled })));
+        setServices(enabledServices);
       },
       (err) => {
         console.error("[Booking] Failed to load services", err);
@@ -146,14 +397,18 @@ export default function BookingPage() {
   useEffect(() => {
     if (!siteId) return;
 
+    console.log(`[Booking] Loading pricing items for siteId=${siteId}`);
     const unsubscribePricing = subscribePricingItems(
       siteId,
       (items) => {
-        // Filter out items without serviceId
+        console.log(`[Booking] Loaded ${items.length} pricing items`);
+        // Filter out items without serviceId (price is optional - NOT filtered here)
+        // Price can be null/undefined/0 and items will still be shown
         const validItems = items.filter((item) => {
           const serviceId = item.serviceId || item.service;
           return !!serviceId;
         });
+        console.log(`[Booking] Filtered to ${validItems.length} valid pricing items (with serviceId):`, validItems.map(p => ({ id: p.id, serviceId: p.serviceId || p.service, type: p.type, hasPrice: !!(p.price || (p.priceRangeMin && p.priceRangeMax)) })));
         setPricingItems(validItems);
       },
       (err) => {
@@ -184,11 +439,24 @@ export default function BookingPage() {
     const settingsUnsubscribe = subscribeBookingSettings(
       siteId,
       (settings) => {
+        if (process.env.NODE_ENV !== "production") {
+          console.log(`[Booking] Loaded booking settings from Firestore for site ${siteId}:`, {
+            slotMinutes: settings.slotMinutes,
+            days: Object.entries(settings.days).map(([key, day]) => ({
+              dayKey: key,
+              enabled: day.enabled,
+              hours: `${day.start}-${day.end}`,
+            })),
+          });
+        }
         setBookingSettings(settings);
         setLoading(false);
       },
       (err) => {
-        console.error("Failed to load booking settings", err);
+        console.error("[Booking] Failed to load booking settings", err);
+        if (process.env.NODE_ENV !== "production") {
+          console.warn(`[Booking] Falling back to default booking settings for site ${siteId}`);
+        }
         setBookingSettings(defaultBookingSettings);
         setLoading(false);
       }
@@ -201,19 +469,64 @@ export default function BookingPage() {
     const workersUnsubscribe = onSnapshot(
       workersQuery,
       (snapshot) => {
-        const workersList: Array<{ id: string; name: string; role?: string; services?: string[] }> = [];
+        const workersList: Array<{ id: string; name: string; role?: string; services?: string[]; availability?: OpeningHours[]; active?: boolean }> = [];
+        const excludedWorkers: Array<{ name: string; reason: string }> = [];
+        
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
-          if (data.active !== false) {
-            workersList.push({
-              id: docSnap.id,
-              name: data.name || "",
-              role: data.role,
-              services: data.services || [], // Include services array
-            });
+          const workerName = data.name || docSnap.id;
+          
+          // Filter by active status (default to true if not set)
+          if (data.active === false) {
+            excludedWorkers.push({ name: workerName, reason: "active=false (disabled)" });
+            return;
           }
+          
+          // Parse availability if present
+          let availability: OpeningHours[] | undefined = undefined;
+          if (data.availability && Array.isArray(data.availability)) {
+            availability = data.availability.map((day: any) => ({
+              day: day.day || "sun",
+              label: day.label || "",
+              open: day.open || null,
+              close: day.close || null,
+            })) as OpeningHours[];
+          }
+          
+          // Include worker (active is true or undefined, which defaults to true)
+          workersList.push({
+            id: docSnap.id,
+            name: data.name || "",
+            role: data.role,
+            services: data.services || [], // Include services array (empty = available for all services)
+            availability, // Include availability schedule
+            active: data.active !== false,
+          });
         });
-        console.log("[Booking] workers loaded", workersList.length);
+        
+        console.log(`[Booking] Workers loaded from sites/${siteId}/workers: ${workersList.length} active workers`);
+        if (excludedWorkers.length > 0) {
+          console.log(`[Booking] Excluded ${excludedWorkers.length} workers:`, excludedWorkers);
+        }
+        if (process.env.NODE_ENV !== "production") {
+          console.log(`[Booking] Worker details:`, workersList.map(w => ({ 
+            id: w.id,
+            name: w.name, 
+            active: w.active,
+            hasServices: Array.isArray(w.services) && w.services.length > 0,
+            servicesCount: w.services?.length || 0,
+            hasAvailability: Array.isArray(w.availability) && w.availability.length > 0,
+            availabilityCount: w.availability?.length || 0,
+            availability: w.availability?.map(day => ({
+              day: day.day,
+              label: day.label,
+              open: day.open,
+              close: day.close,
+              isClosed: !day.open || !day.close,
+            })) || []
+          })));
+        }
+        
         setWorkers(workersList);
         setWorkersLoading(false);
         setWorkersError(null);
@@ -268,45 +581,171 @@ export default function BookingPage() {
     return () => unsubscribe();
   }, [siteId, selectedDate]);
 
+  /**
+   * Create a default pricing item for services that don't have any pricing items
+   * This allows booking to proceed even when no pricing items exist
+   * Price is optional - services without prices are still bookable
+   */
+  const getDefaultPricingItem = (service: SiteService): PricingItem => {
+    return {
+      id: `default_${service.id}`,
+      serviceId: service.name,
+      service: service.name,
+      type: null,
+      durationMinMinutes: 30, // Default duration
+      durationMaxMinutes: 30,
+      price: undefined, // No price - will display "מחיר לפי בקשה"
+      priceRangeMin: undefined,
+      priceRangeMax: undefined,
+      notes: undefined,
+      hasFollowUp: false,
+      followUpServiceId: null,
+      followUpDurationMinutes: null,
+      followUpWaitMinutes: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      order: 0,
+    };
+  };
+
+  /**
+   * Helper function to determine if booking options are available
+   * Returns true if there are enabled services (price is NOT a requirement)
+   */
+  const hasBookingOptions = (): boolean => {
+    if (services.length === 0) {
+      console.log(`[Booking] hasBookingOptions: false - no services loaded`);
+      return false;
+    }
+    // Price is NOT required - all enabled services are bookable
+    console.log(`[Booking] hasBookingOptions: true - ${services.length} enabled services available (price is optional)`);
+    return true;
+  };
+
+  /**
+   * Get all enabled services for booking
+   * Price is optional - services are shown regardless of whether they have pricing items or prices
+   * This ensures services without prices are still available for booking
+   */
+  const bookableServices = services; // All enabled services are bookable, price is optional
+
   // Get pricing items for selected service
+  // If no pricing items exist, create a default one (price is optional)
   const pricingItemsForService = selectedService
-    ? pricingItems.filter((item) => {
-        const itemServiceId = item.serviceId || item.service;
-        return itemServiceId === selectedService.name;
-      })
+    ? (() => {
+        const matchingItems = pricingItems.filter((item) => {
+          const itemServiceId = item.serviceId || item.service;
+          return itemServiceId === selectedService.name;
+        });
+        // If no pricing items exist, create a default one to allow booking
+        if (matchingItems.length === 0) {
+          console.log(`[Booking] Service "${selectedService.name}" has no pricing items, creating default`);
+          return [getDefaultPricingItem(selectedService)];
+        }
+        return matchingItems;
+      })()
     : [];
 
-  // Get services that have pricing items (only show services with pricing options)
-  const servicesWithPricing = services.filter((service) => {
-    return pricingItems.some((item) => {
-      const itemServiceId = item.serviceId || item.service;
-      return itemServiceId === service.name;
+  // Generate dates for the current window (starting from dateWindowStart)
+  function generateDateWindow(startDate: Date, windowSize: number): Date[] {
+    const dates: Date[] = [];
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i < windowSize; i++) {
+      const date = new Date(start);
+      date.setDate(start.getDate() + i);
+      dates.push(date);
+    }
+
+    return dates;
+  }
+
+  // Get today's date (for comparison)
+  function getToday(): Date {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  }
+
+  // Check if we can navigate backward (not before today)
+  function canNavigateBackward(): boolean {
+    const today = getToday();
+    const windowStart = new Date(dateWindowStart);
+    windowStart.setHours(0, 0, 0, 0);
+    
+    // Can go back if window start is after today
+    return windowStart > today;
+  }
+
+  // Navigate to next window
+  function handleNextDateWindow() {
+    setDateWindowStart((prev) => {
+      const next = new Date(prev);
+      next.setDate(prev.getDate() + DATE_WINDOW_SIZE);
+      return next;
     });
-  });
+  }
 
-  const availableDates = getNext14Days();
+  // Navigate to previous window
+  function handlePrevDateWindow() {
+    if (!canNavigateBackward()) return;
+    
+    setDateWindowStart((prev) => {
+      const next = new Date(prev);
+      next.setDate(prev.getDate() - DATE_WINDOW_SIZE);
+      
+      // Ensure we don't go before today
+      const today = getToday();
+      if (next < today) {
+        return today;
+      }
+      
+      return next;
+    });
+  }
 
-  // Filter eligible workers based on selected service
+  // Generate available dates for current window
+  const availableDates = generateDateWindow(dateWindowStart, DATE_WINDOW_SIZE);
+
+  // ============================================================================
+  // STEP 1 → STEP 2: Filter workers by service assignment (Rank 3)
+  // ============================================================================
+  // After selecting a service, show ONLY workers who:
+  // - are active/enabled
+  // - are assigned to this service (or have no assignment = available for all)
   const eligibleWorkers = (() => {
     if (!selectedService) {
-      console.log("[Booking] No service selected, no eligible workers");
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[Booking] Step 1→2: No service selected, no eligible workers");
+      }
       return [];
     }
     const serviceId = selectedService.name; // Service name is the ID
     
     const filtered = workers.filter((worker) => {
-      // If worker has no services set, don't show them
-      if (!Array.isArray(worker.services) || worker.services.length === 0) {
-        console.log(`[Booking] Worker ${worker.name}: no services set, excluding`);
-        return false;
+      const canDo = workerCanDoService(worker, serviceId);
+      if (process.env.NODE_ENV !== "production") {
+        if (canDo) {
+          console.log(`[Booking] Step 1→2: Worker "${worker.name}" CAN do service "${serviceId}"`);
+        } else {
+          console.log(`[Booking] Step 1→2: Worker "${worker.name}" CANNOT do service "${serviceId}" (active=${worker.active}, services=${JSON.stringify(worker.services)})`);
+        }
       }
-      // Check if worker.services includes the serviceId (service name)
-      const isEligible = worker.services.includes(serviceId);
-      console.log(`[Booking] Worker ${worker.name}: services=${JSON.stringify(worker.services)}, serviceId="${serviceId}", eligible=${isEligible}`);
-      return isEligible;
+      return canDo;
     });
     
-    console.log(`[Booking] Service "${serviceId}" - Total workers: ${workers.length}, Eligible: ${filtered.length}`);
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[Booking] Step 1→2: Service "${serviceId}" - Total workers: ${workers.length}, Eligible: ${filtered.length}`);
+      if (filtered.length === 0 && workers.length > 0) {
+        console.warn(`[Booking] Step 1→2: No eligible workers found. Workers:`, workers.map(w => ({ 
+          name: w.name, 
+          active: w.active,
+          hasServices: Array.isArray(w.services) && w.services.length > 0,
+          services: w.services || []
+        })));
+      }
+    }
     return filtered;
   })();
 
@@ -333,6 +772,53 @@ export default function BookingPage() {
       setSelectedPricingItem(null);
     }
   }, [selectedService, eligibleWorkers, selectedWorker, selectedPricingItem]);
+
+  // Reset date window to today when worker changes
+  useEffect(() => {
+    if (selectedWorker) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      setDateWindowStart(today);
+      // Also reset selected date when worker changes
+      setSelectedDate(null);
+    }
+  }, [selectedWorker]);
+
+  // Debug: Log worker availability when date is selected (dev only)
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true" && selectedDate && selectedService) {
+      const dayIndex = selectedDate.getDay();
+      const weekdayKey = getWeekdayKey(dayIndex);
+      
+      console.log(`[Booking] === Worker Availability Check for Date ${ymdLocal(selectedDate)} ===`);
+      console.log(`[Booking] Date: ${ymdLocal(selectedDate)}, JS dayIndex: ${dayIndex}, weekdayKey: "${weekdayKey}"`);
+      console.log(`[Booking] Total workers: ${workers.length}, Eligible workers: ${eligibleWorkers.length}`);
+      
+      eligibleWorkers.forEach((worker) => {
+        const workerDayConfig = resolveWorkerDayConfig(worker, selectedDate);
+        const isDayClosed = workerDayConfig && (!workerDayConfig.open || !workerDayConfig.close);
+        
+        console.log(`[Booking] Worker "${worker.name}" (${worker.id}):`, {
+          active: worker.active !== false,
+          hasAvailability: Array.isArray(worker.availability) && worker.availability.length > 0,
+          availabilityDays: worker.availability?.map(d => d.day) || [],
+          dayConfig: workerDayConfig ? {
+            day: workerDayConfig.day,
+            open: workerDayConfig.open,
+            close: workerDayConfig.close,
+            isClosed: isDayClosed,
+          } : "no config",
+          dayClosed: isDayClosed,
+          availableForDay: !isDayClosed && workerDayConfig !== null,
+        });
+        
+        // Regression guard: If worker day is closed, they must not be available
+        if (isDayClosed && process.env.NODE_ENV !== "production") {
+          console.warn(`[Booking] REGRESSION GUARD: Worker "${worker.name}" has day ${weekdayKey} closed - should be excluded from availability`);
+        }
+      });
+    }
+  }, [selectedDate, selectedService, workers, eligibleWorkers]);
 
   const isStepValid = (): boolean => {
     switch (step) {
@@ -564,37 +1050,188 @@ export default function BookingPage() {
     );
   }
 
-  // Helper functions for time conversion
-  const timeToMinutes = (timeStr: string): number => {
-    const [hours, minutes] = timeStr.split(":").map(Number);
-    return hours * 60 + minutes;
+
+  // Helper: Check if a worker is available for a time slot
+  // This is the single source of truth for worker availability in booking
+  const isWorkerAvailableForSlot = (
+    worker: { id: string; name: string; availability?: OpeningHours[]; active?: boolean },
+    date: Date,
+    slotTime: string,
+    serviceDurationMinutes: number
+  ): { available: boolean; reason?: string } => {
+    // Worker must be active
+    if (worker.active === false) {
+      if (process.env.NODE_ENV !== "production") {
+        console.log(`[Booking] Worker "${worker.name}" (${worker.id}) not available: inactive`);
+      }
+      return { available: false, reason: "inactive" };
+    }
+
+    // If worker has no availability config, assume available (backward compatibility)
+    if (!worker.availability || !Array.isArray(worker.availability) || worker.availability.length === 0) {
+      if (process.env.NODE_ENV !== "production") {
+        console.log(`[Booking] Worker "${worker.name}" (${worker.id}) has no availability config, assuming available`);
+      }
+      return { available: true }; // Backward compatibility: no config = available
+    }
+
+    // Resolve worker day config using shared helper
+    const workerDayConfig = resolveWorkerDayConfig(worker, date);
+    
+    if (!workerDayConfig) {
+      if (process.env.NODE_ENV !== "production") {
+        const dayIndex = date.getDay();
+        const weekdayKey = getWeekdayKey(dayIndex);
+        console.log(`[Booking] Worker "${worker.name}" (${worker.id}) has no config for ${weekdayKey} (jsDayIndex=${dayIndex}), not available`);
+      }
+      return { available: false, reason: "no config for day" };
+    }
+
+    // Explicitly check if worker day is closed (marked as not available)
+    // Worker day is closed if both open and close are null
+    if (!workerDayConfig.open || !workerDayConfig.close) {
+      if (process.env.NODE_ENV !== "production") {
+        const dayIndex = date.getDay();
+        const weekdayKey = getWeekdayKey(dayIndex);
+        console.log(`[Booking] Worker "${worker.name}" (${worker.id}) not available: day ${weekdayKey} is closed (open=${workerDayConfig.open}, close=${workerDayConfig.close})`);
+      }
+      return { available: false, reason: "day closed" };
+    }
+
+    // Check if slot fits within working hours
+    const slotStartMinutes = timeToMinutes(slotTime);
+    const slotEndMinutes = slotStartMinutes + serviceDurationMinutes;
+    
+    const isAvailable = isWithinWorkingHours(workerDayConfig, slotStartMinutes, slotEndMinutes);
+    
+    if (process.env.NODE_ENV !== "production" && !isAvailable) {
+      console.log(`[Booking] Worker "${worker.name}" (${worker.id}) not available for slot ${slotTime}:`, {
+        weekday: workerDayConfig.day,
+        workHours: `${workerDayConfig.open}-${workerDayConfig.close}`,
+        slotStart: slotTime,
+        slotEnd: minutesToTime(slotEndMinutes),
+        slotDuration: serviceDurationMinutes,
+        reason: "outside working hours",
+      });
+    }
+    
+    return { 
+      available: isAvailable, 
+      reason: isAvailable ? undefined : "outside working hours" 
+    };
   };
 
-  const minutesToTime = (minutes: number): string => {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
+  // ============================================================================
+  // STEP 2 → STEP 3: Filter dates by business hours + worker availability + available slots
+  // ============================================================================
+  // After selecting a worker, show ONLY dates where:
+  // - business is open that weekday (Rank 1)
+  // - worker is available that weekday (Rank 2)
+  // - there exists at least one available time slot on that date
+  const isDateAvailable = (date: Date): boolean => {
+    // Must have selected worker
+    if (!selectedWorker) {
+      return false;
+    }
+
+    // Find the worker object
+    const worker = workers.find(w => w.id === selectedWorker.id);
+    if (!worker) {
+      return false;
+    }
+
+    // Rank 1: Business must be open on this date
+    const businessDayConfig = resolveBusinessDayConfig(date);
+    if (!businessDayConfig || !businessDayConfig.enabled) {
+      if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+        console.log(`[Booking] Step 2→3: Date ${ymdLocal(date)} disabled - business closed`);
+      }
+      return false;
+    }
+
+    // Rank 2: Worker must be working on this date
+    if (!isWorkerWorkingOnDate(worker, date)) {
+      if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+        console.log(`[Booking] Step 2→3: Date ${ymdLocal(date)} disabled - worker not available`);
+      }
+      return false;
+    }
+
+    // Check if there's at least one available time slot on this date
+    // (This will be computed in Step 3→4, but we need to verify slots exist)
+    const businessWindow = getBusinessWindow(date);
+    const workerWindow = getWorkerWorkingWindow(worker, date);
+    
+    if (!businessWindow) {
+      return false; // Business closed
+    }
+
+    // If worker has no config, use business window only
+    const effectiveStart = workerWindow ? Math.max(businessWindow.startMin, workerWindow.startMin) : businessWindow.startMin;
+    const effectiveEnd = workerWindow ? Math.min(businessWindow.endMin, workerWindow.endMin) : businessWindow.endMin;
+
+    if (effectiveEnd <= effectiveStart) {
+      if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+        console.log(`[Booking] Step 2→3: Date ${ymdLocal(date)} disabled - no time window overlap`);
+      }
+      return false; // No overlap
+    }
+
+    // Check if at least one slot can fit (using default service duration if not selected yet)
+    const serviceDurationMinutes = selectedPricingItem
+      ? selectedPricingItem.durationMaxMinutes || selectedPricingItem.durationMinMinutes || 30
+      : 30;
+    const slotSize = bookingSettings.slotMinutes;
+    
+    // At least one slot must fit
+    const canFitSlot = (effectiveEnd - effectiveStart) >= Math.max(slotSize, serviceDurationMinutes);
+    
+    if (!canFitSlot) {
+      if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+        console.log(`[Booking] Step 2→3: Date ${ymdLocal(date)} disabled - no slots can fit (window=${effectiveEnd - effectiveStart}min, need=${Math.max(slotSize, serviceDurationMinutes)}min)`);
+      }
+      return false;
+    }
+
+    if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+      console.log(`[Booking] Step 2→3: Date ${ymdLocal(date)} enabled - business open, worker available, slots can fit`);
+    }
+
+    return true;
   };
 
-  // Generate available time slots for selected date
+  // ============================================================================
+  // STEP 3 → STEP 4: Filter time slots by business hours + worker hours + duration + conflicts
+  // ============================================================================
+  // After selecting a date, show ONLY time slots where:
+  // - within business open hours for that date (Rank 1)
+  // - within worker hours for that date (Rank 2)
+  // - slot duration fits fully (service duration)
+  // - does not conflict with existing bookings for that worker (Rank 4)
+  
+  // Generate time slots based on business hours (Rank 1)
   const generateTimeSlotsForDate = (): string[] => {
     if (!selectedDate) return [];
 
-    const dayIndex = selectedDate.getDay(); // 0 = Sunday, 6 = Saturday
-    const dayKey = String(dayIndex) as "0" | "1" | "2" | "3" | "4" | "5" | "6";
-    const dayConfig = bookingSettings.days[dayKey];
+    const businessDayConfig = resolveBusinessDayConfig(selectedDate);
 
-    if (!dayConfig || !dayConfig.enabled) {
+    if (!businessDayConfig || !businessDayConfig.enabled) {
+      if (process.env.NODE_ENV !== "production") {
+        console.log(`[Booking] Step 3→4: generateTimeSlotsForDate - Day is disabled or missing config for date ${ymdLocal(selectedDate)}`);
+      }
       return [];
     }
 
-    const startMin = timeToMinutes(dayConfig.start);
-    const endMin = timeToMinutes(dayConfig.end);
+    const startMin = timeToMinutes(businessDayConfig.start);
+    const endMin = timeToMinutes(businessDayConfig.end);
     const slotSize = bookingSettings.slotMinutes;
 
     // Validate hours
     if (endMin <= startMin) {
-      return []; // Invalid hours - will show error in UI
+      if (process.env.NODE_ENV !== "production") {
+        console.warn(`[Booking] Step 3→4: Invalid hours for date ${ymdLocal(selectedDate)}: ${businessDayConfig.start}-${businessDayConfig.end}`);
+      }
+      return [];
     }
 
     // Generate slots
@@ -606,58 +1243,136 @@ export default function BookingPage() {
       currentTime += slotSize;
     }
 
+    if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+      console.log(`[Booking] Step 3→4: Generated ${slots.length} slots for date ${ymdLocal(selectedDate)} (business hours: ${businessDayConfig.start}-${businessDayConfig.end})`);
+    }
+
     return slots;
   };
 
-  // Filter slots by booked times
+  // Filter time slots using the availability hierarchy
   const availableTimeSlots = (() => {
-    if (!selectedDate) return [];
+    if (!selectedDate || !selectedService || !selectedWorker) return [];
 
     const generatedSlots = generateTimeSlotsForDate();
     
-    // Filter out booked slots
-    return generatedSlots.filter((time) => {
-      // Check if this slot is booked for the selected worker (or any worker if no worker selected)
-      const isBooked = bookingsForDate.some((booking) => {
-        if (booking.time !== time) return false;
-        if (booking.status !== "confirmed") return false;
-        // If worker selected, only block if same worker
-        if (selectedWorker) {
-          return booking.workerId === selectedWorker.id;
-        }
-        // If no worker selected, block if any worker has it
-        return booking.workerId !== null;
+    // Get service duration from selected pricing item (or default)
+    const serviceDurationMinutes = selectedPricingItem
+      ? selectedPricingItem.durationMaxMinutes || selectedPricingItem.durationMinMinutes || 30
+      : 30; // Default 30 minutes if no pricing item selected
+    
+    // Find the selected worker object
+    const worker = workers.find(w => w.id === selectedWorker.id);
+    if (!worker) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn(`[Booking] Step 3→4: Selected worker ${selectedWorker.id} not found`);
+      }
+      return [];
+    }
+
+    // Get windows for filtering
+    const businessWindow = getBusinessWindow(selectedDate);
+    const workerWindow = getWorkerWorkingWindow(worker, selectedDate);
+
+    if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+      console.log(`[Booking] Step 3→4: Filtering slots for date ${ymdLocal(selectedDate)}, worker "${worker.name}"`, {
+        generatedSlots: generatedSlots.length,
+        businessWindow: businessWindow ? `${minutesToTime(businessWindow.startMin)}-${minutesToTime(businessWindow.endMin)}` : "closed",
+        workerWindow: workerWindow ? `${minutesToTime(workerWindow.startMin)}-${minutesToTime(workerWindow.endMin)}` : "no config",
+        serviceDurationMinutes,
       });
-      return !isBooked;
+    }
+
+    // Filter slots using the hierarchy
+    let filteredByBusiness = 0;
+    let filteredByWorker = 0;
+    let filteredByConflicts = 0;
+
+    const availableSlots = generatedSlots.filter((time) => {
+      const slotStartMinutes = timeToMinutes(time);
+      const slotEndMinutes = slotStartMinutes + serviceDurationMinutes;
+
+      // Rank 1 + Rank 2: Check if slot fits within business and worker windows
+      if (!isSlotWithinWindows(slotStartMinutes, slotEndMinutes, businessWindow, workerWindow)) {
+        if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+          if (!businessWindow) {
+            filteredByBusiness++;
+          } else if (!workerWindow || slotStartMinutes < Math.max(businessWindow.startMin, workerWindow.startMin) || slotEndMinutes > Math.min(businessWindow.endMin, workerWindow.endMin)) {
+            filteredByWorker++;
+          }
+        }
+        return false;
+      }
+
+      // Rank 4: Check for booking conflicts
+      if (doesSlotConflictWithBookings(slotStartMinutes, slotEndMinutes, worker.id, bookingsForDate)) {
+        if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+          filteredByConflicts++;
+        }
+        return false;
+      }
+
+      return true;
     });
+
+    if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+      console.log(`[Booking] Step 3→4: Slot filtering results:`, {
+        generated: generatedSlots.length,
+        filteredByBusiness,
+        filteredByWorker,
+        filteredByConflicts,
+        available: availableSlots.length,
+      });
+    }
+
+    return availableSlots;
   })();
 
-  // Check if date is available (has schedule)
-  const isDateAvailable = (date: Date): boolean => {
-    const dayIndex = date.getDay();
-    const dayKey = String(dayIndex) as "0" | "1" | "2" | "3" | "4" | "5" | "6";
-    const dayConfig = bookingSettings.days[dayKey];
-    return dayConfig?.enabled === true;
-  };
 
-  // Debug info for step 4
-  const debugInfo = selectedDate ? (() => {
-    const dayIndex = selectedDate.getDay();
-    const dayKey = String(dayIndex) as "0" | "1" | "2" | "3" | "4" | "5" | "6";
-    const dayConfig = bookingSettings.days[dayKey];
+  // Debug info for step 4 (dev only)
+  const debugInfo = (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true" && selectedDate && selectedService) ? (() => {
+    const dayIndex = getJsWeekday(selectedDate);
+    const dayKey = getBookingWeekdayKey(selectedDate);
+    const businessDayConfig = resolveBusinessDayConfig(selectedDate);
     const generatedSlots = generateTimeSlotsForDate();
+    const weekdayKey = getWeekdayKey(dayIndex);
+    const serviceDurationMinutes = selectedPricingItem
+      ? selectedPricingItem.durationMaxMinutes || selectedPricingItem.durationMinMinutes || 30
+      : 30;
+    
+    // Worker availability debug info
+    const workerAvailabilityInfo = eligibleWorkers.map((worker) => {
+      const workerDayConfig = resolveWorkerDayConfig(worker, selectedDate);
+      const isDayClosed = workerDayConfig && (!workerDayConfig.open || !workerDayConfig.close);
+      return {
+        name: worker.name,
+        active: worker.active !== false,
+        hasAvailability: Array.isArray(worker.availability) && worker.availability.length > 0,
+        dayConfig: workerDayConfig ? {
+          day: workerDayConfig.day,
+          open: workerDayConfig.open,
+          close: workerDayConfig.close,
+          isClosed: isDayClosed,
+        } : "no config",
+        dayClosed: isDayClosed,
+      };
+    });
     
     return {
       selectedDate: ymdLocal(selectedDate),
-      dayIndex,
-      dayKey,
-      dayConfig: JSON.stringify(dayConfig, null, 2),
+      dateISO: selectedDate.toISOString(),
+      jsDayIndex: dayIndex,
+      configDayKey: dayKey,
+      weekdayKey,
+      businessDayConfig: businessDayConfig ? JSON.stringify(businessDayConfig, null, 2) : "null (disabled or missing)",
       slotMinutes: bookingSettings.slotMinutes,
+      serviceDurationMinutes,
       generatedSlotsCount: generatedSlots.length,
       bookingsForDateCount: bookingsForDate.length,
       availableSlotsCount: availableTimeSlots.length,
       workersCount: workers.length,
-      firstWorkerName: workers.length > 0 ? workers[0].name : "none",
+      eligibleWorkersCount: eligibleWorkers.length,
+      workerAvailabilityInfo: JSON.stringify(workerAvailabilityInfo, null, 2),
     };
   })() : null;
 
@@ -729,7 +1444,7 @@ export default function BookingPage() {
                 בחרו שירות ואפשרות מחיר
               </h2>
               
-              {servicesWithPricing.length === 0 ? (
+              {bookableServices.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-sm text-right mb-2" style={{ color: "var(--muted)" }}>
                     אין אפשרויות הזמנה אונליין זמינות כרגע
@@ -740,11 +1455,19 @@ export default function BookingPage() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {servicesWithPricing.map((service) => {
-                    const servicePricingItems = pricingItems.filter((item) => {
-                      const itemServiceId = item.serviceId || item.service;
-                      return itemServiceId === service.name;
-                    });
+                  {bookableServices.map((service) => {
+                    // Get pricing items for this service, or use default if none exist
+                    const servicePricingItems = (() => {
+                      const matching = pricingItems.filter((item) => {
+                        const itemServiceId = item.serviceId || item.service;
+                        return itemServiceId === service.name;
+                      });
+                      // If no pricing items exist, create a default one (price is optional)
+                      if (matching.length === 0) {
+                        return [getDefaultPricingItem(service)];
+                      }
+                      return matching;
+                    })();
                     
                     const isServiceSelected = selectedService?.id === service.id;
                     
@@ -787,7 +1510,15 @@ export default function BookingPage() {
                                 ? `${service.name} - ${item.type}`
                                 : service.name;
                               const displayPrice = item.priceRangeMin && item.priceRangeMax
-                                ? `₪${item.priceRangeMin}-${item.priceRangeMax}`
+                                ? (() => {
+                                    const min = Math.min(item.priceRangeMin!, item.priceRangeMax!);
+                                    const max = Math.max(item.priceRangeMin!, item.priceRangeMax!);
+                                    return (
+                                      <span dir="ltr" className="inline-block">
+                                        ₪{min}–₪{max}
+                                      </span>
+                                    );
+                                  })()
                                 : item.price
                                 ? `₪${item.price}`
                                 : "מחיר לפי בקשה";
@@ -812,7 +1543,7 @@ export default function BookingPage() {
                                         {displayName}
                                       </h4>
                                       <div className="flex gap-3 text-xs" style={{ color: "var(--muted)" }}>
-                                        <span>{displayPrice}</span>
+                                        {typeof displayPrice === "string" ? <span>{displayPrice}</span> : displayPrice}
                                         <span>•</span>
                                         <span>{displayDuration}</span>
                                       </div>
@@ -926,6 +1657,52 @@ export default function BookingPage() {
               <h2 className="text-xl font-bold mb-4 text-right" style={{ color: "var(--text)" }}>
                 בחרו תאריך
               </h2>
+              
+              {/* Navigation controls */}
+              <div className="flex items-center justify-between mb-4 gap-4">
+                <button
+                  type="button"
+                  onClick={handleNextDateWindow}
+                  className="px-4 py-2 rounded-lg border-2 transition-all hover:opacity-90 font-medium text-sm flex items-center gap-2"
+                  style={{
+                    borderColor: "var(--border)",
+                    backgroundColor: "var(--surface)",
+                    color: "var(--text)",
+                  }}
+                >
+                  <span>הבא</span>
+                  <span style={{ transform: "scaleX(-1)" }}>→</span>
+                </button>
+                
+                <div className="text-sm flex-1 text-center" style={{ color: "var(--muted)" }}>
+                  {(() => {
+                    const endDate = new Date(dateWindowStart);
+                    endDate.setDate(dateWindowStart.getDate() + DATE_WINDOW_SIZE - 1);
+                    const startMonth = dateWindowStart.toLocaleDateString("he-IL", { month: "long", year: "numeric" });
+                    const endMonth = endDate.toLocaleDateString("he-IL", { month: "long", year: "numeric" });
+                    if (startMonth === endMonth) {
+                      return startMonth;
+                    }
+                    return `${startMonth} - ${endMonth}`;
+                  })()}
+                </div>
+                
+                <button
+                  type="button"
+                  onClick={handlePrevDateWindow}
+                  disabled={!canNavigateBackward()}
+                  className="px-4 py-2 rounded-lg border-2 transition-all hover:opacity-90 font-medium text-sm disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-2"
+                  style={{
+                    borderColor: canNavigateBackward() ? "var(--border)" : "var(--border)",
+                    backgroundColor: canNavigateBackward() ? "var(--surface)" : "var(--bg)",
+                    color: canNavigateBackward() ? "var(--text)" : "var(--muted)",
+                  }}
+                >
+                  <span style={{ transform: "scaleX(-1)" }}>←</span>
+                  <span>הקודם</span>
+                </button>
+              </div>
+              
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {availableDates.map((date) => {
                   const available = isDateAvailable(date);
@@ -971,8 +1748,8 @@ export default function BookingPage() {
                 </p>
               )}
               
-              {/* Debug panel */}
-              {debugInfo && (
+              {/* Debug panel (dev only - requires NEXT_PUBLIC_DEBUG_BOOKING=true) */}
+              {process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true" && debugInfo && (
                 <div className="mb-4 p-4 rounded-lg border text-right text-xs font-mono" style={{ backgroundColor: "var(--bg)", borderColor: "var(--border)" }}>
                   <div className="space-y-1" style={{ color: "var(--text)" }}>
                     <div><strong>selectedDate:</strong> {debugInfo.selectedDate}</div>
@@ -984,15 +1761,17 @@ export default function BookingPage() {
                     <div><strong>bookingsForDate count:</strong> {debugInfo.bookingsForDateCount}</div>
                     <div><strong>availableSlots count:</strong> {debugInfo.availableSlotsCount}</div>
                     <div><strong>workers count:</strong> {debugInfo.workersCount}</div>
-                    <div><strong>first worker name:</strong> {debugInfo.firstWorkerName}</div>
+                    <div><strong>eligibleWorkers count:</strong> {debugInfo.eligibleWorkersCount}</div>
+                    <div><strong>serviceDurationMinutes:</strong> {debugInfo.serviceDurationMinutes}</div>
+                    <div><strong>weekdayKey:</strong> {debugInfo.weekdayKey}</div>
+                    <div><strong>workerAvailabilityInfo:</strong> <pre className="whitespace-pre-wrap">{debugInfo.workerAvailabilityInfo}</pre></div>
                   </div>
                 </div>
               )}
 
               {/* Check for invalid hours */}
               {selectedDate && (() => {
-                const dayIndex = selectedDate.getDay();
-                const dayKey = String(dayIndex) as "0" | "1" | "2" | "3" | "4" | "5" | "6";
+                const dayKey = getBookingWeekdayKey(selectedDate);
                 const dayConfig = bookingSettings.days[dayKey];
                 if (dayConfig && dayConfig.enabled) {
                   const startMin = timeToMinutes(dayConfig.start);
@@ -1200,10 +1979,12 @@ export default function BookingPage() {
           )}
         </div>
         
-        {/* Debug info */}
-        <div className="mt-4 p-2 bg-slate-100 rounded text-xs text-slate-600 text-right">
-          siteId: {siteId}
-        </div>
+        {/* Debug info (dev only - requires NEXT_PUBLIC_DEBUG_BOOKING=true) */}
+        {process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true" && (
+          <div className="mt-4 p-2 bg-slate-100 rounded text-xs text-slate-600 text-right">
+            siteId: {siteId}
+          </div>
+        )}
       </div>
     </div>
   );
