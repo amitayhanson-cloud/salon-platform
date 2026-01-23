@@ -1009,7 +1009,7 @@ export default function ServicesPage() {
                       });
                       setWaitTimeInputValue(`${parsed.min}-${parsed.max}`);
                       setError(null);
-                    } else {
+                    } else if (parsed.kind === "invalid") {
                       setError(parsed.error || "פורמט לא תקין");
                       // Restore previous value
                       setWaitTimeInputValue(formatNumberOrRange(editingItem.waitMinutes));
@@ -1065,7 +1065,7 @@ export default function ServicesPage() {
                       });
                       setPriceInputValue(`${parsed.min}-${parsed.max}`);
                       setError(null);
-                    } else {
+                    } else if (parsed.kind === "invalid") {
                       setError(parsed.error || "מחיר חייב להיות מספר (למשל: 100) או טווח (למשל: 100-200)");
                       // Restore previous value
                       const prevPrice = editingItem.price ?? editingItem.priceRangeMin;
@@ -1203,8 +1203,13 @@ export default function ServicesPage() {
                             });
                             setFollowUpDurationInputValue(`${parsed.min}-${parsed.max}`);
                             setError(null);
-                          } else {
+                          } else if (parsed.kind === "invalid") {
                             setError(parsed.error || "משך המשך חייב להיות גדול או שווה ל-1 דקה");
+                            // Restore previous value
+                            setFollowUpDurationInputValue(formatNumberOrRange(editingItem.followUpDurationMinutes));
+                          } else {
+                            // Handle case where parsed.kind is "single" or "range" but validation fails (value < 1)
+                            setError("משך המשך חייב להיות גדול או שווה ל-1 דקה");
                             // Restore previous value
                             setFollowUpDurationInputValue(formatNumberOrRange(editingItem.followUpDurationMinutes));
                           }
