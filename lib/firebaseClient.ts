@@ -134,7 +134,7 @@ function initializeFirebase() {
     
     // Firestore works on both client and server
     _db = getFirestore(app);
-    
+
     // Storage only works on client side
     if (isClient) {
       _storage = firebaseGetStorage(app);

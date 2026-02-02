@@ -7,6 +7,7 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
   query,
   orderBy,
   where,
@@ -63,18 +64,21 @@ export async function getPricingItems(siteId: string): Promise<PricingItem[]> {
         durationMaxMinutes = 30;
       }
       
+      const rawFollowUp = data.followUp as { name?: string; durationMinutes?: number; waitMinutes?: number } | undefined;
+      const followUp: PricingItem["followUp"] =
+        rawFollowUp && typeof rawFollowUp.name === "string" && rawFollowUp.name.trim() !== "" && typeof rawFollowUp.durationMinutes === "number" && typeof rawFollowUp.waitMinutes === "number"
+          ? { name: rawFollowUp.name.trim(), durationMinutes: Math.max(0, rawFollowUp.durationMinutes), waitMinutes: Math.max(0, rawFollowUp.waitMinutes) }
+          : null;
+
       return {
         id: d.id,
         ...data,
         serviceId: serviceId || undefined,
-        service: serviceId || data.service || undefined, // Keep service for backward compatibility
+        service: serviceId || data.service || undefined,
         durationMinMinutes,
         durationMaxMinutes,
-        // Ensure backward compatibility - default hasFollowUp to false if not present
-        hasFollowUp: data.hasFollowUp ?? false,
-        followUpServiceId: data.followUpServiceId ?? null,
-        followUpDurationMinutes: data.followUpDurationMinutes ?? null,
-        followUpWaitMinutes: data.followUpWaitMinutes ?? null,
+        hasFollowUp: data.hasFollowUp === true && followUp !== null,
+        followUp,
         createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
         updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
       } as PricingItem;
@@ -119,18 +123,21 @@ export function subscribePricingItems(
             durationMaxMinutes = 30;
           }
           
+          const rawFollowUp = data.followUp as { name?: string; durationMinutes?: number; waitMinutes?: number } | undefined;
+          const followUp: PricingItem["followUp"] =
+            rawFollowUp && typeof rawFollowUp.name === "string" && rawFollowUp.name.trim() !== "" && typeof rawFollowUp.durationMinutes === "number" && typeof rawFollowUp.waitMinutes === "number"
+              ? { name: rawFollowUp.name.trim(), durationMinutes: Math.max(0, rawFollowUp.durationMinutes), waitMinutes: Math.max(0, rawFollowUp.waitMinutes) }
+              : null;
+
           return {
             id: d.id,
             ...data,
             serviceId: serviceId || undefined,
-            service: serviceId || data.service || undefined, // Keep service for backward compatibility
+            service: serviceId || data.service || undefined,
             durationMinMinutes,
             durationMaxMinutes,
-            // Ensure backward compatibility - default hasFollowUp to false if not present
-            hasFollowUp: data.hasFollowUp ?? false,
-            followUpServiceId: data.followUpServiceId ?? null,
-            followUpDurationMinutes: data.followUpDurationMinutes ?? null,
-            followUpWaitMinutes: data.followUpWaitMinutes ?? null,
+            hasFollowUp: data.hasFollowUp === true && followUp !== null,
+            followUp,
             createdAt: data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
             updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
           } as PricingItem;
@@ -168,18 +175,22 @@ export async function createPricingItem(
 export async function updatePricingItem(
   siteId: string,
   itemId: string,
-  updates: Partial<Omit<PricingItem, "id" | "createdAt">>
+  updates: Partial<Omit<PricingItem, "id" | "createdAt">> & Record<string, unknown>,
+  options?: { deleteFields?: string[] }
 ): Promise<void> {
   if (!db || !siteId) throw new Error("Firebase not initialized");
 
-  const updateData: any = {
+  const updateData: Record<string, unknown> = {
     ...updates,
     updatedAt: Timestamp.fromDate(new Date()),
   };
-  
-  // Convert ISO strings to Timestamps if present
+  if (options?.deleteFields) {
+    for (const key of options.deleteFields) {
+      updateData[key] = deleteField();
+    }
+  }
   if (updateData.createdAt && typeof updateData.createdAt === "string") {
-    updateData.createdAt = Timestamp.fromDate(new Date(updateData.createdAt));
+    updateData.createdAt = Timestamp.fromDate(new Date(updateData.createdAt as string));
   }
 
   await updateDoc(pricingItemDoc(siteId, itemId), updateData);

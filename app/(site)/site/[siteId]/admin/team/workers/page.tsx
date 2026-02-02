@@ -34,6 +34,8 @@ interface Worker {
   availability?: OpeningHours[];
   active: boolean;
   createdAt: string;
+  /** עמלת טיפולים (%) 0–100, default 0 */
+  treatmentCommissionPercent?: number;
 }
 
 const DAY_LABELS: Record<string, string> = {
@@ -176,6 +178,7 @@ export default function WorkersPage() {
     services: [],
     availability: defaultAvailability,
     active: true,
+    treatmentCommissionPercent: 0,
   });
 
   // Load services from Firestore (same source as Pricing/Services page)
@@ -282,6 +285,7 @@ export default function WorkersPage() {
             availability,
             active: data.active !== false,
             createdAt: data.createdAt || new Date().toISOString(),
+            treatmentCommissionPercent: data.treatmentCommissionPercent != null ? Number(data.treatmentCommissionPercent) : 0,
           } as Worker;
         });
         setWorkers(items);
@@ -321,6 +325,7 @@ export default function WorkersPage() {
           services: normalizedServices,
           availability: normalizedAvailability,
           active: worker.active !== false,
+          treatmentCommissionPercent: worker.treatmentCommissionPercent ?? 0,
         });
       }
     } else {
@@ -351,6 +356,7 @@ export default function WorkersPage() {
         services: [],
         availability: initialAvailability,
         active: true,
+        treatmentCommissionPercent: 0,
       });
     }
   }, [selectedWorkerId, workers, services, businessHours]);
@@ -369,6 +375,7 @@ export default function WorkersPage() {
       // Clamp availability to business hours before saving
       const clampedAvailability = clampWorkerAvailability(formData.availability || defaultAvailability);
       
+      const commission = Math.min(100, Math.max(0, Number(formData.treatmentCommissionPercent) || 0));
       const newWorker = {
         name: formData.name.trim(),
         role: formData.role?.trim() || null,
@@ -377,10 +384,14 @@ export default function WorkersPage() {
         services: normalizedServices,
         availability: clampedAvailability,
         active: formData.active !== false,
+        treatmentCommissionPercent: commission,
         createdAt: new Date().toISOString(),
       };
       const docRef = await addDoc(workersCollection(siteId), newWorker);
       setSelectedWorkerId(docRef.id);
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[Workers] Add worker success", { workerId: docRef.id, treatmentCommissionPercent: commission });
+      }
       setSaveMessage("עובד נוסף בהצלחה");
       setTimeout(() => setSaveMessage(""), 3000);
     } catch (err) {
@@ -405,6 +416,7 @@ export default function WorkersPage() {
       // Clamp availability to business hours before saving
       const clampedAvailability = clampWorkerAvailability(formData.availability || defaultAvailability);
       
+      const commission = Math.min(100, Math.max(0, Number(formData.treatmentCommissionPercent) || 0));
       await updateDoc(workerDoc(siteId, selectedWorkerId), {
         name: formData.name.trim(),
         role: formData.role?.trim() || null,
@@ -413,7 +425,11 @@ export default function WorkersPage() {
         services: normalizedServices,
         availability: clampedAvailability,
         active: formData.active !== false,
+        treatmentCommissionPercent: commission,
       });
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[Workers] Save worker success", { workerId: selectedWorkerId, treatmentCommissionPercent: commission });
+      }
       setSaveMessage("השינויים נשמרו בהצלחה");
       setTimeout(() => setSaveMessage(""), 3000);
     } catch (err) {
@@ -650,7 +666,7 @@ export default function WorkersPage() {
                         {saving ? "שומר..." : "שמור עובד"}
                       </button>
                       <button
-                        onClick={() => setFormData({ name: "", role: "", phone: "", email: "", services: [], availability: defaultAvailability, active: true })}
+                        onClick={() => setFormData({ name: "", role: "", phone: "", email: "", services: [], availability: defaultAvailability, active: true, treatmentCommissionPercent: 0 })}
                         className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm font-medium"
                       >
                         נקה
@@ -818,7 +834,40 @@ export default function WorkersPage() {
 
                     {/* Services Tab */}
                     {activeWorkerTab === "services" && (
-                      <div>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">
+                            עמלת טיפולים (%)
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={0.1}
+                            value={formData.treatmentCommissionPercent ?? ""}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === "") {
+                                setFormData({ ...formData, treatmentCommissionPercent: 0 });
+                                return;
+                              }
+                              const num = parseFloat(val);
+                              if (!Number.isNaN(num)) {
+                                const clamped = Math.min(100, Math.max(0, num));
+                                setFormData({ ...formData, treatmentCommissionPercent: clamped });
+                              }
+                            }}
+                            onBlur={(e) => {
+                              const v = formData.treatmentCommissionPercent;
+                              if (v != null && (v < 0 || v > 100)) {
+                                const clamped = Math.min(100, Math.max(0, v));
+                                setFormData({ ...formData, treatmentCommissionPercent: clamped });
+                              }
+                            }}
+                            placeholder="0"
+                            className="w-full max-w-[120px] rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                          />
+                        </div>
                         {services.length === 0 ? (
                           <p className="text-sm text-slate-500">אין שירותים מוגדרים. הוסף שירותים בעמוד המחירון.</p>
                         ) : (

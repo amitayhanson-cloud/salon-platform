@@ -198,13 +198,10 @@ export default function ServicesPage() {
       service: serviceId, // Set service for backward compatibility
       durationMinMinutes: 30,
       durationMaxMinutes: 30,
-      waitMinutes: 0,
       price: 0,
       order: itemsByService[serviceId]?.length || 0,
       hasFollowUp: false,
-      followUpServiceId: null,
-      followUpDurationMinutes: null,
-      followUpWaitMinutes: null, // Deprecated - kept for backwards compatibility
+      followUp: null,
     };
     setEditingItem({
       ...newItem,

@@ -21,6 +21,7 @@ function getMenuItems(siteId: string | null): MenuItem[] {
       label: "ניהול אתר",
       items: [
         { label: "הגדרות", href: `${basePath}/settings` },
+        { label: "ייבוא CSV/Excel", href: `${basePath}/settings/import` },
         { label: "שירותים", href: `${basePath}/services` },
         { label: "צבעים", href: `${basePath}/colours` },
         { label: "תמונות", href: `${basePath}/pictures` },
@@ -30,7 +31,7 @@ function getMenuItems(siteId: string | null): MenuItem[] {
       label: "צוות",
       items: [
         { label: "עובדים", href: `${basePath}/team/workers` },
-        { label: "משכורות", href: `${basePath}/team/salary` },
+        { label: "ביצועי צוות", href: `${basePath}/team/salary` },
       ],
     },
     {

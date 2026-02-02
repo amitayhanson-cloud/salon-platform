@@ -1,22 +1,27 @@
 import {
-  addDoc,
   getDoc,
   getDocs,
   query,
   where,
   setDoc,
+  addDoc,
   deleteDoc,
+  writeBatch,
   serverTimestamp,
   Timestamp,
+  collection,
 } from "firebase/firestore";
-import { clientsCollection, clientDoc } from "./firestorePaths";
+import { db } from "./firebaseClient";
+import { clientsCollection, bookingsCollection } from "./firestorePaths";
+import { clientDocRef } from "./firestoreClientRefs";
 
 export interface ClientData {
-  id?: string; // Firestore-generated document ID (NOT phone number)
   name: string;
-  phone: string; // Phone number is a field, NOT the document ID
+  phone: string; // Phone number IS the document ID
   email?: string;
   notes?: string;
+  chemicalCard?: any;
+  personalPricing?: Record<string, number>;
   createdAt?: string | Timestamp;
   updatedAt?: string | Timestamp;
   lastVisit?: string; // ISO date string
@@ -25,28 +30,28 @@ export interface ClientData {
 
 /**
  * Check if a client with the given phone already exists
+ * Since phone IS the document ID, we just check if the doc exists
  */
 export async function checkClientExists(
   siteId: string,
   phone: string
 ): Promise<{ exists: boolean; clientId?: string; clientData?: ClientData }> {
   try {
-    const clientsRef = clientsCollection(siteId);
-    const q = query(clientsRef, where("phone", "==", phone));
-    const snapshot = await getDocs(q);
+    const docRef = clientDocRef(siteId, phone);
+    const snapshot = await getDoc(docRef);
 
-    if (!snapshot.empty) {
-      const doc = snapshot.docs[0];
-      const data = doc.data();
+    if (snapshot.exists()) {
+      const data = snapshot.data();
       return {
         exists: true,
-        clientId: doc.id,
+        clientId: phone,
         clientData: {
-          id: doc.id,
           name: data.name || "",
-          phone: data.phone || "",
+          phone: data.phone || phone, // Use phone from data or fallback to param
           email: data.email || undefined,
           notes: data.notes || undefined,
+          chemicalCard: data.chemicalCard,
+          personalPricing: data.personalPricing,
           createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || undefined,
           updatedAt: data.updatedAt?.toDate?.()?.toISOString() || data.updatedAt || undefined,
         },
@@ -63,9 +68,8 @@ export async function checkClientExists(
 /**
  * Get or create a client by phone number
  * This is the single source of truth for client creation during booking
- * - Searches for existing client by phone
- * - Creates new client only if not found
- * - Always uses Firestore-generated document ID (never phone as ID)
+ * - Phone number IS the document ID
+ * - Uses setDoc with merge to create or update
  */
 export async function getOrCreateClient(
   siteId: string,
@@ -75,52 +79,59 @@ export async function getOrCreateClient(
     // Normalize phone (remove spaces, dashes, etc.)
     const normalizedPhone = clientData.phone.replace(/\s|-|\(|\)/g, "");
 
+    const docRef = clientDocRef(siteId, normalizedPhone);
+    
     // Check if client already exists
     const existing = await checkClientExists(siteId, normalizedPhone);
-    if (existing.exists && existing.clientId) {
+    if (existing.exists && existing.clientData) {
       // Client exists - update name/email if provided and different
-      if (existing.clientData) {
-        const needsUpdate = 
-          (clientData.name.trim() && existing.clientData.name !== clientData.name.trim()) ||
-          (clientData.email && existing.clientData.email !== clientData.email) ||
-          (clientData.notes && existing.clientData.notes !== clientData.notes);
+      const needsUpdate = 
+        (clientData.name.trim() && existing.clientData.name !== clientData.name.trim()) ||
+        (clientData.email && existing.clientData.email !== clientData.email) ||
+        (clientData.notes && existing.clientData.notes !== clientData.notes);
 
-        if (needsUpdate) {
-          await updateClient(siteId, existing.clientId, {
+      if (needsUpdate) {
+        await setDoc(
+          docRef,
+          {
             name: clientData.name.trim() || existing.clientData.name,
-            email: clientData.email || existing.clientData.email,
-            notes: clientData.notes || existing.clientData.notes,
-          });
-        }
+            phone: normalizedPhone,
+            email: clientData.email?.trim() || null,
+            notes: clientData.notes?.trim() || null,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
       }
       
       console.log("[getOrCreateClient] Found existing client", {
         siteId,
-        clientId: existing.clientId,
         phone: normalizedPhone,
       });
       
-      return existing.clientId;
+      return normalizedPhone;
     }
 
-    // Client doesn't exist - create new one with Firestore-generated ID
-    const clientsRef = clientsCollection(siteId);
-    const docRef = await addDoc(clientsRef, {
-      name: clientData.name.trim(),
-      phone: normalizedPhone,
-      email: clientData.email?.trim() || null,
-      notes: clientData.notes?.trim() || null,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
+    // Client doesn't exist - create new one with phone as ID
+    await setDoc(
+      docRef,
+      {
+        name: clientData.name.trim(),
+        phone: normalizedPhone,
+        email: clientData.email?.trim() || null,
+        notes: clientData.notes?.trim() || null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
 
     console.log("[getOrCreateClient] Created new client", {
       siteId,
-      clientId: docRef.id,
       phone: normalizedPhone,
     });
 
-    return docRef.id;
+    return normalizedPhone;
   } catch (error) {
     console.error("[getOrCreateClient] Error getting/creating client", error);
     throw error;
@@ -129,11 +140,11 @@ export async function getOrCreateClient(
 
 /**
  * Create a new client document
- * @deprecated Use getOrCreateClient instead to prevent duplicates
+ * Phone number IS the document ID
  */
 export async function createClient(
   siteId: string,
-  client: Omit<ClientData, "id" | "createdAt" | "updatedAt">
+  client: Omit<ClientData, "createdAt" | "updatedAt">
 ): Promise<string> {
   try {
     // Normalize phone (remove spaces, dashes, etc.)
@@ -145,23 +156,26 @@ export async function createClient(
       throw new Error("CLIENT_EXISTS");
     }
 
-    const clientsRef = clientsCollection(siteId);
-    const docRef = await addDoc(clientsRef, {
-      name: client.name.trim(),
-      phone: normalizedPhone,
-      email: client.email?.trim() || null,
-      notes: client.notes?.trim() || null,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
+    const docRef = clientDocRef(siteId, normalizedPhone);
+    await setDoc(
+      docRef,
+      {
+        name: client.name.trim(),
+        phone: normalizedPhone,
+        email: client.email?.trim() || null,
+        notes: client.notes?.trim() || null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
 
     console.log("[createClient] Created client", {
       siteId,
-      clientId: docRef.id,
       phone: normalizedPhone,
     });
 
-    return docRef.id;
+    return normalizedPhone;
   } catch (error) {
     console.error("[createClient] Error creating client", error);
     throw error;
@@ -170,14 +184,15 @@ export async function createClient(
 
 /**
  * Update an existing client document
+ * clientId is the phone number (document ID)
  */
 export async function updateClient(
   siteId: string,
-  clientId: string,
-  updates: Partial<Omit<ClientData, "id" | "createdAt">>
+  phone: string,
+  updates: Partial<Omit<ClientData, "createdAt">>
 ): Promise<void> {
   try {
-    const clientRef = clientDoc(siteId, clientId);
+    const docRef = clientDocRef(siteId, phone);
     const updateData: any = {
       updatedAt: serverTimestamp(),
     };
@@ -186,7 +201,12 @@ export async function updateClient(
       updateData.name = updates.name.trim();
     }
     if (updates.phone !== undefined) {
-      updateData.phone = updates.phone.replace(/\s|-|\(|\)/g, "");
+      // If phone is being updated, we need to create a new doc with new phone and delete old one
+      const newPhone = updates.phone.replace(/\s|-|\(|\)/g, "");
+      if (newPhone !== phone) {
+        throw new Error("Cannot change client phone number. Create a new client instead.");
+      }
+      updateData.phone = newPhone;
     }
     if (updates.email !== undefined) {
       updateData.email = updates.email?.trim() || null;
@@ -195,11 +215,11 @@ export async function updateClient(
       updateData.notes = updates.notes?.trim() || null;
     }
 
-    await setDoc(clientRef, updateData, { merge: true });
+    await setDoc(docRef, updateData, { merge: true });
 
     console.log("[updateClient] Updated client", {
       siteId,
-      clientId,
+      phone,
       updates: Object.keys(updateData),
     });
   } catch (error) {
@@ -209,15 +229,15 @@ export async function updateClient(
 }
 
 /**
- * Get a client by ID
+ * Get a client by phone number (document ID)
  */
 export async function getClient(
   siteId: string,
-  clientId: string
+  phone: string
 ): Promise<ClientData | null> {
   try {
-    const clientRef = clientDoc(siteId, clientId);
-    const snapshot = await getDoc(clientRef);
+    const docRef = clientDocRef(siteId, phone);
+    const snapshot = await getDoc(docRef);
 
     if (!snapshot.exists()) {
       return null;
@@ -225,11 +245,12 @@ export async function getClient(
 
     const data = snapshot.data();
     return {
-      id: snapshot.id,
       name: data.name || "",
-      phone: data.phone || "",
+      phone: data.phone || phone, // Use phone from data or fallback to param
       email: data.email || undefined,
       notes: data.notes || undefined,
+      chemicalCard: data.chemicalCard,
+      personalPricing: data.personalPricing,
       createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || undefined,
       updatedAt: data.updatedAt?.toDate?.()?.toISOString() || data.updatedAt || undefined,
     };
@@ -239,8 +260,86 @@ export async function getClient(
   }
 }
 
+const BATCH_SIZE = 400;
+
+/**
+ * Delete all documents in a client subcollection (Firestore has no recursive delete).
+ * Handles chemicalCard, personalPricing, or any other subcollection name safely.
+ */
+async function deleteSubcollectionDocs(
+  siteId: string,
+  phone: string,
+  subcollectionName: string
+): Promise<void> {
+  if (!db) throw new Error("Firestore not initialized");
+  const ref = collection(db, "sites", siteId, "clients", phone, subcollectionName);
+  let snapshot = await getDocs(ref);
+  while (!snapshot.empty) {
+    const batch = writeBatch(db);
+    const chunk = snapshot.docs.slice(0, BATCH_SIZE);
+    chunk.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    if (snapshot.docs.length <= BATCH_SIZE) break;
+    snapshot = await getDocs(ref);
+  }
+}
+
+/**
+ * Count bookings for a client (customerPhone or clientId = phone).
+ */
+export async function getClientBookingsCount(siteId: string, phone: string): Promise<number> {
+  const q = query(
+    bookingsCollection(siteId),
+    where("customerPhone", "==", phone)
+  );
+  const snapshot = await getDocs(q);
+  return snapshot.size;
+}
+
+/**
+ * Delete client document and all subcollection docs.
+ * Returns { hasBookings: true } if client has bookings (caller should offer archive instead).
+ * Returns { deleted: true } on success.
+ */
+export async function deleteClient(
+  siteId: string,
+  phone: string
+): Promise<{ deleted: true } | { hasBookings: true }> {
+  if (!siteId || !phone) {
+    throw new Error("Missing siteId or phone");
+  }
+  const count = await getClientBookingsCount(siteId, phone);
+  if (count > 0) {
+    return { hasBookings: true };
+  }
+  const subcollections = ["chemicalCard", "personalPricing"];
+  for (const subName of subcollections) {
+    try {
+      await deleteSubcollectionDocs(siteId, phone, subName);
+    } catch (e) {
+      // Subcollection may not exist; ignore
+    }
+  }
+  const docRef = clientDocRef(siteId, phone);
+  await deleteDoc(docRef);
+  return { deleted: true };
+}
+
+/**
+ * Archive a client (set archived: true). Client can be hidden from main list.
+ */
+export async function archiveClient(siteId: string, phone: string): Promise<void> {
+  const docRef = clientDocRef(siteId, phone);
+  await setDoc(
+    docRef,
+    { archived: true, archivedAt: serverTimestamp(), updatedAt: serverTimestamp() },
+    { merge: true }
+  );
+}
+
 /**
  * Get all clients from the clients collection
+ * Document ID = phone number
  */
 export async function getAllClients(siteId: string): Promise<ClientData[]> {
   try {
@@ -251,11 +350,12 @@ export async function getAllClients(siteId: string): Promise<ClientData[]> {
     snapshot.docs.forEach((doc) => {
       const data = doc.data();
       clients.push({
-        id: doc.id,
         name: data.name || "",
-        phone: data.phone || "",
+        phone: data.phone || doc.id, // Use phone from data or fallback to doc.id (which is phone)
         email: data.email || undefined,
         notes: data.notes || undefined,
+        chemicalCard: data.chemicalCard,
+        personalPricing: data.personalPricing,
         createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || undefined,
         updatedAt: data.updatedAt?.toDate?.()?.toISOString() || data.updatedAt || undefined,
       });

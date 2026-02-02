@@ -32,6 +32,12 @@ export function bookingSettingsDoc(siteId: string) {
   return doc(db, "sites", siteId, "settings", "booking");
 }
 
+/** sites/{siteId}/settings/cleanup — expired bookings auto-delete setting */
+export function cleanupSettingsDoc(siteId: string) {
+  if (!db) throw new Error("Firestore db not initialized");
+  return doc(db, "sites", siteId, "settings", "cleanup");
+}
+
 export function clientsCollection(siteId: string) {
   if (!db) throw new Error("Firestore db not initialized");
   return collection(db, "sites", siteId, "clients");
@@ -42,3 +48,17 @@ export function clientDoc(siteId: string, clientId: string) {
   return doc(db, "sites", siteId, "clients", clientId);
 }
 
+// DEPRECATED: Personal pricing is now stored as a field on the client document
+// sites/{siteId}/clients/{clientId}.personalPricing[serviceTypeId]
+// These functions are kept for backward compatibility but should not be used
+export function personalPricingCollection(siteId: string, clientId: string) {
+  if (!db) throw new Error("Firestore db not initialized");
+  console.warn("[DEPRECATED] personalPricingCollection - use client doc field instead");
+  return collection(db, "sites", siteId, "clients", clientId, "personalPricing");
+}
+
+export function personalPricingDoc(siteId: string, clientId: string, serviceTypeId: string) {
+  if (!db) throw new Error("Firestore db not initialized");
+  console.warn("[DEPRECATED] personalPricingDoc - use client doc field instead");
+  return doc(db, "sites", siteId, "clients", clientId, "personalPricing", serviceTypeId);
+}

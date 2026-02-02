@@ -40,9 +40,10 @@ export default function ServicesPage() {
   const [showAddService, setShowAddService] = useState(false);
   const [newServiceName, setNewServiceName] = useState("");
   const [durationInputValue, setDurationInputValue] = useState<string>("");
-  const [waitTimeInputValue, setWaitTimeInputValue] = useState<string>("");
   const [priceInputValue, setPriceInputValue] = useState<string>("");
+  const [followUpNameInputValue, setFollowUpNameInputValue] = useState<string>("");
   const [followUpDurationInputValue, setFollowUpDurationInputValue] = useState<string>("");
+  const [followUpWaitInputValue, setFollowUpWaitInputValue] = useState<string>("0");
 
   // Track first load to set loading state only once
   const didFirstLoad = useRef(false);
@@ -201,16 +202,13 @@ export default function ServicesPage() {
   const handleAddItem = (serviceId: string) => {
     const newItem: Omit<PricingItem, "id" | "createdAt" | "updatedAt"> = {
       serviceId: serviceId,
-      service: serviceId, // Set service for backward compatibility
+      service: serviceId,
       durationMinMinutes: 30,
       durationMaxMinutes: 30,
-      waitMinutes: 0,
       price: 0,
       order: itemsByService[serviceId]?.length || 0,
       hasFollowUp: false,
-      followUpServiceId: null,
-      followUpDurationMinutes: null,
-      followUpWaitMinutes: null, // Deprecated - kept for backwards compatibility
+      followUp: null,
     };
     setEditingItem({
       ...newItem,
@@ -218,36 +216,23 @@ export default function ServicesPage() {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
-    // Initialize all input values with defaults
     setDurationInputValue("30");
-    setWaitTimeInputValue("0");
     setPriceInputValue("0");
+    setFollowUpNameInputValue("");
     setFollowUpDurationInputValue("");
+    setFollowUpWaitInputValue("0");
   };
 
   const handleEditItem = (item: PricingItem) => {
-    // Convert range values to single values for backwards compatibility
     const convertedItem = { ...item };
-    
-    // Keep price ranges as-is - no conversion needed
-    
-    // Convert waiting time range to single: prefer min, else max, else existing waitMinutes
-    if (convertedItem.waitTimeMin !== undefined || convertedItem.waitTimeMax !== undefined) {
-      convertedItem.waitMinutes = convertedItem.waitTimeMin ?? convertedItem.waitTimeMax ?? convertedItem.waitMinutes ?? undefined;
-      convertedItem.waitTimeMin = undefined;
-      convertedItem.waitTimeMax = undefined;
-    }
-    
-    // Initialize all input values for display
     setDurationInputValue(formatNumberOrRange(convertedItem.durationMinMinutes, convertedItem.durationMaxMinutes));
-    setWaitTimeInputValue(formatNumberOrRange(convertedItem.waitMinutes));
-    // Format price: use range if available, otherwise single price
     setPriceInputValue(formatNumberOrRange(
       convertedItem.priceRangeMin ?? convertedItem.price,
       convertedItem.priceRangeMax
     ));
-    setFollowUpDurationInputValue(formatNumberOrRange(convertedItem.followUpDurationMinutes));
-    
+    setFollowUpNameInputValue(convertedItem.followUp?.name ?? "");
+    setFollowUpDurationInputValue(convertedItem.followUp?.durationMinutes != null ? String(convertedItem.followUp.durationMinutes) : "");
+    setFollowUpWaitInputValue(String(convertedItem.followUp?.waitMinutes ?? 0));
     setEditingItem(convertedItem);
   };
 
@@ -282,20 +267,19 @@ export default function ServicesPage() {
       return;
     }
     if (editingItem.hasFollowUp) {
-      if (!editingItem.followUpServiceId || !editingItem.followUpDurationMinutes || editingItem.followUpDurationMinutes < 1) {
-        setError("שירות המשך ומשך המשך נדרשים כאשר המשך טיפול מופעל");
+      const name = (editingItem.followUp?.name ?? followUpNameInputValue).trim();
+      const durationMinutes = editingItem.followUp?.durationMinutes ?? (followUpDurationInputValue ? parseInt(followUpDurationInputValue, 10) : NaN);
+      const waitMinutes = editingItem.followUp?.waitMinutes ?? (followUpWaitInputValue ? parseInt(followUpWaitInputValue, 10) : 0);
+      if (!name) {
+        setError("נא לבחור שירות לשלב 2");
         return;
       }
-    }
-    // Validate waiting time: must be >= 0 if provided
-    if (editingItem.waitMinutes !== undefined && editingItem.waitMinutes !== null && editingItem.waitMinutes < 0) {
-      setError("זמן המתנה חייב להיות גדול או שווה ל-0");
-      return;
-    }
-    
-    if (editingItem.hasFollowUp) {
-      if (!editingItem.followUpServiceId || !editingItem.followUpDurationMinutes || editingItem.followUpDurationMinutes <= 0) {
-        setError("שירות המשך ומשך המשך נדרשים כאשר המשך טיפול מופעל");
+      if (!Number.isFinite(durationMinutes) || durationMinutes < 1) {
+        setError("משך שלב 2 חייב להיות לפחות 1 דקה");
+        return;
+      }
+      if (!Number.isFinite(waitMinutes) || waitMinutes < 0) {
+        setError("המתנה אחרי שלב 1 חייבת להיות 0 ומעלה");
         return;
       }
     }
@@ -321,20 +305,29 @@ export default function ServicesPage() {
         hasFollowUp: editingItem.hasFollowUp || false,
       };
 
-      // Optional fields - use null instead of undefined
       if (editingItem.type !== undefined && editingItem.type !== null && editingItem.type.trim()) {
         itemData.type = editingItem.type;
       } else {
-        itemData.type = null; // Explicitly set to null if empty
+        itemData.type = null;
       }
-      // Handle waiting time: single value only
-      if (editingItem.waitMinutes !== undefined && editingItem.waitMinutes !== null) {
-        itemData.waitMinutes = editingItem.waitMinutes;
+
+      // Follow-up: hasFollowUp + followUp { name, durationMinutes, waitMinutes } | null
+      const followUpName = (editingItem.followUp?.name ?? followUpNameInputValue).trim();
+      const followUpDuration = editingItem.followUp?.durationMinutes ?? (followUpDurationInputValue ? parseInt(followUpDurationInputValue, 10) : NaN);
+      const followUpWait = editingItem.followUp?.waitMinutes ?? (followUpWaitInputValue ? parseInt(followUpWaitInputValue, 10) : 0);
+      if (editingItem.hasFollowUp && followUpName && Number.isFinite(followUpDuration) && followUpDuration >= 1 && Number.isFinite(followUpWait) && followUpWait >= 0) {
+        itemData.hasFollowUp = true;
+        itemData.followUp = {
+          name: followUpName,
+          ...(editingItem.followUp?.serviceId && { serviceId: editingItem.followUp.serviceId }),
+          durationMinutes: followUpDuration,
+          waitMinutes: followUpWait,
+        };
+      } else {
+        itemData.hasFollowUp = false;
+        itemData.followUp = null;
       }
-      // Clear range fields for backwards compatibility
-      itemData.waitTimeMin = undefined;
-      itemData.waitTimeMax = undefined;
-      
+
       // Handle price: support both single and range
       if (editingItem.priceRangeMin !== undefined && editingItem.priceRangeMax !== undefined) {
         // Range price
@@ -356,37 +349,22 @@ export default function ServicesPage() {
         itemData.notes = editingItem.notes;
       }
 
-      // Follow-up fields - only include if hasFollowUp is true, use null for empty
-      if (editingItem.hasFollowUp) {
-        itemData.followUpServiceId = editingItem.followUpServiceId || null;
-        itemData.followUpDurationMinutes = editingItem.followUpDurationMinutes || null;
-        itemData.followUpWaitMinutes = null; // Deprecated - always set to null for backwards compatibility
-      } else {
-        // Explicitly set to null when disabled
-        itemData.followUpServiceId = null;
-        itemData.followUpDurationMinutes = null;
-        itemData.followUpWaitMinutes = null; // Deprecated - always set to null
-      }
+      const cleanItemData = removeUndefined(itemData) as Record<string, unknown>;
+      console.log("[Services] service doc saved fields:", { hasFollowUp: cleanItemData.hasFollowUp, followUp: cleanItemData.followUp });
 
-      // Remove any undefined values that might have slipped through
-      const cleanItemData = removeUndefined(itemData);
-
-      // Console logging for debugging
-      console.log("[Pricing] Saving item with payload:", cleanItemData);
-      console.log("[Pricing] serviceId value:", cleanItemData.serviceId);
-      console.log("[Pricing] hasFollowUp:", cleanItemData.hasFollowUp);
-      console.log("[Pricing] followUpServiceId:", cleanItemData.followUpServiceId);
+      const deleteLegacyFollowUpFields = ["followUpServiceId", "followUpServiceRefId", "followUpDurationMinutes", "followUpWaitMinutes", "waitMinutes"];
 
       if (editingItem.id === "new") {
-        await createPricingItem(siteId, cleanItemData);
+        await createPricingItem(siteId, cleanItemData as Omit<PricingItem, "id" | "createdAt" | "updatedAt">);
       } else {
-        await updatePricingItem(siteId, editingItem.id, cleanItemData);
+        await updatePricingItem(siteId, editingItem.id, cleanItemData as Partial<Omit<PricingItem, "id" | "createdAt">> & Record<string, unknown>, { deleteFields: deleteLegacyFollowUpFields });
       }
       setEditingItem(null);
       setDurationInputValue("");
-      setWaitTimeInputValue("");
       setPriceInputValue("");
+      setFollowUpNameInputValue("");
       setFollowUpDurationInputValue("");
+      setFollowUpWaitInputValue("0");
     } catch (err) {
       console.error("Failed to save pricing item", err);
       setError("שגיאה בשמירת הפריט");
@@ -412,6 +390,7 @@ export default function ServicesPage() {
       const serviceId = await addSiteService(siteId, {
         name: newServiceName.trim(),
         enabled: true,
+        color: "#3B82F6", // Default blue color
       });
       console.log(`[ServicesPage] Service added successfully: id="${serviceId}", PATH=sites/${siteId}`);
       setNewServiceName("");
@@ -429,14 +408,27 @@ export default function ServicesPage() {
   const handleSaveService = async () => {
     if (!editingService || !editingService.name.trim() || !siteId) return;
     try {
-      await updateSiteService(siteId, editingService.id, {
+      const updatedService = {
+        ...editingService,
         name: editingService.name.trim(),
         enabled: editingService.enabled !== false,
+        color: editingService.color || "#3B82F6", // Default to blue if not set
+      };
+      
+      // Update local state immediately for instant UI feedback
+      setServices(prev => prev.map(s => s.id === updatedService.id ? updatedService : s));
+      
+      await updateSiteService(siteId, editingService.id, {
+        name: updatedService.name,
+        enabled: updatedService.enabled,
+        color: updatedService.color,
       });
+      
       setEditingService(null);
     } catch (err) {
       console.error("Failed to update service", err);
       setError("שגיאה בעדכון שירות");
+      // Revert local state on error by re-fetching (subscription will handle this)
     }
   };
 
@@ -620,9 +612,6 @@ export default function ServicesPage() {
                                   משך (דקות)
                                 </th>
                                 <th className="px-3 py-2 text-right font-semibold text-slate-700">
-                                  המתנה (דקות)
-                                </th>
-                                <th className="px-3 py-2 text-right font-semibold text-slate-700">
                                   מחיר
                                 </th>
                                 <th className="px-3 py-2 text-right font-semibold text-slate-700">
@@ -647,22 +636,16 @@ export default function ServicesPage() {
                                       ? `${item.durationMinMinutes}`
                                       : `${item.durationMinMinutes}-${item.durationMaxMinutes}`}
                                   </td>
-                                  <td className="px-3 py-2 text-slate-600">
-                                    {/* Backwards compatibility: convert range to single for display */}
-                                    {(() => {
-                                      const waitTime = item.waitMinutes ?? item.waitTimeMin ?? item.waitTimeMax;
-                                      return waitTime !== undefined && waitTime !== null ? `${waitTime}` : "-";
-                                    })()}
-                                  </td>
                                   <td className="px-3 py-2 text-slate-900 font-medium">
                                     {formatPriceDisplay(item)}
                                   </td>
                                   <td className="px-3 py-2 text-slate-600 text-xs">
                                     <div className="space-y-1">
                                       {item.notes && <div>{item.notes}</div>}
-                                      {item.hasFollowUp && item.followUpServiceId && item.followUpDurationMinutes && (
+                                      {item.hasFollowUp && item.followUp && (
                                         <div className="text-sky-600 font-medium">
-                                          המשך טיפול: {item.followUpServiceId} ({item.followUpDurationMinutes} דק׳)
+                                          המשך טיפול: {item.followUp.name} ({item.followUp.durationMinutes} דק׳)
+                                          {item.followUp.waitMinutes ? `, המתנה ${item.followUp.waitMinutes} דק׳` : ""}
                                         </div>
                                       )}
                                     </div>
@@ -816,6 +799,38 @@ export default function ServicesPage() {
                   }
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  צבע השירות
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={editingService.color || "#3B82F6"}
+                    onChange={(e) =>
+                      setEditingService({ ...editingService, color: e.target.value })
+                    }
+                    className="w-16 h-10 border border-slate-300 rounded-lg cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={editingService.color || "#3B82F6"}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // Validate hex color format
+                      if (/^#[0-9A-Fa-f]{6}$/.test(value) || value === "") {
+                        setEditingService({ ...editingService, color: value || "#3B82F6" });
+                      }
+                    }}
+                    placeholder="#3B82F6"
+                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500 font-mono text-sm"
+                  />
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  הצבע שיוצג בלוח התורים עבור שירות זה
+                </p>
               </div>
 
               <label className="flex items-center gap-2">
@@ -1006,56 +1021,6 @@ export default function ServicesPage() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  זמן המתנה (דקות)
-                </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={waitTimeInputValue}
-                  onChange={(e) => {
-                    setWaitTimeInputValue(e.target.value);
-                    setError(null);
-                  }}
-                  onBlur={(e) => {
-                    const inputValue = e.target.value.trim();
-                    if (!inputValue) {
-                      setEditingItem({
-                        ...editingItem,
-                        waitMinutes: undefined,
-                      });
-                      setWaitTimeInputValue("");
-                      return;
-                    }
-                    
-                    const parsed = parseNumberOrRange(inputValue);
-                    if (parsed.kind === "single") {
-                      setEditingItem({
-                        ...editingItem,
-                        waitMinutes: parsed.value,
-                      });
-                      setWaitTimeInputValue(`${parsed.value}`);
-                      setError(null);
-                    } else if (parsed.kind === "range") {
-                      // For waiting time, store as single (use min) but display range
-                      setEditingItem({
-                        ...editingItem,
-                        waitMinutes: parsed.min,
-                      });
-                      setWaitTimeInputValue(`${parsed.min}-${parsed.max}`);
-                      setError(null);
-                    } else if (parsed.kind === "invalid") {
-                      setError(parsed.error || "פורמט לא תקין");
-                      // Restore previous value
-                      setWaitTimeInputValue(formatNumberOrRange(editingItem.waitMinutes));
-                    }
-                  }}
-                  placeholder="0"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
                   מחיר
                 </label>
                 <input
@@ -1135,37 +1100,18 @@ export default function ServicesPage() {
                     checked={editingItem.hasFollowUp || false}
                     onChange={(e) => {
                       const newHasFollowUp = e.target.checked;
-                      const updatedItem = {
+                      setEditingItem({
                         ...editingItem,
                         hasFollowUp: newHasFollowUp,
-                        followUpServiceId: null, // Reset to null when toggled
-                        followUpDurationMinutes: null,
-                        followUpWaitMinutes: null,
-                      };
-                      
-                      // Debug logging (dev only)
-                      if (process.env.NODE_ENV === 'development') {
-                        console.log('[Follow-up Toggle]', {
-                          newHasFollowUp,
-                          followUpServiceId: updatedItem.followUpServiceId,
-                          followUpDurationMinutes: updatedItem.followUpDurationMinutes,
-                          beforeUpdate: {
-                            hasFollowUp: editingItem?.hasFollowUp,
-                            followUpServiceId: editingItem?.followUpServiceId,
-                            followUpDurationMinutes: editingItem?.followUpDurationMinutes,
-                          },
-                        });
-                      }
-                      
-                      // Update state immediately
-                      setEditingItem(updatedItem);
-                      // Also reset input values
+                        followUp: newHasFollowUp
+                          ? (editingItem.followUp ?? { name: "", durationMinutes: 15, waitMinutes: 0 })
+                          : null,
+                      });
                       if (!newHasFollowUp) {
+                        setFollowUpNameInputValue("");
                         setFollowUpDurationInputValue("");
+                        setFollowUpWaitInputValue("0");
                       }
-                      
-                      // Force immediate re-render by clearing any error state
-                      // This ensures the Save button state is recalculated immediately
                       setError(null);
                     }}
                     className="w-4 h-4 text-sky-500 rounded focus:ring-sky-500"
@@ -1177,78 +1123,85 @@ export default function ServicesPage() {
                   <div className="space-y-4 pr-6 bg-slate-50 p-4 rounded-lg">
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">
-                        שירות המשך *
+                        שלב 2 – שירות *
                       </label>
                       <select
-                        value={editingItem.followUpServiceId || ""}
-                        onChange={(e) =>
+                        value={editingItem.followUp?.name ?? followUpNameInputValue ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          const svc = services.find((s) => s.name === v);
+                          setFollowUpNameInputValue(v);
                           setEditingItem({
                             ...editingItem,
-                            followUpServiceId: e.target.value || null,
-                          })
-                        }
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                            followUp: editingItem.followUp
+                              ? { ...editingItem.followUp, name: v, serviceId: svc?.id }
+                              : { name: v, serviceId: svc?.id, durationMinutes: 15, waitMinutes: 0 },
+                          });
+                        }}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
                       >
-                        <option value="">בחר שירות</option>
-                        {activeServiceIds.map((serviceName) => (
-                          <option key={serviceName} value={serviceName}>
-                            {serviceName}
-                          </option>
-                        ))}
+                        <option value="">בחר שירות...</option>
+                        {(() => {
+                          const currentName = (editingItem.followUp?.name ?? followUpNameInputValue ?? "").trim();
+                          const inList = currentName && services.some((s) => s.name === currentName);
+                          return (
+                            <>
+                              {currentName && !inList && (
+                                <option value={currentName}>{currentName} (לא ברשימה)</option>
+                              )}
+                              {services.map((s) => (
+                                <option key={s.id} value={s.name}>
+                                  {s.name}
+                                </option>
+                              ))}
+                            </>
+                          );
+                        })()}
                       </select>
                     </div>
-
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">
-                        משך המשך (דקות) *
+                        משך שלב 2 (דקות) *
                       </label>
                       <input
-                        type="text"
-                        inputMode="numeric"
-                        value={followUpDurationInputValue}
+                        type="number"
+                        min={1}
+                        value={editingItem.followUp?.durationMinutes ?? followUpDurationInputValue}
                         onChange={(e) => {
-                          setFollowUpDurationInputValue(e.target.value);
-                          setError(null);
+                          const v = e.target.value;
+                          setFollowUpDurationInputValue(v);
+                          const num = parseInt(v, 10);
+                          if (!Number.isNaN(num) && num >= 1)
+                            setEditingItem({
+                              ...editingItem,
+                              followUp: editingItem.followUp
+                                ? { ...editingItem.followUp, durationMinutes: num }
+                                : { name: followUpNameInputValue || "—", durationMinutes: num, waitMinutes: 0 },
+                            });
                         }}
-                        onBlur={(e) => {
-                          const inputValue = e.target.value.trim();
-                          if (!inputValue) {
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        המתנה אחרי שלב 1 (דקות)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={editingItem.followUp?.waitMinutes ?? followUpWaitInputValue}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setFollowUpWaitInputValue(v);
+                          const num = parseInt(v, 10);
+                          if (!Number.isNaN(num) && num >= 0)
                             setEditingItem({
                               ...editingItem,
-                              followUpDurationMinutes: null,
+                              followUp: editingItem.followUp
+                                ? { ...editingItem.followUp, waitMinutes: num }
+                                : { name: followUpNameInputValue || "—", durationMinutes: parseInt(followUpDurationInputValue, 10) || 15, waitMinutes: num },
                             });
-                            setFollowUpDurationInputValue("");
-                            return;
-                          }
-                          
-                          const parsed = parseNumberOrRange(inputValue);
-                          if (parsed.kind === "single" && parsed.value >= 1) {
-                            setEditingItem({
-                              ...editingItem,
-                              followUpDurationMinutes: parsed.value,
-                            });
-                            setFollowUpDurationInputValue(`${parsed.value}`);
-                            setError(null);
-                          } else if (parsed.kind === "range" && parsed.min >= 1) {
-                            // Store as single (use min) but display range
-                            setEditingItem({
-                              ...editingItem,
-                              followUpDurationMinutes: parsed.min,
-                            });
-                            setFollowUpDurationInputValue(`${parsed.min}-${parsed.max}`);
-                            setError(null);
-                          } else if (parsed.kind === "invalid") {
-                            setError(parsed.error || "משך המשך חייב להיות גדול או שווה ל-1 דקה");
-                            // Restore previous value
-                            setFollowUpDurationInputValue(formatNumberOrRange(editingItem.followUpDurationMinutes));
-                          } else {
-                            // Handle case where parsed.kind is "single" or "range" but validation fails (value < 1)
-                            setError("משך המשך חייב להיות גדול או שווה ל-1 דקה");
-                            // Restore previous value
-                            setFollowUpDurationInputValue(formatNumberOrRange(editingItem.followUpDurationMinutes));
-                          }
                         }}
-                        placeholder="0"
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
                       />
                     </div>
@@ -1273,15 +1226,13 @@ export default function ServicesPage() {
                                          editingItem.durationMinMinutes !== null && 
                                          editingItem.durationMinMinutes >= 1;
                 
-                // Follow-up validation: if hasFollowUp is true, all follow-up fields must be valid
                 const hasFollowUp = editingItem?.hasFollowUp === true;
-                const hasValidFollowUp = !hasFollowUp || 
+                const followUp = editingItem?.followUp;
+                const hasValidFollowUp = !hasFollowUp ||
                                         (hasFollowUp &&
-                                         !!editingItem.followUpServiceId &&
-                                         editingItem.followUpServiceId.trim().length > 0 &&
-                                         editingItem.followUpDurationMinutes !== undefined &&
-                                         editingItem.followUpDurationMinutes !== null &&
-                                         editingItem.followUpDurationMinutes >= 1);
+                                         !!followUp?.name?.trim() &&
+                                         typeof followUp.durationMinutes === "number" && followUp.durationMinutes >= 1 &&
+                                         typeof followUp.waitMinutes === "number" && followUp.waitMinutes >= 0);
                 
                 const isSaveDisabled = !hasService || !hasValidDuration || !hasValidFollowUp;
                 
@@ -1293,12 +1244,11 @@ export default function ServicesPage() {
                     durationMinMinutes: editingItem?.durationMinMinutes,
                     hasValidDuration,
                     hasFollowUp,
-                    followUpServiceId: editingItem?.followUpServiceId,
-                    followUpDurationMinutes: editingItem?.followUpDurationMinutes,
+                    followUp: editingItem?.followUp,
                     hasValidFollowUp,
                     isSaveDisabled,
                     editingItemState: editingItem ? 'exists' : 'null',
-                    timestamp: Date.now(), // Add timestamp to track render order
+                    timestamp: Date.now(),
                   });
                 }
                 
@@ -1316,13 +1266,12 @@ export default function ServicesPage() {
                                                   editingItem.durationMinMinutes !== null && 
                                                   editingItem.durationMinMinutes >= 1;
                   const currentHasFollowUp = editingItem?.hasFollowUp === true;
-                  const currentHasValidFollowUp = !currentHasFollowUp || 
+                  const currentFollowUp = editingItem?.followUp;
+                  const currentHasValidFollowUp = !currentHasFollowUp ||
                                                   (currentHasFollowUp &&
-                                                   !!editingItem.followUpServiceId &&
-                                                   editingItem.followUpServiceId.trim().length > 0 &&
-                                                   editingItem.followUpDurationMinutes !== undefined &&
-                                                   editingItem.followUpDurationMinutes !== null &&
-                                                   editingItem.followUpDurationMinutes >= 1);
+                                                  !!currentFollowUp?.name?.trim() &&
+                                                  typeof currentFollowUp.durationMinutes === "number" && currentFollowUp.durationMinutes >= 1 &&
+                                                  typeof currentFollowUp.waitMinutes === "number" && currentFollowUp.waitMinutes >= 0);
                   const currentIsSaveDisabled = !currentHasService || !currentHasValidDuration || !currentHasValidFollowUp;
                   
                   if (currentIsSaveDisabled) {

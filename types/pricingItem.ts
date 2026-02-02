@@ -1,28 +1,43 @@
+/** Follow-up config: phase 2 service (by id/name) + duration + wait gap. */
+export interface FollowUpConfig {
+  /** Service name (from business services); used for display and worker–service matching. */
+  name: string;
+  /** Optional service id (SiteService.id) for strict worker–service compatibility. */
+  serviceId?: string;
+  durationMinutes: number;
+  waitMinutes: number;
+}
+
 export interface PricingItem {
   id: string;
   serviceId: string; // Required: Service ID/name (from business services list) - used for grouping
   service?: string; // Optional: Service name (for backward compatibility, use serviceId)
   type?: string | null; // Optional: Sub-type/variation (e.g., "רבע ראש", "חצי ראש")
-  // Duration range (new)
-  durationMinMinutes: number; // Minimum duration in minutes
-  durationMaxMinutes: number; // Maximum duration in minutes
-  // Legacy field (for backward compatibility - deprecated, use durationMinMinutes/durationMaxMinutes)
-  durationMinutes?: number; // Deprecated: kept for backward compatibility
-  waitMinutes?: number; // Single waiting time (deprecated - use waitTimeMin/waitTimeMax for range)
-  waitTimeMin?: number; // Minimum waiting time in minutes (for range mode)
-  waitTimeMax?: number; // Maximum waiting time in minutes (for range mode)
-  price?: number; // Single price
-  priceRangeMin?: number; // Range start (if using range)
-  priceRangeMax?: number; // Range end (if using range)
-  notes?: string; // Optional notes
-  // Follow-up service fields
-  hasFollowUp?: boolean; // Whether this service has a follow-up
-  followUpServiceId?: string | null; // Follow-up service name (from business services)
-  followUpDurationMinutes?: number | null; // Follow-up duration in minutes
-  followUpWaitMinutes?: number | null; // Follow-up wait time in minutes
+  // Duration range
+  durationMinMinutes: number;
+  durationMaxMinutes: number;
+  durationMinutes?: number; // Legacy: use durationMinMinutes/durationMaxMinutes
+  waitTimeMin?: number;
+  waitTimeMax?: number;
+  price?: number;
+  priceRangeMin?: number;
+  priceRangeMax?: number;
+  notes?: string;
+  /** When true, phase 2 is a separate booking with free-text name + duration + wait. */
+  hasFollowUp?: boolean;
+  /** Follow-up: name (free text), durationMinutes, waitMinutes. Null when hasFollowUp is false. */
+  followUp?: FollowUpConfig | null;
   createdAt: string;
   updatedAt: string;
-  order?: number; // For sorting within service
+  order?: number;
+  // Legacy (do not use; removed from schema; kept for me/admin and old data)
+  secondaryDurationMin?: number;
+  secondaryServiceTypeId?: string | null;
+  followUpServiceId?: string | null;
+  followUpServiceRefId?: string | null;
+  followUpDurationMinutes?: number | null;
+  followUpWaitMinutes?: number | null;
+  waitMinutes?: number | null;
 }
 
 export interface PricingCategory {

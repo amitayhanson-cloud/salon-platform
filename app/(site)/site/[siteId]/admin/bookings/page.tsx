@@ -1,23 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   query,
+  where,
   orderBy,
   onSnapshot,
 } from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
 import {
   bookingsCollection,
-  workersCollection,
 } from "@/lib/firestorePaths";
 import { ymdLocal } from "@/lib/dateLocal";
 import { deleteBooking } from "@/lib/booking";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
 import { bookingEnabled } from "@/lib/bookingEnabled";
 import type { SiteConfig } from "@/types/siteConfig";
+import { getDateRange, getTwoWeekStart, getSundayStart, toYYYYMMDD } from "@/lib/calendarUtils";
+import { normalizeBooking, isBookingCancelled } from "@/lib/normalizeBooking";
+import TwoWeekCalendar from "@/components/admin/TwoWeekCalendar";
+import { ChevronLeft, ChevronRight, RefreshCw, Timer } from "lucide-react";
+import { useRouter } from "next/navigation";
+import AutoCleanupSettings from "@/components/admin/AutoCleanupSettings";
 
 interface Booking {
   id: string;
@@ -34,18 +40,10 @@ interface Booking {
   startAtMissing?: boolean; // true if startAt field is missing (backward compatibility)
 }
 
-const DAY_LABELS: Record<string, string> = {
-  "0": "ראשון",
-  "1": "שני",
-  "2": "שלישי",
-  "3": "רביעי",
-  "4": "חמישי",
-  "5": "שישי",
-  "6": "שבת",
-};
 
 export default function BookingsAdminPage() {
   const params = useParams();
+  const router = useRouter();
   const siteId = params?.siteId as string;
 
   const [loading, setLoading] = useState(true);
@@ -57,27 +55,25 @@ export default function BookingsAdminPage() {
   const [bookingsCount, setBookingsCount] = useState<number>(0);
   const [bookingsLoading, setBookingsLoading] = useState(true);
   const [bookingsError, setBookingsError] = useState<string | null>(null);
-  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Weekly calendar state
-  const [weekStart, setWeekStart] = useState<Date>(() => {
-    const today = new Date();
-    const day = today.getDay();
-    const diff = today.getDate() - day; // Sunday as week start
-    return new Date(today.setDate(diff));
+  // Two-week calendar state
+  // Always starts on Sunday of the current week (week 1) + next week (week 2) = 14 days
+  const [rangeStart, setRangeStart] = useState<Date>(() => {
+    // Initialize to Sunday of the week containing today
+    return getSundayStart(new Date());
   });
-  const [selectedDay, setSelectedDay] = useState<string>(() => {
-    return ymdLocal(new Date());
-  });
-  const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
-
-  // Workers state (for filter dropdown)
-  const [workers, setWorkers] = useState<Array<{ id: string; name: string }>>([]);
 
   // Delete booking state
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Auto-cleanup settings popover
+  const [autoCleanupOpen, setAutoCleanupOpen] = useState(false);
+
+  // Store unsubscribe function reference for manual refresh
+  const unsubscribeRef = useRef<(() => void) | null>(null);
 
 
   // Load site config to check if booking is enabled
@@ -151,126 +147,94 @@ export default function BookingsAdminPage() {
 
     console.log("[BookingManagement] Setting up realtime listeners for siteId:", siteId);
     const cleanup = setupRealtimeListeners();
+    unsubscribeRef.current = cleanup;
     
     return () => {
       console.log("[BookingManagement] Cleaning up realtime listeners");
       cleanup();
+      unsubscribeRef.current = null;
     };
-  }, [siteId]);
+  }, [siteId, rangeStart]);
 
   const setupRealtimeListeners = (): (() => void) => {
     if (!db || !siteId) {
-      console.log("[BookingManagement] No db or siteId, skipping listener setup");
       setLoading(false);
       return () => {};
     }
 
-    console.log("[BookingManagement] Setting up listeners for siteId:", siteId);
     setLoading(true);
     setBookingsLoading(true);
     setBookingsError(null);
 
-    // Workers listener (for filter dropdown)
-    console.log("[BookingManagement] listening sites/" + siteId + "/workers");
-    let workersQuery;
-    try {
-      workersQuery = query(workersCollection(siteId), orderBy("createdAt", "asc"));
-    } catch (e) {
-      workersQuery = workersCollection(siteId);
-    }
-    const workersUnsubscribe = onSnapshot(
-      workersQuery,
-      (snapshot) => {
-        const items = snapshot.docs.map((d) => ({ id: d.id, name: d.data().name || "" })) as Array<{ id: string; name: string }>;
-        setWorkers(items);
-        console.log("[BookingManagement] workers loaded for filter", items.length);
-      },
-      (err) => {
-        console.error("[BookingManagement] Failed to load workers", err);
-      }
-    );
+    const dateRange = getDateRange(rangeStart, 14);
+    const rangeStartStr = toYYYYMMDD(dateRange[0]);
+    const rangeEndStr = toYYYYMMDD(dateRange[13]);
 
-    // Bookings listener
-    console.log("[BookingManagement] listening sites/" + siteId + "/bookings");
-    
     let fallbackUnsubscribe: (() => void) | null = null;
-    
-    const bookingsQuery = query(bookingsCollection(siteId), orderBy("startAt", "asc"));
+
+    const bookingsQuery = query(
+      bookingsCollection(siteId),
+      where("date", ">=", rangeStartStr),
+      where("date", "<=", rangeEndStr),
+      orderBy("date", "asc"),
+      orderBy("time", "asc")
+    );
 
     const bookingsUnsubscribe = onSnapshot(
       bookingsQuery,
       (snapshot) => {
-        console.log("[BookingManagement] Bookings snapshot received, docs:", snapshot.docs.length);
+        const raw = snapshot.docs.map((d) => normalizeBooking(d as { id: string; data: () => Record<string, unknown> }));
+        const normalized = raw.filter((b) => !isBookingCancelled(b));
+        setBookings(normalized);
+        setBookingsCount(normalized.length);
         setBookingsLoading(false);
         setBookingsError(null);
-        setLoading(false); // FIX: Set loading to false when data loads
-        const items = snapshot.docs.map((d) => ({ id: d.id, ...d.data() })) as any[];
-        console.log("[BookingManagement] bookings loaded", items.length);
-        if (items.length > 0) {
-          console.log("[BookingManagement] booking sample", items[0]);
-          console.log("[Admin] first booking date/time:", items[0]?.date, items[0]?.time);
-        }
-        setBookings(items);
-        setBookingsCount(items.length);
-        setCalendarLoading(false);
+        setLoading(false);
       },
       (err) => {
-        console.error("[BookingManagement] Failed to load bookings", err);
-        
-        // If orderBy failed due to missing index, try without orderBy
-        if (err.message?.includes("index") || err.message?.includes("orderBy") || err.code === "failed-precondition") {
-          console.log("[BookingManagement] Retrying without orderBy due to index error");
-          const fallbackQuery = bookingsCollection(siteId);
+        if (err.message?.includes("index") || err.message?.includes("orderBy") || (err as { code?: string }).code === "failed-precondition") {
+          const fallbackQuery = query(
+            bookingsCollection(siteId),
+            where("date", ">=", rangeStartStr),
+            where("date", "<=", rangeEndStr)
+          );
           fallbackUnsubscribe = onSnapshot(
             fallbackQuery,
             (snapshot) => {
-              console.log("[BookingManagement] Fallback query succeeded, docs:", snapshot.docs.length);
-              const items = snapshot.docs.map((d) => ({ id: d.id, ...d.data() })) as any[];
-              // Sort manually by date/time
-              items.sort((a: any, b: any) => {
-                if (a.startAt && b.startAt && a.startAt.toMillis && b.startAt.toMillis) {
-                  return a.startAt.toMillis() - b.startAt.toMillis();
-                }
-                const dateCompare = (a.date || "").localeCompare(b.date || "");
-                if (dateCompare !== 0) return dateCompare;
-                return (a.time || "").localeCompare(b.time || "");
+              const raw = snapshot.docs.map((d) => normalizeBooking(d as { id: string; data: () => Record<string, unknown> }));
+              const normalized = raw.filter((b) => !isBookingCancelled(b));
+              normalized.sort((a, b) => {
+                const dc = (a.dateStr || "").localeCompare(b.dateStr || "");
+                if (dc !== 0) return dc;
+                return (a.timeHHmm || "").localeCompare(b.timeHHmm || "");
               });
-              setBookings(items);
-              setBookingsCount(items.length);
+              setBookings(normalized);
+              setBookingsCount(normalized.length);
               setBookingsError(null);
               setBookingsLoading(false);
               setLoading(false);
             },
             (fallbackErr) => {
-              console.error("[BookingManagement] Fallback query also failed", fallbackErr);
               setBookingsError(fallbackErr.message || "שגיאה בטעינת התורים");
               setBookingsLoading(false);
               setLoading(false);
               setBookings([]);
               setBookingsCount(0);
-              setCalendarLoading(false);
             }
           );
         } else {
-          // Other error - just set loading to false
-          setBookingsLoading(false);
           setBookingsError(err.message || "שגיאה בטעינת התורים");
-          setLoading(false); // FIX: Set loading to false on error
+          setBookingsLoading(false);
+          setLoading(false);
           setBookings([]);
           setBookingsCount(0);
-          setCalendarLoading(false);
         }
       }
     );
 
-    // Cleanup listeners on unmount
     return () => {
-      console.log("[BookingManagement] Cleaning up listeners");
-      workersUnsubscribe();
       bookingsUnsubscribe();
-      if (fallbackUnsubscribe) {
-        fallbackUnsubscribe();
-      }
+      if (fallbackUnsubscribe) fallbackUnsubscribe();
     };
   };
 
@@ -304,56 +268,57 @@ export default function BookingsAdminPage() {
     setDeleteError(null);
   };
 
-
-  // Date helper functions
-  const startOfWeek = (date: Date): Date => {
-    const d = new Date(date);
-    const day = d.getDay();
-    const diff = d.getDate() - day; // Sunday as week start
-    const start = new Date(d.setDate(diff));
-    start.setHours(0, 0, 0, 0);
-    return start;
-  };
-
-  const addDays = (date: Date, days: number): Date => {
-    const result = new Date(date);
-    result.setDate(result.getDate() + days);
-    return result;
-  };
-
-  // Use ymdLocal helper instead of local formatYMD
-  const formatYMD = ymdLocal;
-
-  const formatDayLabel = (date: Date): string => {
-    const dayIndex = date.getDay().toString();
-    return `${DAY_LABELS[dayIndex]} ${date.getDate()}`;
-  };
-
-  // Get week days array (7 days starting from weekStart)
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-
-  // Filter bookings for current week
-  const weekDayKeys = weekDays.map(formatYMD);
-  const bookingsForWeek = bookings.filter((b: any) => weekDayKeys.includes(b.date));
-
-  // Group bookings by day
-  const bookingsByDay = weekDayKeys.reduce((acc, dayKey) => {
-    acc[dayKey] = bookingsForWeek.filter((b: any) => b.date === dayKey);
-    return acc;
-  }, {} as Record<string, any[]>);
-
-  // Get bookings for selected day, optionally filtered by worker
-  const getBookingsForDate = (date: string, workerId: string | null = null) => {
-    let filtered = bookings.filter((b: any) => b.date === date && b.status === "confirmed");
-    if (workerId) {
-      filtered = filtered.filter((b: any) => b.workerId === workerId);
+  // Refresh handler - re-subscribe to force refresh
+  const handleRefresh = () => {
+    if (refreshing || !siteId || !db) return;
+    
+    setRefreshing(true);
+    setBookingsLoading(true);
+    setBookingsError(null);
+    
+    // Unsubscribe from current listener
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current();
+      unsubscribeRef.current = null;
     }
-    return filtered;
+    
+    // Small delay to ensure cleanup, then re-subscribe
+    setTimeout(() => {
+      const cleanup = setupRealtimeListeners();
+      unsubscribeRef.current = cleanup;
+      
+      // Reset refreshing state after a brief moment
+      // (actual loading state is managed by setupRealtimeListeners)
+      setTimeout(() => {
+        setRefreshing(false);
+      }, 500);
+    }, 100);
   };
 
-  const selectedDayBookings = getBookingsForDate(selectedDay, selectedWorkerId).sort((a: any, b: any) => {
-    return (a.time || "").localeCompare(b.time || "");
-  });
+
+  // Get 14-day date range
+  const dateRange = getDateRange(rangeStart, 14);
+  const dateRangeKeys = dateRange.map(toYYYYMMDD);
+
+  // Group by dateStr (string day key); bookings are already normalized and non-cancelled from listener
+  const groupedByDay = dateRangeKeys.reduce((acc, dayKey) => {
+    const dayBookings = bookings
+      .filter((b: { dateStr?: string }) => (b.dateStr ?? (b as any).date) === dayKey)
+      .sort((a: { timeHHmm?: string; time?: string }, b: { timeHHmm?: string; time?: string }) =>
+        (a.timeHHmm ?? a.time ?? "").localeCompare(b.timeHHmm ?? b.time ?? "")
+      )
+      .map((b: any) => ({
+        id: b.id,
+        time: b.timeHHmm ?? b.time ?? "N/A",
+        serviceName: b.serviceName ?? "N/A",
+        workerName: b.workerName ?? b.workerId ?? undefined,
+      }));
+    acc[dayKey] = dayBookings;
+    return acc;
+  }, {} as Record<string, Array<{ id: string; time: string; serviceName: string; workerName?: string }>>);
+
+  const bookingsByDay = groupedByDay;
+
 
 
   // Add timeout to prevent infinite loading
@@ -431,12 +396,54 @@ export default function BookingsAdminPage() {
           </div>
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-2xl font-bold text-slate-900">ניהול הזמנות</h1>
-            <Link
-              href={`/site/${siteId}/admin`}
-              className="text-sm text-sky-700 hover:text-sky-800"
-            >
-              ← חזרה לפאנל ניהול
-            </Link>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setAutoCleanupOpen((o) => !o)}
+                  className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                  title="מחיקה אוטומטית"
+                  aria-expanded={autoCleanupOpen}
+                  aria-haspopup="dialog"
+                >
+                  <Timer className="w-4 h-4" />
+                  מחיקה אוטומטית
+                </button>
+                {autoCleanupOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      aria-hidden="true"
+                      onClick={() => setAutoCleanupOpen(false)}
+                    />
+                    <div
+                      className="absolute right-0 top-full mt-2 z-50 w-80 bg-white rounded-xl shadow-lg border border-slate-200 p-4"
+                      role="dialog"
+                      aria-label="הגדרות מחיקה אוטומטית"
+                    >
+                      <AutoCleanupSettings siteId={siteId} />
+                    </div>
+                  </>
+                )}
+              </div>
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing || bookingsLoading}
+                className="px-3 py-1.5 bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                title="רענן תורים"
+              >
+                <RefreshCw 
+                  className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} 
+                />
+                רענן
+              </button>
+              <Link
+                href={`/site/${siteId}/admin`}
+                className="text-sm text-sky-700 hover:text-sky-800"
+              >
+                ← חזרה לפאנל ניהול
+              </Link>
+            </div>
           </div>
 
         </div>
@@ -451,25 +458,44 @@ export default function BookingsAdminPage() {
         {/* Calendar */}
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-slate-900">יומן תורים</h2>
+              <h2 className="text-xl font-bold text-slate-900">יומן תורים (14 יום)</h2>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setWeekStart(startOfWeek(addDays(weekStart, -7)))}
-                  className="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-sm"
+                  onClick={() => {
+                    // Move back by 14 days (maintains Sunday anchor)
+                    const newStart = new Date(rangeStart);
+                    newStart.setDate(rangeStart.getDate() - 14);
+                    setRangeStart(newStart);
+                  }}
+                  className="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-sm flex items-center gap-1"
                 >
-                  ← Previous
+                  <ChevronRight className="w-4 h-4" />
+                  Previous
                 </button>
                 <button
-                  onClick={() => setWeekStart(startOfWeek(new Date()))}
+                  onClick={() => {
+                    // Navigate to today's day schedule page
+                    const today = new Date();
+                    const todayKey = toYYYYMMDD(today);
+                    // Get current workerId from URL if available, or use first worker
+                    // For now, navigate without workerId - the day page will handle default selection
+                    router.push(`/site/${siteId}/admin/bookings/day/${todayKey}`);
+                  }}
                   className="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-sm"
                 >
                   Today
                 </button>
                 <button
-                  onClick={() => setWeekStart(startOfWeek(addDays(weekStart, 7)))}
-                  className="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-sm"
+                  onClick={() => {
+                    // Move forward by 14 days (maintains Sunday anchor)
+                    const newStart = new Date(rangeStart);
+                    newStart.setDate(rangeStart.getDate() + 14);
+                    setRangeStart(newStart);
+                  }}
+                  className="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-sm flex items-center gap-1"
                 >
-                  Next →
+                  Next
+                  <ChevronLeft className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -479,151 +505,14 @@ export default function BookingsAdminPage() {
             ) : bookingsError ? (
               <p className="text-sm text-red-600 text-center py-8">Error: {bookingsError}</p>
             ) : (
-              <>
-                {/* Weekly Calendar Grid */}
-                <div className="grid grid-cols-7 gap-2 mb-6">
-                  {weekDays.map((day) => {
-                    const dayKey = formatYMD(day);
-                    const dayBookings = (bookingsByDay[dayKey] || []).filter(
-                      (b: any) => b.status === "confirmed"
-                    );
-                    const isSelected = selectedDay === dayKey;
-                    const isToday = dayKey === formatYMD(new Date());
-
-                    return (
-                      <div
-                        key={dayKey}
-                        onClick={() => setSelectedDay(dayKey)}
-                        className={`border rounded-lg p-2 cursor-pointer transition-colors min-h-[120px] ${
-                          isSelected
-                            ? "border-sky-500 bg-sky-50"
-                            : "border-slate-200 hover:border-slate-300"
-                        } ${isToday ? "bg-blue-50" : ""}`}
-                      >
-                        <div className="text-xs font-semibold text-slate-700 mb-1">
-                          {formatDayLabel(day)}
-                        </div>
-                        <div className="text-xs text-slate-500 mb-2">
-                          {dayBookings.length} {dayBookings.length === 1 ? "booking" : "bookings"}
-                        </div>
-                        <div className="space-y-1">
-                          {dayBookings.slice(0, 3).map((booking: any) => (
-                            <div
-                              key={booking.id}
-                              className="text-xs bg-sky-100 text-sky-700 rounded px-1 py-0.5 truncate"
-                              title={`${booking.time} ${booking.serviceName} (${booking.workerName || "Unassigned"})`}
-                            >
-                              {booking.time} {booking.serviceName}
-                            </div>
-                          ))}
-                          {dayBookings.length > 3 && (
-                            <div className="text-xs text-slate-500">
-                              +{dayBookings.length - 3} more
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Selected Day Bookings List */}
-                <div className="border-t border-slate-200 pt-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-slate-900">
-                      תורים עבור {formatDayLabel(new Date(selectedDay + "T00:00:00"))}
-                    </h3>
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm text-slate-600">בחר עובד:</label>
-                      <select
-                        value={selectedWorkerId || ""}
-                        onChange={(e) => setSelectedWorkerId(e.target.value || null)}
-                        className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 text-right"
-                      >
-                        <option value="">כל העובדים</option>
-                        {workers.map((worker) => (
-                          <option key={worker.id} value={worker.id}>
-                            {worker.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  {selectedDayBookings.length === 0 ? (
-                    <p className="text-sm text-slate-500 text-center py-8">
-                      {selectedWorkerId 
-                        ? `אין תורים עבור ${workers.find(w => w.id === selectedWorkerId)?.name || "עובד זה"} ביום זה`
-                        : "אין תורים ליום זה"}
-                    </p>
-                  ) : (
-                    <div className="space-y-3">
-                      {selectedDayBookings.map((booking: any) => {
-                        // Debug log to confirm date/time/startAt
-                        console.log("[Admin] booking date/time/startAt", 
-                          booking.date, 
-                          booking.time, 
-                          booking.startAt?.toDate?.()?.toString?.()
-                        );
-                        return (
-                        <div
-                          key={booking.id}
-                          className="p-4 border border-slate-200 rounded-lg hover:shadow-md transition-shadow"
-                        >
-                          <div className="flex justify-between items-start gap-4">
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm flex-1">
-                              <div>
-                                <span className="text-slate-600">שעה:</span>{" "}
-                                <span className="font-medium">{booking.time || "N/A"}</span>
-                              </div>
-                              <div>
-                                <span className="text-slate-600">שירות:</span>{" "}
-                                <span className="font-medium">{booking.serviceName || "N/A"}</span>
-                              </div>
-                              {!selectedWorkerId && (
-                                <div>
-                                  <span className="text-slate-600">עובד:</span>{" "}
-                                  <span className="font-medium">
-                                    {booking.workerName || booking.workerId || "לא מוקצה"}
-                                  </span>
-                                </div>
-                              )}
-                              <div>
-                                <span className="text-slate-600">לקוח:</span>{" "}
-                                <span className="font-medium">{booking.customerName || "N/A"}</span>
-                              </div>
-                              <div>
-                                <span className="text-slate-600">טלפון:</span>{" "}
-                                <span className="font-medium">{booking.customerPhone || "N/A"}</span>
-                              </div>
-                              <div>
-                                <span className="text-slate-600">סטטוס:</span>{" "}
-                                <span
-                                  className={`font-medium ${
-                                    booking.status === "confirmed"
-                                      ? "text-emerald-600"
-                                      : "text-red-600"
-                                  }`}
-                                >
-                                  {booking.status === "confirmed" ? "מאושר" : "בוטל"}
-                                </span>
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => onRequestDelete(booking)}
-                              disabled={deleting}
-                              className="px-3 py-2 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                            >
-                              מחק תור
-                            </button>
-                          </div>
-                        </div>
-                      );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </>
+              <TwoWeekCalendar
+                dateRange={dateRange}
+                bookingsByDay={bookingsByDay}
+                onDayClick={(date) => {
+                  // Navigation handled by TwoWeekCalendar component
+                }}
+                siteId={siteId}
+              />
             )}
           </div>
 

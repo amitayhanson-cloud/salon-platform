@@ -34,6 +34,7 @@ export type SiteService = {
   duration?: number;
   enabled?: boolean; // Default: true
   sortOrder?: number; // Default: 0
+  color?: string; // Hex color for service (e.g., "#3B82F6")
 };
 
 export type SiteConfig = {
@@ -77,6 +78,21 @@ export type SiteConfig = {
   };
   dividerStyle?: "none" | "wave" | "curve" | "angle";
   dividerHeight?: number;
+  /** Automatic deletion of archived (cancelled + expired) bookings. Stored at sites/{siteId}.config.archiveRetention */
+  archiveRetention?: ArchiveRetention;
+};
+
+/** Per-site setting for automatic deletion of archived bookings (cancelled + expired) */
+export type ArchiveRetention = {
+  autoDeleteEnabled: boolean;
+  frequency: "weekly";
+  weekday: number; // 0=Sunday, 1=Monday, ... 6=Saturday
+  hour: number; // 0-23
+  minute: number; // 0-59
+  timezone: string; // e.g. "Asia/Jerusalem"
+  deleteScope: "all" | "olderThanDays";
+  olderThanDays?: number; // e.g. keep last 30 days, delete older
+  lastRunAt?: string; // ISO string, set by Cloud Function to avoid double-runs
 };
 
 export const defaultThemeColors = {

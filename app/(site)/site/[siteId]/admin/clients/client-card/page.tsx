@@ -2,12 +2,13 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import { query, where, orderBy, onSnapshot, getDocs } from "firebase/firestore";
+import { query, where, orderBy, onSnapshot, getDocs, collection } from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
-import { bookingsCollection, clientsCollection } from "@/lib/firestorePaths";
+import { bookingsCollection } from "@/lib/firestorePaths";
 import { ChemicalCard } from "./ChemicalCard";
+import PersonalPricingTab from "./PersonalPricingTab";
 import AdminTabs from "@/components/ui/AdminTabs";
-import { createClient, checkClientExists, getAllClients, type ClientData } from "@/lib/firestoreClients";
+import { createClient, checkClientExists, type ClientData } from "@/lib/firestoreClients";
 
 
 interface Client {
@@ -35,13 +36,6 @@ interface Booking {
   price?: number; // If available
 }
 
-interface ServiceHistory {
-  serviceName: string;
-  serviceType?: string | null;
-  count: number;
-  lastDate: string; // YYYY-MM-DD
-}
-
 export default function ClientCardPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -59,8 +53,8 @@ export default function ClientCardPage() {
   const [searchQuery, setSearchQuery] = useState("");
   
   // Tab state for client details sections
-  type TabType = "bookings" | "services" | "chemistry";
-  const [activeTab, setActiveTab] = useState<TabType>("bookings");
+  type TabType = "chemistry" | "bookings" | "pricing";
+  const [activeTab, setActiveTab] = useState<TabType>("chemistry");
 
   // Add Client Modal State
   const [isAddClientModalOpen, setIsAddClientModalOpen] = useState(false);
@@ -77,11 +71,11 @@ export default function ClientCardPage() {
 
   // Extract clientId from URL as a primitive (stable dependency)
   const clientIdFromUrl = searchParams.get("clientId");
-  
+
   // Reset tab to default when client changes
   useEffect(() => {
     if (selectedClientId) {
-      setActiveTab("bookings");
+      setActiveTab("chemistry");
     }
   }, [selectedClientId]);
 
@@ -92,160 +86,58 @@ export default function ClientCardPage() {
     }
   }, [clientIdFromUrl]); // Only depend on the primitive value, not the searchParams object
 
-  // Load clients from both bookings and clients collection
+  // Load clients list ONLY from sites/{siteId}/clients. No merge with bookings; no fallbacks.
+  // State is REPLACED on every snapshot so deleted docs disappear immediately.
   useEffect(() => {
     if (!db || !siteId) return;
 
     setClientsLoading(true);
     setClientsError(null);
 
-    let bookingsQuery;
-    try {
-      bookingsQuery = query(bookingsCollection(siteId), orderBy("createdAt", "desc"));
-    } catch (e) {
-      // If orderBy fails (missing index), try without it
-      bookingsQuery = bookingsCollection(siteId);
-    }
+    const clientsPath = `sites/${siteId}/clients`;
+    const clientsRef = collection(db, "sites", siteId, "clients");
+    const clientsQuery = query(clientsRef);
 
-    // Store manual clients from clients collection
-    let manualClientsMap = new Map<string, ClientData>();
-    
-    // Function to merge clients from both sources
-    const mergeClients = (bookingsSnapshot: any, manualClients: ClientData[]) => {
-      const clientMap = new Map<string, Client>();
-      
-      // Process bookings
-      if (bookingsSnapshot) {
-        bookingsSnapshot.docs.forEach((doc: any) => {
-          const data = doc.data();
-          const phone = data.customerPhone || "";
-          const name = data.customerName || "";
-          
-          if (!phone || !name) return;
-          
-          const normalizedPhone = phone.replace(/\s|-|\(|\)/g, "");
-          
-          if (!clientMap.has(normalizedPhone)) {
-            const createdAt = data.createdAt?.toDate?.()?.toISOString() || data.createdAt || new Date().toISOString();
-            clientMap.set(normalizedPhone, {
-              id: normalizedPhone,
-              name,
-              phone: normalizedPhone,
-              email: data.customerEmail || undefined,
-              createdAt,
-              lastVisit: data.date || undefined,
-              totalBookings: 1,
-            });
-          } else {
-            const client = clientMap.get(normalizedPhone)!;
-            client.totalBookings += 1;
-            const bookingDate = data.date || "";
-            if (bookingDate && (!client.lastVisit || bookingDate > client.lastVisit)) {
-              client.lastVisit = bookingDate;
-            }
-            const bookingCreatedAt = data.createdAt?.toDate?.()?.toISOString() || data.createdAt;
-            if (bookingCreatedAt && client.createdAt && bookingCreatedAt < client.createdAt) {
-              client.createdAt = bookingCreatedAt;
-            }
-          }
-        });
-      }
-      
-      // Merge with manual clients
-      manualClients.forEach((manualClient) => {
-        const normalizedPhone = manualClient.phone.replace(/\s|-|\(|\)/g, "");
-        if (clientMap.has(normalizedPhone)) {
-          const existing = clientMap.get(normalizedPhone)!;
-          if (manualClient.email) existing.email = manualClient.email;
-          const manualDate = typeof manualClient.createdAt === 'string' 
-            ? manualClient.createdAt 
-            : manualClient.createdAt?.toDate?.()?.toISOString();
-          if (manualDate && existing.createdAt && manualDate < existing.createdAt) {
-            existing.createdAt = manualDate;
-          }
-        } else {
-          clientMap.set(normalizedPhone, {
-            id: normalizedPhone,
-            name: manualClient.name,
-            phone: normalizedPhone,
-            email: manualClient.email,
-            createdAt: typeof manualClient.createdAt === 'string' 
-              ? manualClient.createdAt 
-              : manualClient.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-            totalBookings: 0,
-          });
-        }
-      });
-      
-      return Array.from(clientMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-    };
-
-    let bookingsSnapshot: any = null;
-    
-    const unsubscribeBookings = onSnapshot(
-      bookingsQuery,
+    const unsubscribe = onSnapshot(
+      clientsQuery,
       (snapshot) => {
-        bookingsSnapshot = snapshot;
-        const manualClients = Array.from(manualClientsMap.values());
-        try {
-          const clientsList = mergeClients(bookingsSnapshot, manualClients);
-          setClients(clientsList);
-          setClientsLoading(false);
-        } catch (err) {
-          console.error("[ClientCard] Failed to process clients", err);
-          setClientsError("שגיאה בעיבוד רשימת הלקוחות");
-          setClientsLoading(false);
-        }
+        const docIds = snapshot.docs.map((d) => d.id);
+        console.log("[ClientCard] clients snapshot", {
+          path: clientsPath,
+          fromCache: snapshot.metadata?.fromCache ?? "unknown",
+          size: snapshot.size,
+          docIds,
+        });
+
+        // REPLACE state entirely from this snapshot (no append, no merge with bookings or previous state)
+        const mapped = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data();
+          if (data.archived === true) return null;
+          const phone = (data.phone || docSnap.id || "").replace(/\s|-|\(|\)/g, "") || docSnap.id;
+          return {
+            id: docSnap.id,
+            name: data.name || "",
+            phone,
+            email: data.email || undefined,
+            lastVisit: undefined,
+            createdAt: data.createdAt?.toDate?.()?.toISOString?.() ?? (typeof data.createdAt === "string" ? data.createdAt : undefined),
+            totalBookings: 0,
+          };
+        });
+        const list = mapped.filter((c) => c !== null).sort((a, b) => a.name.localeCompare(b.name)) as Client[];
+
+        setClients(list);
+        setClientsLoading(false);
       },
       (err) => {
-        console.error("[ClientCard] Failed to load bookings for clients", err);
+        console.error("[ClientCard] Failed to subscribe to clients collection", err);
         setClientsError("שגיאה בטעינת הלקוחות");
         setClientsLoading(false);
       }
     );
 
-    // Subscribe to manual clients collection for real-time updates
-    const unsubscribeManualClients = onSnapshot(
-      clientsCollection(siteId),
-      (snapshot) => {
-        manualClientsMap.clear();
-        snapshot.docs.forEach((doc) => {
-          const data = doc.data();
-          const normalizedPhone = (data.phone || "").replace(/\s|-|\(|\)/g, "");
-          if (normalizedPhone) {
-            manualClientsMap.set(normalizedPhone, {
-              id: doc.id,
-              name: data.name || "",
-              phone: normalizedPhone,
-              email: data.email || undefined,
-              notes: data.notes || undefined,
-              createdAt: data.createdAt,
-              updatedAt: data.updatedAt,
-            });
-          }
-        });
-        
-        // Re-merge with current bookings snapshot
-        if (bookingsSnapshot) {
-          try {
-            const manualClients = Array.from(manualClientsMap.values());
-            const clientsList = mergeClients(bookingsSnapshot, manualClients);
-            setClients(clientsList);
-          } catch (err) {
-            console.error("[ClientCard] Failed to merge clients", err);
-          }
-        }
-      },
-      (err) => {
-        console.error("[ClientCard] Failed to subscribe to clients collection", err);
-      }
-    );
-
-    return () => {
-      unsubscribeBookings();
-      unsubscribeManualClients();
-    };
-  }, [siteId]); // Only depend on siteId - this effect should run once per site
+    return () => unsubscribe();
+  }, [siteId]);
 
   // Load bookings for selected client
   useEffect(() => {
@@ -368,46 +260,15 @@ export default function ClientCardPage() {
     );
   }, [clients, searchQuery]);
 
-  // Calculate service history from bookings
-  const serviceHistory = useMemo(() => {
-    const serviceMap = new Map<string, ServiceHistory>();
-    
-    clientBookings.forEach((booking) => {
-      const key = booking.serviceType
-        ? `${booking.serviceName} - ${booking.serviceType}`
-        : booking.serviceName;
-      
-      if (!serviceMap.has(key)) {
-        serviceMap.set(key, {
-          serviceName: booking.serviceName,
-          serviceType: booking.serviceType || null,
-          count: 1,
-          lastDate: booking.date,
-        });
-      } else {
-        const history = serviceMap.get(key)!;
-        history.count += 1;
-        if (booking.date > history.lastDate) {
-          history.lastDate = booking.date;
-        }
-      }
-    });
-    
-    return Array.from(serviceMap.values()).sort((a, b) => {
-      // Sort by count (most frequent first), then by last date
-      if (b.count !== a.count) return b.count - a.count;
-      return b.lastDate.localeCompare(a.lastDate);
-    });
-  }, [clientBookings]);
 
-  // Build tabs array with proper typing
+  // Build tabs array with proper typing - "chemistry" is first (default)
   const clientTabs = useMemo<Array<{ key: TabType; label: string }>>(() => {
     return [
+      { key: "chemistry" as TabType, label: "כימיה" },
       { key: "bookings" as TabType, label: "היסטוריית תורים" },
-      ...(serviceHistory.length > 0 ? [{ key: "services" as TabType, label: "היסטוריית שירותים" }] : []),
-      { key: "chemistry" as TabType, label: "כרטיס כימיה" },
+      { key: "pricing" as TabType, label: "תמחור אישי" },
     ];
-  }, [serviceHistory.length]);
+  }, []);
 
   const handleClientSelect = (clientId: string) => {
     setSelectedClientId(clientId);
@@ -730,42 +591,17 @@ export default function ClientCardPage() {
                     </div>
                   )}
 
-                  {/* Service History Tab */}
-                  {activeTab === "services" && (
-                    <div>
-                      {serviceHistory.length === 0 ? (
-                        <p className="text-sm text-slate-500 text-center py-8">אין היסטוריית שירותים</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {serviceHistory.map((service, index) => (
-                            <div
-                              key={index}
-                              className="flex justify-between items-center p-3 bg-slate-50 rounded-lg"
-                            >
-                              <div>
-                                <p className="font-medium text-slate-900">
-                                  {service.serviceType
-                                    ? `${service.serviceName} - ${service.serviceType}`
-                                    : service.serviceName}
-                                </p>
-                                <p className="text-xs text-slate-600 mt-1">
-                                  ביקור אחרון: {new Date(service.lastDate + "T00:00:00").toLocaleDateString("he-IL")}
-                                </p>
-                              </div>
-                              <span className="text-sm font-semibold text-slate-700">
-                                {service.count} פעמים
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
                   {/* Chemical Card Tab */}
                   {activeTab === "chemistry" && (
                     <div>
-                      <ChemicalCard siteId={siteId} clientId={selectedClient.id} />
+                      <ChemicalCard siteId={siteId} phone={selectedClient.id} />
+                    </div>
+                  )}
+
+                  {/* Personal Pricing Tab */}
+                  {activeTab === "pricing" && (
+                    <div>
+                      <PersonalPricingTab siteId={siteId} phone={selectedClient.id} />
                     </div>
                   )}
                 </div>

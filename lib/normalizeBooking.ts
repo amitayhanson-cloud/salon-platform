@@ -136,7 +136,7 @@ export function normalizeBooking(doc: FirestoreDoc): NormalizedBooking {
         const phases = computePhases({
           startAt: startDate,
           durationMinutes: primaryDurationMin,
-          waitMinutes: waitMin,
+          waitMinutes: waitMinutes,
           followUpDurationMinutes: secondaryDurationMin,
         });
         secStart = phases.phase2StartAt;
@@ -148,12 +148,12 @@ export function normalizeBooking(doc: FirestoreDoc): NormalizedBooking {
             bookingId: doc.id,
             phase1Start: startDate.toISOString(),
             phase1End: phase1End.toISOString(),
-            waitMin,
+            waitMinutes,
             computedFollowUpStart: secStart.toISOString(),
             computedGapMin,
           });
-          if (computedGapMin !== waitMin) {
-            console.warn("[GAP] computedGapMin must equal waitMin", { computedGapMin, waitMin });
+          if (computedGapMin !== waitMinutes) {
+            console.warn("[GAP] computedGapMin must equal waitMinutes", { computedGapMin, waitMinutes });
           }
         }
       } else {

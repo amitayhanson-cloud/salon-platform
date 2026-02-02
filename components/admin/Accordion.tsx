@@ -13,23 +13,38 @@ interface AccordionItemProps {
 export function AccordionItem({ title, children, isOpen, onToggle }: AccordionItemProps) {
   return (
     <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between px-6 py-4 text-right hover:bg-slate-50 transition-colors cursor-pointer"
-      >
-        <div className="flex-1 text-right">
+      <div className="flex items-center justify-between px-6 py-4 text-right hover:bg-slate-50 transition-colors">
+        <div 
+          className="flex-1 text-right cursor-pointer"
+          onClick={onToggle}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onToggle();
+            }
+          }}
+          aria-label={isOpen ? "סגור" : "פתח"}
+        >
           {typeof title === "string" ? (
             <span className="text-sm font-semibold text-slate-900">{title}</span>
           ) : (
             title
           )}
         </div>
-        <ChevronDown
-          className={`w-5 h-5 text-slate-600 transition-transform duration-300 flex-shrink-0 ${
-            isOpen ? "rotate-180" : ""
-          }`}
-        />
-      </button>
+        <button
+          onClick={onToggle}
+          className="p-1 hover:bg-slate-100 rounded transition-colors flex-shrink-0"
+          aria-label={isOpen ? "סגור" : "פתח"}
+        >
+          <ChevronDown
+            className={`w-5 h-5 text-slate-600 transition-transform duration-300 ${
+              isOpen ? "rotate-180" : ""
+            }`}
+          />
+        </button>
+      </div>
       <div
         className={`overflow-hidden transition-all duration-300 ease-in-out ${
           isOpen ? "max-h-[5000px] opacity-100" : "max-h-0 opacity-0"

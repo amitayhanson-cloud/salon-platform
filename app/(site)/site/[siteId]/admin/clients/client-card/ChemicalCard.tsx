@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { doc, getDoc, setDoc, updateDoc, Timestamp } from "firebase/firestore";
-import { db } from "@/lib/firebaseClient";
-import { clientDoc } from "@/lib/firestorePaths";
+import { getDoc, setDoc, serverTimestamp, Timestamp, onSnapshot } from "firebase/firestore";
+import { clientDocRef } from "@/lib/firestoreClientRefs";
 import { Plus, Pencil, Trash2, X, Check } from "lucide-react";
 
 interface ColorEntry {
@@ -29,10 +28,14 @@ interface ChemicalCardData {
 
 interface ChemicalCardProps {
   siteId: string;
-  clientId: string; // phone number
+  phone: string; // phone number (document ID)
 }
 
-export function ChemicalCard({ siteId, clientId }: ChemicalCardProps) {
+export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
+  console.log("[ChemicalCard] mounted", { siteId, phone });
+
+  const canSave = Boolean(siteId && phone);
+
   const [chemicalData, setChemicalData] = useState<ChemicalCardData>({
     colors: [],
     oxygen: [],
@@ -57,20 +60,35 @@ export function ChemicalCard({ siteId, clientId }: ChemicalCardProps) {
     notes: "",
   });
 
-  // Load chemical card data
+  // Load chemical card data and subscribe to updates
   useEffect(() => {
-    if (!db || !siteId || !clientId) {
+    if (!siteId || !phone) {
       setLoading(false);
       return;
     }
 
-    const loadChemicalCard = async () => {
-      try {
-        const clientRef = clientDoc(siteId, clientId);
-        const clientSnap = await getDoc(clientRef);
+    const clientRef = clientDocRef(siteId, phone);
+    console.log("[ChemicalCard] Setting up subscription", {
+      siteId,
+      phone,
+      path: clientRef.path,
+      fullPath: `sites/${siteId}/clients/${phone}`,
+    });
 
-        if (clientSnap.exists()) {
-          const data = clientSnap.data();
+    setLoading(true);
+
+    // Subscribe to client document for real-time updates
+    const unsubscribe = onSnapshot(
+      clientRef,
+      (snapshot) => {
+        console.log("[ChemicalCard] Subscription update", {
+          exists: snapshot.exists(),
+          hasChemicalCard: !!snapshot.data()?.chemicalCard,
+          chemicalCard: snapshot.data()?.chemicalCard,
+        });
+
+        if (snapshot.exists()) {
+          const data = snapshot.data();
           const chemicalCard = data.chemicalCard || { colors: [], oxygen: [] };
           
           // Convert Timestamps to objects for state
@@ -86,26 +104,50 @@ export function ChemicalCard({ siteId, clientId }: ChemicalCardProps) {
           });
         } else {
           // Client doc doesn't exist yet, initialize with empty data
+          console.log("[ChemicalCard] Client doc does not exist in subscription, initializing empty");
           setChemicalData({ colors: [], oxygen: [] });
         }
-      } catch (err) {
-        console.error("[ChemicalCard] Failed to load", err);
-      } finally {
+        setLoading(false);
+      },
+      (error) => {
+        console.error("[ChemicalCard] Subscription error", {
+          siteId,
+          phone,
+          error,
+          errorMessage: error.message,
+        });
         setLoading(false);
       }
-    };
+    );
 
-    loadChemicalCard();
-  }, [siteId, clientId]);
+    return () => unsubscribe();
+  }, [siteId, phone]);
 
   const saveChemicalCard = async (data: ChemicalCardData) => {
-    if (!db || !siteId || !clientId) return;
+    console.log("[ChemicalCard] saveChemicalCard called", { siteId, phone });
+
+    if (!siteId || !phone) {
+      console.error("[ChemicalCard] Missing siteId or phone", { siteId, phone });
+      setSaveMessage("שגיאה: חסר siteId או מספר טלפון");
+      setTimeout(() => setSaveMessage(""), 5000);
+      return;
+    }
+
+    if (!data || (data.colors?.length === 0 && data.oxygen?.length === 0)) {
+      console.warn("[ChemicalCard] Empty chemical card – aborting save", { data });
+      // Don't abort - allow saving empty state
+    }
 
     setSaving(true);
     setSaveMessage("");
 
     try {
-      const clientRef = clientDoc(siteId, clientId);
+      const clientRef = clientDocRef(siteId, phone);
+      
+      console.log("[ChemicalCard] Writing to", {
+        path: clientRef.path,
+        fullPath: `sites/${siteId}/clients/${phone}`,
+      });
       
       // Convert data to Firestore format (ensure no undefined)
       const firestoreData: any = {
@@ -128,17 +170,53 @@ export function ChemicalCard({ siteId, clientId }: ChemicalCardProps) {
               ? o.createdAt 
               : Timestamp.fromDate(new Date(o.createdAt || new Date())),
           })),
+          updatedAt: serverTimestamp(),
         },
       };
 
       // Use setDoc with merge to create document if it doesn't exist
       await setDoc(clientRef, firestoreData, { merge: true });
+      console.log("[ChemicalCard] Firestore write OK");
+      
+      // Hard verification: Read-after-write
+      const verifySnap = await getDoc(clientRef);
+      console.log("[ChemicalCard] POST-SAVE SNAP", {
+        exists: verifySnap.exists(),
+        chemicalCard: verifySnap.data()?.chemicalCard,
+        hasChemicalCard: !!verifySnap.data()?.chemicalCard,
+        colorsCount: verifySnap.data()?.chemicalCard?.colors?.length || 0,
+        oxygenCount: verifySnap.data()?.chemicalCard?.oxygen?.length || 0,
+      });
+
+      if (!verifySnap.exists()) {
+        throw new Error(`Save failed: client document does not exist at ${clientRef.path}`);
+      }
+      
+      const verifyData = verifySnap.data();
+      if (!verifyData?.chemicalCard) {
+        throw new Error("POST-SAVE verification failed: chemicalCard NOT persisted");
+      }
+      
+      console.log("[ChemicalCard] POST-SAVE verification passed", {
+        siteId,
+        phone,
+        path: clientRef.path,
+        verified: true,
+      });
+      
       setSaveMessage("נשמר בהצלחה");
       setTimeout(() => setSaveMessage(""), 2000);
     } catch (err) {
-      console.error("[ChemicalCard] Failed to save", err);
-      setSaveMessage("שגיאה בשמירה");
-      setTimeout(() => setSaveMessage(""), 3000);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      console.error("[ChemicalCard] Failed to save", {
+        siteId,
+        phone,
+        path: `sites/${siteId}/clients/${phone}`,
+        error: err,
+        errorMessage,
+      });
+      setSaveMessage(`שגיאה בשמירה: ${errorMessage}`);
+      setTimeout(() => setSaveMessage(""), 5000);
     } finally {
       setSaving(false);
     }
@@ -146,6 +224,12 @@ export function ChemicalCard({ siteId, clientId }: ChemicalCardProps) {
 
   // Color handlers
   const handleAddColor = () => {
+    console.log("[ChemicalCard] handleAddColor called", {
+      colorForm,
+      siteId,
+      phone,
+    });
+
     if (!colorForm.colorNumber.trim() || !colorForm.amount.trim()) {
       alert("יש להזין מספר צבע וכמות");
       return;
@@ -180,12 +264,22 @@ export function ChemicalCard({ siteId, clientId }: ChemicalCardProps) {
   };
 
   const handleSaveColor = () => {
+    console.log("[ChemicalCard] handleSaveColor called", {
+      colorForm,
+      editingColorId,
+      siteId,
+      phone,
+    });
+
     if (!colorForm.colorNumber.trim() || !colorForm.amount.trim()) {
       alert("יש להזין מספר צבע וכמות");
       return;
     }
 
-    if (!editingColorId) return;
+    if (!editingColorId) {
+      console.warn("[ChemicalCard] handleSaveColor: no editingColorId");
+      return;
+    }
 
     const updated = {
       ...chemicalData,
@@ -221,6 +315,12 @@ export function ChemicalCard({ siteId, clientId }: ChemicalCardProps) {
 
   // Oxygen handlers
   const handleAddOxygen = () => {
+    console.log("[ChemicalCard] handleAddOxygen called", {
+      oxygenForm,
+      siteId,
+      phone,
+    });
+
     if (!oxygenForm.percentage.trim() || !oxygenForm.amount.trim()) {
       alert("יש להזין אחוז וכמות");
       return;
@@ -255,12 +355,22 @@ export function ChemicalCard({ siteId, clientId }: ChemicalCardProps) {
   };
 
   const handleSaveOxygen = () => {
+    console.log("[ChemicalCard] handleSaveOxygen called", {
+      oxygenForm,
+      editingOxygenId,
+      siteId,
+      phone,
+    });
+
     if (!oxygenForm.percentage.trim() || !oxygenForm.amount.trim()) {
       alert("יש להזין אחוז וכמות");
       return;
     }
 
-    if (!editingOxygenId) return;
+    if (!editingOxygenId) {
+      console.warn("[ChemicalCard] handleSaveOxygen: no editingOxygenId");
+      return;
+    }
 
     const updated = {
       ...chemicalData,
@@ -298,6 +408,16 @@ export function ChemicalCard({ siteId, clientId }: ChemicalCardProps) {
     return (
       <div className="border-t border-slate-200 pt-6 mt-6">
         <p className="text-sm text-slate-500 text-center py-4">טוען כרטיס כימיה…</p>
+      </div>
+    );
+  }
+
+  if (!canSave) {
+    return (
+      <div className="border-t border-slate-200 pt-6 mt-6">
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-right">
+          <p className="text-sm text-amber-800">חסר מזהה אתר או מספר טלפון – לא ניתן לשמור כרטיס כימיה.</p>
+        </div>
       </div>
     );
   }
@@ -372,8 +492,18 @@ export function ChemicalCard({ siteId, clientId }: ChemicalCardProps) {
             </div>
             <div className="flex gap-2 justify-start">
               <button
-                onClick={handleAddColor}
-                disabled={saving}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log("[ChemicalCard] SAVE BUTTON CLICKED (Add Color)", {
+                    siteId,
+                    phone,
+                    formState: colorForm,
+                  });
+                  handleAddColor();
+                }}
+                disabled={!canSave || saving}
                 className="px-3 py-1.5 bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 text-white rounded text-sm font-medium"
               >
                 שמור
@@ -441,8 +571,19 @@ export function ChemicalCard({ siteId, clientId }: ChemicalCardProps) {
                       </div>
                       <div className="md:col-span-3 flex gap-2 justify-start">
                         <button
-                          onClick={handleSaveColor}
-                          disabled={saving}
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            console.log("[ChemicalCard] SAVE BUTTON CLICKED (Edit Color)", {
+                              siteId,
+                              phone,
+                              editingColorId,
+                              formState: colorForm,
+                            });
+                            handleSaveColor();
+                          }}
+                          disabled={!canSave || saving}
                           className="px-3 py-1.5 bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 text-white rounded text-sm font-medium"
                         >
                           שמור
@@ -559,8 +700,18 @@ export function ChemicalCard({ siteId, clientId }: ChemicalCardProps) {
             </div>
             <div className="flex gap-2 justify-start">
               <button
-                onClick={handleAddOxygen}
-                disabled={saving}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log("[ChemicalCard] SAVE BUTTON CLICKED (Add Oxygen)", {
+                    siteId,
+                    phone,
+                    formState: oxygenForm,
+                  });
+                  handleAddOxygen();
+                }}
+                disabled={!canSave || saving}
                 className="px-3 py-1.5 bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 text-white rounded text-sm font-medium"
               >
                 שמור
@@ -628,8 +779,19 @@ export function ChemicalCard({ siteId, clientId }: ChemicalCardProps) {
                       </div>
                       <div className="md:col-span-3 flex gap-2 justify-start">
                         <button
-                          onClick={handleSaveOxygen}
-                          disabled={saving}
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            console.log("[ChemicalCard] SAVE BUTTON CLICKED (Edit Oxygen)", {
+                              siteId,
+                              phone,
+                              editingOxygenId,
+                              formState: oxygenForm,
+                            });
+                            handleSaveOxygen();
+                          }}
+                          disabled={!canSave || saving}
                           className="px-3 py-1.5 bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 text-white rounded text-sm font-medium"
                         >
                           שמור

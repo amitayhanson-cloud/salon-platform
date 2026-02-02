@@ -30,6 +30,9 @@ import type { SiteService } from "@/types/siteConfig";
 import { subscribePricingItems } from "@/lib/firestorePricing";
 import type { PricingItem } from "@/types/pricingItem";
 import type { OpeningHours } from "@/types/booking";
+import { getWorkerBusyIntervals, overlaps } from "@/lib/bookingPhases";
+import { canWorkerPerformService, workersWhoCanPerformService } from "@/lib/workerServiceCompatibility";
+import { resolvePhase2Worker } from "@/lib/phase2Assignment";
 
 type BookingStep = 1 | 2 | 3 | 4 | 5 | 6; // 6 = success
 
@@ -52,13 +55,34 @@ export default function BookingPage() {
   const [workersLoading, setWorkersLoading] = useState<boolean>(true);
   const [workersError, setWorkersError] = useState<string | null>(null);
   
-  // Bookings for filtering
-  const [bookingsForDate, setBookingsForDate] = useState<Array<{ workerId: string | null; time: string; status: string }>>([]);
+  type BookingForDate = {
+    id: string;
+    workerId: string | null;
+    time: string;
+    status: string;
+    durationMin?: number;
+    date?: string;
+    waitMin?: number;
+    waitMinutes?: number;
+    secondaryDurationMin?: number;
+    secondaryWorkerId?: string | null;
+    secondaryStartAt?: { toDate: () => Date };
+    secondaryEndAt?: { toDate: () => Date };
+    startAt?: { toDate: () => Date };
+    endAt?: { toDate: () => Date };
+    followUpStartAt?: { toDate: () => Date };
+    followUpEndAt?: { toDate: () => Date };
+    followUpWorkerId?: string | null;
+    followUpServiceId?: string | null;
+    phases?: Array<{ kind: string; startAt: { toDate: () => Date }; endAt: { toDate: () => Date }; durationMin: number; workerId?: string | null }>;
+  };
+  const [bookingsForDate, setBookingsForDate] = useState<BookingForDate[]>([]);
 
   // Booking form state
   const [selectedService, setSelectedService] = useState<SiteService | null>(null);
   const [selectedPricingItem, setSelectedPricingItem] = useState<PricingItem | null>(null);
   const [selectedWorker, setSelectedWorker] = useState<{ id: string; name: string } | null>(null);
+  const [phase2WorkerAssigned, setPhase2WorkerAssigned] = useState<{ id: string; name: string } | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string>("");
   const [clientName, setClientName] = useState("");
@@ -177,23 +201,12 @@ export default function BookingPage() {
   // FILTERING FUNCTIONS (Single Responsibility)
   // ============================================================================
 
-  // Filter 1: Check if worker can perform a service
+  // Filter 1: Centralized worker–service compatibility (single source of truth)
   function workerCanDoService(
     worker: { services?: string[]; active?: boolean },
-    serviceId: string
+    serviceIdOrName: string
   ): boolean {
-    // Worker must be active
-    if (worker.active === false) {
-      return false;
-    }
-
-    // If worker has no services assigned, they are available for ALL services (backward compatibility)
-    if (!Array.isArray(worker.services) || worker.services.length === 0) {
-      return true;
-    }
-
-    // Worker must be assigned to this service
-    return worker.services.includes(serviceId);
+    return canWorkerPerformService(worker, serviceIdOrName);
   }
 
   // Filter 2: Check if worker is working on a date (business hours + worker availability)
@@ -286,32 +299,18 @@ export default function BookingPage() {
     }
   }
 
-  // Filter 6: Check if slot conflicts with existing bookings
-  function doesSlotConflictWithBookings(
+  // Filter 6: Check if slot conflicts with worker-blocking phases only (primary + secondary; wait ignored)
+  function doesSlotConflictWithWorker(
     slotStartMinutes: number,
     slotEndMinutes: number,
     workerId: string,
-    bookingsForDate: Array<{ workerId: string | null; time: string; status: string }>
+    bookings: BookingForDate[],
+    dateStr: string
   ): boolean {
-    return bookingsForDate.some((booking) => {
-      // Only check confirmed bookings
-      if (booking.status !== "confirmed") {
-        return false;
-      }
-
-      // Only check bookings for this worker
-      if (booking.workerId !== workerId) {
-        return false;
-      }
-
-      // Check time overlap
-      const bookingStartMinutes = timeToMinutes(booking.time);
-      // Assume booking duration is at least 30 minutes (or use service duration if available)
-      const bookingEndMinutes = bookingStartMinutes + 30; // Default duration
-
-      // Check if slots overlap
-      return !(slotEndMinutes <= bookingStartMinutes || slotStartMinutes >= bookingEndMinutes);
-    });
+    const busyIntervals = getWorkerBusyIntervals(bookings, workerId, dateStr);
+    return busyIntervals.some((interval) =>
+      overlaps(slotStartMinutes, slotEndMinutes, interval.startMin, interval.endMin)
+    );
   }
 
   // Helper: Check if a time slot fits within a worker's working hours
@@ -575,19 +574,37 @@ export default function BookingPage() {
     const q = query(
       bookingsCollection(siteId),
       where("date", "==", dateStr),
-      where("status", "==", "confirmed")
+      where("status", "in", ["confirmed", "active"])
     );
 
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const bookings: Array<{ workerId: string | null; time: string; status: string }> = [];
+        const bookings: BookingForDate[] = [];
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
+          const timeVal = data.timeHHmm ?? data.time ?? "";
+          const durationMin = data.durationMin ?? data.duration ?? 60;
           bookings.push({
+            id: docSnap.id,
             workerId: data.workerId || null,
-            time: data.time || "",
+            time: timeVal,
             status: data.status || "confirmed",
+            durationMin: typeof durationMin === "number" ? durationMin : 60,
+            date: dateStr,
+            startAt: data.startAt,
+            endAt: data.endAt,
+            waitMin: data.waitMin ?? data.waitMinutes ?? 0,
+            waitMinutes: data.waitMinutes ?? data.waitMin ?? 0,
+            secondaryDurationMin: data.secondaryDurationMin ?? 0,
+            secondaryWorkerId: data.secondaryWorkerId ?? null,
+            secondaryStartAt: data.secondaryStartAt,
+            secondaryEndAt: data.secondaryEndAt,
+            followUpStartAt: data.followUpStartAt,
+            followUpEndAt: data.followUpEndAt,
+            followUpWorkerId: data.followUpWorkerId ?? null,
+            followUpServiceId: data.followUpServiceId ?? null,
+            phases: data.phases,
           });
         });
         setBookingsForDate(bookings);
@@ -612,16 +629,14 @@ export default function BookingPage() {
       serviceId: service.name,
       service: service.name,
       type: null,
-      durationMinMinutes: 30, // Default duration
+      durationMinMinutes: 30,
       durationMaxMinutes: 30,
-      price: undefined, // No price - will display "מחיר לפי בקשה"
+      price: undefined,
       priceRangeMin: undefined,
       priceRangeMax: undefined,
       notes: undefined,
       hasFollowUp: false,
-      followUpServiceId: null,
-      followUpDurationMinutes: null,
-      followUpWaitMinutes: null,
+      followUp: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       order: 0,
@@ -728,12 +743,21 @@ export default function BookingPage() {
   // Generate available dates for current window
   const availableDates = generateDateWindow(dateWindowStart, DATE_WINDOW_SIZE);
 
+  // Phase 2 service identifier (for worker–service compatibility): name from follow-up; workers store service names
+  const phase2ServiceName = selectedPricingItem?.followUp?.name?.trim() ?? "";
+
+  // Workers who can perform phase 2 service (used for phase 2 selector and slot feasibility)
+  const workersWhoCanDoPhase2 = (() => {
+    if (!phase2ServiceName) return [];
+    return workersWhoCanPerformService(workers, phase2ServiceName);
+  })();
+
   // ============================================================================
-  // STEP 1 → STEP 2: Filter workers by service assignment (Rank 3)
+  // STEP 1 → STEP 2: Filter workers by phase 1 service + phase 2 feasibility gate
   // ============================================================================
-  // After selecting a service, show ONLY workers who:
-  // - are active/enabled
-  // - are assigned to this service (or have no assignment = available for all)
+  // Show ONLY workers who:
+  // - can perform phase 1 service (Rank 3)
+  // - If service has follow-up: at least one worker (possibly same or different) can do phase 2; otherwise no one is offered
   const eligibleWorkers = (() => {
     if (!selectedService) {
       if (process.env.NODE_ENV !== "production") {
@@ -741,32 +765,22 @@ export default function BookingPage() {
       }
       return [];
     }
-    const serviceId = selectedService.name; // Service name is the ID
-    
-    const filtered = workers.filter((worker) => {
-      const canDo = workerCanDoService(worker, serviceId);
+    const phase1ServiceName = selectedService.name;
+
+    const canDoPhase1 = workers.filter((worker) => canWorkerPerformService(worker, phase1ServiceName));
+
+    const hasFollowUp = (selectedPricingItem?.hasFollowUp === true && selectedPricingItem?.followUp?.durationMinutes >= 1) ?? false;
+    if (hasFollowUp && phase2ServiceName && workersWhoCanDoPhase2.length === 0) {
       if (process.env.NODE_ENV !== "production") {
-        if (canDo) {
-          console.log(`[Booking] Step 1→2: Worker "${worker.name}" CAN do service "${serviceId}"`);
-        } else {
-          console.log(`[Booking] Step 1→2: Worker "${worker.name}" CANNOT do service "${serviceId}" (active=${worker.active}, services=${JSON.stringify(worker.services)})`);
-        }
+        console.log("[Booking] Step 1→2: Phase 2 service required but no worker can do it – no booking option");
       }
-      return canDo;
-    });
-    
-    if (process.env.NODE_ENV !== "production") {
-      console.log(`[Booking] Step 1→2: Service "${serviceId}" - Total workers: ${workers.length}, Eligible: ${filtered.length}`);
-      if (filtered.length === 0 && workers.length > 0) {
-        console.warn(`[Booking] Step 1→2: No eligible workers found. Workers:`, workers.map(w => ({ 
-          name: w.name, 
-          active: w.active,
-          hasServices: Array.isArray(w.services) && w.services.length > 0,
-          services: w.services || []
-        })));
-      }
+      return [];
     }
-    return filtered;
+
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[Booking] Step 1→2: Phase 1 "${phase1ServiceName}" – eligible: ${canDoPhase1.length}; phase 2 "${phase2ServiceName || "—"}" – can do: ${workersWhoCanDoPhase2.length}`);
+    }
+    return canDoPhase1;
   })();
 
   // Reset worker and pricing item selection when service changes
@@ -803,6 +817,8 @@ export default function BookingPage() {
       setSelectedDate(null);
     }
   }, [selectedWorker]);
+
+  const hasSecondaryPhase = (selectedPricingItem?.secondaryDurationMin ?? selectedPricingItem?.followUp?.durationMinutes ?? 0) > 0;
 
   // Debug: Log worker availability when date is selected (dev only)
   useEffect(() => {
@@ -891,16 +907,55 @@ export default function BookingPage() {
     try {
       const bookingDate = ymdLocal(selectedDate);
       console.log("[BookingSubmit] date:", bookingDate, "time:", selectedTime);
-      
+
+      const hasSecondary = selectedPricingItem.hasFollowUp === true && !!selectedPricingItem.followUp?.name?.trim();
+      const primaryDurationMin = selectedPricingItem.durationMaxMinutes ?? selectedPricingItem.durationMinMinutes ?? 30;
+      const waitMin = selectedPricingItem.followUp?.waitMinutes ?? 0;
+      const phase2DurationMin = selectedPricingItem.followUp?.durationMinutes ?? 0;
+      const phase2ServiceName = selectedPricingItem.followUp?.name?.trim() ?? "";
+
+      let secondaryWorker: { id: string; name: string } | null = null;
+      if (hasSecondary && phase2ServiceName && phase2DurationMin >= 1 && selectedWorker) {
+        const slotStartMinutes = timeToMinutes(selectedTime);
+        const workerWindowByWorkerId: Record<string, { startMin: number; endMin: number } | null> = {};
+        for (const w of workers) {
+          workerWindowByWorkerId[w.id] = getWorkerWorkingWindow(w, selectedDate!);
+        }
+        const businessWindow = getBusinessWindow(selectedDate!);
+        secondaryWorker = resolvePhase2Worker({
+          phase1Worker: { id: selectedWorker.id, name: selectedWorker.name },
+          dateStr: bookingDate,
+          phase1StartMinutes: slotStartMinutes,
+          phase1DurationMin: primaryDurationMin,
+          waitMin,
+          phase2DurationMin,
+          phase2ServiceName,
+          workers,
+          bookingsForDate,
+          workerWindowByWorkerId,
+          businessWindow: businessWindow ?? undefined,
+        });
+      }
+
+      const secondaryServiceName = selectedPricingItem.followUp?.name?.trim() ?? null;
+      const secondaryServiceType = null;
+      const secondaryServiceColor = null;
+
       await saveBooking(
         siteId,
         {
-          serviceId: selectedService.name, // Use service name as ID
+          serviceId: selectedService.name,
           serviceName: selectedService.name,
-          serviceType: selectedPricingItem.type || null, // Include type if selected
-          pricingItemId: selectedPricingItem.id || null, // Include pricing item ID
+          serviceType: selectedPricingItem.type || null,
+          pricingItemId: selectedPricingItem.id || null,
+          serviceColor: selectedService.color || null,
           workerId: selectedWorker?.id || null,
           workerName: selectedWorker?.name || null,
+          secondaryWorkerId: secondaryWorker?.id ?? null,
+          secondaryWorkerName: secondaryWorker?.name ?? null,
+          secondaryServiceName: secondaryServiceName ?? undefined,
+          secondaryServiceType: secondaryServiceType ?? undefined,
+          secondaryServiceColor: secondaryServiceColor ?? undefined,
           date: bookingDate,
           time: selectedTime,
           name: clientName.trim(),
@@ -908,8 +963,10 @@ export default function BookingPage() {
           note: clientNote.trim() || undefined,
           createdAt: new Date().toISOString(),
         },
-        selectedPricingItem // Pass pricing item for duration calculation
+        selectedPricingItem,
+        selectedService.color
       );
+      setPhase2WorkerAssigned(secondaryWorker);
       setStep(6); // Show success
     } catch (err) {
       console.error("Failed to save booking", err);
@@ -1043,6 +1100,14 @@ export default function BookingPage() {
                   {selectedWorker?.name}
                 </span>
               </div>
+              {phase2WorkerAssigned && (
+                <div className="flex justify-between items-center pb-3 border-b" style={{ borderColor: "var(--border)" }}>
+                  <span className="text-sm" style={{ color: "var(--muted)" }}>המשך טיפול יבוצע על ידי:</span>
+                  <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                    {phase2WorkerAssigned.name}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between items-center pb-3 border-b" style={{ borderColor: "var(--border)" }}>
                 <span className="text-sm" style={{ color: "var(--muted)" }}>תאריך:</span>
                 <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
@@ -1201,14 +1266,12 @@ export default function BookingPage() {
     const serviceDurationMinutes = selectedPricingItem
       ? selectedPricingItem.durationMaxMinutes || selectedPricingItem.durationMinMinutes || 30
       : 30;
-    const slotSize = bookingSettings.slotMinutes;
-    
-    // At least one slot must fit
-    const canFitSlot = (effectiveEnd - effectiveStart) >= Math.max(slotSize, serviceDurationMinutes);
-    
+    const slotIntervalMinutes = 15; // Time picker uses 15-min steps
+    const canFitSlot = (effectiveEnd - effectiveStart) >= Math.max(slotIntervalMinutes, serviceDurationMinutes);
+
     if (!canFitSlot) {
       if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
-        console.log(`[Booking] Step 2→3: Date ${ymdLocal(date)} disabled - no slots can fit (window=${effectiveEnd - effectiveStart}min, need=${Math.max(slotSize, serviceDurationMinutes)}min)`);
+        console.log(`[Booking] Step 2→3: Date ${ymdLocal(date)} disabled - no slots can fit (window=${effectiveEnd - effectiveStart}min, need=${Math.max(slotIntervalMinutes, serviceDurationMinutes)}min)`);
       }
       return false;
     }
@@ -1229,8 +1292,10 @@ export default function BookingPage() {
   // - slot duration fits fully (service duration)
   // - does not conflict with existing bookings for that worker (Rank 4)
   
-  // Generate time slots based on business hours (Rank 1)
-  const generateTimeSlotsForDate = (): string[] => {
+  // Generate time slots based on business hours (Rank 1).
+  // Last selectable start = close - durationMin (e.g. close 19:00, duration 30 → last start 18:30).
+  // durationMin: service duration in minutes; default 30 if unknown.
+  const generateTimeSlotsForDate = (durationMin: number = 30): string[] => {
     if (!selectedDate) return [];
 
     const businessDayConfig = resolveBusinessDayConfig(selectedDate);
@@ -1242,46 +1307,49 @@ export default function BookingPage() {
       return [];
     }
 
-    const startMin = timeToMinutes(businessDayConfig.start);
-    const endMin = timeToMinutes(businessDayConfig.end);
-    const slotSize = bookingSettings.slotMinutes;
+    const openMin = timeToMinutes(businessDayConfig.start);
+    const closeMin = timeToMinutes(businessDayConfig.end);
+    const slotIntervalMinutes = 15; // Time picker: 15-minute increments (00, 15, 30, 45)
 
-    // Validate hours
-    if (endMin <= startMin) {
+    if (closeMin <= openMin) {
       if (process.env.NODE_ENV !== "production") {
         console.warn(`[Booking] Step 3→4: Invalid hours for date ${ymdLocal(selectedDate)}: ${businessDayConfig.start}-${businessDayConfig.end}`);
       }
       return [];
     }
 
-    // Generate slots
-    const slots: string[] = [];
-    let currentTime = startMin;
+    // Last valid start time so the booking fits before close: closeMin - durationMin
+    const lastStartMin = closeMin - durationMin;
+    if (lastStartMin < openMin) return [];
 
-    while (currentTime + slotSize <= endMin) {
+    const slots: string[] = [];
+    let currentTime = openMin;
+
+    while (currentTime <= lastStartMin) {
       slots.push(minutesToTime(currentTime));
-      currentTime += slotSize;
+      currentTime += slotIntervalMinutes;
     }
 
     if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
-      console.log(`[Booking] Step 3→4: Generated ${slots.length} slots for date ${ymdLocal(selectedDate)} (business hours: ${businessDayConfig.start}-${businessDayConfig.end})`);
+      console.log(`[Booking] Step 3→4: Generated ${slots.length} slots for date ${ymdLocal(selectedDate)} (open=${minutesToTime(openMin)} close=${minutesToTime(closeMin)} duration=${durationMin}min lastStart=${minutesToTime(lastStartMin)})`);
     }
 
     return slots;
   };
 
-  // Filter time slots using the availability hierarchy
+  // Filter time slots: only show slots where phase 1 is valid AND phase 2 can be fulfilled (auto-assigned)
   const availableTimeSlots = (() => {
     if (!selectedDate || !selectedService || !selectedWorker) return [];
 
-    const generatedSlots = generateTimeSlotsForDate();
-    
-    // Get service duration from selected pricing item (or default)
-    const serviceDurationMinutes = selectedPricingItem
+    const primaryDurationMin = selectedPricingItem
       ? selectedPricingItem.durationMaxMinutes || selectedPricingItem.durationMinMinutes || 30
-      : 30; // Default 30 minutes if no pricing item selected
-    
-    // Find the selected worker object
+      : 30;
+    const waitMin = selectedPricingItem?.followUp?.waitMinutes ?? 0;
+    const secondaryDurationMin = selectedPricingItem?.followUp?.durationMinutes ?? 0;
+    const phase2ServiceName = selectedPricingItem?.followUp?.name?.trim() ?? "";
+
+    const generatedSlots = generateTimeSlotsForDate(primaryDurationMin);
+
     const worker = workers.find(w => w.id === selectedWorker.id);
     if (!worker) {
       if (process.env.NODE_ENV !== "production") {
@@ -1290,46 +1358,69 @@ export default function BookingPage() {
       return [];
     }
 
-    // Get windows for filtering
     const businessWindow = getBusinessWindow(selectedDate);
     const workerWindow = getWorkerWorkingWindow(worker, selectedDate);
+
+    const dateStr = ymdLocal(selectedDate);
+    const workerWindowByWorkerId: Record<string, { startMin: number; endMin: number } | null> = {};
+    for (const w of workers) {
+      workerWindowByWorkerId[w.id] = getWorkerWorkingWindow(w, selectedDate);
+    }
 
     if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
       console.log(`[Booking] Step 3→4: Filtering slots for date ${ymdLocal(selectedDate)}, worker "${worker.name}"`, {
         generatedSlots: generatedSlots.length,
+        primaryDurationMin,
+        waitMin,
+        secondaryDurationMin,
         businessWindow: businessWindow ? `${minutesToTime(businessWindow.startMin)}-${minutesToTime(businessWindow.endMin)}` : "closed",
         workerWindow: workerWindow ? `${minutesToTime(workerWindow.startMin)}-${minutesToTime(workerWindow.endMin)}` : "no config",
-        serviceDurationMinutes,
       });
     }
 
-    // Filter slots using the hierarchy
     let filteredByBusiness = 0;
     let filteredByWorker = 0;
     let filteredByConflicts = 0;
+    let filteredByPhase2 = 0;
 
     const availableSlots = generatedSlots.filter((time) => {
       const slotStartMinutes = timeToMinutes(time);
-      const slotEndMinutes = slotStartMinutes + serviceDurationMinutes;
+      const slotEndMinutes = slotStartMinutes + primaryDurationMin;
 
-      // Rank 1 + Rank 2: Check if slot fits within business and worker windows
+      // Rank 1 + Rank 2: Primary window within business and primary worker hours
       if (!isSlotWithinWindows(slotStartMinutes, slotEndMinutes, businessWindow, workerWindow)) {
         if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
-          if (!businessWindow) {
-            filteredByBusiness++;
-          } else if (!workerWindow || slotStartMinutes < Math.max(businessWindow.startMin, workerWindow.startMin) || slotEndMinutes > Math.min(businessWindow.endMin, workerWindow.endMin)) {
-            filteredByWorker++;
-          }
+          if (!businessWindow) filteredByBusiness++;
+          else if (!workerWindow || slotStartMinutes < Math.max(businessWindow.startMin, workerWindow.startMin) || slotEndMinutes > Math.min(businessWindow.endMin, workerWindow.endMin)) filteredByWorker++;
         }
         return false;
       }
 
-      // Rank 4: Check for booking conflicts
-      if (doesSlotConflictWithBookings(slotStartMinutes, slotEndMinutes, worker.id, bookingsForDate)) {
-        if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
-          filteredByConflicts++;
-        }
+      // Rank 4: Primary worker free during primary window
+      if (doesSlotConflictWithWorker(slotStartMinutes, slotEndMinutes, worker.id, bookingsForDate, dateStr)) {
+        if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") filteredByConflicts++;
         return false;
+      }
+
+      // Hard gate: multi-phase — only show slot if phase 2 can be resolved (same worker or another eligible)
+      if (secondaryDurationMin > 0 && phase2ServiceName) {
+        const resolved = resolvePhase2Worker({
+          phase1Worker: { id: worker.id, name: worker.name },
+          dateStr,
+          phase1StartMinutes: slotStartMinutes,
+          phase1DurationMin: primaryDurationMin,
+          waitMin,
+          phase2DurationMin: secondaryDurationMin,
+          phase2ServiceName,
+          workers,
+          bookingsForDate,
+          workerWindowByWorkerId,
+          businessWindow: businessWindow ?? undefined,
+        });
+        if (resolved === null) {
+          if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") filteredByPhase2++;
+          return false;
+        }
       }
 
       return true;
@@ -1341,6 +1432,7 @@ export default function BookingPage() {
         filteredByBusiness,
         filteredByWorker,
         filteredByConflicts,
+        filteredByPhase2,
         available: availableSlots.length,
       });
     }
@@ -1354,11 +1446,11 @@ export default function BookingPage() {
     const dayIndex = getJsWeekday(selectedDate);
     const dayKey = getBookingWeekdayKey(selectedDate);
     const businessDayConfig = resolveBusinessDayConfig(selectedDate);
-    const generatedSlots = generateTimeSlotsForDate();
-    const weekdayKey = getWeekdayKey(dayIndex);
     const serviceDurationMinutes = selectedPricingItem
       ? selectedPricingItem.durationMaxMinutes || selectedPricingItem.durationMinMinutes || 30
       : 30;
+    const generatedSlots = generateTimeSlotsForDate(serviceDurationMinutes);
+    const weekdayKey = getWeekdayKey(dayIndex);
     
     // Worker availability debug info
     const workerAvailabilityInfo = eligibleWorkers.map((worker) => {
@@ -1665,6 +1757,7 @@ export default function BookingPage() {
                         </div>
                       </button>
                     ))}
+                    {/* No phase 2 worker picker — phase 2 is auto-assigned at booking time */}
                   </>
                 )}
               </div>
