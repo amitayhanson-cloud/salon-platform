@@ -41,9 +41,18 @@ export function parseCSV(fileOrString: File | string): Promise<ParseResult> {
   });
 }
 
+function isArrayRow(x: unknown): x is unknown[] {
+  return Array.isArray(x);
+}
+
+function isObjectRow(x: unknown): x is Record<string, unknown> {
+  return x !== null && typeof x === "object" && !Array.isArray(x);
+}
+
 /**
  * Parse XLSX file to rows (first sheet).
  * Uses dynamic import of xlsx so it's only loaded when needed.
+ * Supports both array-style rows (header: 1) and object-style rows.
  */
 export async function parseXLSX(file: File): Promise<ParseResult> {
   const XLSX = await import("xlsx");
@@ -53,26 +62,49 @@ export async function parseXLSX(file: File): Promise<ParseResult> {
   if (!firstSheet) {
     return { rows: [], headers: [], errors: ["No sheet found"] };
   }
-  const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, {
+  const raw = XLSX.utils.sheet_to_json(firstSheet, {
     header: 1,
     defval: "",
   });
-  if (json.length === 0) {
+  if (!Array.isArray(raw) || raw.length === 0) {
     return { rows: [], headers: [], errors: [] };
   }
-  const headerRow = json[0] as unknown[];
-  const headers = headerRow.map((c) => String(c ?? "").trim());
-  const rows: Record<string, string>[] = [];
-  for (let i = 1; i < json.length; i++) {
-    const row = json[i] as unknown[];
-    const obj: Record<string, string> = {};
-    headers.forEach((h, j) => {
-      obj[h] = row[j] != null ? String(row[j]).trim() : "";
-    });
-    if (Object.values(obj).some((v) => v)) {
-      rows.push(obj);
+  const first = raw[0];
+  let headers: string[];
+  let rows: Record<string, string>[];
+
+  if (isArrayRow(first)) {
+    headers = first.map((c) => String(c ?? "").trim());
+    rows = [];
+    for (let i = 1; i < raw.length; i++) {
+      const row = raw[i];
+      if (!isArrayRow(row)) continue;
+      const obj: Record<string, string> = {};
+      headers.forEach((h, j) => {
+        obj[h] = String(row[j] ?? "").trim();
+      });
+      if (Object.values(obj).some((v) => v)) {
+        rows.push(obj);
+      }
     }
+  } else if (isObjectRow(first)) {
+    headers = Object.keys(first).map((k) => String(k ?? "").trim());
+    rows = [];
+    for (let i = 0; i < raw.length; i++) {
+      const row = raw[i];
+      if (!isObjectRow(row)) continue;
+      const obj: Record<string, string> = {};
+      headers.forEach((h) => {
+        obj[h] = String(row[h] ?? "").trim();
+      });
+      if (Object.values(obj).some((v) => v)) {
+        rows.push(obj);
+      }
+    }
+  } else {
+    return { rows: [], headers: [], errors: [] };
   }
+
   return { rows, headers, errors: [] };
 }
 
