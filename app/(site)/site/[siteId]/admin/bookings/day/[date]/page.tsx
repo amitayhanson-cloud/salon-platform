@@ -528,10 +528,10 @@ export default function DaySchedulePage() {
 
   const formatTime = (d: Date): string =>
     `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
-  const toDate = (val: Date | { toDate: () => Date } | null | undefined): Date | null => {
+  const toDate = (val: unknown): Date | null => {
     if (val == null) return null;
     if (val instanceof Date) return val;
-    if (typeof (val as { toDate: () => Date }).toDate === "function") return (val as { toDate: () => Date }).toDate();
+    if (typeof (val as { toDate?: () => Date }).toDate === "function") return (val as { toDate: () => Date }).toDate();
     return null;
   };
 
