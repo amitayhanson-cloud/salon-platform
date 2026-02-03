@@ -1306,7 +1306,7 @@ export default function SettingsPage() {
             <span className="text-xs text-emerald-600">{saveMessage}</span>
           )}
           <button
-            onClick={handleSaveConfig}
+            onClick={() => { void handleSaveConfig(); }}
             disabled={isSaving}
             className="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
           >
