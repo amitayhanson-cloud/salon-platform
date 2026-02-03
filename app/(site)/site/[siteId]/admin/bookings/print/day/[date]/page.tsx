@@ -90,29 +90,28 @@ export default function PrintDayPage() {
   const bookingsForWorker: PrintBookingRow[] = useMemo(() => {
     if (!validWorker || !workerId) return [];
     const filtered = bookings.filter((b) => b.workerId === workerId);
-    return filtered
-      .map((b) => {
-        const startAt = toDate((b.start ?? b.startAt) as Date | { toDate: () => Date } | undefined);
-        const endAt = toDate((b.end ?? b.endAt) as Date | { toDate: () => Date } | undefined);
-        if (!startAt || !endAt) return null;
-        const customerName = (b as { customerName?: string }).customerName ?? "";
-        const serviceName = (b as { serviceName?: string }).serviceName ?? "";
-        const note = (b as { note?: string | null }).note ?? null;
-        const clientId = (b as { clientId?: string }).clientId;
-        const customerPhone = (b as { customerPhone?: string }).customerPhone ?? "";
-        const clientKey = (clientId && clientId.trim()) ? normalizePhone(clientId) : normalizePhone(customerPhone);
-        return {
-          startAt,
-          endAt,
-          customerName,
-          serviceName,
-          phase: b.phase,
-          note,
-          clientKey: clientKey || "",
-        };
-      })
-      .filter((r): r is PrintBookingRow => r != null)
-      .sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+    const rows: PrintBookingRow[] = [];
+    for (const b of filtered) {
+      const startAt = toDate((b.start ?? b.startAt) as Date | { toDate: () => Date } | undefined);
+      const endAt = toDate((b.end ?? b.endAt) as Date | { toDate: () => Date } | undefined);
+      if (!startAt || !endAt) continue;
+      const customerName = (b as { customerName?: string }).customerName ?? "";
+      const serviceName = (b as { serviceName?: string }).serviceName ?? "";
+      const note = (b as { note?: string | null }).note ?? null;
+      const clientId = (b as { clientId?: string }).clientId;
+      const customerPhone = (b as { customerPhone?: string }).customerPhone ?? "";
+      const clientKey = (clientId && clientId.trim()) ? normalizePhone(clientId) : normalizePhone(customerPhone);
+      rows.push({
+        startAt,
+        endAt,
+        customerName,
+        serviceName,
+        phase: b.phase,
+        note,
+        clientKey: clientKey || "",
+      });
+    }
+    return rows.sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
   }, [bookings, workerId, validWorker]);
 
   const uniqueClientKeys = useMemo(() => {
