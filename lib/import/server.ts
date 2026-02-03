@@ -400,7 +400,11 @@ export async function runExecute(
           String(phase2Start.getDate()).padStart(2, "0");
         const phase2TimeStr =
           String(phase2Start.getHours()).padStart(2, "0") + ":" + String(phase2Start.getMinutes()).padStart(2, "0");
-        const phase2WorkerId = v.workerId;
+        const phase2WorkerIdRaw = v.workerId ?? phase1Doc.workerId;
+        if (typeof phase2WorkerIdRaw !== "string" || !phase2WorkerIdRaw.trim()) {
+          continue;
+        }
+        const phase2WorkerIdStr: string = phase2WorkerIdRaw.trim();
         const phase2Key = bookingImportKey({
           siteId,
           phone: phoneNorm,
@@ -408,7 +412,7 @@ export async function runExecute(
           startTime: phase2TimeStr,
           durationMin: followUp.followUpDurationMin ?? 0,
           serviceTypeId: "",
-          workerId: phase2WorkerId,
+          workerId: phase2WorkerIdStr,
           phase: 2,
           parentGroupKey: followUp.parentGroupKey,
         });
@@ -418,7 +422,7 @@ export async function runExecute(
             clientId: phoneNorm,
             customerName: v.client.name || "—",
             customerPhone: phoneNorm,
-            workerId: phase2WorkerId,
+            workerId: phase2WorkerIdStr,
             workerName,
             serviceName: followUp.followUpServiceName,
             serviceTypeId: null,
