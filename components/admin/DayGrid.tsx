@@ -78,7 +78,6 @@ export interface DayGridProps {
     serviceType?: string;
     serviceColor?: string | null;
     status?: string;
-    [key: string]: unknown;
   }>;
   workers: Array<{ id: string; name: string }>;
   startHour?: number;
@@ -107,7 +106,14 @@ export default function DayGrid({
 
   const allBlocks = useMemo(() => {
     return confirmedBookings
-      .map((b) => bookingToBlock(b as Parameters<typeof bookingToBlock>[0], confirmedBookings))
+      .map((b) => {
+        const booking = b as unknown;
+        const list = confirmedBookings as unknown;
+        return bookingToBlock(
+          booking as Parameters<typeof bookingToBlock>[0],
+          list as Parameters<typeof bookingToBlock>[1]
+        );
+      })
       .filter((b): b is RenderBlock => b !== null);
   }, [confirmedBookings]);
 
