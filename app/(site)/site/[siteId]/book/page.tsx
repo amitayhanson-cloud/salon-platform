@@ -769,7 +769,15 @@ export default function BookingPage() {
 
     const canDoPhase1 = workers.filter((worker) => canWorkerPerformService(worker, phase1ServiceName));
 
-    const hasFollowUp = (selectedPricingItem?.hasFollowUp === true && selectedPricingItem?.followUp?.durationMinutes >= 1) ?? false;
+    const followUpDurationRaw = selectedPricingItem?.followUp?.durationMinutes;
+    const followUpDuration =
+      typeof followUpDurationRaw === "number" && Number.isFinite(followUpDurationRaw)
+        ? followUpDurationRaw
+        : undefined;
+    const hasFollowUp =
+      selectedPricingItem?.hasFollowUp === true &&
+      followUpDuration !== undefined &&
+      followUpDuration >= 1;
     if (hasFollowUp && phase2ServiceName && workersWhoCanDoPhase2.length === 0) {
       if (process.env.NODE_ENV !== "production") {
         console.log("[Booking] Step 1→2: Phase 2 service required but no worker can do it – no booking option");
