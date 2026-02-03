@@ -61,20 +61,29 @@ export function useSiteConfig(siteId: string) {
     setSiteConfig((prev) => (prev ? { ...prev, ...updates } : prev));
   };
 
-  const handleSaveConfig = async () => {
-    if (!siteConfig || typeof window === "undefined" || !siteId) return;
+  const handleSaveConfig = async (immediateUpdates?: Partial<SiteConfig>) => {
+    // Ignore when Save button passes the click event as first argument
+    if (
+      immediateUpdates &&
+      typeof immediateUpdates === "object" &&
+      "nativeEvent" in immediateUpdates
+    ) {
+      immediateUpdates = undefined;
+    }
+    const base = siteConfig && immediateUpdates ? { ...siteConfig, ...immediateUpdates } : siteConfig;
+    if (!base || typeof window === "undefined" || !siteId) return;
     setIsSaving(true);
     setSaveMessage("");
 
     try {
       // Normalize field names (handle any legacy field names)
-      const siteConfigAny = siteConfig as any;
-      const normalizedReviews = siteConfig.reviews ?? siteConfigAny.reviewItems ?? siteConfigAny.customerReviews ?? [];
-      const normalizedFaqs = siteConfig.faqs ?? siteConfigAny.faqItems ?? [];
+      const siteConfigAny = base as any;
+      const normalizedReviews = base.reviews ?? siteConfigAny.reviewItems ?? siteConfigAny.customerReviews ?? [];
+      const normalizedFaqs = base.faqs ?? siteConfigAny.faqItems ?? [];
 
       // Auto-add "reviews" to extraPages if reviews exist
       // Auto-add "faq" to extraPages if faqs exist
-      const extraPages = new Set(siteConfig.extraPages ?? []);
+      const extraPages = new Set(base.extraPages ?? []);
       if ((normalizedReviews.length ?? 0) > 0) {
         extraPages.add("reviews");
       }
@@ -83,14 +92,14 @@ export function useSiteConfig(siteId: string) {
       }
       
       // Normalize services: trim, remove blanks, dedupe preserving order
-      const currentServices = siteConfig.services || [];
+      const currentServices = base.services || [];
       const serviceNames = normalizeServices(
         currentServices.map((s) => typeof s === 'string' ? s : (s as any).name)
       );
       
       // Build servicePricing map
       const servicePricing: Record<string, number> = {};
-      const existingPricing = siteConfig.servicePricing || {};
+      const existingPricing = base.servicePricing || {};
       
       for (const serviceName of serviceNames) {
         if (existingPricing[serviceName] !== undefined) {
@@ -112,7 +121,7 @@ export function useSiteConfig(siteId: string) {
       }
       
       const updatedConfig: SiteConfig = {
-        ...siteConfig,
+        ...base,
         services: serviceNames,
         servicePricing: servicePricing,
         reviews: normalizedReviews,

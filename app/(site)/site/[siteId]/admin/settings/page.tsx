@@ -13,6 +13,8 @@ import AdminTabs from "@/components/ui/AdminTabs";
 import { deleteUserAccount } from "@/lib/deleteUserAccount";
 import { saveBookingSettings, convertSalonBookingStateToBookingSettings, subscribeBookingSettings } from "@/lib/firestoreBookingSettings";
 import { defaultBookingSettings } from "@/types/bookingSettings";
+import type { SiteBranding } from "@/types/siteConfig";
+import { validateLogoFile } from "@/lib/siteLogoStorage";
 
 
 const SERVICE_OPTIONS: Record<SiteConfig["salonType"], string[]> = {
@@ -940,6 +942,187 @@ function AdminSiteTab({
   );
 }
 
+function BrandingLogoEditor({
+  siteId,
+  siteConfig,
+  onChange,
+  onSave,
+  isSaving,
+  getToken,
+}: {
+  siteId: string;
+  siteConfig: SiteConfig;
+  onChange: (updates: Partial<SiteConfig>) => void;
+  onSave: (updates?: Partial<SiteConfig>) => Promise<void>;
+  isSaving: boolean;
+  getToken: () => Promise<string | null>;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const branding = siteConfig.branding ?? {};
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    setError(null);
+    if (!file) return;
+    const err = validateLogoFile(file);
+    if (err) {
+      setError(err);
+      return;
+    }
+    setUploading(true);
+    try {
+      const token = await getToken();
+      if (!token) {
+        setError("יש להתחבר כדי להעלות לוגו");
+        return;
+      }
+      const signRes = await fetch("/api/cloudinary/sign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ siteId }),
+      });
+      const signData = await signRes.json().catch(() => ({}));
+      if (!signRes.ok) {
+        setError(signData.error || "קבלת חתימה נכשלה");
+        return;
+      }
+      const { timestamp, signature, apiKey, cloudName, folder, publicId } = signData;
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("api_key", apiKey);
+      formData.append("timestamp", String(timestamp));
+      formData.append("signature", signature);
+      formData.append("folder", folder);
+      formData.append("public_id", publicId);
+      const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+        method: "POST",
+        body: formData,
+      });
+      const uploadData = await uploadRes.json().catch(() => ({}));
+      if (!uploadRes.ok || uploadData.error) {
+        setError(uploadData.error?.message || "העלאת הלוגו ל-Cloudinary נכשלה");
+        return;
+      }
+      const secureUrl = uploadData.secure_url as string;
+      const logoPublicId = uploadData.public_id as string | undefined;
+      const saveRes = await fetch("/api/admin/site-logo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          siteId,
+          logoUrl: secureUrl,
+          logoPublicId: logoPublicId ?? null,
+        }),
+      });
+      const saveData = await saveRes.json().catch(() => ({}));
+      if (!saveRes.ok) {
+        setError(saveData.error || "שמירת הלוגו נכשלה");
+        return;
+      }
+      const nextBranding: SiteBranding = { ...branding, logoUrl: secureUrl, logoPublicId: logoPublicId ?? undefined };
+      onChange({ branding: nextBranding });
+      await onSave({ branding: nextBranding });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "העלאת הלוגו נכשלה");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleRemove = async () => {
+    setError(null);
+    try {
+      const token = await getToken();
+      if (!token) {
+        setError("יש להתחבר כדי להסיר לוגו");
+        return;
+      }
+      const saveRes = await fetch("/api/admin/site-logo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ siteId, logoUrl: null }),
+      });
+      const saveData = await saveRes.json().catch(() => ({}));
+      if (!saveRes.ok) {
+        setError(saveData.error || "הסרת הלוגו נכשלה");
+        return;
+      }
+      const nextBranding: SiteBranding = { ...branding, logoUrl: null };
+      onChange({ branding: nextBranding });
+      await onSave({ branding: nextBranding });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "הסרת הלוגו נכשלה");
+    }
+  };
+
+  return (
+    <div className="space-y-6 text-right">
+      <h2 className="text-sm font-semibold text-slate-900">לוגו ומיתוג</h2>
+      <p className="text-xs text-slate-500">
+        הלוגו יוצג בראש האתר הציבורי ליד כפתור &quot;קביעת תור&quot;. מומלץ: PNG, JPG, SVG או WEBP, עד 2MB.
+      </p>
+
+      <div className="flex flex-wrap items-start gap-4">
+        {branding.logoUrl ? (
+          <div className="flex flex-col items-center gap-2">
+            <div
+              className="w-24 h-24 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden shrink-0"
+              style={{ minHeight: 96 }}
+            >
+              <img
+                src={branding.logoUrl}
+                alt={branding.logoAlt || siteConfig.salonName || "לוגו"}
+                className="max-w-full max-h-full object-contain"
+              />
+            </div>
+            <div className="flex gap-2">
+              <label className="cursor-pointer px-3 py-1.5 text-sm font-medium text-sky-600 hover:text-sky-700 border border-sky-300 rounded-lg">
+                החלף
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp"
+                  className="sr-only"
+                  onChange={handleFileChange}
+                  disabled={uploading || isSaving}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={handleRemove}
+                disabled={isSaving}
+                className="px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-700 border border-slate-300 rounded-lg disabled:opacity-50"
+              >
+                הסר
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium rounded-lg w-fit disabled:opacity-50">
+              {uploading ? "מעלה…" : "העלה לוגו"}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp"
+                className="sr-only"
+                onChange={handleFileChange}
+                disabled={uploading || isSaving}
+              />
+            </label>
+          </div>
+        )}
+      </div>
+
+      {error && (
+        <p className="text-sm text-red-600" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // Reviews Editor Component
 
 
@@ -1099,10 +1282,11 @@ export default function SettingsPage() {
     { key: "basic", label: "מידע בסיסי" },
     { key: "contact", label: "פרטי יצירת קשר" },
     { key: "booking", label: "הזמנה אונליין" },
+    { key: "branding", label: "לוגו ומיתוג" },
     { key: "reviews", label: "ביקורות" },
     { key: "faq", label: "FAQ" },
     { key: "hours", label: "שעות פעילות" },
-] as const;
+  ] as const;
 
   // Derive type from tabs config to ensure type safety
   type SettingsTabType = typeof settingsTabs[number]["key"];
@@ -1160,6 +1344,16 @@ export default function SettingsPage() {
               siteConfig={siteConfig}
               onChange={handleConfigChange}
               renderSections={["booking"]}
+            />
+          )}
+          {activeTab === "branding" && (
+            <BrandingLogoEditor
+              siteId={siteId}
+              siteConfig={siteConfig}
+              onChange={handleConfigChange}
+              onSave={handleSaveConfig}
+              isSaving={isSaving}
+              getToken={async () => (firebaseUser ? await firebaseUser.getIdToken() : null)}
             />
           )}
           {activeTab === "reviews" && (

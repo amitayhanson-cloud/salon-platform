@@ -412,7 +412,11 @@ export default function ServicesPage() {
         ...editingService,
         name: editingService.name.trim(),
         enabled: editingService.enabled !== false,
-        color: editingService.color || "#3B82F6", // Default to blue if not set
+        color: editingService.color || "#3B82F6",
+        description: editingService.description?.trim() || undefined,
+        price: editingService.price,
+        duration: editingService.duration,
+        imageUrl: editingService.imageUrl?.trim() || null,
       };
       
       // Update local state immediately for instant UI feedback
@@ -422,6 +426,10 @@ export default function ServicesPage() {
         name: updatedService.name,
         enabled: updatedService.enabled,
         color: updatedService.color,
+        description: updatedService.description,
+        price: updatedService.price,
+        duration: updatedService.duration,
+        imageUrl: updatedService.imageUrl ?? null,
       });
       
       setEditingService(null);
@@ -830,6 +838,81 @@ export default function ServicesPage() {
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
                   הצבע שיוצג בלוח התורים עבור שירות זה
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  תיאור קצר (לאתר)
+                </label>
+                <textarea
+                  rows={2}
+                  value={editingService.description ?? ""}
+                  onChange={(e) =>
+                    setEditingService({ ...editingService, description: e.target.value.trim() || undefined })
+                  }
+                  placeholder="תיאור אופציונלי לשירות..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    מחיר התחלתי (₪)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={editingService.price ?? ""}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      const n = v === "" ? undefined : parseInt(v, 10);
+                      setEditingService({ ...editingService, price: v === "" ? undefined : (Number.isFinite(n) ? n : editingService.price) });
+                    }}
+                    placeholder="—"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    משך (דקות)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    step={5}
+                    value={editingService.duration ?? ""}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      const n = v === "" ? undefined : parseInt(v, 10);
+                      setEditingService({ ...editingService, duration: v === "" ? undefined : (Number.isFinite(n) && n >= 1 ? n : editingService.duration) });
+                    }}
+                    placeholder="—"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 -mt-1">
+                אופציונלי. יוצגו בכרטיס השירות באתר.
+              </p>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  תמונת שירות (כתובת URL)
+                </label>
+                <input
+                  type="url"
+                  value={editingService.imageUrl ?? ""}
+                  onChange={(e) =>
+                    setEditingService({ ...editingService, imageUrl: e.target.value.trim() || undefined })
+                  }
+                  placeholder="https://..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  אופציונלי. תוצג ברשת השירותים באתר
                 </p>
               </div>
 

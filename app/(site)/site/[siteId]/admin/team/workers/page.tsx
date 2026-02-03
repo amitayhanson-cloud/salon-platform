@@ -307,53 +307,54 @@ export default function WorkersPage() {
 
   // Load selected worker data into form
   useEffect(() => {
+    // Default: all services checked (worker can do all unless explicitly unchecked)
+    const allServiceNames = services.map((s) => s.name);
     if (selectedWorkerId) {
       const worker = workers.find((w) => w.id === selectedWorkerId);
       if (worker) {
-        // Normalize worker services to ensure they match current services
-        const normalizedServices = normalizeWorkerServices(worker.services || []);
-        
+        // If worker has no services or empty array, default to all services checked
+        const rawServices = worker.services ?? [];
+        const servicesToShow =
+          rawServices.length === 0
+            ? allServiceNames
+            : normalizeWorkerServices(rawServices);
         // Clamp worker availability to business hours (backwards compatibility)
         let normalizedAvailability = worker.availability || defaultAvailability;
         normalizedAvailability = clampWorkerAvailability(normalizedAvailability);
-        
         setFormData({
           name: worker.name || "",
           role: worker.role || "",
           phone: worker.phone || "",
           email: worker.email || "",
-          services: normalizedServices,
+          services: servicesToShow,
           availability: normalizedAvailability,
           active: worker.active !== false,
           treatmentCommissionPercent: worker.treatmentCommissionPercent ?? 0,
         });
       }
     } else {
-      // Reset form for new worker - initialize with business hours constraints
+      // New worker: default all service checkboxes checked
       const initialAvailability = defaultAvailability.map((day) => {
         const businessDay = getBusinessDayConfig(day.day);
         if (!businessDay.enabled) {
-          // Business is closed on this day
           return {
             ...day,
             open: null,
             close: null,
           };
         }
-        // Use business hours as default
         return {
           ...day,
           open: businessDay.start,
           close: businessDay.end,
         };
       });
-      
       setFormData({
         name: "",
         role: "",
         phone: "",
         email: "",
-        services: [],
+        services: allServiceNames,
         availability: initialAvailability,
         active: true,
         treatmentCommissionPercent: 0,
@@ -872,6 +873,11 @@ export default function WorkersPage() {
                           <p className="text-sm text-slate-500">אין שירותים מוגדרים. הוסף שירותים בעמוד המחירון.</p>
                         ) : (
                           <div className="space-y-2">
+                            {(formData.services || []).length === 0 && (
+                              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                עובד זה לא יהיה ניתן להזמנה עבור אף שירות. בחר לפחות שירות אחד.
+                              </p>
+                            )}
                             {services.map((service) => {
                               // Use service.name as the ID (same as Pricing/Services page)
                               const serviceId = service.name;

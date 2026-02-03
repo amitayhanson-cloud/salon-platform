@@ -182,10 +182,18 @@ export function getAdmin(): typeof admin {
   }
 
   try {
-    // Initialize Firebase Admin
-    admin.initializeApp({
+    // Storage is optional (we use Cloudinary for uploads). Only set storageBucket when env is present.
+    const storageBucket = process.env.FIREBASE_STORAGE_BUCKET?.trim();
+    const initOptions: { credential: admin.credential.Credential; storageBucket?: string } = {
       credential: admin.credential.cert(serviceAccount),
-    });
+    };
+    if (storageBucket) {
+      initOptions.storageBucket = storageBucket;
+      if (process.env.NODE_ENV === "development") {
+        console.log("[firebaseAdmin] Storage bucket (server):", storageBucket);
+      }
+    }
+    admin.initializeApp(initOptions);
 
     _admin = admin;
     return _admin;
@@ -206,6 +214,21 @@ export function getAdminDb() {
 // Export admin auth instance (lazy initialization)
 export function getAdminAuth() {
   return getAdmin().auth();
+}
+
+/**
+ * Returns Firebase Admin Storage bucket. Only use if FIREBASE_STORAGE_BUCKET is set.
+ * Logo uploads use Cloudinary; this is for any remaining Firebase Storage usage.
+ */
+export function getAdminStorageBucket() {
+  const bucketName = process.env.FIREBASE_STORAGE_BUCKET?.trim();
+  if (!bucketName) {
+    throw new Error(
+      "FIREBASE_STORAGE_BUCKET is not set. Set it in .env.local to use Firebase Admin Storage, or use Cloudinary for uploads."
+    );
+  }
+  const { getStorage } = require("firebase-admin/storage");
+  return getStorage().bucket(bucketName);
 }
 
 // Export as `auth` for convenience (matches the import in route files)

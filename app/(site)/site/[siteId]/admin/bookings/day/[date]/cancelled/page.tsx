@@ -527,10 +527,28 @@ export default function CancelledBookingsPage() {
         {/* Header */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-            <div>
+            <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-2xl font-bold text-slate-900">
-                תורים שבוטלו — {scope === "day" ? formatDayLabel(selectedDate) : "הכל"}
+                תורים שבוטלו {scope === "day" ? "—" : "— הכל"}
               </h1>
+              {scope === "day" && (
+                <>
+                  <input
+                    type="date"
+                    value={dateKey}
+                    onChange={(e) => {
+                      const newKey = e.target.value;
+                      if (newKey && siteId) {
+                        router.push(`/site/${siteId}/admin/bookings/day/${newKey}/cancelled?scope=day`);
+                      }
+                    }}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-base font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                  <span className="text-xl font-semibold text-slate-700">
+                    {formatDayLabel(selectedDate)}
+                  </span>
+                </>
+              )}
             </div>
             <div className="flex items-center gap-3 flex-wrap">
               {/* Scope: לפי יום | הכל */}

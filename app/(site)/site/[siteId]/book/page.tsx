@@ -517,7 +517,7 @@ export default function BookingPage() {
             id: docSnap.id,
             name: data.name || "",
             role: data.role,
-            services: data.services || [], // Include services array (empty = available for all services)
+            services: data.services || [], // Empty/missing = worker can do zero services (see workerServiceCompatibility)
             availability, // Include availability schedule
             active: data.active !== false,
           });

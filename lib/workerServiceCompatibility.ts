@@ -4,18 +4,22 @@
  *
  * Workers store services as an array of service identifiers (names; see workers admin).
  * Service identifier = service name from business services list (SiteService.name).
+ * Empty or missing services = worker can do ZERO services (must explicitly select services).
  */
 
 export interface WorkerForCompatibility {
   active?: boolean;
-  /** Service identifiers this worker can perform (e.g. service names from business services). */
+  /** Service identifiers this worker can perform (e.g. service names from business services). Empty/missing = none. */
   services?: string[];
+  /** If true, worker can perform all services regardless of services array. Optional; default false. */
+  allServicesAllowed?: boolean;
 }
 
 /**
  * Returns true iff the worker can perform the given service.
  * - Worker must be active (active !== false).
- * - If worker has no services array or empty array: backward compatibility → can do all services (true).
+ * - If worker.allServicesAllowed === true: can do all services.
+ * - If worker has no services array or empty array: can do ZERO services (false).
  * - Otherwise: worker.services must include serviceIdOrName.
  */
 export function canWorkerPerformService(
@@ -29,8 +33,11 @@ export function canWorkerPerformService(
     return false;
   }
   const id = serviceIdOrName.trim();
+  if (worker.allServicesAllowed === true) {
+    return true;
+  }
   if (!Array.isArray(worker.services) || worker.services.length === 0) {
-    return true; // backward compatibility: no assignment = available for all
+    return false; // no services selected = can do zero services
   }
   return worker.services.includes(id);
 }

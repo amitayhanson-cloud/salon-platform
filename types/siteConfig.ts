@@ -31,10 +31,12 @@ export type SiteService = {
   description?: string;
   price?: number | string;
   category?: string;
-  duration?: number;
+  duration?: number; // minutes
   enabled?: boolean; // Default: true
   sortOrder?: number; // Default: 0
   color?: string; // Hex color for service (e.g., "#3B82F6")
+  /** Optional image URL for public site services grid */
+  imageUrl?: string | null;
 };
 
 export type SiteConfig = {
@@ -80,6 +82,16 @@ export type SiteConfig = {
   dividerHeight?: number;
   /** Automatic deletion of archived (cancelled + expired) bookings. Stored at sites/{siteId}.config.archiveRetention */
   archiveRetention?: ArchiveRetention;
+  /** Per-site branding (logo for header) */
+  branding?: SiteBranding;
+}
+
+/** Per-site branding (logo shown in public header) */
+export type SiteBranding = {
+  logoUrl?: string | null;
+  logoAlt?: string;
+  /** Cloudinary public_id for future delete/overwrite (e.g. sites/{siteId}/branding/logo) */
+  logoPublicId?: string | null;
 };
 
 /** Per-site setting for automatic deletion of archived bookings (cancelled + expired) */

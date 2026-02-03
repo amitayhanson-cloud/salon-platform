@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { motion } from "framer-motion";
 // Removed useRouter and useAuth - public site has no admin access
 import type { SiteConfig } from "@/types/siteConfig";
 import type { TemplateDefinition } from "@/lib/templateLibrary";
@@ -14,8 +15,17 @@ import {
   HAIR_WORK_IMAGES,
 } from "@/lib/hairImages";
 import { defaultThemeColors } from "@/types/siteConfig";
+import {
+  slideInFromLeft,
+  slideInFromRight,
+  servicesContainer,
+  serviceItem,
+  servicesTitle,
+} from "@/lib/animations";
 import WaveDivider from "./components/WaveDivider";
 import ContactIconsBar from "./components/ContactIconsBar";
+import SalonHeader from "./components/SalonHeader";
+import ServiceCard from "./components/ServiceCard";
 import { TestimonialCarousel, type TestimonialItem } from "@/components/ui/testimonial-carousel";
 
 // Work Gallery Component with horizontal scrolling
@@ -187,14 +197,11 @@ export default function HairLuxurySite({
   // Use services from services array (same source as admin Services page)
   // ONLY use services from Firestore - no fallback to config.services or defaults
   // Filter to only enabled services with valid names
-  const visibleServices = services.filter(
-    (s) => s && s.enabled !== false && s.name && s.name.trim()
-  );
-  
-  const displayServices = visibleServices.map((s) => s.name.trim());
-  
-  // Don't render services section if no services
-  const hasServices = displayServices.length > 0;
+  const visibleServices = services
+    .filter((s) => s && s.enabled !== false && s.name && s.name.trim())
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || (a.name || "").localeCompare(b.name || ""));
+
+  const hasServices = visibleServices.length > 0;
 
   // Build address string for map and Waze
   const buildAddressString = (): string | null => {
@@ -231,38 +238,100 @@ export default function HairLuxurySite({
         background: `radial-gradient(circle at top, var(--surface) 0, var(--bg) 55%, #000000 100%)`,
       } as React.CSSProperties}
     >
-      {/* Simple salon header */}
-      <header className="py-4" style={{ backgroundColor: "var(--primary)", color: "var(--primaryText)" }}>
-        <div className="max-w-5xl mx-auto px-4 flex items-center justify-end">
-          <div className="flex flex-col items-end">
-            <h1 className="text-xl sm:text-2xl font-bold">
-              {config.salonName || "שם הסלון"}
-            </h1>
-          </div>
-        </div>
-      </header>
+      {/* Salon header: RTL, name on right, nav + CTA on left */}
+      <SalonHeader
+        salonName={config.salonName || "שם הסלון"}
+        siteId={siteId}
+        bookingEnabled={bookingEnabled(config)}
+        scrollToSection={scrollToSection}
+        logoUrl={config.branding?.logoUrl ?? null}
+        logoAlt={config.branding?.logoAlt}
+      />
 
       {/* Hero Section */}
       <section className="relative min-h-[80vh] flex items-center justify-center px-4">
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: `url(${heroImageUrl})` }}
-        />
+        <div className="absolute inset-0">
+          <img
+            src={heroImageUrl}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover"
+            loading="eager"
+            fetchPriority="high"
+          />
+        </div>
         <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/75 to-black/90" />
 
-        <div className="relative z-10 w-full max-w-4xl mx-auto text-center text-white space-y-6">
-          <p className="text-sm tracking-[0.2em]" style={{ color: "var(--primaryText)", opacity: 0.9 }}>
-            סלון יופי | עיצוב שיער
-          </p>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight">
-            {config.salonName || "שם הסלון"} – חוויית שיער ברמת לוקס
-          </h1>
-          <p className="text-lg sm:text-xl max-w-2xl mx-auto" style={{ color: "var(--primaryText)", opacity: 0.9 }}>
+        <motion.div
+          className="relative z-10 w-full max-w-4xl mx-auto text-center text-white space-y-6"
+          initial="hidden"
+          animate="visible"
+          variants={{
+            visible: {
+              transition: { staggerChildren: 0.14, delayChildren: 0.1 },
+            },
+            hidden: {},
+          }}
+        >
+          <motion.div
+            variants={{
+              hidden: { opacity: 0, y: 18 },
+              visible: {
+                opacity: 1,
+                y: 0,
+                transition: { duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] },
+              },
+            }}
+          >
+            <p className="text-sm tracking-[0.2em]" style={{ color: "var(--primaryText)", opacity: 0.9 }}>
+              סלון יופי | עיצוב שיער
+            </p>
+            <div className="space-y-2">
+              <p
+                dir="ltr"
+                lang="en"
+                className="text-2xl sm:text-3xl font-medium tracking-wide text-white/95"
+                style={{ unicodeBidi: "isolate" }}
+              >
+                {config.salonName || "שם הסלון"}
+              </p>
+              <h1
+                dir="rtl"
+                lang="he"
+                className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight"
+                style={{ unicodeBidi: "plaintext" }}
+              >
+                חוויית שיער ברמת לוקס
+              </h1>
+            </div>
+          </motion.div>
+
+          <motion.p
+            className="text-lg sm:text-xl max-w-2xl mx-auto"
+            style={{ color: "var(--primaryText)", opacity: 0.9 }}
+            variants={{
+              hidden: { opacity: 0, y: 18 },
+              visible: {
+                opacity: 1,
+                y: 0,
+                transition: { duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] },
+              },
+            }}
+          >
             צוות מקצועי, חומרים פרימיום ואווירה פרטית ומפנקת – לכל לקוחה שמחפשת
             טיפול שיער מדויק ברמה הגבוהה ביותר.
-          </p>
+          </motion.p>
 
-          <div className="flex flex-wrap justify-center gap-4 pt-4">
+          <motion.div
+            className="flex flex-wrap justify-center gap-4 pt-4"
+            variants={{
+              hidden: { opacity: 0, y: 18 },
+              visible: {
+                opacity: 1,
+                y: 0,
+                transition: { duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] },
+              },
+            }}
+          >
             {bookingEnabled(config) && (
               <Link
                 href={`/site/${siteId}/book`}
@@ -287,8 +356,8 @@ export default function HairLuxurySite({
             >
               צור קשר
             </button>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
 
         {/* Scroll hint */}
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
@@ -312,8 +381,8 @@ export default function HairLuxurySite({
       >
         <div className="max-w-6xl mx-auto px-4 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
-            {/* Text side (RTL, on the right on large screens) */}
-            <div className="order-2 lg:order-1 text-right">
+            {/* Text side (RTL, on the right on large screens) — slides in from right */}
+            <motion.div className="order-2 lg:order-1 text-right" {...slideInFromRight}>
               <p
                 className="text-sm uppercase tracking-[0.3em] font-light mb-2"
                 style={{ color: "var(--accent)" }}
@@ -354,10 +423,10 @@ export default function HairLuxurySite({
                   חומרים פרימיום בלבד
                 </div>
               </div>
-            </div>
+            </motion.div>
 
-            {/* Image side */}
-            <div className="order-1 lg:order-2">
+            {/* Image side (RTL, on the left on large screens) — slides in from left */}
+            <motion.div className="order-1 lg:order-2" {...slideInFromLeft}>
               <div className="relative overflow-hidden rounded-3xl shadow-lg" style={{ backgroundColor: "var(--border)" }}>
                 <img
                   src={aboutImageUrl}
@@ -366,7 +435,7 @@ export default function HairLuxurySite({
                 />
                 <div className="absolute inset-0 pointer-events-none bg-gradient-to-tr from-black/10 via-transparent to-white/5" />
               </div>
-            </div>
+            </motion.div>
           </div>
         </div>
       </section>
@@ -375,48 +444,44 @@ export default function HairLuxurySite({
       {hasServices && (
       <section
         id="services-section"
+        dir="rtl"
         className="py-16 lg:py-24"
         style={{ backgroundColor: "var(--bg)" }}
       >
-        <div className="max-w-6xl mx-auto px-4 lg:px-8 space-y-8">
-          <div className="text-right space-y-3">
-            <p
-              className="text-sm uppercase tracking-[0.3em] font-light"
-              style={{ color: "var(--accent)" }}
-            >
+        <div className="max-w-6xl mx-auto px-4 lg:px-8 space-y-10">
+          <motion.div
+            className="text-right space-y-2"
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true }}
+            variants={servicesTitle}
+          >
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--text)" }}>
               השירותים שלנו
-            </p>
-            <h2 className="text-3xl sm:text-4xl font-serif font-light tracking-wide" style={{ color: "var(--text)" }}>
-              שירותים מקצועיים מותאמים אישית
             </h2>
-            <p className="max-w-2xl" style={{ color: "var(--muted)" }}>
-              כל שירות מבוצע בקפידה על ידי צוות מקצועי ומנוסה, תוך שימוש
-              בחומרים איכותיים וטכניקות מתקדמות.
+            <p className="text-base max-w-2xl" style={{ color: "var(--muted)" }}>
+              כל שירות מבוצע בקפידה על ידי צוות מקצועי ומנוסה, תוך שימוש בחומרים איכותיים וטכניקות מתקדמות.
             </p>
-          </div>
+          </motion.div>
 
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {displayServices.map((service, idx) => (
-              <div
-                key={idx}
-                className="rounded-2xl shadow-md p-6 hover:shadow-lg hover:-translate-y-0.5 transition"
-                style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)", borderWidth: "1px" }}
-              >
-                <h3
-                  className="text-xl font-serif font-light mb-3"
-                  style={{ color: "var(--accent)" }}
-                >
-                  {service}
-                </h3>
-                <p className="text-sm leading-relaxed mb-3" style={{ color: "var(--muted)" }}>
-                  שירות מדויק המותאם אישית למבנה הפנים וסגנון החיים שלך.
-                </p>
-                <p className="text-xs" style={{ color: "var(--muted)", opacity: 0.8 }}>
-                  מחירים משתנים לפי אורך ועובי שיער
-                </p>
-              </div>
+          <motion.div
+            className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true }}
+            variants={servicesContainer}
+          >
+            {visibleServices.map((service, idx) => (
+              <motion.div key={service.id} variants={serviceItem}>
+                <ServiceCard
+                  service={service}
+                  siteId={siteId}
+                  bookingEnabled={bookingEnabled(config)}
+                  libraryImage={HAIR_WORK_IMAGES[idx % HAIR_WORK_IMAGES.length]}
+                />
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         </div>
       </section>
       )}

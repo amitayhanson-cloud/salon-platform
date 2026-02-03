@@ -605,10 +605,25 @@ export default function DaySchedulePage() {
         {/* Header - Fixed at top */}
         <div className="flex-shrink-0 mb-4">
           <div className="flex items-center justify-between mb-4">
-            <div>
+            <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-slate-900">
-                לוח זמנים - {formatDayLabel(selectedDate)}
+                לוח זמנים —
               </h1>
+              <input
+                type="date"
+                value={dateKey}
+                onChange={(e) => {
+                  const newKey = e.target.value;
+                  if (newKey && siteId) {
+                    const query = selectedWorkerId && selectedWorkerId !== ALL_WORKERS ? `?workerId=${encodeURIComponent(selectedWorkerId)}` : "";
+                    router.push(`/site/${siteId}/admin/bookings/day/${newKey}${query}`);
+                  }
+                }}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-base font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              />
+              <span className="text-xl font-semibold text-slate-700">
+                {formatDayLabel(selectedDate)}
+              </span>
             </div>
             <div className="flex items-center gap-3">
               <a

@@ -12,12 +12,14 @@ function cleanApiKey(apiKey: string | undefined): string | undefined {
   return apiKey.trim().split(':')[0];
 }
 
-// Read environment variables
+// Single source of truth: exact bucket name from Firebase Console → Storage (e.g. xxxx.appspot.com)
+const CLIENT_STORAGE_BUCKET = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET?.trim() || undefined;
+
 const firebaseConfig = {
   apiKey: cleanApiKey(process.env.NEXT_PUBLIC_FIREBASE_API_KEY),
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  storageBucket: CLIENT_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
@@ -135,9 +137,17 @@ function initializeFirebase() {
     // Firestore works on both client and server
     _db = getFirestore(app);
 
-    // Storage only works on client side
+    // Storage only works on client side; require bucket and use explicit gs:// URL
     if (isClient) {
-      _storage = firebaseGetStorage(app);
+      if (!CLIENT_STORAGE_BUCKET) {
+        const err = "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET is required for Storage. Set it in .env.local to the exact bucket name from Firebase Console → Storage (e.g. your-project.appspot.com).";
+        console.error("❌", err);
+        throw new Error(err);
+      }
+      _storage = firebaseGetStorage(app, `gs://${CLIENT_STORAGE_BUCKET}`);
+      if (process.env.NODE_ENV === "development") {
+        console.log("🔍 Storage bucket (client):", CLIENT_STORAGE_BUCKET);
+      }
     }
     
     // Debug logging
