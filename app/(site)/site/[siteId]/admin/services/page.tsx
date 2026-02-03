@@ -869,7 +869,12 @@ export default function ServicesPage() {
                     onChange={(e) => {
                       const v = e.target.value;
                       const n = v === "" ? undefined : parseInt(v, 10);
-                      setEditingService({ ...editingService, price: v === "" ? undefined : (Number.isFinite(n) ? n : editingService.price) });
+                      const validPrice =
+                        typeof n === "number" && Number.isFinite(n) ? n : undefined;
+                      setEditingService({
+                        ...editingService,
+                        price: v === "" ? undefined : (validPrice ?? editingService.price),
+                      });
                     }}
                     placeholder="—"
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
@@ -887,7 +892,13 @@ export default function ServicesPage() {
                     onChange={(e) => {
                       const v = e.target.value;
                       const n = v === "" ? undefined : parseInt(v, 10);
-                      setEditingService({ ...editingService, duration: v === "" ? undefined : (Number.isFinite(n) && n >= 1 ? n : editingService.duration) });
+                      const validDuration =
+                        typeof n === "number" && Number.isFinite(n) && n >= 1
+                          ? n
+                          : undefined;
+                      const duration =
+                        v === "" ? undefined : (validDuration ?? editingService.duration);
+                      setEditingService({ ...editingService, duration });
                     }}
                     placeholder="—"
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
