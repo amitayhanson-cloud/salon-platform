@@ -21,13 +21,13 @@ function getCloudinarySignature(params: Record<string, string | number>, secret:
 
 export async function POST(request: Request) {
   try {
-    const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
-    const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
-    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME?.trim();
+    const rawSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+    const rawKey = process.env.CLOUDINARY_API_KEY?.trim();
+    const rawCloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME?.trim();
     const missing: string[] = [];
-    if (!apiSecret) missing.push("CLOUDINARY_API_SECRET");
-    if (!apiKey) missing.push("CLOUDINARY_API_KEY");
-    if (!cloudName) missing.push("NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME");
+    if (!rawSecret) missing.push("CLOUDINARY_API_SECRET");
+    if (!rawKey) missing.push("CLOUDINARY_API_KEY");
+    if (!rawCloudName) missing.push("NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME");
     if (missing.length > 0) {
       return NextResponse.json(
         {
@@ -38,6 +38,15 @@ export async function POST(request: Request) {
         { status: 500 }
       );
     }
+    if (typeof rawSecret !== "string" || typeof rawKey !== "string" || typeof rawCloudName !== "string") {
+      return NextResponse.json(
+        { error: "Cloudinary not configured", missing: ["CLOUDINARY_API_SECRET", "CLOUDINARY_API_KEY", "NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME"], hint: "Add these to .env.local then restart the dev server (npm run dev)." },
+        { status: 500 }
+      );
+    }
+    const apiSecret = rawSecret;
+    const apiKey = rawKey;
+    const cloudName = rawCloudName;
 
     const authHeader = request.headers.get("authorization");
     const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
@@ -46,21 +55,25 @@ export async function POST(request: Request) {
     }
     const auth = getAdminAuth();
     const decoded = await auth.verifyIdToken(token);
-    const uid = decoded.uid;
+    const uid: string = decoded.uid;
 
-    const body = await request.json().catch(() => ({}));
-    const siteId = body?.siteId;
-    if (!siteId || typeof siteId !== "string" || !siteId.trim()) {
+    const body = await request.json().catch((): Record<string, unknown> => ({}));
+    const siteIdRaw = body && typeof body === "object" && "siteId" in body ? (body as { siteId: unknown }).siteId : undefined;
+    if (typeof siteIdRaw !== "string" || !siteIdRaw.trim()) {
       return NextResponse.json({ error: "missing siteId" }, { status: 400 });
     }
+    const siteId = siteIdRaw.trim();
 
     const db = getAdminDb();
     const siteSnap = await db.collection("sites").doc(siteId).get();
     if (!siteSnap.exists) {
       return NextResponse.json({ error: "site not found" }, { status: 404 });
     }
-    const ownerUid = (siteSnap.data() as { ownerUid?: string })?.ownerUid;
-    if (ownerUid !== uid) {
+    const siteData = siteSnap.data();
+    const ownerUid = siteData && typeof siteData === "object" && "ownerUid" in siteData
+      ? (siteData as { ownerUid: unknown }).ownerUid
+      : undefined;
+    if (typeof ownerUid !== "string" || ownerUid !== uid) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
 
