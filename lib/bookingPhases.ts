@@ -278,6 +278,7 @@ export type BookingLike = {
   durationMin?: number;
   primaryDurationMin?: number;
   waitMin?: number;
+  waitMinutes?: number;
   secondaryDurationMin?: number;
   hasSecondary?: boolean;
   customerName?: string;
@@ -308,6 +309,15 @@ function toDate(val: Date | { toDate: () => Date } | undefined): Date | null {
   if (val instanceof Date) return val;
   if (typeof (val as { toDate: () => Date }).toDate === "function") return (val as { toDate: () => Date }).toDate();
   return null;
+}
+
+/** Returns wait duration in minutes. Uses waitMin (canonical) then waitMinutes (legacy); safe narrowing. */
+function getWaitMin(booking: { waitMin?: number; waitMinutes?: number }): number {
+  const w = booking.waitMin;
+  if (typeof w === "number" && Number.isFinite(w) && w >= 0) return Math.floor(w);
+  const wm = booking.waitMinutes;
+  if (typeof wm === "number" && Number.isFinite(wm) && wm >= 0) return Math.floor(wm);
+  return 0;
 }
 
 /**
@@ -437,7 +447,7 @@ export function toPhaseEvents(booking: BookingLike): BookingPhaseEvent[] {
     phase2Start = secondaryStartAt;
     phase2End = secondaryEndAt;
   } else {
-    const waitMin = Number(booking.waitMin ?? booking.waitMinutes ?? 0);
+    const waitMin = getWaitMin(booking);
     const phase1DurationMin = booking.primaryDurationMin ?? booking.durationMin ?? 60;
     const phase1End = new Date(phase1Start.getTime() + phase1DurationMin * 60 * 1000);
     phase2Start = new Date(phase1End.getTime() + waitMin * 60 * 1000);
