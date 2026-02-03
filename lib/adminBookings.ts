@@ -256,7 +256,9 @@ export async function updateAdminBooking(
   const timeStr = payload.time;
   const status = payload.status ?? "confirmed";
 
-  const excludeIds = [phase1Id, phase2Id].filter(Boolean);
+  const excludeIds: string[] = [phase1Id, phase2Id].filter(
+    (x): x is string => x !== null && typeof x === "string" && x.length > 0
+  );
   const phase1Conflict = await checkWorkerConflicts({
     siteId,
     workerId: payload.phase1.workerId,
