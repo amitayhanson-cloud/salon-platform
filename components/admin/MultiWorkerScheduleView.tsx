@@ -228,7 +228,13 @@ export default function MultiWorkerScheduleView({
             workers={workersToRender}
             startHour={startHour}
             endHour={endHour}
-            onBookingClick={onBookingClick}
+            onBookingClick={
+              onBookingClick
+                ? (b: unknown): void => {
+                    onBookingClick(b as Booking);
+                  }
+                : undefined
+            }
           />
         )}
       </div>
