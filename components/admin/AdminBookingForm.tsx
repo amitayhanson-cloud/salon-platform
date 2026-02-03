@@ -209,9 +209,14 @@ export default function AdminBookingForm({
     bookingsForDate,
   ]);
 
-  const excludeBookingIds = useMemo(() => {
+  const excludeBookingIds = useMemo((): string[] => {
     if (mode !== "edit" || !initialData) return [];
-    return [initialData.phase1Id, initialData.phase2Id].filter(Boolean);
+    const ids: string[] = [];
+    if (typeof initialData.phase1Id === "string" && initialData.phase1Id.length > 0)
+      ids.push(initialData.phase1Id);
+    if (typeof initialData.phase2Id === "string" && initialData.phase2Id.length > 0)
+      ids.push(initialData.phase2Id);
+    return ids;
   }, [mode, initialData]);
 
   const conflictPhase1 = useMemo(() => {
