@@ -23,6 +23,7 @@ import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
 import { bookingEnabled } from "@/lib/bookingEnabled";
 import type { SiteConfig } from "@/types/siteConfig";
 import type { SiteService } from "@/types/siteConfig";
+import type { OpeningHours, Weekday } from "@/types/booking";
 import { subscribeSiteServices } from "@/lib/firestoreSiteServices";
 import DayScheduleView from "@/components/admin/DayScheduleView";
 import MultiWorkerScheduleView from "@/components/admin/MultiWorkerScheduleView";
@@ -41,6 +42,28 @@ const DAY_LABELS: Record<string, string> = {
   "5": "שישי",
   "6": "שבת",
 };
+
+const WEEKDAY_LABELS: Record<string, string> = {
+  sun: "ראשון",
+  mon: "שני",
+  tue: "שלישי",
+  wed: "רביעי",
+  thu: "חמישי",
+  fri: "שישי",
+  sat: "שבת",
+};
+
+const WEEKDAYS_ORDER: Weekday[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+
+function getDayLabel(day: string): string {
+  return DAY_LABELS[day] ?? WEEKDAY_LABELS[day] ?? day;
+}
+
+function toWeekday(day: string): Weekday {
+  const n = parseInt(day, 10);
+  if (Number.isInteger(n) && n >= 0 && n < 7) return WEEKDAYS_ORDER[n];
+  return (WEEKDAY_LABELS[day] !== undefined ? day : "sun") as Weekday;
+}
 
 interface Booking {
   id: string;
@@ -126,6 +149,23 @@ export default function DaySchedulePage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteSuccess, setDeleteSuccess] = useState(false);
+
+  // Map workers to WorkerWithServices (add label to availability for AdminBookingForm)
+  const workersForForm = useMemo(() => {
+    return workers.map((w) => ({
+      id: w.id,
+      name: w.name,
+      services: w.services,
+      availability: w.availability?.map(
+        (a): OpeningHours => ({
+          day: toWeekday(a.day),
+          label: getDayLabel(a.day),
+          open: a.open ?? null,
+          close: a.close ?? null,
+        })
+      ),
+    }));
+  }, [workers]);
 
   // Load site config
   useEffect(() => {
@@ -931,7 +971,7 @@ export default function DaySchedulePage() {
             mode={formMode}
             siteId={siteId}
             defaultDate={dateKey}
-            workers={workers}
+            workers={workersForForm}
             services={services}
             bookingsForDate={bookingsForForm}
             initialData={formMode === "edit" ? editInitialData ?? undefined : undefined}
