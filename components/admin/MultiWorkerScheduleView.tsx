@@ -96,13 +96,16 @@ function startFromDateAndTime(
  * Phase 1 and phase 2: startAt/endAt from this doc (or start/end). Fallback to dateStr+timeStr only when missing.
  * No parent-derived times; no gap/wait display hacks. Positioning: computeBlockPosition (minutesFromDayStart * pxPerMin).
  */
+/** Sentinel for bookings with no worker (show in "ללא מטפל" column). */
+export const UNASSIGNED_WORKER_ID = "__unassigned__";
+
 export function bookingToBlock(
   booking: Booking,
   _allBookings?: Booking[]
 ): RenderBlock | null {
   const phase = booking.phase ?? 1;
-  const workerId = booking.workerId ?? "";
-  if (!workerId) return null;
+  const rawWorkerId = booking.workerId ?? "";
+  const workerId = rawWorkerId && String(rawWorkerId).trim() !== "" ? rawWorkerId : UNASSIGNED_WORKER_ID;
 
   const dateStr = (booking as { dateStr?: string }).dateStr ?? booking.date ?? "";
   const timeStr = (booking as { timeHHmm?: string }).timeHHmm ?? booking.time ?? "";
@@ -185,11 +188,17 @@ export default function MultiWorkerScheduleView({
   endHour = 20,
   onBookingClick,
 }: MultiWorkerScheduleViewProps) {
-  const UNASSIGNED_WORKER_ID = "__unassigned__";
   const confirmedBookings = useMemo(() => bookings.filter((b) => !isBookingCancelled(b)), [bookings]);
   const workersToRender = useMemo(() => {
-    const hasUnassigned = confirmedBookings.some((b) => (b.workerId ?? null) === null);
-    if (hasUnassigned) return [...workers, { id: UNASSIGNED_WORKER_ID, name: "ללא מטפל" }];
+    const workerIds = new Set(workers.map((w) => w.id));
+    const hasNullWorker = confirmedBookings.some((b) => (b.workerId ?? null) === null);
+    const hasUnknownWorker = confirmedBookings.some((b) => {
+      const wid = b.workerId ?? null;
+      return wid !== null && !workerIds.has(wid);
+    });
+    if (hasNullWorker || hasUnknownWorker) {
+      return [...workers, { id: UNASSIGNED_WORKER_ID, name: "ללא מטפל" }];
+    }
     return workers;
   }, [confirmedBookings, workers]);
 

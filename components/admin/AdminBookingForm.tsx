@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { X } from "lucide-react";
 import { computePhases } from "@/lib/bookingPhasesTiming";
 import { resolvePhase2Worker } from "@/lib/phase2Assignment";
-import { canWorkerPerformService } from "@/lib/workerServiceCompatibility";
+import { canWorkerPerformService, workersWhoCanPerformService } from "@/lib/workerServiceCompatibility";
 import { findWorkerConflictFromBookings } from "@/lib/bookingConflicts";
 import {
   createAdminBooking,
@@ -12,8 +12,17 @@ import {
   type AdminBookingPayload,
 } from "@/lib/adminBookings";
 import type { SiteService } from "@/types/siteConfig";
+import type { PricingItem } from "@/types/pricingItem";
 import type { BookingSettings } from "@/types/bookingSettings";
 import type { OpeningHours } from "@/types/booking";
+
+/** Display label for a service type (pricing item): service name + optional type (e.g. "תספורת - חצי ראש"). */
+function getServiceTypeLabel(item: PricingItem, services: SiteService[]): string {
+  const serviceId = item.serviceId || item.service;
+  const service = services.find((s) => s.id === serviceId || s.name === serviceId);
+  const base = service?.name ?? serviceId ?? item.id;
+  return item.type && item.type.trim() ? `${base} - ${item.type.trim()}` : base;
+}
 
 const SLOT_MINUTES = 15;
 
@@ -78,6 +87,10 @@ export interface AdminBookingFormProps {
   defaultDate: string; // YYYY-MM-DD
   workers: WorkerWithServices[];
   services: SiteService[];
+  /** Service types (pricing items) for phase 1 dropdown; filtered by site and enabled services. */
+  pricingItems: PricingItem[];
+  /** Existing clients for "select customer" in add booking; when selected, name and phone are filled. */
+  existingClients?: Array<{ id: string; name: string; phone: string }>;
   /** Bookings for the day (for conflict check). In edit mode, exclude the booking being edited. */
   bookingsForDate: Array<{
     id: string;
@@ -101,19 +114,47 @@ export default function AdminBookingForm({
   defaultDate,
   workers,
   services,
+  pricingItems,
+  existingClients = [],
   bookingsForDate,
   bookingSettings,
   initialData,
   onSuccess,
   onCancel,
 }: AdminBookingFormProps) {
+  // Service types available for phase 1: only items whose service is in the enabled services list
+  const phase1ServiceTypeOptions = useMemo(() => {
+    return pricingItems.filter((item) => {
+      const sid = item.serviceId || item.service;
+      return sid && services.some((s) => s.id === sid || s.name === sid);
+    });
+  }, [pricingItems, services]);
+
+  // Resolve initial phase1ServiceTypeId: from booking, or from serviceName (legacy), or first option
+  const initialPhase1ServiceTypeId = useMemo(() => {
+    if (initialData?.phase1?.serviceTypeId && initialData.phase1.serviceTypeId.trim()) {
+      return initialData.phase1.serviceTypeId;
+    }
+    const legacyServiceName = initialData?.phase1?.serviceName?.trim();
+    if (legacyServiceName) {
+      const firstMatch = phase1ServiceTypeOptions.find(
+        (p) => (p.serviceId || p.service) === legacyServiceName
+      );
+      if (firstMatch) return firstMatch.id;
+    }
+    return phase1ServiceTypeOptions[0]?.id ?? "";
+  }, [initialData?.phase1?.serviceTypeId, initialData?.phase1?.serviceName, phase1ServiceTypeOptions]);
+
   const [customerName, setCustomerName] = useState(initialData?.customerName ?? "");
   const [customerPhone, setCustomerPhone] = useState(initialData?.customerPhone ?? "");
   const [date, setDate] = useState(initialData?.date ?? defaultDate);
   const [time, setTime] = useState(initialData?.time ?? "09:00");
-  const [phase1ServiceName, setPhase1ServiceName] = useState(
-    initialData?.phase1?.serviceName ?? (services[0]?.name ?? "")
-  );
+  const [phase1ServiceTypeId, setPhase1ServiceTypeId] = useState(initialPhase1ServiceTypeId);
+
+  useEffect(() => {
+    setPhase1ServiceTypeId(initialPhase1ServiceTypeId);
+  }, [initialPhase1ServiceTypeId]);
+
   const [phase1WorkerId, setPhase1WorkerId] = useState(
     initialData?.phase1?.workerId ?? (workers[0]?.id ?? "")
   );
@@ -136,6 +177,12 @@ export default function AdminBookingForm({
     (initialData?.status as "confirmed" | "cancelled" | "active") ?? "confirmed"
   );
   const [price, setPrice] = useState<string>(initialData?.price != null ? String(initialData.price) : "");
+  const [selectedClientId, setSelectedClientId] = useState<string>(() => {
+    if (!initialData?.customerPhone || existingClients.length === 0) return "";
+    const normalized = initialData.customerPhone.replace(/\s|-|\(|\)/g, "");
+    const found = existingClients.find((c) => c.id === normalized || c.phone.replace(/\s|-|\(|\)/g, "") === normalized);
+    return found ? found.id : "";
+  });
 
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -144,10 +191,38 @@ export default function AdminBookingForm({
   const phase1Worker = workers.find((w) => w.id === phase1WorkerId);
   const phase1WorkerName = phase1Worker?.name ?? "";
 
+  const selectedPhase1Item = useMemo(
+    () => phase1ServiceTypeOptions.find((p) => p.id === phase1ServiceTypeId) ?? null,
+    [phase1ServiceTypeOptions, phase1ServiceTypeId]
+  );
+  // Use the same identifier as workers: SiteService.name (workers store service names on their card)
+  const phase1ServiceName = useMemo(() => {
+    if (!selectedPhase1Item) return "";
+    const sid = selectedPhase1Item.serviceId || selectedPhase1Item.service;
+    const svc = services.find((x) => x.id === sid || x.name === sid);
+    return (svc?.name ?? sid) ?? "";
+  }, [selectedPhase1Item, services]);
+
+  const phase1EligibleWorkers = useMemo(() => {
+    if (!phase1ServiceName.trim()) return workers;
+    return workersWhoCanPerformService(workers, phase1ServiceName);
+  }, [workers, phase1ServiceName]);
+
+  // When service type changes, ensure selected worker is eligible; otherwise pick first eligible
+  useEffect(() => {
+    if (phase1EligibleWorkers.length === 0) return;
+    const isEligible = phase1EligibleWorkers.some((w) => w.id === phase1WorkerId);
+    if (!isEligible) {
+      setPhase1WorkerId(phase1EligibleWorkers[0]?.id ?? "");
+    }
+  }, [phase1ServiceName, phase1EligibleWorkers, phase1WorkerId]);
+
   const phase1ServiceColor = useMemo(() => {
-    const s = services.find((x) => x.name === phase1ServiceName);
+    if (!selectedPhase1Item) return null;
+    const sid = selectedPhase1Item.serviceId || selectedPhase1Item.service;
+    const s = services.find((x) => x.id === sid || x.name === sid);
     return s?.color ?? null;
-  }, [services, phase1ServiceName]);
+  }, [services, selectedPhase1Item]);
 
   const livePreview = useMemo(() => {
     const [y, m, d] = date.split("-").map(Number);
@@ -286,9 +361,9 @@ export default function AdminBookingForm({
     if (!customerPhone.trim()) next.customerPhone = "נא להזין טלפון";
     if (!date.trim()) next.date = "נא לבחור תאריך";
     if (!time.trim()) next.time = "נא לבחור שעה";
-    if (!phase1ServiceName.trim()) next.phase1Service = "נא לבחור שירות לשלב 1";
+    if (!phase1ServiceTypeId.trim()) next.phase1Service = "נא לבחור סוג שירות לשלב 1";
     if (!phase1WorkerId) next.phase1Worker = "נא לבחור מטפל לשלב 1";
-    if (phase1Worker && !canWorkerPerformService(phase1Worker, phase1ServiceName)) {
+    if (phase1Worker && phase1ServiceName && !canWorkerPerformService(phase1Worker, phase1ServiceName)) {
       next.phase1Worker = "המטפל שנבחר לא מבצע שירות זה";
     }
     if (phase1DurationMin < 1) next.phase1Duration = "משך שלב 1 חייב להיות לפחות 1 דקה";
@@ -321,6 +396,7 @@ export default function AdminBookingForm({
     customerPhone,
     date,
     time,
+    phase1ServiceTypeId,
     phase1ServiceName,
     phase1WorkerId,
     phase1Worker,
@@ -355,7 +431,8 @@ export default function AdminBookingForm({
       time,
       phase1: {
         serviceName: phase1ServiceName.trim(),
-        serviceTypeId: null,
+        serviceTypeId: phase1ServiceTypeId.trim() || null,
+        serviceType: selectedPhase1Item?.type?.trim() ?? null,
         workerId: phase1WorkerId,
         workerName: phase1WorkerName,
         durationMin: phase1DurationMin,
@@ -419,13 +496,44 @@ export default function AdminBookingForm({
           </div>
         )}
 
+        {existingClients.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">בחר לקוח קיים</label>
+            <select
+              value={selectedClientId}
+              onChange={(e) => {
+                const id = e.target.value;
+                setSelectedClientId(id);
+                if (id) {
+                  const client = existingClients.find((c) => c.id === id);
+                  if (client) {
+                    setCustomerName(client.name);
+                    setCustomerPhone(client.phone);
+                  }
+                }
+              }}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right bg-white"
+            >
+              <option value="">— הזן ידנית —</option>
+              {existingClients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} — {c.phone}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">שם לקוח *</label>
             <input
               type="text"
               value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
+              onChange={(e) => {
+                setCustomerName(e.target.value);
+                if (selectedClientId) setSelectedClientId("");
+              }}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
             />
             {errors.customerName && <p className="text-xs text-red-600 mt-0.5">{errors.customerName}</p>}
@@ -435,7 +543,10 @@ export default function AdminBookingForm({
             <input
               type="tel"
               value={customerPhone}
-              onChange={(e) => setCustomerPhone(e.target.value)}
+              onChange={(e) => {
+                setCustomerPhone(e.target.value);
+                if (selectedClientId) setSelectedClientId("");
+              }}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
             />
             {errors.customerPhone && <p className="text-xs text-red-600 mt-0.5">{errors.customerPhone}</p>}
@@ -474,15 +585,16 @@ export default function AdminBookingForm({
           <h4 className="text-sm font-semibold text-slate-800 mb-3">שלב 1</h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">שירות *</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">סוג שירות *</label>
               <select
-                value={phase1ServiceName}
-                onChange={(e) => setPhase1ServiceName(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
+                value={phase1ServiceTypeId}
+                onChange={(e) => setPhase1ServiceTypeId(e.target.value)}
+                className={`w-full px-3 py-2 border rounded-lg text-right ${!phase1ServiceTypeId ? "border-red-300" : "border-slate-300"}`}
               >
-                {services.map((s) => (
-                  <option key={s.id} value={s.name}>
-                    {s.name}
+                <option value="">בחר סוג שירות</option>
+                {phase1ServiceTypeOptions.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {getServiceTypeLabel(item, services)}
                   </option>
                 ))}
               </select>
@@ -491,16 +603,23 @@ export default function AdminBookingForm({
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">מטפל *</label>
               <select
-                value={phase1WorkerId}
+                value={phase1EligibleWorkers.some((w) => w.id === phase1WorkerId) ? phase1WorkerId : (phase1EligibleWorkers[0]?.id ?? "")}
                 onChange={(e) => setPhase1WorkerId(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
               >
-                {workers.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name}
-                  </option>
-                ))}
+                {phase1EligibleWorkers.length === 0 ? (
+                  <option value="">אין מטפלים שמבצעים שירות זה</option>
+                ) : (
+                  phase1EligibleWorkers.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name}
+                    </option>
+                  ))
+                )}
               </select>
+              {phase1ServiceName && phase1EligibleWorkers.length < workers.length && (
+                <p className="text-xs text-slate-500 mt-0.5">מוצגים רק מטפלים שמבצעים את השירות הנבחר</p>
+              )}
               {errors.phase1Worker && <p className="text-xs text-red-600 mt-0.5">{errors.phase1Worker}</p>}
             </div>
             <div>

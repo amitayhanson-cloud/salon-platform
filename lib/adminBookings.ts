@@ -47,6 +47,7 @@ export interface AdminBookingPayload {
   phase1: {
     serviceName: string;
     serviceTypeId?: string | null;
+    serviceType?: string | null;
     workerId: string;
     workerName: string;
     durationMin: number;
@@ -140,7 +141,7 @@ export async function createAdminBooking(
     workerName: payload.phase1.workerName,
     serviceTypeId: payload.phase1.serviceTypeId ?? null,
     serviceName: payload.phase1.serviceName,
-    serviceType: null,
+    serviceType: payload.phase1.serviceType ?? null,
     durationMin,
     startAt: Timestamp.fromDate(phases.phase1StartAt),
     endAt: Timestamp.fromDate(phases.phase1EndAt),
@@ -304,6 +305,7 @@ export async function updateAdminBooking(
     workerName: payload.phase1.workerName,
     serviceTypeId: payload.phase1.serviceTypeId ?? null,
     serviceName: payload.phase1.serviceName,
+    serviceType: payload.phase1.serviceType ?? null,
     durationMin,
     startAt: Timestamp.fromDate(phases.phase1StartAt),
     endAt: Timestamp.fromDate(phases.phase1EndAt),

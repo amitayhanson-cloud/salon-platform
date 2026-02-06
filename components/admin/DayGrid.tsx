@@ -118,6 +118,10 @@ export default function DayGrid({
   }, [confirmedBookings]);
 
   const workerIds = useMemo(() => workers.map((w) => w.id), [workers]);
+  const unassignedColIndex = useMemo(
+    () => workerIds.indexOf("__unassigned__"),
+    [workerIds]
+  );
 
   const blocksWithGrid: DayGridBlock[] = useMemo(() => {
     const result: DayGridBlock[] = [];
@@ -133,7 +137,8 @@ export default function DayGrid({
       const minutesFromViewStart = Math.max(0, startMin - DAY_START_MINUTES);
       const rowStart = Math.floor(minutesFromViewStart / SLOT_MINUTES) + 1;
       const rowSpan = Math.max(1, Math.ceil(durMin / SLOT_MINUTES));
-      const workerCol = workerIds.indexOf(block.workerId);
+      let workerCol = workerIds.indexOf(block.workerId);
+      if (workerCol === -1 && unassignedColIndex >= 0) workerCol = unassignedColIndex;
       if (workerCol === -1) continue;
       result.push({
         ...block,
@@ -143,7 +148,7 @@ export default function DayGrid({
       });
     }
     return result;
-  }, [allBlocks, dateISO, DAY_START_MINUTES, DAY_END_MINUTES, workerIds]);
+  }, [allBlocks, dateISO, DAY_START_MINUTES, DAY_END_MINUTES, workerIds, unassignedColIndex]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const row11_30Ref = useRef<HTMLDivElement>(null);

@@ -64,11 +64,15 @@ type SiteMeta = {
 type SiteDoc = {
   id: string;
   ownerUid?: string | null;
+  ownerUserId?: string | null;
   config?: SiteConfig;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
   [key: string]: any; // Allow other fields from template
 };
+
+/** Site document fields we always set when creating a site (required for Firestore rules). */
+export type SiteDocCreate = Omit<SiteDoc, "id"> & { ownerUid: string; ownerUserId?: string };
 
 /**
  * Get site document reference
@@ -154,10 +158,11 @@ export async function createSiteFromTemplate(
   }
   
   // Merge builder config into template data
-  // IMPORTANT: Always set ownerUid explicitly (don't rely on template)
-  const siteData = {
+  // IMPORTANT: Always set ownerUid (and ownerUserId for backwards compatibility) so Firestore rules allow read/write
+  const siteData: SiteDocCreate = {
     ...templateDataToCopy,
-    ownerUid, // Explicitly set ownerUid to the current user's UID
+    ownerUid,
+    ownerUserId: ownerUid,
     config: finalConfig,
     createdAt: now,
     updatedAt: now,

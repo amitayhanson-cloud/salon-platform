@@ -7,25 +7,31 @@ import { useParams, useRouter, usePathname } from "next/navigation";
 export const dynamic = "force-dynamic";
 import AdminHeader from "@/components/admin/AdminHeader";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { verifySiteOwnership } from "@/lib/firestoreSites";
 
 export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading: authLoading, authReady } = useAuth();
+  const { user, firebaseUser, loading: authLoading, authReady } = useAuth();
   const params = useParams();
   const router = useRouter();
   const pathname = usePathname();
   const [authorized, setAuthorized] = useState(false);
   const [checking, setChecking] = useState(true);
   const [initializing, setInitializing] = useState(false);
+  const [ownershipRepairError, setOwnershipRepairError] = useState<string | null>(null);
   const siteId = params.siteId as string;
-  
+
   // Prevent redirect loops
   const redirectAttempted = useRef(false);
   const lastCheckedUid = useRef<string | null>(null);
+
+  function isPermissionError(err: unknown): boolean {
+    const msg = err instanceof Error ? err.message : String(err);
+    const code = (err as { code?: string })?.code;
+    return code === "permission-denied" || /missing or insufficient permissions/i.test(msg);
+  }
 
   useEffect(() => {
     // Don't check until auth is ready
@@ -82,6 +88,7 @@ export default function AdminLayout({
     }
 
     const checkAuthorization = async () => {
+      setOwnershipRepairError(null);
       if (process.env.NODE_ENV === "development") {
         console.log("[ADMIN GUARD] Checking authorization", {
           authReady,
@@ -90,11 +97,51 @@ export default function AdminLayout({
         });
       }
 
+      const { getSite, backfillSiteOwnerUid, verifySiteOwnership } = await import("@/lib/firestoreSites");
+
+      let site: Awaited<ReturnType<typeof getSite>> = null;
       try {
-        // First, check if the site exists
-        const { getSite, backfillSiteOwnerUid } = await import("@/lib/firestoreSites");
-        const site = await getSite(siteId);
-        
+        site = await getSite(siteId);
+      } catch (getSiteError) {
+        if (isPermissionError(getSiteError) && user.siteId === siteId && firebaseUser) {
+          if (process.env.NODE_ENV === "development") {
+            console.log("[ADMIN GUARD] Permission denied on getSite, attempting repair via API");
+          }
+          try {
+            const token = await firebaseUser.getIdToken();
+            const res = await fetch("/api/repair-site-ownership", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ siteId }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+              setOwnershipRepairError(
+                data?.message || data?.error || "תיקון הרשאות נכשל. נדרש תיקון מהשרת – פנה למנהל המערכת."
+              );
+              setChecking(false);
+              setAuthorized(false);
+              return;
+            }
+            site = await getSite(siteId);
+          } catch (repairOrRetryError) {
+            console.error("[ADMIN GUARD] Repair or retry failed:", repairOrRetryError);
+            setOwnershipRepairError(
+              "לא ניתן לטעון את האתר. נדרש תיקון הרשאות בשרת – פנה למנהל המערכת או הרץ תיקון מהשרת."
+            );
+            setChecking(false);
+            setAuthorized(false);
+            return;
+          }
+        } else {
+          console.error("[ADMIN GUARD] Error checking authorization:", getSiteError);
+          setChecking(false);
+          setAuthorized(false);
+          return;
+        }
+      }
+
+      try {
         if (!site) {
           // Site doesn't exist - show error UI (NOT redirect to builder)
           if (process.env.NODE_ENV === "development") {
@@ -120,7 +167,6 @@ export default function AdminLayout({
 
         // Verify site ownership: sites/{siteId}.ownerUid === current uid
         const isOwner = await verifySiteOwnership(siteId, user.id);
-        
         if (!isOwner) {
           // User is not the owner of this site
           if (!redirectAttempted.current) {
@@ -129,7 +175,7 @@ export default function AdminLayout({
               console.log(`[ADMIN GUARD] Access denied: uid=${user.id} is not owner of siteId=${siteId}`);
               console.log(`[ADMIN GUARD] Site ownerUid=${siteOwnerUid}, user.uid=${user.id}`);
             }
-            
+
             // Get user's own siteId and redirect to their admin (if they have one)
             const { getUserDocument } = await import("@/lib/firestoreUsers");
             const userDoc = await getUserDocument(user.id);
@@ -180,7 +226,7 @@ export default function AdminLayout({
     };
 
     checkAuthorization();
-  }, [user, authLoading, authReady, siteId, router, authorized, pathname]);
+  }, [user, firebaseUser, authLoading, authReady, siteId, router, authorized, pathname]);
 
   // Show loading state
   if (authLoading || checking || initializing) {
@@ -203,7 +249,7 @@ export default function AdminLayout({
         <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-8 max-w-md text-right">
           <h1 className="text-2xl font-bold text-slate-900 mb-4">גישה נדחתה</h1>
           <p className="text-slate-600 mb-6">
-            אין לך הרשאה לגשת לפאנל הניהול של אתר זה.
+            {ownershipRepairError || "אין לך הרשאה לגשת לפאנל הניהול של אתר זה."}
           </p>
           <div className="flex gap-3">
             <button

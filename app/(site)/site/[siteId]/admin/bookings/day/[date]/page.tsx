@@ -17,7 +17,7 @@ import {
   workersCollection,
 } from "@/lib/firestorePaths";
 import { normalizeBooking, isBookingCancelled } from "@/lib/normalizeBooking";
-import { ymdLocal, parseYmdToLocalDate } from "@/lib/dateLocal";
+import { parseDateParamToDayKey } from "@/lib/dateLocal";
 import { fromYYYYMMDD, getMinutesSinceStartOfDay } from "@/lib/calendarUtils";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
 import { bookingEnabled } from "@/lib/bookingEnabled";
@@ -25,6 +25,9 @@ import type { SiteConfig } from "@/types/siteConfig";
 import type { SiteService } from "@/types/siteConfig";
 import type { OpeningHours, Weekday } from "@/types/booking";
 import { subscribeSiteServices } from "@/lib/firestoreSiteServices";
+import { subscribePricingItems } from "@/lib/firestorePricing";
+import type { PricingItem } from "@/types/pricingItem";
+import { getAllClients } from "@/lib/firestoreClients";
 import DayScheduleView from "@/components/admin/DayScheduleView";
 import MultiWorkerScheduleView from "@/components/admin/MultiWorkerScheduleView";
 import WorkerFilter from "@/components/admin/WorkerFilter";
@@ -69,6 +72,7 @@ interface Booking {
   id: string;
   serviceName: string;
   serviceType?: string;
+  serviceTypeId?: string | null;
   serviceCategory?: string;
   serviceColor?: string | null;
   workerId: string | null;
@@ -106,9 +110,9 @@ export default function DaySchedulePage() {
   const siteId = params?.siteId as string;
   const dateParam = params?.date as string;
 
-  // Parse date from URL
-  const selectedDate = dateParam ? fromYYYYMMDD(dateParam) : new Date();
-  const dateKey = ymdLocal(selectedDate);
+  // Stable YYYY-MM-DD only (same as main calendar); avoid DD/MM vs MM/DD
+  const dateKey = parseDateParamToDayKey(dateParam);
+  const selectedDate = fromYYYYMMDD(dateKey);
 
   // Sentinel value for "All workers" mode (defined outside component to avoid dependency issues)
   const ALL_WORKERS = "all";
@@ -133,7 +137,10 @@ export default function DaySchedulePage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [workers, setWorkers] = useState<Array<{ id: string; name: string; services?: string[]; availability?: { day: string; open: string | null; close: string | null }[] }>>([]);
   const [services, setServices] = useState<SiteService[]>([]);
+  const [pricingItems, setPricingItems] = useState<PricingItem[]>([]);
+  const [existingClients, setExistingClients] = useState<Array<{ id: string; name: string; phone: string }>>([]);
   const [bookingsLoading, setBookingsLoading] = useState(true);
+  const [workersLoading, setWorkersLoading] = useState(true);
 
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -204,10 +211,58 @@ export default function DaySchedulePage() {
     return () => unsubscribe();
   }, [siteId]);
 
-  // Load workers list
+  // Load pricing items (service types) for booking form
   useEffect(() => {
-    if (!siteId || !db) return;
+    if (!siteId) return;
 
+    const unsubscribe = subscribePricingItems(
+      siteId,
+      (items) => setPricingItems(items),
+      (e) => {
+        console.error("[DaySchedule] Failed to load pricing items", e);
+        setPricingItems([]);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [siteId]);
+
+  // Load existing clients for "select customer" in add-booking form
+  useEffect(() => {
+    if (!siteId) return;
+    let cancelled = false;
+    getAllClients(siteId)
+      .then((list) => {
+        if (cancelled) return;
+        const mapped = list
+          .filter((c) => (c.phone || "").trim() !== "")
+          .map((c) => ({
+            id: (c.phone || "").replace(/\s|-|\(|\)/g, ""),
+            name: (c.name || "").trim(),
+            phone: (c.phone || "").trim(),
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        setExistingClients(mapped);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          console.error("[DaySchedule] Failed to load clients", e);
+          setExistingClients([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [siteId]);
+
+  // Load workers list (must finish before showing calendar so booking blocks have columns)
+  useEffect(() => {
+    if (!siteId || !db) {
+      setWorkersLoading(false);
+      return;
+    }
+
+    setWorkersLoading(true);
     const workersQuery = query(workersCollection(siteId), orderBy("name", "asc"));
     const unsubscribe = onSnapshot(
       workersQuery,
@@ -219,9 +274,12 @@ export default function DaySchedulePage() {
             name: data.name || "",
             services: (data.services as string[] | undefined) || [],
             availability: (data.availability as { day: string; open: string | null; close: string | null }[] | undefined) || [],
+            active: data.active !== false,
+            allServicesAllowed: data.allServicesAllowed === true,
           };
         });
         setWorkers(items);
+        setWorkersLoading(false);
         
         // No auto-select needed - default is "all" (All workers)
         // The selectedWorkerId is already set correctly from URL in initial state:
@@ -231,6 +289,7 @@ export default function DaySchedulePage() {
       },
       (err) => {
         console.error("[DaySchedule] Failed to load workers", err);
+        setWorkersLoading(false);
       }
     );
 
@@ -265,7 +324,7 @@ export default function DaySchedulePage() {
       bookingsQuery,
       (snapshot) => {
         const normalized = snapshot.docs.map((d) => normalizeBooking(d as { id: string; data: () => Record<string, unknown> }));
-        const forDay = normalized.filter((b) => b.dateStr === dateKey);
+        const forDay = normalized.filter((b) => (b.dateStr ?? (b as { date?: string }).date) === dateKey);
         const notCancelled = forDay.filter((b) => !isBookingCancelled(b));
         notCancelled.sort((a, b) => (a.timeHHmm || "").localeCompare(b.timeHHmm || ""));
         const withWorkerNames = notCancelled.map((b) => {
@@ -389,13 +448,10 @@ export default function DaySchedulePage() {
   }, [bookings, serviceColorLookup]);
 
   // Day matching uses string key only (dateStr === selectedDateStr); filter out cancelled only
-  const forSelectedDay = bookingsWithColors.filter((b) => (b as { dateStr?: string }).dateStr === dateKey || b.date === dateKey);
+  const forSelectedDay = bookingsWithColors.filter(
+    (b) => ((b as { dateStr?: string }).dateStr ?? b.date) === dateKey
+  );
   const filteredBookings = forSelectedDay.filter((b) => !isBookingCancelled(b));
-
-  // Temporary: remove after confirming bookings render correctly
-  if (typeof window !== "undefined") {
-    console.log("[DAY_RENDER]", { selectedDateStr: dateKey, selectedWorkerId, count: filteredBookings.length, ids: filteredBookings.map((b) => ({ id: b.id, date: (b as { dateStr?: string }).dateStr ?? b.date, time: (b as { timeHHmm?: string }).timeHHmm ?? b.time, worker: b.workerId, status: b.status })) });
-  }
 
   // Get working hours from config (default 8-20)
   const startHour = 8;
@@ -465,7 +521,7 @@ export default function DaySchedulePage() {
       time: timeStr,
       phase1: {
         serviceName: b1.serviceName ?? "",
-        serviceTypeId: (b1 as { serviceTypeId?: string }).serviceTypeId ?? null,
+        serviceTypeId: b1.serviceTypeId ?? (b1 as { serviceTypeId?: string }).serviceTypeId ?? null,
         workerId: b1.workerId ?? "",
         workerName: b1.workerName ?? workers.find((w) => w.id === b1.workerId)?.name ?? "",
         durationMin: b1.durationMin ?? 30,
@@ -595,7 +651,7 @@ export default function DaySchedulePage() {
     return formatTime(endTime);
   };
 
-  if (loading || bookingsLoading) {
+  if (loading || bookingsLoading || workersLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50" dir="rtl">
         <div className="text-center">
@@ -973,6 +1029,8 @@ export default function DaySchedulePage() {
             defaultDate={dateKey}
             workers={workersForForm}
             services={services}
+            pricingItems={pricingItems}
+            existingClients={existingClients}
             bookingsForDate={bookingsForForm}
             initialData={formMode === "edit" ? editInitialData ?? undefined : undefined}
             onSuccess={handleBookingFormSuccess}

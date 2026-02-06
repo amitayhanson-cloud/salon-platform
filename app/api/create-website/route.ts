@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createWebsiteDocument, updateUserSiteId } from "@/lib/firestoreUsers";
-import { doc, setDoc, Timestamp } from "firebase/firestore";
-import { db } from "@/lib/firebaseClient";
+import { getAdminDb } from "@/lib/firebaseAdmin";
 import { defaultSiteConfig } from "@/types/siteConfig";
 
 export async function POST(request: NextRequest) {
@@ -55,22 +54,20 @@ export async function POST(request: NextRequest) {
     // Update user document with site ID
     await updateUserSiteId(userId, website.id);
 
-    // Create initial site config for the website
-    if (!db) {
-      console.error("❌ Firestore db not initialized in API route");
-      console.error("🔍 db type:", typeof db, "value:", db);
-      throw new Error("Firestore db not initialized. Check Firebase configuration.");
-    }
-
-    const siteConfigRef = doc(db, "sites", website.id);
+    // Create initial site document with Admin SDK so ownership is set (satisfies Firestore rules)
+    const db = getAdminDb();
+    const siteId = website.id;
     const initialConfig = {
       ...defaultSiteConfig,
       salonName: salonName || "הסלון שלי",
-      createdAt: Timestamp.now(),
-      updatedAt: Timestamp.now(),
     };
-
-    await setDoc(siteConfigRef, initialConfig);
+    await db.collection("sites").doc(siteId).set({
+      ...initialConfig,
+      ownerUid: userId,
+      ownerUserId: userId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
 
     return NextResponse.json({
       success: true,
