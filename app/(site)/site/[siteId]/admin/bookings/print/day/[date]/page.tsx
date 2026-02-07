@@ -5,8 +5,8 @@ export const dynamic = "force-dynamic";
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { getDoc } from "firebase/firestore";
-import { query, where, onSnapshot } from "firebase/firestore";
-import { bookingsCollection, workerDoc } from "@/lib/firestorePaths";
+import { query, where, orderBy, onSnapshot } from "firebase/firestore";
+import { bookingsCollection, workerDoc, workersCollection } from "@/lib/firestorePaths";
 import { clientDocRef } from "@/lib/firestoreClientRefs";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
 import { normalizeBooking, isBookingCancelled, type NormalizedBooking } from "@/lib/normalizeBooking";
@@ -34,11 +34,14 @@ export default function PrintDayPage() {
 
   const [config, setConfig] = useState<{ salonName: string } | null>(null);
   const [worker, setWorker] = useState<{ id: string; name: string } | null>(null);
+  const [workers, setWorkers] = useState<{ id: string; name: string }[]>([]);
   const [bookings, setBookings] = useState<NormalizedBooking[]>([]);
   const [chemicalCardsMap, setChemicalCardsMap] = useState<Record<string, ChemicalCardPrintData | null>>({});
   const [chemicalCardsReady, setChemicalCardsReady] = useState(false);
+  const [workersLoaded, setWorkersLoaded] = useState(false);
 
-  const validWorker = workerId && workerId !== "all";
+  const validSingleWorker = workerId && workerId !== "all";
+  const validAllWorkers = !workerId || workerId === "all";
 
   // Subscribe to site config
   useEffect(() => {
@@ -50,9 +53,9 @@ export default function PrintDayPage() {
     );
   }, [siteId]);
 
-  // Load worker by id
+  // Load single worker by id
   useEffect(() => {
-    if (!siteId || !validWorker) {
+    if (!siteId || !validSingleWorker) {
       setWorker(null);
       return;
     }
@@ -67,7 +70,27 @@ export default function PrintDayPage() {
       }
     });
     return () => { cancelled = true; };
-  }, [siteId, workerId, validWorker]);
+  }, [siteId, workerId, validSingleWorker]);
+
+  // Load all workers (for "all workers" print)
+  useEffect(() => {
+    if (!siteId || !validAllWorkers) {
+      setWorkers([]);
+      setWorkersLoaded(false);
+      return;
+    }
+    const q = query(workersCollection(siteId), orderBy("name", "asc"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setWorkers(
+        snapshot.docs.map((d) => {
+          const data = d.data();
+          return { id: d.id, name: (data?.name as string) ?? "" };
+        })
+      );
+      setWorkersLoaded(true);
+    }, (err) => console.error("[PrintDay] workers error", err));
+    return () => unsubscribe();
+  }, [siteId, validAllWorkers]);
 
   // Subscribe to bookings for the day
   useEffect(() => {
@@ -88,7 +111,7 @@ export default function PrintDayPage() {
   }, [siteId, dateKey]);
 
   const bookingsForWorker: PrintBookingRow[] = useMemo(() => {
-    if (!validWorker || !workerId) return [];
+    if (!validSingleWorker || !workerId) return [];
     const filtered = bookings.filter((b) => b.workerId === workerId);
     const rows: PrintBookingRow[] = [];
     for (const b of filtered) {
@@ -112,12 +135,47 @@ export default function PrintDayPage() {
       });
     }
     return rows.sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
-  }, [bookings, workerId, validWorker]);
+  }, [bookings, workerId, validSingleWorker]);
+
+  /** For "all workers" mode: each worker's bookings. */
+  const bookingsPerWorker = useMemo(() => {
+    if (!validAllWorkers || workers.length === 0) return [];
+    return workers.map((w) => {
+      const filtered = bookings.filter((b) => b.workerId === w.id);
+      const rows: PrintBookingRow[] = [];
+      for (const b of filtered) {
+        const startAt = toDate((b.start ?? b.startAt) as Date | { toDate: () => Date } | undefined);
+        const endAt = toDate((b.end ?? b.endAt) as Date | { toDate: () => Date } | undefined);
+        if (!startAt || !endAt) continue;
+        const customerName = (b as { customerName?: string }).customerName ?? "";
+        const serviceName = (b as { serviceName?: string }).serviceName ?? "";
+        const note = (b as { note?: string | null }).note ?? null;
+        const clientId = (b as { clientId?: string }).clientId;
+        const customerPhone = (b as { customerPhone?: string }).customerPhone ?? "";
+        const clientKey = (clientId && clientId.trim()) ? normalizePhone(clientId) : normalizePhone(customerPhone);
+        rows.push({
+          startAt,
+          endAt,
+          customerName,
+          serviceName,
+          phase: b.phase,
+          note,
+          clientKey: clientKey || "",
+        });
+      }
+      rows.sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+      return { worker: w, rows };
+    });
+  }, [bookings, workers, validAllWorkers]);
 
   const uniqueClientKeys = useMemo(() => {
-    const keys = [...new Set(bookingsForWorker.map((r) => r.clientKey).filter(Boolean))];
-    return keys;
-  }, [bookingsForWorker]);
+    if (validAllWorkers) {
+      const keys = new Set<string>();
+      bookingsPerWorker.forEach(({ rows }) => rows.forEach((r) => r.clientKey && keys.add(r.clientKey)));
+      return [...keys];
+    }
+    return [...new Set(bookingsForWorker.map((r) => r.clientKey).filter(Boolean))];
+  }, [validAllWorkers, bookingsForWorker, bookingsPerWorker]);
 
   useEffect(() => {
     if (!siteId || uniqueClientKeys.length === 0) {
@@ -161,7 +219,10 @@ export default function PrintDayPage() {
     return () => { cancelled = true; };
   }, [siteId, uniqueClientKeys]);
 
-  const ready = config != null && worker != null && validWorker && chemicalCardsReady;
+  const ready =
+    config != null &&
+    chemicalCardsReady &&
+    (validSingleWorker ? worker != null : validAllWorkers && workersLoaded);
 
   // Auto-print when data is ready (once)
   useEffect(() => {
@@ -171,7 +232,39 @@ export default function PrintDayPage() {
     return () => clearTimeout(timeoutId);
   }, [ready]);
 
-  if (!validWorker) {
+  // All workers: render one section per worker
+  if (validAllWorkers) {
+    return (
+      <div className="worker-day-print-root" dir="rtl" style={{ paddingBottom: "2rem" }}>
+        <style dangerouslySetInnerHTML={{ __html: `
+          @media print {
+            .worker-day-print-root .print-section { break-inside: avoid; page-break-inside: avoid; }
+          }
+        ` }} />
+        {!workersLoaded ? (
+          <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+            <p className="text-slate-700 font-medium">טוען...</p>
+          </div>
+        ) : bookingsPerWorker.length === 0 ? (
+          <div className="p-8 text-center text-slate-600">אין עובדים או תורים ליום זה.</div>
+        ) : (
+          bookingsPerWorker.map(({ worker: w, rows }) => (
+            <div key={w.id} className="print-section">
+              <WorkerDayPrintView
+                siteName={config?.salonName ?? "לוח זמנים"}
+                dayISO={dateKey}
+                worker={w}
+                bookingsForWorkerDay={rows}
+                chemicalCardsMap={chemicalCardsMap}
+              />
+            </div>
+          ))
+        )}
+      </div>
+    );
+  }
+
+  if (!validSingleWorker) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6" dir="rtl">
         <div className="bg-white rounded-xl shadow border border-slate-200 p-8 max-w-md text-center">

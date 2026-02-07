@@ -722,9 +722,12 @@ export default function DaySchedulePage() {
   }
 
   // Print: open print-day page in new tab. Uses window.open so it works even if overlays/stacking would block anchor clicks (e.g. in production).
+  // When "All workers" is selected, pass workerId=all to print all workers' schedules.
   const handlePrint = () => {
-    if (selectedWorkerId === ALL_WORKERS || !selectedWorkerId) return;
-    const url = `/site/${siteId}/admin/bookings/print/day/${dateKey}?workerId=${encodeURIComponent(selectedWorkerId)}`;
+    if (!selectedWorkerId) return;
+    const workerParam =
+      selectedWorkerId === ALL_WORKERS ? "all" : encodeURIComponent(selectedWorkerId);
+    const url = `/site/${siteId}/admin/bookings/print/day/${dateKey}?workerId=${workerParam}`;
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
@@ -760,16 +763,12 @@ export default function DaySchedulePage() {
                 data-testid="print-day-button"
                 title={
                   selectedWorkerId === ALL_WORKERS
-                    ? "בחר מטפל להדפסה"
+                    ? "הדפס לוח זמנים (כל העובדים)"
                     : "הדפס לוח זמנים"
                 }
-                disabled={selectedWorkerId === ALL_WORKERS || !selectedWorkerId}
+                disabled={!selectedWorkerId}
                 onClick={handlePrint}
-                className={
-                  selectedWorkerId === ALL_WORKERS || !selectedWorkerId
-                    ? "inline-flex items-center gap-2 px-3 py-2 bg-slate-200 text-slate-500 rounded-lg text-sm font-medium cursor-not-allowed"
-                    : "inline-flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
-                }
+                className="inline-flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
               >
                 <Printer className="w-4 h-4" />
                 הדפס
