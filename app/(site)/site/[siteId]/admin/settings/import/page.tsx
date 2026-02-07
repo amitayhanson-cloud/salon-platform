@@ -11,105 +11,16 @@ import { downloadCSVTemplate, downloadExcelTemplate, downloadExampleFile } from 
 import { autoDetectMapping, CLIENT_IMPORT_FIELDS } from "@/lib/import/mapRow";
 import { computeMappingStats } from "@/lib/import/validateMapping";
 import type { RawRow, ColumnMapping, DryRunResult, ExecuteResult } from "@/lib/import/types";
-import { Upload, CheckCircle, AlertCircle, Sparkles, Download } from "lucide-react";
-import type { AIPreprocessResult } from "@/app/api/import/ai-preprocess/route";
+import { Upload, CheckCircle, AlertCircle, Download } from "lucide-react";
 
 type Step = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
-const MAX_ROWS_FOR_AI = 200;
 const CHUNK_SIZE = 100;
 const CHUNK_THRESHOLD = 200;
 const EXECUTE_TIMEOUT_MS = typeof process !== "undefined" && process.env.NODE_ENV === "development" ? 60_000 : 180_000;
 
-function rowsToAIText(headers: string[], rows: RawRow[]): string {
-  const headerLine = headers.join(" | ");
-  const sampleRows = rows.slice(0, 50);
-  const rowLines = sampleRows.map((r, i) => {
-    const values = headers.map((h) => {
-      const v = String(r[h] ?? "").trim();
-      return v.includes(",") || v.includes('"') ? `"${v.replace(/"/g, '""')}"` : v;
-    });
-    return `${i + 1}. ${values.join(", ")}`;
-  });
-  return `Headers:\n${headerLine}\n\nRows:\n${rowLines.join("\n")}`;
-}
-
 function isMappingConfident(stats: { phoneMapped: boolean; nameMapped: boolean; validPhoneRatio: number }): boolean {
   return stats.phoneMapped && stats.nameMapped && stats.validPhoneRatio >= 0.3;
-}
-
-function AIOptionalButton({
-  headers,
-  rows,
-  onRun,
-  firebaseUser,
-}: {
-  headers: string[];
-  rows: RawRow[];
-  onRun: (result: AIPreprocessResult) => void;
-  firebaseUser: { getIdToken: () => Promise<string> } | null;
-}) {
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiResult, setAiResult] = useState<AIPreprocessResult | null>(null);
-  const [aiError, setAiError] = useState<string | null>(null);
-
-  const runAI = useCallback(async () => {
-    if (!headers.length || !rows.length || !firebaseUser) return;
-    setAiLoading(true);
-    setAiError(null);
-    try {
-      const token = await firebaseUser.getIdToken();
-      const textForAI = rowsToAIText(headers, rows.slice(0, MAX_ROWS_FOR_AI));
-      const res = await fetch("/api/import/ai-preprocess", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          textBlock: textForAI,
-          headers,
-          rows: rows.slice(0, MAX_ROWS_FOR_AI),
-          originalRowCount: rows.length,
-        }),
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(d.error || res.statusText);
-      }
-      const data: AIPreprocessResult = await res.json();
-      setAiResult(data);
-    } catch (err) {
-      console.error("[import] AI error:", err);
-      setAiError(err instanceof Error ? err.message : "שגיאת AI");
-    } finally {
-      setAiLoading(false);
-    }
-  }, [headers, rows, firebaseUser]);
-
-  if (aiResult) {
-    return (
-      <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-        <p className="text-sm font-medium text-green-800 mb-2">AI סיים: {aiResult.cleanedRowCount} שורות תקינות</p>
-        <p className="text-xs text-green-700 mb-3">מקור: {aiResult.originalRowCount} | הוסרו: {aiResult.droppedRowsCount}</p>
-        <button type="button" onClick={() => onRun(aiResult)} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium">
-          המשך לייבוא
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      <button
-        type="button"
-        onClick={runAI}
-        disabled={aiLoading}
-        className="flex items-center gap-2 px-4 py-2 border border-violet-300 rounded-lg text-violet-700 text-sm hover:bg-violet-50"
-      >
-        <Sparkles className="w-4 h-4" />
-        {aiLoading ? "מעבד..." : "נסה לתקן עם AI"}
-      </button>
-      {aiError && <p className="text-xs text-red-600">{aiError}</p>}
-    </div>
-  );
 }
 
 export default function ImportPage() {
@@ -178,20 +89,6 @@ export default function ImportPage() {
       setLoading(false);
     }
   }, [loading]);
-
-  const handleAIApprove = useCallback((result: AIPreprocessResult) => {
-    const rawRows: RawRow[] = result.normalizedRows.map((r) => ({
-      fullName: r.fullName,
-      phone: r.phone,
-      email: r.email ?? "",
-      notes: r.notes ?? "",
-    }));
-    setRows(rawRows);
-    setHeaders(result.normalizedHeaders);
-    setMapping(autoDetectMapping(result.normalizedHeaders));
-    setParsedPreview({ headers: result.normalizedHeaders, rows: rawRows });
-    setStep(2);
-  }, []);
 
   const handleDryRun = useCallback(async () => {
     if (!firebaseUser || !siteId) return;
@@ -511,12 +408,9 @@ export default function ImportPage() {
                       המשך
                     </button>
                   ) : (
-                    <>
-                      <button type="button" onClick={() => setStep(2)} className="px-4 py-2 bg-sky-500 text-white rounded-lg text-sm font-medium">
-                        מיפוי ידני
-                      </button>
-                      <AIOptionalButton headers={headers} rows={rows} onRun={handleAIApprove} firebaseUser={firebaseUser ?? null} />
-                    </>
+                    <button type="button" onClick={() => setStep(2)} className="px-4 py-2 bg-sky-500 text-white rounded-lg text-sm font-medium">
+                      מיפוי ידני
+                    </button>
                   )}
                   <button type="button" onClick={() => setStep(0)} className="px-4 py-2 border border-slate-200 rounded-lg text-slate-700 text-sm">
                     חזרה
