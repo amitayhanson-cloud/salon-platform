@@ -838,8 +838,9 @@ export default function WorkersPage() {
                       <div className="space-y-4">
                         <div>
                           <label className="block text-sm font-medium text-slate-700 mb-1">
-                            עמלת טיפולים (%)
+                            אחוז לעובד (%)
                           </label>
+                          <p className="text-xs text-slate-500 mb-1">חלק העובד מההכנסה (העסק מקבל את השאר)</p>
                           <input
                             type="number"
                             min={0}

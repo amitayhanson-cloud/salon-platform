@@ -42,12 +42,15 @@ interface Booking {
   date?: string;
 }
 
+/** Commission direction: treatmentCommissionPercent = worker's share (0–100). Business gets the remainder. */
 interface WorkerMetrics {
   workerId: string;
   workerName: string;
   grossRevenue: number;
-  feePaid: number;
-  netRevenue: number;
+  /** Worker's share of revenue (grossRevenue * commissionPercent/100) */
+  workerPayout: number;
+  /** Business share (grossRevenue * (1 - commissionPercent/100)) */
+  businessShare: number;
   totalMinutes: number;
   totalHours: number;
   avgPerHour: number;
@@ -339,8 +342,8 @@ export default function TeamPerformancePage() {
     return map;
   }, [workers]);
 
-  // Build worker commission percent map (0–100, default 0)
-  const workerCommissionPercentMap = useMemo(() => {
+  // Worker's share of revenue (0–100%). Business gets (100 - this). Same field as treatmentCommissionPercent.
+  const workerSharePercentMap = useMemo(() => {
     const map = new Map<string, number>();
     workers.forEach((w) => {
       const pct = w.treatmentCommissionPercent;
@@ -375,7 +378,7 @@ export default function TeamPerformancePage() {
     return resolvedPrice;
   };
 
-  // Calculate metrics per worker (gross, fee, net, hourly from net)
+  // Calculate metrics per worker: gross revenue, worker payout (worker %), business share (100 - worker %), avg per hour (worker)
   const workerMetrics = useMemo(() => {
     const metricsMap = new Map<string, WorkerMetrics>();
 
@@ -386,8 +389,8 @@ export default function TeamPerformancePage() {
         workerId: booking.workerId,
         workerName: workerNameMap.get(booking.workerId) || booking.workerId,
         grossRevenue: 0,
-        feePaid: 0,
-        netRevenue: 0,
+        workerPayout: 0,
+        businessShare: 0,
         totalMinutes: 0,
         totalHours: 0,
         avgPerHour: 0,
@@ -414,30 +417,30 @@ export default function TeamPerformancePage() {
 
     const metrics: WorkerMetrics[] = Array.from(metricsMap.values()).map((m) => {
       const totalHours = m.totalMinutes / 60;
-      const commissionPercent = workerCommissionPercentMap.get(m.workerId) ?? 0;
-      const feePaid = m.grossRevenue * (commissionPercent / 100);
-      const netRevenue = m.grossRevenue - feePaid;
-      const avgPerHour = totalHours > 0 ? m.grossRevenue / totalHours : 0;
+      const workerSharePercent = workerSharePercentMap.get(m.workerId) ?? 0;
+      const workerPayout = m.grossRevenue * (workerSharePercent / 100);
+      const businessShare = m.grossRevenue * (1 - workerSharePercent / 100);
+      const avgPerHour = totalHours > 0 ? workerPayout / totalHours : 0;
       return {
         ...m,
-        feePaid,
-        netRevenue,
+        workerPayout,
+        businessShare,
         totalHours,
         avgPerHour,
       };
     });
 
-    return metrics.sort((a, b) => b.netRevenue - a.netRevenue);
-  }, [bookings, workerNameMap, workerCommissionPercentMap, personalPricingOverrides, serviceTypePriceMap]);
+    return metrics.sort((a, b) => b.workerPayout - a.workerPayout);
+  }, [bookings, workerNameMap, workerSharePercentMap, personalPricingOverrides, serviceTypePriceMap]);
 
-  // Totals: gross, hours, avg per hour (gross/hours), fees, net to workers
+  // Totals: gross, hours, worker payout total, business share total
   const totals = useMemo(() => {
     const totalGrossRevenue = workerMetrics.reduce((sum, m) => sum + m.grossRevenue, 0);
     const totalHours = workerMetrics.reduce((sum, m) => sum + m.totalHours, 0);
-    const totalFees = workerMetrics.reduce((sum, m) => sum + m.feePaid, 0);
-    const totalNetToWorker = workerMetrics.reduce((sum, m) => sum + m.netRevenue, 0);
-    const avgPerHour = totalHours > 0 ? totalGrossRevenue / totalHours : 0;
-    return { totalGrossRevenue, totalHours, totalFees, totalNetToWorker, avgPerHour };
+    const totalWorkerPayout = workerMetrics.reduce((sum, m) => sum + m.workerPayout, 0);
+    const totalBusinessShare = workerMetrics.reduce((sum, m) => sum + m.businessShare, 0);
+    const avgPerHour = totalHours > 0 ? totalWorkerPayout / totalHours : 0;
+    return { totalGrossRevenue, totalHours, totalWorkerPayout, totalBusinessShare, avgPerHour };
   }, [workerMetrics]);
 
   const handleRefresh = () => {
@@ -560,8 +563,8 @@ export default function TeamPerformancePage() {
                   <th className="text-right p-4 text-sm font-semibold text-slate-700">שירותים</th>
                   <th className="text-right p-4 text-sm font-semibold text-slate-700">שעות עבודה</th>
                   <th className="text-right p-4 text-sm font-semibold text-slate-700">ממוצע לשעה</th>
-                  <th className="text-right p-4 text-sm font-semibold text-slate-700">עמלות</th>
-                  <th className="text-right p-4 text-sm font-semibold text-slate-700">נטו לעובד</th>
+                  <th className="text-right p-4 text-sm font-semibold text-slate-700">חלק עובד</th>
+                  <th className="text-right p-4 text-sm font-semibold text-slate-700">חלק עסק</th>
                 </tr>
               </thead>
               <tbody>
@@ -585,10 +588,10 @@ export default function TeamPerformancePage() {
                       </span>
                     </td>
                     <td className="p-4">
-                      <span className="text-slate-700">{formatCurrency(worker.feePaid)}</span>
+                      <span className="text-slate-700">{formatCurrency(worker.workerPayout)}</span>
                     </td>
                     <td className="p-4">
-                      <span className="text-slate-700">{formatCurrency(worker.netRevenue)}</span>
+                      <span className="text-slate-700">{formatCurrency(worker.businessShare)}</span>
                     </td>
                   </tr>
                 ))}
@@ -609,19 +612,19 @@ export default function TeamPerformancePage() {
                     </span>
                   </td>
                   <td className="p-4">
-                    <span className="text-slate-900">{formatCurrency(totals.totalFees)}</span>
+                    <span className="text-slate-900">{formatCurrency(totals.totalWorkerPayout)}</span>
                   </td>
                   <td className="p-4">
-                    <span className="text-slate-900">{formatCurrency(totals.totalNetToWorker)}</span>
+                    <span className="text-slate-900">{formatCurrency(totals.totalBusinessShare)}</span>
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-          {/* Business fees summary */}
+          {/* Business share summary */}
           <div className="p-4 bg-slate-50 border-t border-slate-200 text-right">
             <p className="text-sm font-medium text-slate-800">
-              סה״כ רווח העסק מעמלות: <span className="font-bold">{formatCurrency(totals.totalFees)}</span>
+              סה״כ חלק העסק: <span className="font-bold">{formatCurrency(totals.totalBusinessShare)}</span>
             </p>
           </div>
         </div>
