@@ -721,11 +721,18 @@ export default function DaySchedulePage() {
     );
   }
 
+  // Print: open print-day page in new tab. Uses window.open so it works even if overlays/stacking would block anchor clicks (e.g. in production).
+  const handlePrint = () => {
+    if (selectedWorkerId === ALL_WORKERS || !selectedWorkerId) return;
+    const url = `/site/${siteId}/admin/bookings/print/day/${dateKey}?workerId=${encodeURIComponent(selectedWorkerId)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
   return (
     <div className="h-screen bg-slate-50 flex flex-col overflow-hidden" dir="rtl">
       <div className="max-w-7xl mx-auto w-full px-4 py-4 flex flex-col h-full">
-        {/* Header - Fixed at top */}
-        <div className="flex-shrink-0 mb-4">
+        {/* Toolbar: sticky below AdminHeader (top-16 = 64px) with z-40 so it stays clickable and is not covered by schedule or sticky header. */}
+        <div className="flex-shrink-0 mb-4 sticky top-16 z-40 bg-slate-50 -mx-4 px-4 py-4 -mt-4">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-slate-900">
@@ -748,34 +755,25 @@ export default function DaySchedulePage() {
               </span>
             </div>
             <div className="flex items-center gap-3">
-              <a
-                href={
-                  selectedWorkerId !== ALL_WORKERS && selectedWorkerId
-                    ? `/site/${siteId}/admin/bookings/print/day/${dateKey}?workerId=${encodeURIComponent(selectedWorkerId)}`
-                    : "#"
-                }
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
+                data-testid="print-day-button"
                 title={
                   selectedWorkerId === ALL_WORKERS
                     ? "בחר מטפל להדפסה"
                     : "הדפס לוח זמנים"
                 }
+                disabled={selectedWorkerId === ALL_WORKERS || !selectedWorkerId}
+                onClick={handlePrint}
                 className={
-                  selectedWorkerId === ALL_WORKERS
+                  selectedWorkerId === ALL_WORKERS || !selectedWorkerId
                     ? "inline-flex items-center gap-2 px-3 py-2 bg-slate-200 text-slate-500 rounded-lg text-sm font-medium cursor-not-allowed"
                     : "inline-flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
                 }
-                onClick={(e) => {
-                  if (selectedWorkerId === ALL_WORKERS || !selectedWorkerId) {
-                    e.preventDefault();
-                  }
-                }}
-                aria-disabled={selectedWorkerId === ALL_WORKERS}
               >
                 <Printer className="w-4 h-4" />
                 הדפס
-              </a>
+              </button>
               <button
                 type="button"
                 onClick={handleAddBooking}
@@ -818,14 +816,14 @@ export default function DaySchedulePage() {
           )}
         </div>
 
-        {/* Timeline Schedule - Takes remaining height */}
+        {/* Timeline Schedule - Takes remaining height; z-0 so toolbar (z-40) stays on top and clickable. */}
         {workers.length === 0 ? (
-          <div className="flex-1 min-h-0 bg-white rounded-lg shadow-sm border border-slate-200 p-6 flex items-center justify-center">
+          <div className="flex-1 min-h-0 relative z-0 bg-white rounded-lg shadow-sm border border-slate-200 p-6 flex items-center justify-center">
             <p className="text-sm text-slate-500">טוען עובדים...</p>
           </div>
         ) : selectedWorkerId === ALL_WORKERS ? (
           // All workers mode - multi-column view
-          <div className="flex-1 min-h-0 bg-white rounded-lg shadow-sm border border-slate-200 p-6 overflow-hidden">
+          <div className="flex-1 min-h-0 relative z-0 bg-white rounded-lg shadow-sm border border-slate-200 p-6 overflow-hidden">
             <MultiWorkerScheduleView
               date={dateKey}
               bookings={filteredBookings}
@@ -837,7 +835,7 @@ export default function DaySchedulePage() {
           </div>
         ) : (
           // Single worker mode
-          <div className="flex-1 min-h-0 bg-white rounded-lg shadow-sm border border-slate-200 p-6 overflow-hidden">
+          <div className="flex-1 min-h-0 relative z-0 bg-white rounded-lg shadow-sm border border-slate-200 p-6 overflow-hidden">
             <DayScheduleView
               date={dateKey}
               bookings={filteredBookings}
