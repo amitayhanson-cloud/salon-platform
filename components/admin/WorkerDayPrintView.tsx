@@ -118,6 +118,13 @@ export default function WorkerDayPrintView({
             background: white;
             font-size: 12pt;
           }
+          /* All-workers print: multiple sections flow one after the other instead of stacking. */
+          .all-workers-print .worker-day-print-root {
+            position: static !important;
+            left: auto;
+            top: auto;
+            margin-bottom: 1.5rem;
+          }
           .worker-day-print-root .print-header {
             margin-bottom: 1rem;
             padding-bottom: 0.5rem;

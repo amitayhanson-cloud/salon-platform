@@ -236,10 +236,10 @@ export default function PrintDayPage() {
     return () => clearTimeout(timeoutId);
   }, [ready]);
 
-  // All workers: render one section per worker
+  // All workers: render one section per worker (all-workers-print so print CSS flows all sections)
   if (validAllWorkers) {
     return (
-      <div className="worker-day-print-root" dir="rtl" style={{ paddingBottom: "2rem" }}>
+      <div className="worker-day-print-root all-workers-print" dir="rtl" style={{ paddingBottom: "2rem" }}>
         <style dangerouslySetInnerHTML={{ __html: `
           @media print {
             .worker-day-print-root .print-section { break-inside: avoid; page-break-inside: avoid; }
