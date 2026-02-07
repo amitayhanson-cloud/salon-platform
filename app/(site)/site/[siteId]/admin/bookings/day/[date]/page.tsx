@@ -32,6 +32,7 @@ import DayScheduleView from "@/components/admin/DayScheduleView";
 import MultiWorkerScheduleView from "@/components/admin/MultiWorkerScheduleView";
 import WorkerFilter from "@/components/admin/WorkerFilter";
 import AdminBookingFormSimple from "@/components/admin/AdminBookingFormSimple";
+import AdminCreateBookingForm from "@/components/admin/AdminCreateBookingForm";
 import { cancelBooking } from "@/lib/booking";
 import { X, Plus, Printer } from "lucide-react";
 import type { AdminBookingFormSimpleEditData } from "@/components/admin/AdminBookingFormSimple";
@@ -491,6 +492,7 @@ export default function DaySchedulePage() {
   };
 
   /** Build initial data for the simple edit form (date, time, worker, duration + preserved phase1/phase2 for merge on save). */
+  /** When booking is phase 2 (follow-up), sets editingPhase: 2 so form edits the follow-up slot only. */
   function buildSimpleEditInitialData(
     booking: Booking,
     allBookings: Booking[]
@@ -507,8 +509,6 @@ export default function DaySchedulePage() {
           ? booking
           : null;
     const b1 = phase1Doc;
-    const dateStr = (b1 as { dateStr?: string }).dateStr ?? b1.date ?? dateKey;
-    const timeStr = (b1 as { timeHHmm?: string }).timeHHmm ?? b1.time ?? "09:00";
     const waitMin = b1.waitMin ?? (b1 as { waitMinutes?: number }).waitMinutes ?? 0;
     const phase2DurationMin =
       phase2Doc?.durationMin ??
@@ -516,14 +516,30 @@ export default function DaySchedulePage() {
       30;
     const phase2ServiceName = phase2Doc?.serviceName ?? "";
 
+    const isEditingPhase2 = booking.phase === 2 && phase2Doc;
+    const sourceDoc = isEditingPhase2 ? phase2Doc : b1;
+    const dateStr = (sourceDoc as { dateStr?: string }).dateStr ?? sourceDoc.date ?? dateKey;
+    const timeStr = (sourceDoc as { timeHHmm?: string }).timeHHmm ?? sourceDoc.time ?? "09:00";
+    const workerId = sourceDoc.workerId ?? "";
+    const workerName =
+      sourceDoc.workerName ??
+      (sourceDoc as { secondaryWorkerName?: string }).secondaryWorkerName ??
+      workers.find((w) => w.id === sourceDoc.workerId)?.name ??
+      "";
+    const durationMin =
+      sourceDoc.durationMin ??
+      (sourceDoc as { secondaryDurationMin?: number }).secondaryDurationMin ??
+      30;
+
     return {
       date: dateStr,
       time: timeStr,
-      workerId: b1.workerId ?? "",
-      workerName: b1.workerName ?? workers.find((w) => w.id === b1.workerId)?.name ?? "",
-      durationMin: b1.durationMin ?? 30,
+      workerId,
+      workerName,
+      durationMin,
       phase1Id: phase1Doc.id,
       phase2Id: phase2Doc?.id ?? null,
+      editingPhase: isEditingPhase2 ? 2 : 1,
       customerName: b1.customerName ?? "",
       customerPhone: b1.customerPhone ?? b1.phone ?? "",
       note: b1.note ?? null,
@@ -1025,7 +1041,29 @@ export default function DaySchedulePage() {
       )}
 
       {/* Admin Booking Form Modal (create / edit) */}
-      {showBookingForm && (
+      {showBookingForm && formMode === "create" && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-[100]"
+          dir="rtl"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) handleBookingFormCancel();
+          }}
+        >
+          <AdminCreateBookingForm
+            siteId={siteId}
+            defaultDate={dateKey}
+            workers={workersForForm}
+            services={services}
+            pricingItems={pricingItems}
+            existingClients={existingClients}
+            bookingsForDate={bookingsForForm}
+            onSuccess={handleBookingFormSuccess}
+            onCancel={handleBookingFormCancel}
+          />
+        </div>
+      )}
+
+      {showBookingForm && formMode === "edit" && (
         <div
           className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
           dir="rtl"
@@ -1034,7 +1072,13 @@ export default function DaySchedulePage() {
           }}
         >
           <AdminBookingFormSimple
-            key={formMode === "edit" && editInitialData ? `edit-${editInitialData.phase1Id}` : "create"}
+            key={
+              formMode === "edit" && editInitialData
+                ? editInitialData.editingPhase === 2 && editInitialData.phase2Id
+                  ? `edit-phase2-${editInitialData.phase2Id}`
+                  : `edit-${editInitialData.phase1Id}`
+                : "create"
+            }
             mode={formMode}
             siteId={siteId}
             defaultDate={dateKey}

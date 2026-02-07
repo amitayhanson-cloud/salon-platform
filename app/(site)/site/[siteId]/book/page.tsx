@@ -8,7 +8,6 @@ import { doc, getDoc, onSnapshot, query, where, getDocs, orderBy } from "firebas
 import { collection } from "firebase/firestore";
 import type { SiteConfig } from "@/types/siteConfig";
 import { defaultSiteConfig } from "@/types/siteConfig";
-import { saveBooking } from "@/lib/booking";
 import { bookingsCollection, bookingSettingsDoc } from "@/lib/firestorePaths";
 import {
   formatDateForDisplay,
@@ -33,6 +32,12 @@ import type { OpeningHours } from "@/types/booking";
 import { getWorkerBusyIntervals, overlaps } from "@/lib/bookingPhases";
 import { canWorkerPerformService, workersWhoCanPerformService } from "@/lib/workerServiceCompatibility";
 import { resolvePhase2Worker } from "@/lib/phase2Assignment";
+import {
+  getChainTotalDuration,
+  resolveChainWorkers,
+  type ChainServiceInput,
+} from "@/lib/multiServiceChain";
+import { saveBooking, saveMultiServiceBooking } from "@/lib/booking";
 
 type BookingStep = 1 | 2 | 3 | 4 | 5 | 6; // 6 = success
 
@@ -78,9 +83,12 @@ export default function BookingPage() {
   };
   const [bookingsForDate, setBookingsForDate] = useState<BookingForDate[]>([]);
 
-  // Booking form state
-  const [selectedService, setSelectedService] = useState<SiteService | null>(null);
-  const [selectedPricingItem, setSelectedPricingItem] = useState<PricingItem | null>(null);
+  // Booking form state: list of { service, pricingItem } for multi-service support
+  const [selectedServices, setSelectedServices] = useState<Array<{ service: SiteService; pricingItem: PricingItem }>>([]);
+  const [expandingServiceId, setExpandingServiceId] = useState<string | null>(null);
+  // Derived for single-service path (backward compat)
+  const selectedService = selectedServices[0]?.service ?? null;
+  const selectedPricingItem = selectedServices[0]?.pricingItem ?? null;
   const [selectedWorker, setSelectedWorker] = useState<{ id: string; name: string } | null>(null);
   const [phase2WorkerAssigned, setPhase2WorkerAssigned] = useState<{ id: string; name: string } | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -743,77 +751,43 @@ export default function BookingPage() {
   // Generate available dates for current window
   const availableDates = generateDateWindow(dateWindowStart, DATE_WINDOW_SIZE);
 
-  // Phase 2 service identifier (for worker–service compatibility): name from follow-up; workers store service names
-  const phase2ServiceName = selectedPricingItem?.followUp?.name?.trim() ?? "";
-
-  // Workers who can perform phase 2 service (used for phase 2 selector and slot feasibility)
-  const workersWhoCanDoPhase2 = (() => {
-    if (!phase2ServiceName) return [];
-    return workersWhoCanPerformService(workers, phase2ServiceName);
-  })();
-
   // ============================================================================
-  // STEP 1 → STEP 2: Filter workers by phase 1 service + phase 2 feasibility gate
+  // STEP 1 → STEP 2: Filter workers by first service (+ phase 2 feasibility for single-service)
   // ============================================================================
-  // Show ONLY workers who:
-  // - can perform phase 1 service (Rank 3)
-  // - If service has follow-up: at least one worker (possibly same or different) can do phase 2; otherwise no one is offered
   const eligibleWorkers = (() => {
-    if (!selectedService) {
-      if (process.env.NODE_ENV !== "production") {
-        console.log("[Booking] Step 1→2: No service selected, no eligible workers");
-      }
-      return [];
-    }
-    const phase1ServiceName = selectedService.name;
+    if (selectedServices.length === 0) return [];
+    const firstService = selectedServices[0]!.service;
+    const firstPricing = selectedServices[0]!.pricingItem;
+    const phase1ServiceName = firstService.name;
 
     const canDoPhase1 = workers.filter((worker) => canWorkerPerformService(worker, phase1ServiceName));
 
-    const followUpDurationRaw = selectedPricingItem?.followUp?.durationMinutes;
-    const followUpDuration =
-      typeof followUpDurationRaw === "number" && Number.isFinite(followUpDurationRaw)
-        ? followUpDurationRaw
-        : undefined;
-    const hasFollowUp =
-      selectedPricingItem?.hasFollowUp === true &&
-      followUpDuration !== undefined &&
-      followUpDuration >= 1;
-    if (hasFollowUp && phase2ServiceName && workersWhoCanDoPhase2.length === 0) {
-      if (process.env.NODE_ENV !== "production") {
-        console.log("[Booking] Step 1→2: Phase 2 service required but no worker can do it – no booking option");
-      }
-      return [];
+    // Single-service with follow-up: gate by phase 2 worker availability
+    if (selectedServices.length === 1) {
+      const phase2Name = firstPricing?.followUp?.name?.trim() ?? "";
+      const workersWhoCanDoPhase2 = phase2Name
+        ? workersWhoCanPerformService(workers, phase2Name)
+        : [];
+      const followUpDurationRaw = firstPricing?.followUp?.durationMinutes;
+      const hasFollowUp =
+        firstPricing?.hasFollowUp === true &&
+        typeof followUpDurationRaw === "number" &&
+        followUpDurationRaw >= 1;
+      if (hasFollowUp && phase2Name && workersWhoCanDoPhase2.length === 0) return [];
     }
 
-    if (process.env.NODE_ENV !== "production") {
-      console.log(`[Booking] Step 1→2: Phase 1 "${phase1ServiceName}" – eligible: ${canDoPhase1.length}; phase 2 "${phase2ServiceName || "—"}" – can do: ${workersWhoCanDoPhase2.length}`);
-    }
     return canDoPhase1;
   })();
 
-  // Reset worker and pricing item selection when service changes
+  // Reset worker if not eligible when services change
   useEffect(() => {
-    if (selectedService) {
-      // Reset pricing item if it doesn't belong to the selected service
-      if (selectedPricingItem) {
-        const itemServiceId = selectedPricingItem.serviceId || selectedPricingItem.service;
-        if (itemServiceId !== selectedService.name) {
-          setSelectedPricingItem(null);
-        }
+    if (selectedServices.length > 0 && selectedWorker) {
+      const isEligible = eligibleWorkers.some((w) => w.id === selectedWorker.id);
+      if (!isEligible) {
+        setSelectedWorker(null);
       }
-      // Reset worker if not eligible
-      if (selectedWorker) {
-        const isEligible = eligibleWorkers.some((w) => w.id === selectedWorker.id);
-        if (!isEligible) {
-          console.log("[Booking] Current worker not eligible for service, resetting selection");
-          setSelectedWorker(null);
-        }
-      }
-    } else {
-      // Reset both if service is deselected
-      setSelectedPricingItem(null);
     }
-  }, [selectedService, eligibleWorkers, selectedWorker, selectedPricingItem]);
+  }, [selectedServices, eligibleWorkers, selectedWorker]);
 
   // Reset date window to today when worker changes
   useEffect(() => {
@@ -867,8 +841,7 @@ export default function BookingPage() {
   const isStepValid = (): boolean => {
     switch (step) {
       case 1:
-        // Service and pricing item must be selected
-        return selectedService !== null && selectedPricingItem !== null;
+        return selectedServices.length >= 1;
       case 2:
         // Worker selection is optional, but we need at least one eligible worker available
         // If no eligible workers, disable next step
@@ -900,12 +873,8 @@ export default function BookingPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
-    if (!isStepValid() || !selectedService || !selectedPricingItem || !selectedDate || !selectedTime) {
-      return;
-    }
-
-    if (!db) {
-      setSubmitError("Firebase לא מאותחל. אנא רענן את הדף.");
+    if (!isStepValid() || selectedServices.length === 0 || !selectedDate || !selectedTime || !db) {
+      if (!db) setSubmitError("Firebase לא מאותחל. אנא רענן את הדף.");
       return;
     }
 
@@ -914,68 +883,93 @@ export default function BookingPage() {
 
     try {
       const bookingDate = ymdLocal(selectedDate);
-      console.log("[BookingSubmit] date:", bookingDate, "time:", selectedTime);
+      const [hh, mm] = selectedTime.split(":").map(Number);
+      const startAt = new Date(selectedDate);
+      startAt.setHours(hh, mm, 0, 0);
 
-      const hasSecondary = selectedPricingItem.hasFollowUp === true && !!selectedPricingItem.followUp?.name?.trim();
-      const primaryDurationMin = selectedPricingItem.durationMaxMinutes ?? selectedPricingItem.durationMinMinutes ?? 30;
-      const waitMin = selectedPricingItem.followUp?.waitMinutes ?? 0;
-      const phase2DurationMin = selectedPricingItem.followUp?.durationMinutes ?? 0;
-      const phase2ServiceName = selectedPricingItem.followUp?.name?.trim() ?? "";
+      const workerWindowByWorkerId: Record<string, { startMin: number; endMin: number } | null> = {};
+      for (const w of workers) {
+        workerWindowByWorkerId[w.id] = getWorkerWorkingWindow(w, selectedDate);
+      }
+      const businessWindow = getBusinessWindow(selectedDate);
 
-      let secondaryWorker: { id: string; name: string } | null = null;
-      if (hasSecondary && phase2ServiceName && phase2DurationMin >= 1 && selectedWorker) {
-        const slotStartMinutes = timeToMinutes(selectedTime);
-        const workerWindowByWorkerId: Record<string, { startMin: number; endMin: number } | null> = {};
-        for (const w of workers) {
-          workerWindowByWorkerId[w.id] = getWorkerWorkingWindow(w, selectedDate!);
-        }
-        const businessWindow = getBusinessWindow(selectedDate!);
-        secondaryWorker = resolvePhase2Worker({
-          phase1Worker: { id: selectedWorker.id, name: selectedWorker.name },
+      if (selectedServices.length > 1) {
+        const chain: ChainServiceInput[] = selectedServices.map((s) => ({ service: s.service, pricingItem: s.pricingItem }));
+        const resolved = resolveChainWorkers({
+          chain,
+          startAt,
           dateStr: bookingDate,
-          phase1StartMinutes: slotStartMinutes,
-          phase1DurationMin: primaryDurationMin,
-          waitMin,
-          phase2DurationMin,
-          phase2ServiceName,
           workers,
           bookingsForDate,
+          preferredWorkerId: selectedWorker?.id ?? null,
           workerWindowByWorkerId,
-          businessWindow: businessWindow ?? undefined,
+          businessWindow,
         });
-      }
-
-      const secondaryServiceName = selectedPricingItem.followUp?.name?.trim() ?? null;
-      const secondaryServiceType = null;
-      const secondaryServiceColor = null;
-
-      await saveBooking(
-        siteId,
-        {
-          serviceId: selectedService.name,
-          serviceName: selectedService.name,
-          serviceType: selectedPricingItem.type || null,
-          pricingItemId: selectedPricingItem.id || null,
-          serviceColor: selectedService.color || null,
-          workerId: selectedWorker?.id || null,
-          workerName: selectedWorker?.name || null,
-          secondaryWorkerId: secondaryWorker?.id ?? null,
-          secondaryWorkerName: secondaryWorker?.name ?? null,
-          secondaryServiceName: secondaryServiceName ?? undefined,
-          secondaryServiceType: secondaryServiceType ?? undefined,
-          secondaryServiceColor: secondaryServiceColor ?? undefined,
-          date: bookingDate,
-          time: selectedTime,
+        if (!resolved) {
+          setSubmitError("אין זמינות להשלמת כל השירותים. נא בחר שעה אחרת.");
+          return;
+        }
+        await saveMultiServiceBooking(siteId, resolved, {
           name: clientName.trim(),
           phone: clientPhone.trim(),
           note: clientNote.trim() || undefined,
-          createdAt: new Date().toISOString(),
-        },
-        selectedPricingItem,
-        selectedService.color
-      );
-      setPhase2WorkerAssigned(secondaryWorker);
-      setStep(6); // Show success
+        });
+        setPhase2WorkerAssigned(null);
+      } else {
+        const selectedPricingItem = selectedServices[0]!.pricingItem;
+        const selectedService = selectedServices[0]!.service;
+        const hasSecondary = selectedPricingItem.hasFollowUp === true && !!selectedPricingItem.followUp?.name?.trim();
+        const primaryDurationMin = selectedPricingItem.durationMaxMinutes ?? selectedPricingItem.durationMinMinutes ?? 30;
+        const waitMin = selectedPricingItem.followUp?.waitMinutes ?? 0;
+        const phase2DurationMin = selectedPricingItem.followUp?.durationMinutes ?? 0;
+        const phase2ServiceName = selectedPricingItem.followUp?.name?.trim() ?? "";
+
+        let secondaryWorker: { id: string; name: string } | null = null;
+        if (hasSecondary && phase2ServiceName && phase2DurationMin >= 1 && selectedWorker) {
+          const slotStartMinutes = timeToMinutes(selectedTime);
+          secondaryWorker = resolvePhase2Worker({
+            phase1Worker: { id: selectedWorker.id, name: selectedWorker.name },
+            dateStr: bookingDate,
+            phase1StartMinutes: slotStartMinutes,
+            phase1DurationMin: primaryDurationMin,
+            waitMin,
+            phase2DurationMin,
+            phase2ServiceName,
+            workers,
+            bookingsForDate,
+            workerWindowByWorkerId,
+            businessWindow: businessWindow ?? undefined,
+          });
+        }
+
+        await saveBooking(
+          siteId,
+          {
+            serviceId: selectedService.name,
+            serviceName: selectedService.name,
+            serviceType: selectedPricingItem.type || null,
+            pricingItemId: selectedPricingItem.id || null,
+            serviceColor: selectedService.color || null,
+            workerId: selectedWorker?.id || null,
+            workerName: selectedWorker?.name || null,
+            secondaryWorkerId: secondaryWorker?.id ?? null,
+            secondaryWorkerName: secondaryWorker?.name ?? null,
+            secondaryServiceName: selectedPricingItem.followUp?.name?.trim() ?? undefined,
+            secondaryServiceType: undefined,
+            secondaryServiceColor: undefined,
+            date: bookingDate,
+            time: selectedTime,
+            name: clientName.trim(),
+            phone: clientPhone.trim(),
+            note: clientNote.trim() || undefined,
+            createdAt: new Date().toISOString(),
+          },
+          selectedPricingItem,
+          selectedService.color
+        );
+        setPhase2WorkerAssigned(secondaryWorker);
+      }
+      setStep(6);
     } catch (err) {
       console.error("Failed to save booking", err);
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -1097,9 +1091,11 @@ export default function BookingPage() {
 
             <div className="rounded-2xl p-6 mb-6 text-right space-y-3" style={{ backgroundColor: "var(--bg)" }}>
               <div className="flex justify-between items-center pb-3 border-b" style={{ borderColor: "var(--border)" }}>
-                <span className="text-sm" style={{ color: "var(--muted)" }}>שירות:</span>
+                <span className="text-sm" style={{ color: "var(--muted)" }}>שירות{selectedServices.length > 1 ? "ים" : ""}:</span>
                 <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-                  {selectedService?.name}
+                  {selectedServices.length === 1
+                    ? selectedService?.name
+                    : selectedServices.map((s) => s.pricingItem.type?.trim() ? `${s.service.name} — ${s.pricingItem.type}` : s.service.name).join(" → ")}
                 </span>
               </div>
               <div className="flex justify-between items-center pb-3 border-b" style={{ borderColor: "var(--border)" }}>
@@ -1222,13 +1218,12 @@ export default function BookingPage() {
   // - worker is available that weekday (Rank 2)
   // - there exists at least one available time slot on that date
   const isDateAvailable = (date: Date): boolean => {
-    // Must have selected worker
-    if (!selectedWorker) {
-      return false;
-    }
+    if (selectedServices.length === 0) return false;
+    // Use selected worker or first eligible for window check (multi-service allows "no preference")
+    const workerId = selectedWorker?.id ?? eligibleWorkers[0]?.id;
+    if (!workerId) return false;
 
-    // Find the worker object
-    const worker = workers.find(w => w.id === selectedWorker.id);
+    const worker = workers.find((w) => w.id === workerId);
     if (!worker) {
       return false;
     }
@@ -1270,10 +1265,12 @@ export default function BookingPage() {
       return false; // No overlap
     }
 
-    // Check if at least one slot can fit (using default service duration if not selected yet)
-    const serviceDurationMinutes = selectedPricingItem
-      ? selectedPricingItem.durationMaxMinutes || selectedPricingItem.durationMinMinutes || 30
-      : 30;
+    // Check if at least one slot can fit (chain total duration for multi-service)
+    const chainInput: ChainServiceInput[] = selectedServices.map((s) => ({ service: s.service, pricingItem: s.pricingItem }));
+    const serviceDurationMinutes =
+      chainInput.length > 1 ? getChainTotalDuration(chainInput) : selectedPricingItem
+        ? selectedPricingItem.durationMaxMinutes || selectedPricingItem.durationMinMinutes || 30
+        : 30;
     const slotIntervalMinutes = 15; // Time picker uses 15-min steps
     const canFitSlot = (effectiveEnd - effectiveStart) >= Math.max(slotIntervalMinutes, serviceDurationMinutes);
 
@@ -1345,10 +1342,43 @@ export default function BookingPage() {
     return slots;
   };
 
-  // Filter time slots: only show slots where phase 1 is valid AND phase 2 can be fulfilled (auto-assigned)
+  // Filter time slots: single-service uses existing logic; multi-service uses resolveChainWorkers
   const availableTimeSlots = (() => {
-    if (!selectedDate || !selectedService || !selectedWorker) return [];
+    if (!selectedDate || selectedServices.length === 0) return [];
 
+    const dateStr = ymdLocal(selectedDate);
+    const workerWindowByWorkerId: Record<string, { startMin: number; endMin: number } | null> = {};
+    for (const w of workers) {
+      workerWindowByWorkerId[w.id] = getWorkerWorkingWindow(w, selectedDate);
+    }
+    const businessWindow = getBusinessWindow(selectedDate);
+
+    // Multi-service: use chain resolution
+    if (selectedServices.length > 1) {
+      const chain: ChainServiceInput[] = selectedServices.map((s) => ({ service: s.service, pricingItem: s.pricingItem }));
+      const totalDuration = getChainTotalDuration(chain);
+      const generatedSlots = generateTimeSlotsForDate(totalDuration);
+      const preferredWorkerId = selectedWorker?.id ?? null;
+
+      return generatedSlots.filter((time) => {
+        const [hh, mm] = time.split(":").map(Number);
+        const startAt = new Date(selectedDate);
+        startAt.setHours(hh, mm, 0, 0);
+        const resolved = resolveChainWorkers({
+          chain,
+          startAt,
+          dateStr,
+          workers,
+          bookingsForDate,
+          preferredWorkerId,
+          workerWindowByWorkerId,
+          businessWindow,
+        });
+        return resolved !== null;
+      });
+    }
+
+    // Single-service: existing logic
     const primaryDurationMin = selectedPricingItem
       ? selectedPricingItem.durationMaxMinutes || selectedPricingItem.durationMinMinutes || 30
       : 30;
@@ -1356,61 +1386,21 @@ export default function BookingPage() {
     const secondaryDurationMin = selectedPricingItem?.followUp?.durationMinutes ?? 0;
     const phase2ServiceName = selectedPricingItem?.followUp?.name?.trim() ?? "";
 
+    const workerId = selectedWorker?.id ?? eligibleWorkers[0]?.id;
+    if (!workerId) return [];
+    const worker = workers.find((w) => w.id === workerId);
+    if (!worker) return [];
+
     const generatedSlots = generateTimeSlotsForDate(primaryDurationMin);
-
-    const worker = workers.find(w => w.id === selectedWorker.id);
-    if (!worker) {
-      if (process.env.NODE_ENV !== "production") {
-        console.warn(`[Booking] Step 3→4: Selected worker ${selectedWorker.id} not found`);
-      }
-      return [];
-    }
-
-    const businessWindow = getBusinessWindow(selectedDate);
     const workerWindow = getWorkerWorkingWindow(worker, selectedDate);
 
-    const dateStr = ymdLocal(selectedDate);
-    const workerWindowByWorkerId: Record<string, { startMin: number; endMin: number } | null> = {};
-    for (const w of workers) {
-      workerWindowByWorkerId[w.id] = getWorkerWorkingWindow(w, selectedDate);
-    }
-
-    if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
-      console.log(`[Booking] Step 3→4: Filtering slots for date ${ymdLocal(selectedDate)}, worker "${worker.name}"`, {
-        generatedSlots: generatedSlots.length,
-        primaryDurationMin,
-        waitMin,
-        secondaryDurationMin,
-        businessWindow: businessWindow ? `${minutesToTime(businessWindow.startMin)}-${minutesToTime(businessWindow.endMin)}` : "closed",
-        workerWindow: workerWindow ? `${minutesToTime(workerWindow.startMin)}-${minutesToTime(workerWindow.endMin)}` : "no config",
-      });
-    }
-
-    let filteredByBusiness = 0;
-    let filteredByWorker = 0;
-    let filteredByConflicts = 0;
-    let filteredByPhase2 = 0;
-
-    const availableSlots = generatedSlots.filter((time) => {
+    return generatedSlots.filter((time) => {
       const slotStartMinutes = timeToMinutes(time);
       const slotEndMinutes = slotStartMinutes + primaryDurationMin;
 
-      // Rank 1 + Rank 2: Primary window within business and primary worker hours
-      if (!isSlotWithinWindows(slotStartMinutes, slotEndMinutes, businessWindow, workerWindow)) {
-        if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
-          if (!businessWindow) filteredByBusiness++;
-          else if (!workerWindow || slotStartMinutes < Math.max(businessWindow.startMin, workerWindow.startMin) || slotEndMinutes > Math.min(businessWindow.endMin, workerWindow.endMin)) filteredByWorker++;
-        }
-        return false;
-      }
+      if (!isSlotWithinWindows(slotStartMinutes, slotEndMinutes, businessWindow, workerWindow)) return false;
+      if (doesSlotConflictWithWorker(slotStartMinutes, slotEndMinutes, worker.id, bookingsForDate, dateStr)) return false;
 
-      // Rank 4: Primary worker free during primary window
-      if (doesSlotConflictWithWorker(slotStartMinutes, slotEndMinutes, worker.id, bookingsForDate, dateStr)) {
-        if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") filteredByConflicts++;
-        return false;
-      }
-
-      // Hard gate: multi-phase — only show slot if phase 2 can be resolved (same worker or another eligible)
       if (secondaryDurationMin > 0 && phase2ServiceName) {
         const resolved = resolvePhase2Worker({
           phase1Worker: { id: worker.id, name: worker.name },
@@ -1425,27 +1415,10 @@ export default function BookingPage() {
           workerWindowByWorkerId,
           businessWindow: businessWindow ?? undefined,
         });
-        if (resolved === null) {
-          if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") filteredByPhase2++;
-          return false;
-        }
+        if (resolved === null) return false;
       }
-
       return true;
     });
-
-    if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
-      console.log(`[Booking] Step 3→4: Slot filtering results:`, {
-        generated: generatedSlots.length,
-        filteredByBusiness,
-        filteredByWorker,
-        filteredByConflicts,
-        filteredByPhase2,
-        available: availableSlots.length,
-      });
-    }
-
-    return availableSlots;
   })();
 
 
@@ -1557,13 +1530,82 @@ export default function BookingPage() {
 
         {/* Step content */}
         <div className="rounded-3xl shadow-lg p-6 sm:p-8" style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)", borderWidth: "1px" }}>
-          {/* Step 1: Service and pricing selection */}
+          {/* Step 1: Service and pricing selection (multi-service: add to list) */}
           {step === 1 && (
             <div className="space-y-4">
               <h2 className="text-xl font-bold mb-4 text-right" style={{ color: "var(--text)" }}>
-                בחרו שירות ואפשרות מחיר
+                בחרו שירותים
               </h2>
-              
+              <p className="text-sm text-right mb-3" style={{ color: "var(--muted)" }}>
+                ניתן להוסיף מספר שירותים לאותו ביקור
+              </p>
+
+              {selectedServices.length > 0 && (
+                <div className="mb-4 p-4 rounded-xl border" style={{ borderColor: "var(--border)", backgroundColor: "var(--bg)" }}>
+                  <p className="text-xs font-medium mb-2 text-right" style={{ color: "var(--muted)" }}>השירותים שנבחרו</p>
+                  <ul className="space-y-2">
+                    {selectedServices.map((s, idx) => {
+                      const dur = s.pricingItem.durationMaxMinutes ?? s.pricingItem.durationMinMinutes ?? 30;
+                      const disp = s.pricingItem.type?.trim() ? `${s.service.name} — ${s.pricingItem.type}` : s.service.name;
+                      return (
+                        <li
+                          key={`${s.service.id}-${s.pricingItem.id}-${idx}`}
+                          className="flex items-center justify-between gap-2 p-2 rounded-lg"
+                          style={{ backgroundColor: "var(--surface)" }}
+                        >
+                          <span className="text-sm font-medium" style={{ color: "var(--text)" }}>
+                            {idx + 1}. {disp} ({dur} דק׳)
+                          </span>
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (idx > 0) {
+                                  const next = [...selectedServices];
+                                  [next[idx - 1], next[idx]] = [next[idx]!, next[idx - 1]!];
+                                  setSelectedServices(next);
+                                }
+                              }}
+                              disabled={idx === 0}
+                              className="p-1 rounded text-xs disabled:opacity-40"
+                              style={{ color: "var(--muted)" }}
+                              aria-label="למעלה"
+                            >
+                              ↑
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (idx < selectedServices.length - 1) {
+                                  const next = [...selectedServices];
+                                  [next[idx], next[idx + 1]] = [next[idx + 1]!, next[idx]!];
+                                  setSelectedServices(next);
+                                }
+                              }}
+                              disabled={idx === selectedServices.length - 1}
+                              className="p-1 rounded text-xs disabled:opacity-40"
+                              style={{ color: "var(--muted)" }}
+                              aria-label="למטה"
+                            >
+                              ↓
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedServices((prev) => prev.filter((_, i) => i !== idx))}
+                              className="p-1 rounded text-xs"
+                              style={{ color: "#dc2626" }}
+                              aria-label="הסר"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+
               {bookableServices.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-sm text-right mb-2" style={{ color: "var(--muted)" }}>
@@ -1589,26 +1631,17 @@ export default function BookingPage() {
                       return matching;
                     })();
                     
-                    const isServiceSelected = selectedService?.id === service.id;
-                    
+                    const isExpanded = expandingServiceId === service.id;
+
                     return (
                       <div key={service.id} className="space-y-3">
-                        {/* Service Header */}
                         <button
                           type="button"
-                          onClick={() => {
-                            if (isServiceSelected) {
-                              setSelectedService(null);
-                              setSelectedPricingItem(null);
-                            } else {
-                              setSelectedService(service);
-                              setSelectedPricingItem(null);
-                            }
-                          }}
+                          onClick={() => setExpandingServiceId((prev) => (prev === service.id ? null : service.id))}
                           className="w-full text-right p-4 rounded-2xl border-2 transition-all hover:opacity-90"
                           style={{
-                            borderColor: isServiceSelected ? "var(--primary)" : "var(--border)",
-                            backgroundColor: isServiceSelected ? "var(--bg)" : "var(--surface)",
+                            borderColor: isExpanded ? "var(--primary)" : "var(--border)",
+                            backgroundColor: isExpanded ? "var(--bg)" : "var(--surface)",
                           }}
                         >
                           <div className="flex justify-between items-center">
@@ -1621,11 +1654,10 @@ export default function BookingPage() {
                           </div>
                         </button>
                         
-                        {/* Pricing Options for this service */}
-                        {isServiceSelected && servicePricingItems.length > 0 && (
+                        {isExpanded && servicePricingItems.length > 0 && (
                           <div className="pr-4 space-y-2">
+                            <p className="text-xs text-right mb-2" style={{ color: "var(--muted)" }}>הוסף אפשרות</p>
                             {servicePricingItems.map((item) => {
-                              const isSelected = selectedPricingItem?.id === item.id;
                               const displayName = item.type && item.type.trim() 
                                 ? `${service.name} - ${item.type}`
                                 : service.name;
@@ -1650,12 +1682,12 @@ export default function BookingPage() {
                                 <button
                                   key={item.id}
                                   type="button"
-                                  onClick={() => setSelectedPricingItem(item)}
-                                  className="w-full text-right p-3 rounded-xl border transition-all hover:opacity-90"
-                                  style={{
-                                    borderColor: isSelected ? "var(--primary)" : "var(--border)",
-                                    backgroundColor: isSelected ? "var(--bg)" : "var(--surface)",
+                                  onClick={() => {
+                                    setSelectedServices((prev) => [...prev, { service, pricingItem: item }]);
+                                    setExpandingServiceId(null);
                                   }}
+                                  className="w-full text-right p-3 rounded-xl border transition-all hover:opacity-90"
+                                  style={{ borderColor: "var(--border)", backgroundColor: "var(--surface)" }}
                                 >
                                   <div className="flex justify-between items-start">
                                     <div className="text-right">
@@ -1668,9 +1700,7 @@ export default function BookingPage() {
                                         <span>{displayDuration}</span>
                                       </div>
                                     </div>
-                                    {isSelected && (
-                                      <span className="text-lg">✓</span>
-                                    )}
+                                    <span className="text-lg" style={{ color: "var(--primary)" }}>+</span>
                                   </div>
                                 </button>
                               );
@@ -1707,7 +1737,7 @@ export default function BookingPage() {
                       אין עובדים זמינים לשירות זה
                     </p>
                     <p className="text-xs" style={{ color: "#991b1b" }}>
-                      אנא פנה למנהל המערכת כדי להגדיר עובדים לשירות "{selectedService?.name}"
+                      אנא פנה למנהל המערכת כדי להגדיר עובדים {selectedServices.length === 1 ? `לשירות "${selectedService?.name}"` : "לשירותים אלה"}
                     </p>
                   </div>
                 ) : (

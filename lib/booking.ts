@@ -280,6 +280,148 @@ export async function saveBooking(
   }
 }
 
+/** Chain slot from multiServiceChain.resolveChainWorkers (with workers resolved). */
+export interface ChainSlotForSave {
+  serviceOrder: number;
+  serviceName: string;
+  serviceType: string | null;
+  durationMin: number;
+  startAt: Date;
+  endAt: Date;
+  workerId: string | null;
+  workerName: string | null;
+  serviceColor?: string | null;
+  pricingItemId?: string | null;
+  followUp?: {
+    serviceName: string;
+    durationMin: number;
+    waitMin: number;
+    startAt: Date;
+    endAt: Date;
+    workerId: string | null;
+    workerName: string | null;
+  };
+}
+
+/**
+ * Save multi-service booking chain. Creates one booking doc per service (and per follow-up).
+ * Adds visitGroupId and serviceOrder. Does not change existing saveBooking.
+ */
+export async function saveMultiServiceBooking(
+  siteId: string,
+  chainSlots: ChainSlotForSave[],
+  client: { name: string; phone: string; note?: string }
+): Promise<{ visitGroupId: string; firstBookingId: string }> {
+  if (!db) throw new Error("Firestore db not initialized");
+  if (chainSlots.length === 0) throw new Error("Chain must have at least one service");
+
+  const visitGroupId =
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `visit-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+
+  const clientId = await getOrCreateClient(siteId, {
+    name: client.name,
+    phone: client.phone,
+    email: undefined,
+    notes: client.note,
+  });
+
+  const bookingsRef = bookingsCollection(siteId);
+  let firstBookingId = "";
+
+  for (const slot of chainSlots) {
+    const dateStr =
+      slot.startAt.getFullYear() +
+      "-" +
+      String(slot.startAt.getMonth() + 1).padStart(2, "0") +
+      "-" +
+      String(slot.startAt.getDate()).padStart(2, "0");
+    const timeStr =
+      String(slot.startAt.getHours()).padStart(2, "0") +
+      ":" +
+      String(slot.startAt.getMinutes()).padStart(2, "0");
+
+    const phase1: Record<string, unknown> = {
+      siteId,
+      clientId,
+      customerName: client.name,
+      customerPhone: client.phone,
+      workerId: slot.workerId,
+      workerName: slot.workerName ?? null,
+      serviceTypeId: slot.pricingItemId ?? null,
+      serviceName: slot.serviceName,
+      serviceType: slot.serviceType ?? null,
+      durationMin: slot.durationMin,
+      startAt: Timestamp.fromDate(slot.startAt),
+      endAt: Timestamp.fromDate(slot.endAt),
+      dateISO: dateStr,
+      timeHHmm: timeStr,
+      date: dateStr,
+      time: timeStr,
+      status: "confirmed",
+      phase: 1,
+      note: client.note ?? null,
+      serviceColor: slot.serviceColor ?? null,
+      price: null,
+      priceSource: null,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      visitGroupId,
+      serviceOrder: slot.serviceOrder,
+      ...(slot.followUp && slot.followUp.durationMin >= 1 && { waitMinutes: slot.followUp.waitMin }),
+    };
+    const refA = await addDoc(bookingsRef, cleanUndefined(phase1) as Record<string, unknown>);
+    if (!firstBookingId) firstBookingId = refA.id;
+
+    if (slot.followUp && slot.followUp.durationMin >= 1 && slot.followUp.serviceName) {
+      const fu = slot.followUp;
+      const fuDateStr =
+        fu.startAt.getFullYear() +
+        "-" +
+        String(fu.startAt.getMonth() + 1).padStart(2, "0") +
+        "-" +
+        String(fu.startAt.getDate()).padStart(2, "0");
+      const fuTimeStr =
+        String(fu.startAt.getHours()).padStart(2, "0") +
+        ":" +
+        String(fu.startAt.getMinutes()).padStart(2, "0");
+      const phase2: Record<string, unknown> = {
+        siteId,
+        clientId,
+        customerName: client.name,
+        customerPhone: client.phone,
+        workerId: fu.workerId,
+        workerName: fu.workerName ?? null,
+        serviceTypeId: null,
+        serviceName: fu.serviceName,
+        serviceType: null,
+        durationMin: fu.durationMin,
+        startAt: Timestamp.fromDate(fu.startAt),
+        endAt: Timestamp.fromDate(fu.endAt),
+        dateISO: fuDateStr,
+        timeHHmm: fuTimeStr,
+        date: fuDateStr,
+        time: fuTimeStr,
+        status: "confirmed",
+        phase: 2,
+        parentBookingId: refA.id,
+        note: client.note ?? null,
+        serviceColor: slot.serviceColor ?? null,
+        price: null,
+        priceSource: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        visitGroupId,
+        serviceOrder: slot.serviceOrder,
+      };
+      await addDoc(bookingsRef, cleanUndefined(phase2) as Record<string, unknown>);
+    }
+  }
+
+  return { visitGroupId, firstBookingId };
+}
+
 /**
  * Check if a slot is taken by querying Firestore
  */

@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import {
   createAdminBooking,
   updateAdminBooking,
+  updatePhase2Only,
   type AdminBookingPayload,
 } from "@/lib/adminBookings";
 import { findWorkerConflictFromBookings } from "@/lib/bookingConflicts";
@@ -43,6 +44,8 @@ export interface AdminBookingFormSimpleEditData {
   durationMin: number;
   phase1Id: string;
   phase2Id: string | null;
+  /** When 2, we are editing the follow-up (phase 2) slot only; form shows phase 2's date/time/worker/duration. */
+  editingPhase?: 1 | 2;
   customerName: string;
   customerPhone: string;
   note?: string | null;
@@ -125,6 +128,9 @@ export default function AdminBookingFormSimple({
 
   const excludeBookingIds = useMemo(() => {
     if (mode !== "edit" || !initialData) return [];
+    if (initialData.editingPhase === 2 && initialData.phase2Id) {
+      return [initialData.phase2Id];
+    }
     const ids: string[] = [initialData.phase1Id];
     if (initialData.phase2Id) ids.push(initialData.phase2Id);
     return ids;
@@ -233,12 +239,22 @@ export default function AdminBookingFormSimple({
       if (mode === "create") {
         await createAdminBooking(siteId, buildCreatePayload());
       } else if (initialData) {
-        await updateAdminBooking(
-          siteId,
-          initialData.phase1Id,
-          initialData.phase2Id,
-          buildEditPayload()
-        );
+        if (initialData.editingPhase === 2 && initialData.phase2Id) {
+          await updatePhase2Only(siteId, initialData.phase2Id, {
+            date,
+            time,
+            workerId,
+            workerName,
+            durationMin: Math.max(1, Math.min(DURATION_MIN_MAX, durationMin)),
+          });
+        } else {
+          await updateAdminBooking(
+            siteId,
+            initialData.phase1Id,
+            initialData.phase2Id,
+            buildEditPayload()
+          );
+        }
       }
       onSuccess();
     } catch (err) {
@@ -267,7 +283,11 @@ export default function AdminBookingFormSimple({
     >
       <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center">
         <h3 className="text-lg font-bold text-slate-900">
-          {mode === "create" ? "הוספת תור" : "עריכת תור"}
+          {mode === "create"
+            ? "הוספת תור"
+            : initialData?.editingPhase === 2
+              ? "עריכת תור שלב 2 (המשך)"
+              : "עריכת תור"}
         </h3>
         <button
           type="button"

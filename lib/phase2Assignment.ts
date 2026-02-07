@@ -124,6 +124,8 @@ export function autoAssignPhase2Worker(
 export interface ResolvePhase2WorkerParams {
   /** The selected phase 1 worker (preferred for phase 2 if capable and available). */
   phase1Worker: { id: string; name: string };
+  /** User-selected worker; try first for phase 2 if eligible and available. */
+  preferredWorkerId?: string | null;
   dateStr: string;
   phase1StartMinutes: number;
   phase1DurationMin: number;
@@ -145,6 +147,7 @@ export interface ResolvePhase2WorkerParams {
 export function resolvePhase2Worker(params: ResolvePhase2WorkerParams): { id: string; name: string } | null {
   const {
     phase1Worker,
+    preferredWorkerId,
     dateStr,
     phase1StartMinutes,
     phase1DurationMin,
@@ -170,6 +173,9 @@ export function resolvePhase2Worker(params: ResolvePhase2WorkerParams): { id: st
     businessWindow,
   });
 
+  if (preferredWorkerId && eligible.some((w) => w.id === preferredWorkerId)) {
+    return { id: preferredWorkerId, name: workers.find((w) => w.id === preferredWorkerId)?.name ?? preferredWorkerId };
+  }
   const phase1IsEligible = eligible.some((w) => w.id === phase1Worker.id);
   if (phase1IsEligible) {
     return { id: phase1Worker.id, name: phase1Worker.name };

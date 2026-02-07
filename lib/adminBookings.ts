@@ -418,3 +418,177 @@ export async function updateAdminBooking(
     await addDoc(bookingsCollection(siteId), cleanUndefined(newPhase2Doc) as Record<string, unknown>);
   }
 }
+
+/**
+ * Update only the phase 2 (follow-up) booking. Phase 1 is unchanged.
+ * Used when user clicks the phase 2 block and edits its time/worker/duration.
+ */
+export async function updatePhase2Only(
+  siteId: string,
+  phase2Id: string,
+  payload: {
+    date: string;
+    time: string;
+    workerId: string;
+    workerName: string;
+    durationMin: number;
+  }
+): Promise<void> {
+  if (!db) throw new Error("Firestore not initialized");
+
+  const [y, m, d] = payload.date.split("-").map(Number);
+  const [hh, mm] = payload.time.split(":").map(Number);
+  const phase2StartAt = new Date(y, m - 1, d, hh || 0, mm || 0, 0, 0);
+  const phase2EndAt = new Date(
+    phase2StartAt.getTime() + Math.max(1, payload.durationMin) * 60 * 1000
+  );
+
+  const dateStr =
+    phase2StartAt.getFullYear() +
+    "-" +
+    String(phase2StartAt.getMonth() + 1).padStart(2, "0") +
+    "-" +
+    String(phase2StartAt.getDate()).padStart(2, "0");
+  const timeStr =
+    String(phase2StartAt.getHours()).padStart(2, "0") +
+    ":" +
+    String(phase2StartAt.getMinutes()).padStart(2, "0");
+
+  const phase2Conflict = await checkWorkerConflicts({
+    siteId,
+    workerId: payload.workerId,
+    dayISO: dateStr,
+    startAt: phase2StartAt,
+    endAt: phase2EndAt,
+    excludeBookingIds: [phase2Id],
+  });
+  if (phase2Conflict.hasConflict && phase2Conflict.conflictingBooking) {
+    throw new Error(
+      `Worker is already booked from ${phase2Conflict.conflictingBooking.timeRange}`
+    );
+  }
+
+  const phase2Ref = bookingDoc(siteId, phase2Id);
+  const phase2Update: Record<string, unknown> = {
+    workerId: payload.workerId,
+    workerName: payload.workerName,
+    durationMin: Math.max(1, payload.durationMin),
+    startAt: Timestamp.fromDate(phase2StartAt),
+    endAt: Timestamp.fromDate(phase2EndAt),
+    dateISO: dateStr,
+    timeHHmm: timeStr,
+    date: dateStr,
+    time: timeStr,
+    updatedAt: serverTimestamp(),
+  };
+  await updateDoc(phase2Ref, cleanUndefined(phase2Update) as Record<string, unknown>);
+}
+
+/** Admin multi-service visit: one slot per service, sequential timing. */
+export interface AdminMultiServiceSlot {
+  serviceName: string;
+  durationMin: number;
+  workerId: string;
+  workerName: string;
+}
+
+/**
+ * Create a multi-service visit. Each service = one booking doc with visitGroupId and serviceOrder.
+ * Does not change existing createAdminBooking.
+ */
+export async function createAdminMultiServiceVisit(
+  siteId: string,
+  payload: {
+    customerName: string;
+    customerPhone: string;
+    date: string;
+    time: string;
+    slots: AdminMultiServiceSlot[];
+    note?: string | null;
+  }
+): Promise<{ visitGroupId: string; firstBookingId: string }> {
+  if (!db) throw new Error("Firestore not initialized");
+  if (payload.slots.length === 0) throw new Error("At least one service required");
+
+  const visitGroupId =
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `visit-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+
+  const clientId = await getOrCreateClient(siteId, {
+    name: payload.customerName.trim(),
+    phone: payload.customerPhone.trim(),
+    email: undefined,
+    notes: payload.note ?? undefined,
+  });
+
+  const [y, m, d] = payload.date.split("-").map(Number);
+  const [hh, mm] = payload.time.split(":").map(Number);
+  let cursor = new Date(y, m - 1, d, hh || 0, mm || 0, 0, 0);
+
+  const bookingsRef = bookingsCollection(siteId);
+  let firstBookingId = "";
+
+  for (let i = 0; i < payload.slots.length; i++) {
+    const slot = payload.slots[i]!;
+    const durationMin = Math.max(1, Math.min(480, slot.durationMin));
+    const endAt = new Date(cursor.getTime() + durationMin * 60 * 1000);
+
+    const dateStr =
+      cursor.getFullYear() +
+      "-" +
+      String(cursor.getMonth() + 1).padStart(2, "0") +
+      "-" +
+      String(cursor.getDate()).padStart(2, "0");
+    const timeStr =
+      String(cursor.getHours()).padStart(2, "0") +
+      ":" +
+      String(cursor.getMinutes()).padStart(2, "0");
+
+    const conflict = await checkWorkerConflicts({
+      siteId,
+      workerId: slot.workerId,
+      dayISO: dateStr,
+      startAt: cursor,
+      endAt,
+      excludeBookingIds: [],
+    });
+    if (conflict.hasConflict && conflict.conflictingBooking) {
+      throw new Error(`Worker ${slot.workerName} is busy: ${conflict.conflictingBooking.timeRange}`);
+    }
+
+    const doc: Record<string, unknown> = {
+      siteId,
+      clientId,
+      customerName: payload.customerName.trim(),
+      customerPhone: payload.customerPhone.trim(),
+      workerId: slot.workerId,
+      workerName: slot.workerName,
+      serviceName: slot.serviceName,
+      serviceTypeId: null,
+      serviceType: null,
+      durationMin,
+      startAt: Timestamp.fromDate(cursor),
+      endAt: Timestamp.fromDate(endAt),
+      dateISO: dateStr,
+      timeHHmm: timeStr,
+      date: dateStr,
+      time: timeStr,
+      status: "confirmed",
+      phase: 1,
+      note: payload.note ?? null,
+      serviceColor: null,
+      price: null,
+      priceSource: null,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      visitGroupId,
+      serviceOrder: i,
+    };
+    const ref = await addDoc(bookingsRef, cleanUndefined(doc) as Record<string, unknown>);
+    if (!firstBookingId) firstBookingId = ref.id;
+    cursor = endAt;
+  }
+
+  return { visitGroupId, firstBookingId };
+}

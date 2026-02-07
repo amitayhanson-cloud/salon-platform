@@ -35,6 +35,10 @@ export interface NormalizedBooking {
   phase?: 1 | 2;
   /** Set on phase 2 booking doc; links to phase 1 booking id */
   parentBookingId?: string | null;
+  /** Multi-service visit: same value for all services in one visit (optional) */
+  visitGroupId?: string | null;
+  /** Multi-service visit: order in chain 0,1,2… (optional) */
+  serviceOrder?: number | null;
   primaryWorkerId?: string | null;
   secondaryWorkerId?: string | null;
   primaryDurationMin?: number;
@@ -202,6 +206,8 @@ export function normalizeBooking(doc: FirestoreDoc): NormalizedBooking {
     waitMinutes,
     phase,
     parentBookingId: parentBookingId ?? undefined,
+    visitGroupId: (d.visitGroupId as string | undefined) ?? undefined,
+    serviceOrder: typeof d.serviceOrder === "number" ? d.serviceOrder : undefined,
   } as NormalizedBooking;
 }
 
