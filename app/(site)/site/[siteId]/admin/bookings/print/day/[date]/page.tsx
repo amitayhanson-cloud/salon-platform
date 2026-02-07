@@ -120,6 +120,7 @@ export default function PrintDayPage() {
       if (!startAt || !endAt) continue;
       const customerName = (b as { customerName?: string }).customerName ?? "";
       const serviceName = (b as { serviceName?: string }).serviceName ?? "";
+      const serviceType = (b as { serviceType?: string }).serviceType ?? "";
       const note = (b as { note?: string | null }).note ?? null;
       const clientId = (b as { clientId?: string }).clientId;
       const customerPhone = (b as { customerPhone?: string }).customerPhone ?? "";
@@ -129,6 +130,7 @@ export default function PrintDayPage() {
         endAt,
         customerName,
         serviceName,
+        serviceType: serviceType || undefined,
         phase: b.phase,
         note,
         clientKey: clientKey || "",
@@ -149,6 +151,7 @@ export default function PrintDayPage() {
         if (!startAt || !endAt) continue;
         const customerName = (b as { customerName?: string }).customerName ?? "";
         const serviceName = (b as { serviceName?: string }).serviceName ?? "";
+        const serviceType = (b as { serviceType?: string }).serviceType ?? "";
         const note = (b as { note?: string | null }).note ?? null;
         const clientId = (b as { clientId?: string }).clientId;
         const customerPhone = (b as { customerPhone?: string }).customerPhone ?? "";
@@ -158,6 +161,7 @@ export default function PrintDayPage() {
           endAt,
           customerName,
           serviceName,
+          serviceType: serviceType || undefined,
           phase: b.phase,
           note,
           clientKey: clientKey || "",

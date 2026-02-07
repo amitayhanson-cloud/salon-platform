@@ -19,6 +19,8 @@ export interface PrintBookingRow {
   endAt: Date;
   customerName: string;
   serviceName: string;
+  /** Service type (e.g. variant/category of the service). */
+  serviceType?: string;
   phase?: 1 | 2;
   note?: string | null;
   /** Client doc key (normalized phone) for chemical card lookup. */
@@ -238,6 +240,7 @@ export default function WorkerDayPrintView({
               <th>שעה</th>
               <th>לקוח</th>
               <th>שירות</th>
+              <th>סוג שירות</th>
               <th>שלב</th>
               <th>הערות</th>
             </tr>
@@ -251,11 +254,12 @@ export default function WorkerDayPrintView({
                   </td>
                   <td>{row.customerName || "—"}</td>
                   <td>{row.serviceName || "—"}</td>
+                  <td>{row.serviceType?.trim() || "—"}</td>
                   <td>{row.phase != null ? `שלב ${row.phase}` : "—"}</td>
                   <td>{row.note?.trim() || "—"}</td>
                 </tr>
                 <tr className="print-chemical-row">
-                  <td colSpan={5} className="print-chemical-cell">
+                  <td colSpan={6} className="print-chemical-cell">
                     <ChemicalCardBlock card={chemicalCardsMap[row.clientKey] ?? null} />
                   </td>
                 </tr>
