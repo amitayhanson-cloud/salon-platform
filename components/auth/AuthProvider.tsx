@@ -16,6 +16,35 @@ import { routeAfterAuth } from "@/lib/authRedirect";
 import { normalizeFirebaseError, logFirebaseError } from "@/lib/firebaseErrors";
 import type { User } from "@/types/user";
 
+function isFirestorePermissionError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  const code = (err as { code?: string })?.code;
+  return code === "permission-denied" || /missing or insufficient permissions/i.test(msg);
+}
+
+/** Fetch user doc with retry on permission error (auth token can lag after sign-in). */
+async function getUserDocumentWithRetry(uid: string, maxRetries = 2): Promise<User | null> {
+  const delays = [0, 400, 1000];
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      console.warn("[AuthProvider] Retrying getUserDocument after permission error", {
+        attempt,
+        uid,
+        delayMs: delays[attempt],
+      });
+      await new Promise((r) => setTimeout(r, delays[attempt]));
+    }
+    try {
+      return await getUserDocument(uid);
+    } catch (e) {
+      if (!isFirestorePermissionError(e) || attempt === maxRetries) {
+        throw e;
+      }
+    }
+  }
+  return null;
+}
+
 type AuthContextType = {
   user: User | null;
   firebaseUser: FirebaseUser | null;
@@ -141,17 +170,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (firebaseUser) {
         setFirebaseUser(firebaseUser);
-        // Fetch user document from Firestore
+        // Ensure auth token is ready before Firestore read (avoids "Missing or insufficient permissions" race)
         try {
-          let userDoc = await getUserDocument(firebaseUser.uid);
-          
+          await firebaseUser.getIdToken(true);
+        } catch (_) {
+          // non-blocking
+        }
+        try {
+          let userDoc = await getUserDocumentWithRetry(firebaseUser.uid);
+
           // If user doc doesn't exist, create it (e.g., for Google users who signed in before we created docs)
           if (!userDoc) {
             if (process.env.NODE_ENV === "development") {
-              console.log("[AuthProvider] User doc missing, creating...", { 
-                uid: firebaseUser.uid, 
+              console.log("[AuthProvider] User doc missing, creating...", {
+                uid: firebaseUser.uid,
                 email: firebaseUser.email,
-                provider: firebaseUser.providerData[0]?.providerId || "unknown"
+                provider: firebaseUser.providerData[0]?.providerId || "unknown",
               });
             }
             try {
@@ -164,7 +198,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               console.error("[AuthProvider] Error creating user document:", createError);
             }
           }
-          
+
           if (isMounted) {
             setUser(userDoc);
             if (process.env.NODE_ENV === "development" && userDoc) {
@@ -175,7 +209,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           }
         } catch (error) {
-          console.error("[AuthProvider] Error fetching user document:", error);
+          const isPerm = isFirestorePermissionError(error);
+          console.error("[AuthProvider] Error fetching user document:", {
+            error,
+            message: error instanceof Error ? error.message : String(error),
+            code: (error as { code?: string })?.code,
+            uid: firebaseUser.uid,
+          });
+          if (isPerm) {
+            console.error(
+              "[AuthProvider] Firestore permission denied on users/{uid}. Deploy rules: firebase deploy --only firestore:rules"
+            );
+          }
           if (isMounted) {
             setUser(null);
           }

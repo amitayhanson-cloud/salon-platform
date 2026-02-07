@@ -30,7 +30,12 @@ export default function AdminLayout({
   function isPermissionError(err: unknown): boolean {
     const msg = err instanceof Error ? err.message : String(err);
     const code = (err as { code?: string })?.code;
-    return code === "permission-denied" || /missing or insufficient permissions/i.test(msg);
+    const name = (err as { name?: string })?.name;
+    return (
+      code === "permission-denied" ||
+      name === "FirebaseError" ||
+      /missing or insufficient permissions/i.test(msg)
+    );
   }
 
   useEffect(() => {
@@ -103,29 +108,61 @@ export default function AdminLayout({
       try {
         site = await getSite(siteId);
       } catch (getSiteError) {
+        console.warn("[ADMIN GUARD] getSite failed", {
+          siteId,
+          errorMessage: getSiteError instanceof Error ? getSiteError.message : String(getSiteError),
+          errorCode: (getSiteError as { code?: string })?.code,
+          userSiteId: user.siteId,
+          willAttemptRepair: isPermissionError(getSiteError) && user.siteId === siteId && !!firebaseUser,
+        });
+
         if (isPermissionError(getSiteError) && user.siteId === siteId && firebaseUser) {
-          if (process.env.NODE_ENV === "development") {
-            console.log("[ADMIN GUARD] Permission denied on getSite, attempting repair via API");
-          }
+          const repairUrl =
+            typeof window !== "undefined"
+              ? `${window.location.origin}/api/repair-site-ownership`
+              : "/api/repair-site-ownership";
+          console.log("[ADMIN GUARD] Attempting repair", { repairUrl, siteId });
+
           try {
-            const token = await firebaseUser.getIdToken();
-            const res = await fetch("/api/repair-site-ownership", {
+            const token = await firebaseUser.getIdToken(true);
+            if (!token) {
+              console.error("[ADMIN GUARD] getIdToken returned empty");
+              setOwnershipRepairError("שגיאת אימות. נסה להתחבר מחדש.");
+              setChecking(false);
+              setAuthorized(false);
+              return;
+            }
+            const res = await fetch(repairUrl, {
               method: "POST",
+              credentials: "same-origin",
               headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
               body: JSON.stringify({ siteId }),
             });
             const data = await res.json().catch(() => ({}));
+            console.log("[ADMIN GUARD] Repair API response", {
+              url: repairUrl,
+              status: res.status,
+              ok: res.ok,
+              body: data,
+            });
+
             if (!res.ok) {
+              const serverMsg = data?.message || data?.error || res.statusText;
+              console.error("[ADMIN GUARD] Repair API failed", { status: res.status, body: data });
               setOwnershipRepairError(
-                data?.message || data?.error || "תיקון הרשאות נכשל. נדרש תיקון מהשרת – פנה למנהל המערכת."
+                `תיקון הרשאות נכשל: ${serverMsg}. נדרש תיקון מהשרת – פנה למנהל המערכת.`
               );
               setChecking(false);
               setAuthorized(false);
               return;
             }
+            console.log("[ADMIN GUARD] Repair succeeded, re-fetching site");
             site = await getSite(siteId);
           } catch (repairOrRetryError) {
-            console.error("[ADMIN GUARD] Repair or retry failed:", repairOrRetryError);
+            console.error("[ADMIN GUARD] Repair or retry failed", {
+              error: repairOrRetryError,
+              message: repairOrRetryError instanceof Error ? repairOrRetryError.message : String(repairOrRetryError),
+            });
             setOwnershipRepairError(
               "לא ניתן לטעון את האתר. נדרש תיקון הרשאות בשרת – פנה למנהל המערכת או הרץ תיקון מהשרת."
             );

@@ -31,10 +31,10 @@ import { getAllClients } from "@/lib/firestoreClients";
 import DayScheduleView from "@/components/admin/DayScheduleView";
 import MultiWorkerScheduleView from "@/components/admin/MultiWorkerScheduleView";
 import WorkerFilter from "@/components/admin/WorkerFilter";
-import AdminBookingForm from "@/components/admin/AdminBookingForm";
+import AdminBookingFormSimple from "@/components/admin/AdminBookingFormSimple";
 import { cancelBooking } from "@/lib/booking";
 import { X, Plus, Printer } from "lucide-react";
-import type { AdminBookingFormInitialData } from "@/components/admin/AdminBookingForm";
+import type { AdminBookingFormSimpleEditData } from "@/components/admin/AdminBookingFormSimple";
 
 const DAY_LABELS: Record<string, string> = {
   "0": "ראשון",
@@ -144,7 +144,7 @@ export default function DaySchedulePage() {
 
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
-  const [editInitialData, setEditInitialData] = useState<AdminBookingFormInitialData | null>(null);
+  const [editInitialData, setEditInitialData] = useState<AdminBookingFormSimpleEditData | null>(null);
 
   const fallbackUnsubRef = useRef<(() => void) | null>(null);
 
@@ -490,10 +490,11 @@ export default function DaySchedulePage() {
     setDeleteError(null);
   };
 
-  function buildInitialDataFromBooking(
+  /** Build initial data for the simple edit form (date, time, worker, duration + preserved phase1/phase2 for merge on save). */
+  function buildSimpleEditInitialData(
     booking: Booking,
     allBookings: Booking[]
-  ): AdminBookingFormInitialData | null {
+  ): AdminBookingFormSimpleEditData | null {
     const phase1Doc =
       booking.phase === 2
         ? allBookings.find((b) => b.id === booking.parentBookingId)
@@ -509,22 +510,29 @@ export default function DaySchedulePage() {
     const dateStr = (b1 as { dateStr?: string }).dateStr ?? b1.date ?? dateKey;
     const timeStr = (b1 as { timeHHmm?: string }).timeHHmm ?? b1.time ?? "09:00";
     const waitMin = b1.waitMin ?? (b1 as { waitMinutes?: number }).waitMinutes ?? 0;
-    const phase2DurationMin = phase2Doc?.durationMin ?? (phase2Doc as { secondaryDurationMin?: number })?.secondaryDurationMin ?? 30;
+    const phase2DurationMin =
+      phase2Doc?.durationMin ??
+      (phase2Doc as { secondaryDurationMin?: number })?.secondaryDurationMin ??
+      30;
     const phase2ServiceName = phase2Doc?.serviceName ?? "";
 
     return {
+      date: dateStr,
+      time: timeStr,
+      workerId: b1.workerId ?? "",
+      workerName: b1.workerName ?? workers.find((w) => w.id === b1.workerId)?.name ?? "",
+      durationMin: b1.durationMin ?? 30,
       phase1Id: phase1Doc.id,
       phase2Id: phase2Doc?.id ?? null,
       customerName: b1.customerName ?? "",
       customerPhone: b1.customerPhone ?? b1.phone ?? "",
-      date: dateStr,
-      time: timeStr,
+      note: b1.note ?? null,
+      status: b1.status ?? "confirmed",
+      price: (b1 as { price?: number }).price ?? null,
       phase1: {
         serviceName: b1.serviceName ?? "",
         serviceTypeId: b1.serviceTypeId ?? (b1 as { serviceTypeId?: string }).serviceTypeId ?? null,
-        workerId: b1.workerId ?? "",
-        workerName: b1.workerName ?? workers.find((w) => w.id === b1.workerId)?.name ?? "",
-        durationMin: b1.durationMin ?? 30,
+        serviceType: (b1 as { serviceType?: string }).serviceType ?? null,
         serviceColor: b1.serviceColor ?? null,
       },
       phase2:
@@ -535,12 +543,9 @@ export default function DaySchedulePage() {
               waitMinutes: waitMin,
               durationMin: phase2DurationMin,
               workerId: phase2Doc.workerId ?? null,
-              workerName: phase2Doc.workerName ?? phase2Doc.secondaryWorkerName ?? null,
+              workerName: phase2Doc.workerName ?? (phase2Doc as { secondaryWorkerName?: string }).secondaryWorkerName ?? null,
             }
           : null,
-      note: b1.note ?? null,
-      status: b1.status ?? "confirmed",
-      price: (b1 as { price?: number }).price ?? null,
     };
   }
 
@@ -551,7 +556,7 @@ export default function DaySchedulePage() {
   };
 
   const handleEditBooking = (booking: Booking) => {
-    const initial = buildInitialDataFromBooking(booking, filteredBookings);
+    const initial = buildSimpleEditInitialData(booking, filteredBookings);
     if (initial) {
       setEditInitialData(initial);
       setFormMode("edit");
@@ -577,6 +582,11 @@ export default function DaySchedulePage() {
     const ids = new Set([editInitialData.phase1Id, editInitialData.phase2Id].filter(Boolean));
     return filteredBookings.filter((b) => !ids.has(b.id));
   }, [filteredBookings, formMode, editInitialData]);
+
+  const workersForSimpleForm = useMemo(
+    () => workers.map((w) => ({ id: w.id, name: w.name })),
+    [workers]
+  );
 
   // Handle booking block click
   const handleBookingClick = (booking: Booking) => {
@@ -1023,13 +1033,12 @@ export default function DaySchedulePage() {
             if (e.target === e.currentTarget) handleBookingFormCancel();
           }}
         >
-          <AdminBookingForm
+          <AdminBookingFormSimple
+            key={formMode === "edit" && editInitialData ? `edit-${editInitialData.phase1Id}` : "create"}
             mode={formMode}
             siteId={siteId}
             defaultDate={dateKey}
-            workers={workersForForm}
-            services={services}
-            pricingItems={pricingItems}
+            workers={workersForSimpleForm}
             existingClients={existingClients}
             bookingsForDate={bookingsForForm}
             initialData={formMode === "edit" ? editInitialData ?? undefined : undefined}
