@@ -11,7 +11,9 @@ import { runExecute } from "@/lib/import/server";
 import type { RawRow, ColumnMapping } from "@/lib/import/types";
 
 export async function POST(request: Request) {
+  const start = Date.now();
   try {
+    console.log("[import/execute] start request");
     const authHeader = request.headers.get("authorization");
     const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
     if (!token) {
@@ -26,6 +28,8 @@ export async function POST(request: Request) {
     const rows = body?.rows as RawRow[] | undefined;
     const mapping = body?.mapping as ColumnMapping | undefined;
     const skipRowsWithErrors = body?.skipRowsWithErrors === true;
+
+    console.log("[import/execute] siteId=", siteId, "rows.length=", rows?.length ?? "n/a");
     if (!siteId || typeof siteId !== "string") {
       return NextResponse.json({ error: "missing siteId" }, { status: 400 });
     }
@@ -37,6 +41,7 @@ export async function POST(request: Request) {
     }
 
     const db = getAdminDb();
+    console.log("[import/execute] loading context");
     const siteDoc = await db.collection("sites").doc(siteId).get();
     if (!siteDoc.exists) {
       return NextResponse.json({ error: "site not found" }, { status: 404 });
@@ -46,12 +51,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
 
+    console.log("[import/execute] before runExecute, rows=", rows.length);
     const result = await runExecute(siteId, rows, mapping, { skipRowsWithErrors });
-    return NextResponse.json(result);
+    console.log("[import/execute] done in", Date.now() - start, "ms, created=", result.clientsCreated, "updated=", result.clientsUpdated);
+    return NextResponse.json({ ok: true, ...result });
   } catch (e) {
-    console.error("[import/execute]", e);
+    const err = e instanceof Error ? e : new Error(String(e));
+    console.error("[import/execute] exception:", err.message, err.stack);
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "server_error" },
+      { ok: false, error: err.message, errors: [] },
       { status: 500 }
     );
   }

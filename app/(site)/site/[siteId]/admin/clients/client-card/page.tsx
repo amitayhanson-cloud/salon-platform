@@ -1,21 +1,24 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
-import { useParams, useSearchParams } from "next/navigation";
-import { query, where, orderBy, onSnapshot, getDocs, collection } from "firebase/firestore";
+import { useEffect, useState, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
+import { query, where, orderBy, onSnapshot, collection } from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
 import { bookingsCollection } from "@/lib/firestorePaths";
 import { ChemicalCard } from "./ChemicalCard";
 import PersonalPricingTab from "./PersonalPricingTab";
 import AdminTabs from "@/components/ui/AdminTabs";
 import { createClient, checkClientExists, type ClientData } from "@/lib/firestoreClients";
-
+import { useAuth } from "@/components/auth/AuthProvider";
+import { MoreVertical, Pencil, Trash2, CheckSquare, Square } from "lucide-react";
 
 interface Client {
   id: string; // phone number (unique identifier)
   name: string;
   phone: string;
   email?: string;
+  notes?: string;
   lastVisit?: string; // ISO date string
   createdAt?: string; // ISO date string
   totalBookings: number;
@@ -39,22 +42,56 @@ interface Booking {
 export default function ClientCardPage() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const siteId = params?.siteId as string;
-  
+  const { firebaseUser } = useAuth();
+
   const [clients, setClients] = useState<Client[]>([]);
   const [clientsLoading, setClientsLoading] = useState(true);
   const [clientsError, setClientsError] = useState<string | null>(null);
-  
+
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [clientBookings, setClientBookings] = useState<Booking[]>([]);
   const [bookingsLoading, setBookingsLoading] = useState(false);
   const [bookingsError, setBookingsError] = useState<string | null>(null);
-  
+
   const [searchQuery, setSearchQuery] = useState("");
-  
+
   // Tab state for client details sections
   type TabType = "chemistry" | "bookings" | "pricing";
   const [activeTab, setActiveTab] = useState<TabType>("chemistry");
+
+  // Actions menu (list row) - uses portal for correct layering
+  const [actionsOpenForId, setActionsOpenForId] = useState<string | null>(null);
+  const [actionsMenuClient, setActionsMenuClient] = useState<Client | null>(null);
+  const [actionsMenuRect, setActionsMenuRect] = useState<{ top: number; right: number } | null>(null);
+
+  // Toast
+  const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
+
+  // Edit modal
+  const [editClient, setEditClient] = useState<Client | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", email: "", notes: "" });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  // Selection for bulk delete
+  const [selectedForDelete, setSelectedForDelete] = useState<Set<string>>(new Set());
+
+  // Bulk delete modal
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteMode, setBulkDeleteMode] = useState<"client_only" | "client_and_bookings">("client_only");
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState("");
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
+
+  // Delete modal
+  const [deleteClient, setDeleteClient] = useState<Client | null>(null);
+  const [deleteMode, setDeleteMode] = useState<"client_only" | "client_and_bookings">("client_only");
+  const [deleteBookingCount, setDeleteBookingCount] = useState<number>(0);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Add Client Modal State
   const [isAddClientModalOpen, setIsAddClientModalOpen] = useState(false);
@@ -94,21 +131,12 @@ export default function ClientCardPage() {
     setClientsLoading(true);
     setClientsError(null);
 
-    const clientsPath = `sites/${siteId}/clients`;
     const clientsRef = collection(db, "sites", siteId, "clients");
     const clientsQuery = query(clientsRef);
 
     const unsubscribe = onSnapshot(
       clientsQuery,
       (snapshot) => {
-        const docIds = snapshot.docs.map((d) => d.id);
-        console.log("[ClientCard] clients snapshot", {
-          path: clientsPath,
-          fromCache: snapshot.metadata?.fromCache ?? "unknown",
-          size: snapshot.size,
-          docIds,
-        });
-
         // REPLACE state entirely from this snapshot (no append, no merge with bookings or previous state)
         const mapped = snapshot.docs.map((docSnap) => {
           const data = docSnap.data();
@@ -119,6 +147,7 @@ export default function ClientCardPage() {
             name: data.name || "",
             phone,
             email: data.email || undefined,
+            notes: data.notes || undefined,
             lastVisit: undefined,
             createdAt: data.createdAt?.toDate?.()?.toISOString?.() ?? (typeof data.createdAt === "string" ? data.createdAt : undefined),
             totalBookings: 0,
@@ -381,6 +410,228 @@ export default function ClientCardPage() {
     }
   };
 
+  // Toast auto-clear
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const showToast = useCallback((message: string, error?: boolean) => {
+    setToast({ message, error });
+  }, []);
+
+  const closeActionsMenu = useCallback(() => {
+    setActionsOpenForId(null);
+    setActionsMenuClient(null);
+    setActionsMenuRect(null);
+  }, []);
+
+  useEffect(() => {
+    if (!actionsOpenForId) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeActionsMenu();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [actionsOpenForId, closeActionsMenu]);
+
+  const openEditModal = useCallback((client: Client) => {
+    closeActionsMenu();
+    setEditClient(client);
+    setEditForm({
+      name: client.name,
+      email: client.email ?? "",
+      notes: client.notes ?? "",
+    });
+    setEditError(null);
+  }, [closeActionsMenu]);
+
+  const closeEditModal = useCallback(() => {
+    setEditClient(null);
+    setEditError(null);
+  }, []);
+
+  const handleSaveEdit = useCallback(async () => {
+    if (!firebaseUser || !siteId || !editClient) return;
+    if (!editForm.name.trim()) {
+      setEditError("שם הוא שדה חובה");
+      return;
+    }
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch("/api/clients/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          siteId,
+          clientId: editClient.id,
+          updates: {
+            name: editForm.name.trim(),
+            email: editForm.email.trim() || undefined,
+            notes: editForm.notes.trim() || undefined,
+          },
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || res.statusText);
+      }
+      closeEditModal();
+      showToast("הלקוח עודכן בהצלחה");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "שגיאה בעדכון";
+      setEditError(msg);
+      showToast(msg, true);
+    } finally {
+      setEditSaving(false);
+    }
+  }, [firebaseUser, siteId, editClient, editForm, closeEditModal, showToast]);
+
+  const openDeleteModal = useCallback(async (client: Client) => {
+    closeActionsMenu();
+    setDeleteClient(client);
+    setDeleteMode("client_only");
+    setDeleteConfirmText("");
+    setDeleteError(null);
+    if (selectedClientId === client.id) {
+      setDeleteBookingCount(clientBookings.length);
+    } else {
+      setDeleteBookingCount(0);
+      try {
+        const token = firebaseUser ? await firebaseUser.getIdToken() : null;
+        if (!token || !siteId) {
+          setDeleteBookingCount(0);
+          return;
+        }
+        const res = await fetch(
+          `/api/clients/booking-count?siteId=${encodeURIComponent(siteId)}&clientId=${encodeURIComponent(client.id)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const data = await res.json().catch(() => ({}));
+        setDeleteBookingCount(data.ok ? data.count ?? 0 : 0);
+      } catch {
+        setDeleteBookingCount(0);
+      }
+    }
+  }, [selectedClientId, clientBookings.length, firebaseUser, siteId, closeActionsMenu]);
+
+  const closeDeleteModal = useCallback(() => {
+    setDeleteClient(null);
+    setDeleteConfirmText("");
+    setDeleteError(null);
+  }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!firebaseUser || !siteId || !deleteClient) return;
+    const expectedConfirm = "מחק";
+    const validConfirm = deleteConfirmText.trim() === expectedConfirm || deleteConfirmText.trim() === deleteClient.id;
+    if (!validConfirm) {
+      setDeleteError(`הקלד "${expectedConfirm}" או את מספר הטלפון ${deleteClient.id} לאישור`);
+      return;
+    }
+    setDeleteLoading(true);
+    setDeleteError(null);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch("/api/clients/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ siteId, clientId: deleteClient.id, mode: deleteMode }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || res.statusText);
+      }
+      closeDeleteModal();
+      if (selectedClientId === deleteClient.id) {
+        setSelectedClientId(null);
+        const url = new URL(window.location.href);
+        url.searchParams.delete("clientId");
+        router.replace(url.pathname + url.search);
+      }
+      showToast("הלקוח נמחק");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "שגיאה במחיקה";
+      setDeleteError(msg);
+      showToast(msg, true);
+    } finally {
+      setDeleteLoading(false);
+    }
+  }, [firebaseUser, siteId, deleteClient, deleteMode, deleteConfirmText, selectedClientId, closeDeleteModal, router, showToast]);
+
+  const toggleSelectForDelete = useCallback((clientId: string) => {
+    setSelectedForDelete((prev) => {
+      const next = new Set(prev);
+      if (next.has(clientId)) next.delete(clientId);
+      else next.add(clientId);
+      return next;
+    });
+  }, []);
+
+  const selectAllForDelete = useCallback(() => {
+    setSelectedForDelete(new Set(filteredClients.map((c) => c.id)));
+  }, [filteredClients]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedForDelete(new Set());
+  }, []);
+
+  const BULK_DELETE_TIMEOUT_MS = 15000;
+
+  const handleBulkDelete = useCallback(async () => {
+    if (!firebaseUser || !siteId) return;
+    const ids = Array.from(selectedForDelete);
+    if (ids.length === 0) return;
+    if (bulkDeleteConfirm.trim() !== "מחק") {
+      setBulkDeleteError('הקלד "מחק" לאישור');
+      return;
+    }
+    setBulkDeleteLoading(true);
+    setBulkDeleteError(null);
+    const wasSelectedInDetail = selectedClientId !== null && selectedForDelete.has(selectedClientId);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const fetchPromise = fetch("/api/clients/delete-bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ siteId, clientIds: ids, mode: bulkDeleteMode }),
+      });
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("המחיקה לוקחת יותר מדי זמן (15 שניות). נסה שוב.")), BULK_DELETE_TIMEOUT_MS)
+      );
+      const res = await Promise.race([fetchPromise, timeoutPromise]);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error((data as { message?: string }).message || res.statusText);
+      }
+      const deleted = (data as { deleted?: number }).deleted ?? 0;
+      const failed = (data as { failed?: number }).failed ?? 0;
+      if (failed > 0) {
+        showToast(`נמחקו ${deleted}. ${failed} נכשלו (יש תורים?)`, true);
+      } else {
+        showToast(`נמחקו ${deleted} לקוחות`);
+      }
+      if (wasSelectedInDetail) {
+        setSelectedClientId(null);
+        const url = new URL(window.location.href);
+        url.searchParams.delete("clientId");
+        router.replace(url.pathname + url.search);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "שגיאה במחיקה";
+      setBulkDeleteError(msg);
+      showToast(msg, true);
+    } finally {
+      setBulkDeleteLoading(false);
+      setBulkDeleteOpen(false);
+      setBulkDeleteConfirm("");
+      setSelectedForDelete(new Set());
+    }
+  }, [firebaseUser, siteId, selectedForDelete, bulkDeleteMode, bulkDeleteConfirm, selectedClientId, router, showToast]);
+
   return (
     <div dir="rtl" className="min-h-screen bg-slate-50">
       <div className="max-w-7xl mx-auto px-4 py-6">
@@ -401,14 +652,38 @@ export default function ClientCardPage() {
           {/* Clients List */}
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
-              <div className="flex justify-between items-center mb-4">
+              <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
                 <h2 className="text-lg font-bold text-slate-900">רשימת לקוחות</h2>
-                <button
-                  onClick={handleOpenAddClientModal}
-                  className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium rounded-lg transition-colors"
-                >
-                  הוסף/י לקוח
-                </button>
+                <div className="flex gap-2">
+                  {selectedForDelete.size > 0 && (
+                    <>
+                      <button
+                        onClick={selectAllForDelete}
+                        className="px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-lg"
+                      >
+                        בחר הכל
+                      </button>
+                      <button
+                        onClick={clearSelection}
+                        className="px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-lg"
+                      >
+                        נקה
+                      </button>
+                      <button
+                        onClick={() => { setBulkDeleteOpen(true); setBulkDeleteMode("client_only"); setBulkDeleteConfirm(""); setBulkDeleteError(null); }}
+                        className="px-3 py-1.5 text-sm text-red-700 hover:bg-red-50 border border-red-200 rounded-lg font-medium"
+                      >
+                        מחק {selectedForDelete.size} נבחרים
+                      </button>
+                    </>
+                  )}
+                  <button
+                    onClick={handleOpenAddClientModal}
+                    className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    הוסף/י לקוח
+                  </button>
+                </div>
               </div>
               
               {/* Search Input */}
@@ -438,27 +713,68 @@ export default function ClientCardPage() {
               ) : (
                 <div className="space-y-2 max-h-[600px] overflow-y-auto">
                   {filteredClients.map((client) => (
-                    <button
+                    <div
                       key={client.id}
-                      onClick={() => handleClientSelect(client.id)}
-                      className={`w-full text-right p-3 rounded-lg border transition-colors ${
+                      className={`relative w-full text-right p-3 rounded-lg border transition-colors ${
                         selectedClientId === client.id
                           ? "border-sky-500 bg-sky-50"
                           : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
                       }`}
                     >
-                      <div className="flex justify-between items-center">
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-slate-900">{client.name}</h3>
-                          <p className="text-xs text-slate-600 mt-1">{client.phone}</p>
-                        </div>
-                        {client.totalBookings > 0 && (
-                          <span className="text-xs text-slate-400 mr-2">
-                            {client.totalBookings} תורים
-                          </span>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); toggleSelectForDelete(client.id); }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-slate-200 text-slate-500"
+                        aria-label={selectedForDelete.has(client.id) ? "בטל בחירה" : "בחר למחיקה"}
+                      >
+                        {selectedForDelete.has(client.id) ? (
+                          <CheckSquare className="w-5 h-5 text-sky-600" />
+                        ) : (
+                          <Square className="w-5 h-5" />
                         )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleClientSelect(client.id)}
+                        className="w-full text-right block pr-10"
+                      >
+                        <div className="flex justify-between items-center">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-slate-900">{client.name}</h3>
+                            <p className="text-xs text-slate-600 mt-1">{client.phone}</p>
+                          </div>
+                          {client.totalBookings > 0 && (
+                            <span className="text-xs text-slate-400 mr-2">
+                              {client.totalBookings} תורים
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                      <div className="absolute left-2 top-1/2 -translate-y-1/2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (actionsOpenForId === client.id) {
+                              closeActionsMenu();
+                            } else {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              setActionsMenuRect({
+                                top: rect.bottom + 4,
+                                right: typeof window !== "undefined" ? window.innerWidth - rect.left : 0,
+                              });
+                              setActionsMenuClient(client);
+                              setActionsOpenForId(client.id);
+                            }
+                          }}
+                          className="p-1 rounded hover:bg-slate-200 text-slate-500"
+                          aria-label="פעולות"
+                          aria-expanded={actionsOpenForId === client.id}
+                        >
+                          <MoreVertical className="w-5 h-5" />
+                        </button>
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -509,6 +825,25 @@ export default function ClientCardPage() {
                       <p className="text-base text-slate-900">{selectedClient.totalBookings}</p>
                     </div>
                   </div>
+                </div>
+
+                <div className="flex gap-3 mb-6">
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(selectedClient)}
+                    className="flex items-center gap-2 px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium rounded-lg"
+                  >
+                    <Pencil className="w-4 h-4" />
+                    ערוך לקוח
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openDeleteModal(selectedClient)}
+                    className="flex items-center gap-2 px-4 py-2 border border-red-300 text-red-700 hover:bg-red-50 text-sm font-medium rounded-lg"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    מחק לקוח
+                  </button>
                 </div>
 
                 {/* Tabs Navigation */}
@@ -738,6 +1073,283 @@ export default function ClientCardPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Actions menu portal (floats above all content) */}
+      {actionsOpenForId && actionsMenuClient && actionsMenuRect &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[9998]"
+              aria-hidden
+              onClick={closeActionsMenu}
+            />
+            <div
+              className="fixed z-[9999] py-1 bg-white border border-slate-200 rounded-lg shadow-xl min-w-[140px]"
+              style={{
+                top: actionsMenuRect.top,
+                right: actionsMenuRect.right,
+              }}
+              dir="rtl"
+            >
+              <button
+                type="button"
+                onClick={() => openEditModal(actionsMenuClient)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-right text-sm text-slate-700 hover:bg-slate-50"
+              >
+                <Pencil className="w-4 h-4" />
+                עריכה
+              </button>
+              <button
+                type="button"
+                onClick={() => openDeleteModal(actionsMenuClient)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-right text-sm text-red-700 hover:bg-red-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                מחיקה
+              </button>
+            </div>
+          </>,
+          document.body
+        )}
+
+      {/* Toast */}
+      {toast && (
+        <div
+          className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-2 rounded-lg shadow-lg text-sm font-medium ${
+            toast.error ? "bg-red-600 text-white" : "bg-slate-800 text-white"
+          }`}
+        >
+          {toast.message}
+        </div>
+      )}
+
+      {/* Edit Client Modal */}
+      {editClient && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" dir="rtl">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <h2 className="text-xl font-bold text-slate-900 mb-4">עריכת לקוח</h2>
+              {editError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-right">
+                  <p className="text-sm text-red-700">{editError}</p>
+                </div>
+              )}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">שם מלא *</label>
+                  <input
+                    type="text"
+                    value={editForm.name}
+                    onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">טלפון</label>
+                  <input
+                    type="text"
+                    value={editClient.phone}
+                    readOnly
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-right text-slate-600"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">לא ניתן לשנות טלפון (מזהה הלקוח).</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">אימייל</label>
+                  <input
+                    type="email"
+                    value={editForm.email}
+                    onChange={(e) => setEditForm((p) => ({ ...p, email: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">הערות</label>
+                  <textarea
+                    value={editForm.notes}
+                    onChange={(e) => setEditForm((p) => ({ ...p, notes: e.target.value }))}
+                    rows={3}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right resize-none"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={closeEditModal}
+                  className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50"
+                >
+                  ביטול
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEdit}
+                  disabled={editSaving}
+                  className="flex-1 px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 disabled:opacity-50"
+                >
+                  {editSaving ? "שומר…" : "שמור"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Client Modal */}
+      {deleteClient && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" dir="rtl">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="p-6">
+              <h2 className="text-xl font-bold text-slate-900 mb-2">למחוק לקוח?</h2>
+              <p className="text-sm text-slate-600 mb-4">
+                הפעולה תמחק את הלקוח. מה לעשות עם התורים שלו?
+              </p>
+              <p className="text-sm text-slate-700 mb-4">
+                ללקוח זה יש <strong>{deleteBookingCount}</strong> תורים.
+              </p>
+              <div className="space-y-2 mb-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="deleteMode"
+                    checked={deleteMode === "client_only"}
+                    onChange={() => setDeleteMode("client_only")}
+                    className="rounded-full"
+                  />
+                  <span className="text-sm">מחק רק את הלקוח והשאר תורים</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="deleteMode"
+                    checked={deleteMode === "client_and_bookings"}
+                    onChange={() => setDeleteMode("client_and_bookings")}
+                    className="rounded-full"
+                  />
+                  <span className="text-sm">מחק לקוח + מחק את כל התורים שלו</span>
+                </label>
+              </div>
+              {deleteMode === "client_only" && deleteBookingCount > 0 && (
+                <p className="text-xs text-amber-700 mb-2">
+                  לא ניתן למחוק רק את הלקוח כאשר יש תורים. בחר למחוק גם תורים.
+                </p>
+              )}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  הקלד &quot;מחק&quot; או את מספר הטלפון לאישור
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  placeholder="מחק או 0541234567"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
+                />
+              </div>
+              {deleteError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-right">
+                  <p className="text-sm text-red-700">{deleteError}</p>
+                </div>
+              )}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={closeDeleteModal}
+                  className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50"
+                >
+                  ביטול
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDelete}
+                  disabled={
+                    deleteLoading ||
+                    (deleteMode === "client_only" && deleteBookingCount > 0) ||
+                    (deleteConfirmText.trim() !== "מחק" && deleteConfirmText.trim() !== deleteClient.id)
+                  }
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {deleteLoading ? "מוחק…" : "מחק"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Modal */}
+      {bulkDeleteOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" dir="rtl">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="p-6">
+              <h2 className="text-xl font-bold text-slate-900 mb-2">מחיקת {selectedForDelete.size} לקוחות</h2>
+              <p className="text-sm text-slate-600 mb-4">
+                מה לעשות עם התורים של הלקוחות הנבחרים?
+              </p>
+              <div className="space-y-2 mb-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="bulkDeleteMode"
+                    checked={bulkDeleteMode === "client_only"}
+                    onChange={() => setBulkDeleteMode("client_only")}
+                    className="rounded-full"
+                  />
+                  <span className="text-sm">מחק רק את הלקוחות (השאר תורים)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="bulkDeleteMode"
+                    checked={bulkDeleteMode === "client_and_bookings"}
+                    onChange={() => setBulkDeleteMode("client_and_bookings")}
+                    className="rounded-full"
+                  />
+                  <span className="text-sm">מחק לקוחות + מחק את כל התורים שלהם</span>
+                </label>
+              </div>
+              <p className="text-xs text-amber-700 mb-2">
+                לקוחות עם תורים יידלגו אם תבחר &quot;מחק רק לקוחות&quot;.
+              </p>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  הקלד &quot;מחק&quot; לאישור
+                </label>
+                <input
+                  type="text"
+                  value={bulkDeleteConfirm}
+                  onChange={(e) => setBulkDeleteConfirm(e.target.value)}
+                  placeholder="מחק"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
+                />
+              </div>
+              {bulkDeleteError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-right">
+                  <p className="text-sm text-red-700">{bulkDeleteError}</p>
+                </div>
+              )}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setBulkDeleteOpen(false); setBulkDeleteConfirm(""); setBulkDeleteError(null); }}
+                  className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50"
+                >
+                  ביטול
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBulkDelete}
+                  disabled={bulkDeleteLoading || bulkDeleteConfirm.trim() !== "מחק"}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {bulkDeleteLoading ? "מוחק…" : "מחק"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

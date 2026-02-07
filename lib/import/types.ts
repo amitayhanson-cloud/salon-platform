@@ -77,6 +77,14 @@ export interface RowError {
   message: string;
 }
 
+/** Preview row shown in final confirmation (normalized). */
+export interface PreviewRow {
+  fullName: string;
+  phone: string;
+  email?: string;
+  notes?: string;
+}
+
 /** Dry-run result (no writes). */
 export interface DryRunResult {
   clientsToCreate: number;
@@ -85,6 +93,10 @@ export interface DryRunResult {
   bookingsToSkip: number;
   errors: RowError[];
   warnings: RowError[];
+  /** First 50 rows that will be imported, with normalized fields (matches Execute). */
+  previewRows?: PreviewRow[];
+  /** Count of rows with validation errors (skipped). */
+  droppedRowCount?: number;
 }
 
 /** Execute result (after import). */
