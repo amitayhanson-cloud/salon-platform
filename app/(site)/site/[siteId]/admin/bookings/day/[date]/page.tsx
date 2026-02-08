@@ -821,7 +821,6 @@ export default function DaySchedulePage() {
             <p className="text-sm text-slate-500">טוען עובדים...</p>
           </div>
         ) : selectedWorkerId === ALL_WORKERS ? (
-          // All workers mode - multi-column view
           <div className="flex-1 min-h-0 relative z-0 bg-white rounded-lg shadow-sm border border-slate-200 p-6 overflow-hidden">
             <MultiWorkerScheduleView
               date={dateKey}
@@ -833,7 +832,6 @@ export default function DaySchedulePage() {
             />
           </div>
         ) : (
-          // Single worker mode
           <div className="flex-1 min-h-0 relative z-0 bg-white rounded-lg shadow-sm border border-slate-200 p-6 overflow-hidden">
             <DayScheduleView
               date={dateKey}

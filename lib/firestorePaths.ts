@@ -27,6 +27,16 @@ export function bookingDoc(siteId: string, bookingId: string) {
   return doc(db, "sites", siteId, "bookings", bookingId);
 }
 
+export function tasksCollection(siteId: string) {
+  if (!db) throw new Error("Firestore db not initialized");
+  return collection(db, "sites", siteId, "tasks");
+}
+
+export function taskDoc(siteId: string, taskId: string) {
+  if (!db) throw new Error("Firestore db not initialized");
+  return doc(db, "sites", siteId, "tasks", taskId);
+}
+
 export function bookingSettingsDoc(siteId: string) {
   if (!db) throw new Error("Firestore db not initialized");
   return doc(db, "sites", siteId, "settings", "booking");

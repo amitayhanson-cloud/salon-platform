@@ -21,6 +21,7 @@ import type { SiteConfig } from "@/types/siteConfig";
 import { getDateRange, getTwoWeekStart, getSundayStart, toYYYYMMDD } from "@/lib/calendarUtils";
 import { normalizeBooking, isBookingCancelled } from "@/lib/normalizeBooking";
 import TwoWeekCalendar from "@/components/admin/TwoWeekCalendar";
+import TaskListPanel from "@/components/admin/TaskListPanel";
 import { ChevronLeft, ChevronRight, RefreshCw, Timer } from "lucide-react";
 import { useRouter } from "next/navigation";
 import AutoCleanupSettings from "@/components/admin/AutoCleanupSettings";
@@ -456,6 +457,7 @@ export default function BookingsAdminPage() {
         )}
 
         {/* Calendar */}
+        <div className="mb-6">
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold text-slate-900">יומן תורים (14 יום)</h2>
@@ -515,6 +517,12 @@ export default function BookingsAdminPage() {
               />
             )}
           </div>
+
+        {/* Tasks (below calendar) */}
+        <div className="mt-4">
+          <TaskListPanel siteId={siteId} maxHeight="280px" />
+        </div>
+        </div>
 
       </div>
 
