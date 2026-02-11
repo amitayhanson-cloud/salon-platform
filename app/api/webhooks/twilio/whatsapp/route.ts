@@ -50,8 +50,9 @@ function xmlResponse(body: string, status = 200): NextResponse {
   });
 }
 
-function okResponse(): NextResponse {
-  return new NextResponse("ok", { status: 200 });
+function emptyResponse(messageSid?: string): NextResponse {
+  console.log("[WA_WEBHOOK] http_200_empty", messageSid != null ? { messageSid } : {});
+  return new NextResponse(null, { status: 200 });
 }
 
 export async function POST(request: NextRequest) {
@@ -142,12 +143,12 @@ export async function POST(request: NextRequest) {
     const existing = await getInboundByMessageSid(MessageSid);
     if (existing?.processedAt != null) {
       console.log("[WA_WEBHOOK] dedupe_hit", { messageSid: MessageSid });
-      return okResponse();
+      return emptyResponse(docId);
     }
     const claimed = await tryClaimInbound(MessageSid, { fromE164, to: To, body: Body });
     if (!claimed) {
       console.log("[WA_WEBHOOK] dedupe_hit", { messageSid: MessageSid });
-      return okResponse();
+      return emptyResponse(docId);
     }
   }
 
@@ -204,7 +205,7 @@ export async function POST(request: NextRequest) {
     } catch (e) {
       console.error("[WA_WEBHOOK] sendWhatsApp failed", { messageSid: docId, error: e });
     }
-    return okResponse();
+    return emptyResponse(docId);
   }
 
   const SAFE_ERROR_MSG = "משהו השתבש. אנא פנה/י למספרה.";
@@ -216,7 +217,7 @@ export async function POST(request: NextRequest) {
       } catch {
         // ignore
       }
-      return okResponse();
+      return emptyResponse(docId);
     }
 
     await logInboundWhatsApp({
@@ -249,7 +250,7 @@ export async function POST(request: NextRequest) {
         const reply =
           "לא מצאתי בחירה פעילה. אנא השב/י שוב על הודעת התזכורת עם כן או לא.";
         await recordAndSendReply(reply, "no_session");
-        return okResponse();
+        return emptyResponse(docId);
       }
       const n = selection;
       const choices = session.choices;
@@ -257,7 +258,7 @@ export async function POST(request: NextRequest) {
       if (n < 1 || n > choices.length) {
         const reply = `מספר לא תקין. אנא השב/י עם מספר בין 1 ל-${choices.length}.`;
         await recordAndSendReply(reply, "invalid_selection");
-        return okResponse();
+        return emptyResponse(docId);
       }
       const chosen = choices[n - 1]!;
       const booking = await getBookingByRefIfAwaitingConfirmation(chosen.bookingRef);
@@ -266,7 +267,7 @@ export async function POST(request: NextRequest) {
           "נראה שהתור הזה כבר עודכן. אם צריך עזרה, דבר/י עם העסק.";
         await deleteWhatsAppSession(fromE164);
         await recordAndSendReply(reply, "booking_updated");
-        return okResponse();
+        return emptyResponse(docId);
       }
       if (session.intent === "confirm") {
         await markBookingConfirmed(booking.siteId, booking.bookingId);
@@ -278,7 +279,7 @@ export async function POST(request: NextRequest) {
         const reply = `אושר ✅ נתראה ב-${timeStr} אצל ${booking.salonName}.`;
         await deleteWhatsAppSession(fromE164);
         await recordAndSendReply(reply, "matched_yes", chosen.bookingRef);
-        return okResponse();
+        return emptyResponse(docId);
       }
       await markBookingCancelledByWhatsApp(booking.siteId, booking.bookingId);
       console.log("[WA_WEBHOOK] selection_applied", {
@@ -288,7 +289,7 @@ export async function POST(request: NextRequest) {
       const reply = `בוטל ✅. אם תרצה/י לקבוע מחדש, דבר/י עם ${booking.salonName}.`;
       await deleteWhatsAppSession(fromE164);
       await recordAndSendReply(reply, "matched_no", chosen.bookingRef);
-      return okResponse();
+      return emptyResponse(docId);
     }
 
     if (intent === "yes" || intent === "no") {
@@ -300,20 +301,20 @@ export async function POST(request: NextRequest) {
           const alreadyConfirmed = await findNextBookingByPhoneWithStatus(fromE164, "confirmed");
           if (alreadyConfirmed) {
             await recordAndSendReply("התור כבר מאושר 😊", "no_booking");
-            return okResponse();
+            return emptyResponse(docId);
           }
         }
         if (intent === "no") {
           const alreadyCancelled = await findNextBookingByPhoneWithStatus(fromE164, "cancelled");
           if (alreadyCancelled) {
             await recordAndSendReply("התור כבר בוטל.", "no_booking");
-            return okResponse();
+            return emptyResponse(docId);
           }
         }
         const reply =
           "לא מצאתי תור שממתין לאישור עבור המספר הזה. אם קבעת תור, אפשר לפנות למספרה.";
         await recordAndSendReply(reply, "no_booking");
-        return okResponse();
+        return emptyResponse(docId);
       }
 
       if (matches.length === 1) {
@@ -330,7 +331,7 @@ export async function POST(request: NextRequest) {
           const timeStr = formatIsraelTime(choice.startAt.toDate());
           const reply = `אושר ✅ נתראה ב-${timeStr} ב-${choice.siteName}.`;
           await recordAndSendReply(reply, "matched_yes", bookingRef);
-          return okResponse();
+          return emptyResponse(docId);
         }
         await markBookingCancelledByWhatsApp(choice.siteId, choice.bookingId);
         console.log("[WA_WEBHOOK] booking_updated", {
@@ -339,7 +340,7 @@ export async function POST(request: NextRequest) {
           newStatus: "cancelled",
         });
         await recordAndSendReply("הבנתי, ביטלתי את התור.", "matched_no", bookingRef);
-        return okResponse();
+        return emptyResponse(docId);
       }
 
       const choices = matches.slice(0, 5);
@@ -370,11 +371,11 @@ export async function POST(request: NextRequest) {
       const list = lines.join("\n");
       const reply = `יש לך כמה תורים שממתינים לאישור. על איזה מהם מדובר?\n\n${list}\n\nהשב/י עם מספר (1-${choices.length}).`;
       await recordAndSendReply(reply, "ambiguous");
-      return okResponse();
+      return emptyResponse(docId);
     }
 
     const help = 'כדי לאשר תור השב/השיבי "כן", כדי לבטל השב/השיבי "לא".';
     await recordAndSendReply(help, "no_match");
-    return okResponse();
+    return emptyResponse(docId);
   }
 }
