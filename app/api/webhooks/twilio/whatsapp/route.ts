@@ -5,7 +5,6 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { randomUUID } from "crypto";
 import twilio from "twilio";
 import {
   getWebhookUrl,
@@ -23,7 +22,14 @@ import {
   getWhatsAppSession,
   deleteWhatsAppSession,
 } from "@/lib/whatsapp";
-import { createInboundDoc, updateInboundDoc } from "@/lib/whatsapp/inboundLog";
+import {
+  getInboundByMessageSid,
+  tryClaimInbound,
+  setInboundProcessed,
+  writeInboundReceived,
+  writeInboundSignatureFailed,
+  updateInboundDoc,
+} from "@/lib/whatsapp/inboundLog";
 import { formatIsraelTime, formatIsraelDateTime } from "@/lib/datetime/formatIsraelTime";
 
 const WEBHOOK_PATH = "/api/webhooks/twilio/whatsapp";
@@ -44,9 +50,12 @@ function xmlResponse(body: string, status = 200): NextResponse {
   });
 }
 
+function okResponse(): NextResponse {
+  return new NextResponse("ok", { status: 200 });
+}
+
 export async function POST(request: NextRequest) {
-  const inboundId = randomUUID();
-  console.log("[WA_WEBHOOK] start", { inboundId, ts: new Date().toISOString() });
+  console.log("[WA_WEBHOOK] start", { ts: new Date().toISOString() });
 
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   if (!authToken) {
@@ -58,7 +67,7 @@ export async function POST(request: NextRequest) {
   try {
     rawBody = await request.text();
   } catch (e) {
-    console.error("[WA_WEBHOOK] failed to read body", { inboundId, error: e });
+    console.error("[WA_WEBHOOK] failed to read body", { error: e });
     return xmlResponse(twimlMessage("", "משהו השתבש. אנא פנה/י למספרה."), 200);
   }
 
@@ -98,7 +107,6 @@ export async function POST(request: NextRequest) {
       });
     } else {
       console.error("[WA_WEBHOOK] signature_failed", {
-        inboundId,
         urlForSig,
         signatureHeaderLength: twilioSignature.length,
         rawBodyLength: rawBody.length,
@@ -109,15 +117,7 @@ export async function POST(request: NextRequest) {
       const Body = String(twilioParams["Body"] ?? "").trim();
       const MessageSid = String(twilioParams["MessageSid"] ?? "").trim();
       try {
-        await createInboundDoc({
-          inboundId,
-          from: From,
-          to: To,
-          body: Body,
-          messageSid: MessageSid,
-          status: "signature_failed",
-          errorMessage: "Invalid signature",
-        });
+        if (MessageSid) await writeInboundSignatureFailed(MessageSid, { from: From, to: To, body: Body });
       } catch (e) {
         console.error("[WA_WEBHOOK] failed to write inbound doc", e);
       }
@@ -133,20 +133,33 @@ export async function POST(request: NextRequest) {
   const Body = String(twilioParams["Body"] ?? "").trim();
   const MessageSid = String(twilioParams["MessageSid"] ?? "").trim();
   const NumMedia = String(twilioParams["NumMedia"] ?? "").trim();
-  console.log("[WA_WEBHOOK] inbound", { inboundId, From, To, Body, MessageSid, NumMedia });
 
-  try {
-    await createInboundDoc({
-      inboundId,
-      from: From,
-      to: To,
-      body: Body,
-      messageSid: MessageSid,
-      status: "received",
-    });
-  } catch (e) {
-    console.error("[WA_WEBHOOK] failed to write inbound received", e);
+  const fromE164 = normalizeE164(From.replace(/^whatsapp:/, ""), "IL");
+  const docId = MessageSid || `no-sid-${Date.now()}`;
+  if (!MessageSid) {
+    console.warn("[WA_WEBHOOK] missing MessageSid, using fallback", { docId });
+  } else {
+    const existing = await getInboundByMessageSid(MessageSid);
+    if (existing?.processedAt != null) {
+      console.log("[WA_WEBHOOK] dedupe_hit", { messageSid: MessageSid });
+      return okResponse();
+    }
+    const claimed = await tryClaimInbound(MessageSid, { fromE164, to: To, body: Body });
+    if (!claimed) {
+      console.log("[WA_WEBHOOK] dedupe_hit", { messageSid: MessageSid });
+      return okResponse();
+    }
   }
+
+  if (!MessageSid) {
+    try {
+      await writeInboundReceived(docId, { messageSid: "", fromE164, to: To, body: Body });
+    } catch (e) {
+      console.error("[WA_WEBHOOK] failed to write inbound received", e);
+    }
+  }
+
+  console.log("[WA_WEBHOOK] inbound_received", { messageSid: docId });
 
   try {
     return await handleInbound();
@@ -157,8 +170,7 @@ export async function POST(request: NextRequest) {
     const isIndexError = errCode === 9 && /index/i.test(errMessage);
 
     console.error("[WA_WEBHOOK] error", {
-      inboundId,
-      messageSid: MessageSid,
+      messageSid: docId,
       from: From,
       body: Body,
       errName: errObj?.name,
@@ -167,10 +179,18 @@ export async function POST(request: NextRequest) {
       errStack: errObj?.stack ?? null,
     });
     if (isIndexError) {
-      console.error("[WA_WEBHOOK] missing_index", { inboundId, errMessage });
+      console.error("[WA_WEBHOOK] missing_index", { messageSid: docId, errMessage });
     }
+    const errorReply = isIndexError
+      ? "System needs a database index. Please contact the salon."
+      : "משהו השתבש. אנא פנה/י למספרה.";
     try {
-      await updateInboundDoc(inboundId, {
+      await setInboundProcessed(docId, {
+        resultStatus: isIndexError ? "missing_index" : "error",
+        replyBody: errorReply,
+        error: errMessage,
+      });
+      await updateInboundDoc(docId, {
         status: isIndexError ? "missing_index" : "error",
         errorCode: errCode ?? null,
         errorMessage: errMessage,
@@ -179,14 +199,12 @@ export async function POST(request: NextRequest) {
     } catch {
       // ignore
     }
-    if (isIndexError) {
-      return xmlResponse(
-        twimlMessage(From || "", "System needs a database index. Please contact the salon.")
-      );
+    try {
+      await sendWhatsApp({ toE164: fromE164, body: errorReply });
+    } catch (e) {
+      console.error("[WA_WEBHOOK] sendWhatsApp failed", { messageSid: docId, error: e });
     }
-    return xmlResponse(
-      twimlMessage(From || "", "משהו השתבש. אנא פנה/י למספרה.")
-    );
+    return okResponse();
   }
 
   const SAFE_ERROR_MSG = "משהו השתבש. אנא פנה/י למספרה.";
@@ -194,14 +212,12 @@ export async function POST(request: NextRequest) {
   async function handleInbound(): Promise<NextResponse> {
     if (!From || !MessageSid) {
       try {
-        await updateInboundDoc(inboundId, { status: "error", errorMessage: "Missing From or MessageSid" });
+        await updateInboundDoc(docId, { status: "error", errorMessage: "Missing From or MessageSid" });
       } catch {
         // ignore
       }
-      return xmlResponse(twimlMessage(From || "", SAFE_ERROR_MSG));
+      return okResponse();
     }
-
-    const fromE164 = normalizeE164(From.replace(/^whatsapp:/, ""), "IL");
 
     await logInboundWhatsApp({
       fromPhone: From,
@@ -212,38 +228,45 @@ export async function POST(request: NextRequest) {
 
     const { intent, selection } = normalizeInbound(Body);
 
-    const sendReply = async (replyBody: string) => {
+    async function recordAndSendReply(
+      replyBody: string,
+      resultStatus: string,
+      bookingRef?: string | null
+    ): Promise<void> {
+      await setInboundProcessed(docId, { resultStatus, replyBody, bookingRef });
+      console.log("[WA_WEBHOOK] replying_once", { messageSid: docId });
       try {
         await sendWhatsApp({ toE164: fromE164, body: replyBody });
       } catch (e) {
-        console.error("[WA_WEBHOOK] sendWhatsApp failed", { inboundId, error: e });
+        console.error("[WA_WEBHOOK] sendWhatsApp failed", { messageSid: docId, error: e });
       }
-    };
+      console.log("[WA_WEBHOOK] replied", { messageSid: docId });
+    }
 
     if (selection !== null) {
       const session = await getWhatsAppSession(fromE164);
       if (!session) {
         const reply =
           "לא מצאתי בחירה פעילה. אנא השב/י שוב על הודעת התזכורת עם כן או לא.";
-        await sendReply(reply);
-        return xmlResponse(twimlMessage(From, reply));
+        await recordAndSendReply(reply, "no_session");
+        return okResponse();
       }
       const n = selection;
       const choices = session.choices;
       console.log("[WA_WEBHOOK] selection_received", { phoneE164: fromE164, n });
       if (n < 1 || n > choices.length) {
         const reply = `מספר לא תקין. אנא השב/י עם מספר בין 1 ל-${choices.length}.`;
-        await sendReply(reply);
-        return xmlResponse(twimlMessage(From, reply));
+        await recordAndSendReply(reply, "invalid_selection");
+        return okResponse();
       }
       const chosen = choices[n - 1]!;
       const booking = await getBookingByRefIfAwaitingConfirmation(chosen.bookingRef);
       if (!booking) {
         const reply =
           "נראה שהתור הזה כבר עודכן. אם צריך עזרה, דבר/י עם העסק.";
-        await sendReply(reply);
         await deleteWhatsAppSession(fromE164);
-        return xmlResponse(twimlMessage(From, reply));
+        await recordAndSendReply(reply, "booking_updated");
+        return okResponse();
       }
       if (session.intent === "confirm") {
         await markBookingConfirmed(booking.siteId, booking.bookingId);
@@ -253,9 +276,9 @@ export async function POST(request: NextRequest) {
         });
         const timeStr = formatIsraelTime(booking.startAt);
         const reply = `אושר ✅ נתראה ב-${timeStr} אצל ${booking.salonName}.`;
-        await sendReply(reply);
         await deleteWhatsAppSession(fromE164);
-        return xmlResponse(twimlMessage(From, reply));
+        await recordAndSendReply(reply, "matched_yes", chosen.bookingRef);
+        return okResponse();
       }
       await markBookingCancelledByWhatsApp(booking.siteId, booking.bookingId);
       console.log("[WA_WEBHOOK] selection_applied", {
@@ -263,9 +286,9 @@ export async function POST(request: NextRequest) {
         intent: "cancel",
       });
       const reply = `בוטל ✅. אם תרצה/י לקבוע מחדש, דבר/י עם ${booking.salonName}.`;
-      await sendReply(reply);
       await deleteWhatsAppSession(fromE164);
-      return xmlResponse(twimlMessage(From, reply));
+      await recordAndSendReply(reply, "matched_no", chosen.bookingRef);
+      return okResponse();
     }
 
     if (intent === "yes" || intent === "no") {
@@ -273,68 +296,50 @@ export async function POST(request: NextRequest) {
       console.log("[WA_WEBHOOK] matches_count", { phoneE164: fromE164, count: matches.length });
 
       if (matches.length === 0) {
-        try {
-          await updateInboundDoc(inboundId, { status: "no_booking" });
-        } catch {
-          // ignore
-        }
         if (intent === "yes") {
           const alreadyConfirmed = await findNextBookingByPhoneWithStatus(fromE164, "confirmed");
           if (alreadyConfirmed) {
-            const reply = "התור כבר מאושר 😊";
-            await sendReply(reply);
-            return xmlResponse(twimlMessage(From, reply));
+            await recordAndSendReply("התור כבר מאושר 😊", "no_booking");
+            return okResponse();
           }
         }
         if (intent === "no") {
           const alreadyCancelled = await findNextBookingByPhoneWithStatus(fromE164, "cancelled");
           if (alreadyCancelled) {
-            const reply = "התור כבר בוטל.";
-            await sendReply(reply);
-            return xmlResponse(twimlMessage(From, reply));
+            await recordAndSendReply("התור כבר בוטל.", "no_booking");
+            return okResponse();
           }
         }
         const reply =
           "לא מצאתי תור שממתין לאישור עבור המספר הזה. אם קבעת תור, אפשר לפנות למספרה.";
-        await sendReply(reply);
-        return xmlResponse(twimlMessage(From, reply));
+        await recordAndSendReply(reply, "no_booking");
+        return okResponse();
       }
 
       if (matches.length === 1) {
         const choice = matches[0]!;
         const bookingRef = choice.bookingRef;
-        console.log("[WA_WEBHOOK] booking_found", { inboundId, bookingRef });
+        console.log("[WA_WEBHOOK] booking_found", { messageSid: docId, bookingRef });
         if (intent === "yes") {
           await markBookingConfirmed(choice.siteId, choice.bookingId);
           console.log("[WA_WEBHOOK] booking_updated", {
-            inboundId,
+            messageSid: docId,
             bookingRef,
             newStatus: "confirmed",
           });
-          try {
-            await updateInboundDoc(inboundId, { status: "matched_yes", bookingRef });
-          } catch {
-            // ignore
-          }
           const timeStr = formatIsraelTime(choice.startAt.toDate());
           const reply = `אושר ✅ נתראה ב-${timeStr} ב-${choice.siteName}.`;
-          await sendReply(reply);
-          return xmlResponse(twimlMessage(From, reply));
+          await recordAndSendReply(reply, "matched_yes", bookingRef);
+          return okResponse();
         }
         await markBookingCancelledByWhatsApp(choice.siteId, choice.bookingId);
         console.log("[WA_WEBHOOK] booking_updated", {
-          inboundId,
+          messageSid: docId,
           bookingRef,
           newStatus: "cancelled",
         });
-        try {
-          await updateInboundDoc(inboundId, { status: "matched_no", bookingRef });
-        } catch {
-          // ignore
-        }
-        const reply = "הבנתי, ביטלתי את התור.";
-        await sendReply(reply);
-        return xmlResponse(twimlMessage(From, reply));
+        await recordAndSendReply("הבנתי, ביטלתי את התור.", "matched_no", bookingRef);
+        return okResponse();
       }
 
       const choices = matches.slice(0, 5);
@@ -357,14 +362,6 @@ export async function POST(request: NextRequest) {
         twilioMessageSid: MessageSid,
         bookingRefs: choices.map((c) => c.bookingRef),
       });
-      try {
-        await updateInboundDoc(inboundId, {
-          status: "ambiguous",
-          errorMessage: `Multiple bookings: ${choices.map((c) => c.bookingRef).join(", ")}`,
-        });
-      } catch {
-        // ignore
-      }
       const lines = choices.map((c, i) => {
         const { dateStr, timeStr } = formatIsraelDateTime(c.startAt);
         const servicePart = c.serviceName ? ` ${c.serviceName}` : "";
@@ -372,17 +369,12 @@ export async function POST(request: NextRequest) {
       });
       const list = lines.join("\n");
       const reply = `יש לך כמה תורים שממתינים לאישור. על איזה מהם מדובר?\n\n${list}\n\nהשב/י עם מספר (1-${choices.length}).`;
-      await sendReply(reply);
-      return xmlResponse(twimlMessage(From, reply));
+      await recordAndSendReply(reply, "ambiguous");
+      return okResponse();
     }
 
-    try {
-      await updateInboundDoc(inboundId, { status: "no_match" });
-    } catch {
-      // ignore
-    }
     const help = 'כדי לאשר תור השב/השיבי "כן", כדי לבטל השב/השיבי "לא".';
-    await sendReply(help);
-    return xmlResponse(twimlMessage(From, help));
+    await recordAndSendReply(help, "no_match");
+    return okResponse();
   }
 }
