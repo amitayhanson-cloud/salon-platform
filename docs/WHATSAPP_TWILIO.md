@@ -17,6 +17,10 @@ One WhatsApp sender number for the whole platform. Every message includes the sa
    Reply: `הבנתי, ביטלתי את התור.`  
    Booking is **removed from calendar** and **shown in client history** as בוטל (cancelled).
 
+6. **Multiple bookings awaiting confirmation** (e.g. recurring): When the customer replies YES or NO and **more than one** booking matches (same phone, `whatsappStatus: "awaiting_confirmation"`, `startAt` in the future), the webhook sends a **numbered menu** (earliest 5 only). Example:  
+   `יש לך כמה תורים שממתינים לאישור. על איזה מהם מדובר?\n\n1) 11/02/2026 10:00 – סלון א' תספורת\n2) 18/02/2026 10:00 – סלון א' תספורת\n\nהשב/י עם מספר (1-2).`  
+   A **session** is stored in `whatsapp_sessions/{phoneE164}` (expires in 10 minutes). The customer replies **"1"** or **"2"** etc.; the webhook applies confirm or cancel to that booking and deletes the session.
+
 ## Data model (Firestore)
 
 - **sites/{siteId}**  
@@ -39,6 +43,10 @@ One WhatsApp sender number for the whole platform. Every message includes the sa
   - Written at webhook entry: `inboundId`, `receivedAt`, `from`, `to`, `body`, `messageSid`, `status: "received"`.  
   - Updated after processing: `status` one of `"matched_yes"` | `"matched_no"` | `"no_match"` | `"no_booking"` | `"ambiguous"` | `"signature_failed"` | `"error"` | `"missing_index"`, optional `bookingRef`, `errorMessage`, `errorCode`, `errorStack`, `updatedAt`.  
   - Use to confirm production is receiving webhooks even if the UI doesn’t update (e.g. Vercel logs show `[WA_WEBHOOK] start` and a doc appears in **whatsapp_inbound**). When the customer gets “Something went wrong” or “System needs a database index”, check Vercel logs for `[WA_WEBHOOK] error` (or `[WA_WEBHOOK] missing_index`) and the **whatsapp_inbound** doc for this `inboundId`: `status`, `errorMessage`, `errorCode`, `errorStack`.
+
+- **whatsapp_sessions/{phoneE164}** (top-level; selection menu state)  
+  - When multiple bookings match YES/NO, the webhook creates a session: `phoneE164`, `status: "awaiting_selection"`, `intent: "confirm"` | `"cancel"`, `createdAt`, `expiresAt` (now + 10 minutes), `choices` (array of `{ bookingRef`, `siteId`, `bookingId`, `startAt`, `siteName`, `serviceName? }`), optional `lastInboundMessageSid`, `lastInboundBody`.  
+  - After the user replies with a number (1–N), the webhook applies the action and deletes the session. If the user doesn't reply in time, the session expires and a later "1"/"2" gets "לא מצאתי בחירה פעילה".
 
 ## Required env vars
 
@@ -90,7 +98,7 @@ to the **exact** URL configured in Twilio Console. When set, the app uses this U
 ## Endpoints
 
 - **POST /api/webhooks/twilio/whatsapp**  
-  Inbound WhatsApp webhook. Validates `X-Twilio-Signature` (using `TWILIO_WEBHOOK_URL` or `x-forwarded-*` when behind a proxy), writes each inbound to Firestore **whatsapp_inbound** (status: received → matched_yes / matched_no / no_match / no_booking / ambiguous / signature_failed / error), handles YES/NO, and **always** returns TwiML `<Response><Message>...</Message></Response>` so WhatsApp receives a reply. Check Vercel logs for `[WA_WEBHOOK]` and Firestore **whatsapp_inbound** to confirm production receives webhooks.
+  Inbound WhatsApp webhook. Validates `X-Twilio-Signature`, writes to **whatsapp_inbound**, and handles: (1) **Numeric reply** ("1", "2", …) → resolve **whatsapp_sessions** and confirm/cancel the chosen booking. (2) **YES/NO** (כן/לא etc.) → find up to 5 bookings awaiting confirmation; 0 → "no booking" message; 1 → confirm/cancel immediately; 2+ → save session and send numbered menu. (3) Other → help message. All replies are TwiML. Logs: `[WA_WEBHOOK] matches_count`, `session_saved`, `selection_received`, `selection_applied`, `booking_found`, `booking_updated`.
 
 - **GET /api/debug/whatsapp-webhook-health**  
   Returns `{ ok: true, now: ISO, webhook: "/api/webhooks/twilio/whatsapp" }`. Use to verify routing on Vercel.
@@ -254,11 +262,17 @@ When a booking is created with **startAt** less than 24 hours in the future (and
 4. **Reply NO** to cancel the same booking.
 5. **Reply anything else** to get the help message.
 
+**Selection menu (multiple bookings):**
+
+1. Create **two** (or more) future bookings for the **same** phone, both with `whatsappStatus: "awaiting_confirmation"` (e.g. send reminders for both, or set manually in Firestore).
+2. From that phone, reply **"כן"** (or "yes"). You should receive a numbered menu: "יש לך כמה תורים שממתינים לאישור…" with lines like "1) … 2) …" and "השב/י עם מספר (1–2)."
+3. Reply **"1"**. The first booking should be confirmed and you get "אושר ✅ נתראה ב-…". Check Firestore: that booking has `whatsappStatus: "confirmed"`; the other remains `awaiting_confirmation`; `whatsapp_sessions/{phoneE164}` is deleted.
+4. Reply **"לא"** again. You get the menu (for the remaining booking(s)). Reply **"1"** to cancel that one; reply should be "בוטל ✅…" and the booking should be cancelled/archived (not deleted).
+
 ## Multi-tenant correctness
 
 - Every outbound message includes **salon name** and **time**.
-- Inbound YES: we find the single booking with `customerPhoneE164` match, `whatsappStatus === "awaiting_confirmation"`, `startAt > now`, ordered by `startAt` asc (limit 2 to detect ambiguity). If exactly one, we confirm it and reply; otherwise we ask the user to clarify.
-- NO: same lookup; we mark that booking cancelled and reply.
+- Inbound YES/NO: we find up to 5 bookings with `customerPhoneE164` match, `whatsappStatus === "awaiting_confirmation"`, `startAt > now`, ordered by `startAt` asc. If 0 → no-booking message; if 1 → confirm or cancel that booking immediately; if 2+ → save a **whatsapp_sessions** entry and send a numbered menu; the user replies "1"/"2"/… and we apply the action to the chosen booking.
 
 ## Verification (YES/NO and UI)
 

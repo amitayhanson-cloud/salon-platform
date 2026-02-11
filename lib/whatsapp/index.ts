@@ -7,13 +7,25 @@ export {
   getWebhookUrl,
   type WebhookUrlSource,
 } from "./validateSignature";
-export { normalizeInboundBody, isYes, isNo } from "./yesNoDetection";
+export { normalizeInboundBody, isYes, isNo, normalizeInbound, type InboundIntent } from "./yesNoDetection";
 export {
   findNextAwaitingConfirmationByPhone,
   findAwaitingConfirmationByPhone,
   findNextBookingByPhoneWithStatus,
   markBookingConfirmed,
   markBookingCancelledByWhatsApp,
+  getBookingByRefIfAwaitingConfirmation,
 } from "./bookingConfirmation";
+export {
+  findBookingsAwaitingConfirmationByPhoneMulti,
+  type BookingChoice,
+} from "./findBookingsAwaitingConfirmation";
+export {
+  createWhatsAppSession,
+  getWhatsAppSession,
+  deleteWhatsAppSession,
+  type WhatsAppSession,
+  type SessionIntent,
+} from "./whatsappSessions";
 export type { SendWhatsAppParams } from "./send";
 export type { BookingForConfirmation } from "./bookingConfirmation";

@@ -149,6 +149,35 @@ export async function markBookingConfirmed(siteId: string, bookingId: string): P
 }
 
 /**
+ * Parse bookingRef "sites/{siteId}/bookings/{bookingId}" and fetch the booking if it exists
+ * and whatsappStatus === "awaiting_confirmation". Returns null otherwise.
+ */
+export async function getBookingByRefIfAwaitingConfirmation(bookingRef: string): Promise<{
+  siteId: string;
+  bookingId: string;
+  salonName: string;
+  startAt: Date;
+} | null> {
+  const match = /^sites\/([^/]+)\/bookings\/([^/]+)$/.exec(bookingRef);
+  if (!match) return null;
+  const [, siteId, bookingId] = match;
+  const db = getAdminDb();
+  const doc = await db.collection("sites").doc(siteId).collection("bookings").doc(bookingId).get();
+  if (!doc.exists) return null;
+  const data = doc.data()!;
+  if (data.whatsappStatus !== "awaiting_confirmation") return null;
+  const startAt =
+    data.startAt instanceof Timestamp
+      ? data.startAt.toDate()
+      : new Date((data.startAt?.seconds ?? 0) * 1000);
+  let salonName = "הסלון";
+  const siteSnap = await db.collection("sites").doc(siteId).get();
+  const config = siteSnap.data()?.config;
+  salonName = config?.salonName ?? config?.whatsappBrandName ?? salonName;
+  return { siteId, bookingId, salonName, startAt };
+}
+
+/**
  * Set booking to cancelled (WhatsApp flow) when user replies NO.
  * Does NOT delete: sets status + archive fields so booking is removed from calendar
  * but remains in client history as cancelled.
