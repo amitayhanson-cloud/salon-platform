@@ -25,13 +25,23 @@ export function validateTwilioSignature(
 }
 
 /**
- * Build full webhook URL for signature validation (e.g. behind ngrok or proxy).
- * Use WEBHOOK_BASE_URL in env to override (e.g. https://abc.ngrok.io).
+ * Build full webhook URL for Twilio signature validation.
+ * Prefer TWILIO_WEBHOOK_URL (exact URL Twilio calls) for production behind proxies.
+ * Else use x-forwarded-proto/host when present, fallback to request url.
  */
 export function getWebhookUrl(path: string, request: Request): string {
+  const explicit = process.env.TWILIO_WEBHOOK_URL?.trim();
+  if (explicit) {
+    return explicit.replace(/\/$/, "");
+  }
   const base = process.env.WEBHOOK_BASE_URL?.trim();
   if (base) {
     return `${base.replace(/\/$/, "")}${path}`;
+  }
+  const proto = request.headers.get("x-forwarded-proto") ?? "https";
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "";
+  if (host) {
+    return `${proto}://${host}${path}`;
   }
   const url = new URL(request.url);
   return url.origin + path;

@@ -35,6 +35,11 @@ One WhatsApp sender number for the whole platform. Every message includes the sa
   - `direction`: `"outbound"` | `"inbound"`.
   - `toPhone`, `fromPhone`, `body`, `bookingId`, `siteId`, `bookingRef` (path e.g. `sites/{siteId}/bookings/{bookingId}`), `twilioMessageSid`, `createdAt`, `error`.
 
+- **whatsapp_inbound/{inboundId}** (top-level; production diagnostics)  
+  - Written at webhook entry: `inboundId`, `receivedAt`, `from`, `to`, `body`, `messageSid`, `status: "received"`.  
+  - Updated after processing: `status` one of `"matched_yes"` | `"matched_no"` | `"no_match"` | `"no_booking"` | `"ambiguous"` | `"signature_failed"` | `"error"`, optional `bookingRef`, `errorMessage`, `updatedAt`.  
+  - Use to confirm production is receiving webhooks even if the UI doesn’t update (e.g. Vercel logs show `[WA_WEBHOOK] start` and a doc appears in **whatsapp_inbound**).
+
 ## Required env vars
 
 In `.env.local` (and Vercel env for production):
@@ -45,6 +50,7 @@ In `.env.local` (and Vercel env for production):
 | `TWILIO_AUTH_TOKEN` | Yes | Twilio auth token |
 | `TWILIO_WHATSAPP_FROM` | Yes | Sender, e.g. `whatsapp:+14155238886` (sandbox or prod) |
 | `WEBHOOK_BASE_URL` | For ngrok | Base URL for signature validation (e.g. `https://abc.ngrok.io`) |
+| `TWILIO_WEBHOOK_URL` | **Production** | **Exact** URL Twilio calls (e.g. `https://YOURDOMAIN.vercel.app/api/webhooks/twilio/whatsapp`). Use this for signature validation behind proxies; do not rely on `WEBHOOK_BASE_URL` in production. |
 | `CRON_SECRET` | For cron | Bearer token for `POST /api/cron/send-whatsapp-reminders` |
 | `SKIP_TWILIO_SIGNATURE` | DEV only | Set to `true` to skip webhook signature validation when `NODE_ENV !== "production"` (never use in production) |
 
@@ -63,10 +69,28 @@ In `.env.local` (and Vercel env for production):
 
 Twilio sends webhooks to that URL. Signature validation uses the full URL + raw body; `WEBHOOK_BASE_URL` ensures the signed URL matches when behind ngrok. For local testing without ngrok signature issues, set `SKIP_TWILIO_SIGNATURE=true` in `.env.local` (dev only).
 
+### Production webhook (critical)
+
+**Twilio Console → Messaging → Try it out / Sandbox (or your WhatsApp sender):**
+
+- **When a message comes in:** set to **exactly**  
+  `https://YOURDOMAIN.vercel.app/api/webhooks/twilio/whatsapp`  
+  (replace `YOURDOMAIN` with your Vercel project domain, e.g. `caleno-xxx`).
+- **Method:** **POST**.
+
+**Vercel env (recommended):** set  
+`TWILIO_WEBHOOK_URL=https://YOURDOMAIN.vercel.app/api/webhooks/twilio/whatsapp`  
+so signature validation uses the same URL Twilio calls (proxies can change `Host`/protocol).
+
+**Verify routing:** open **GET** `https://YOURDOMAIN.vercel.app/api/debug/whatsapp-webhook-health` in a browser. You should see `{ "ok": true, "now": "...", "webhook": "/api/webhooks/twilio/whatsapp" }`.
+
 ## Endpoints
 
 - **POST /api/webhooks/twilio/whatsapp**  
-  Inbound WhatsApp webhook. Validates `X-Twilio-Signature`, logs to `whatsapp_messages`, handles YES/NO. Replies are sent via the Twilio API and logged.
+  Inbound WhatsApp webhook. Validates `X-Twilio-Signature` (using `TWILIO_WEBHOOK_URL` or `x-forwarded-*` when behind a proxy), writes each inbound to Firestore **whatsapp_inbound** (status: received → matched_yes / matched_no / no_match / no_booking / ambiguous / signature_failed / error), handles YES/NO, and **always** returns TwiML `<Response><Message>...</Message></Response>` so WhatsApp receives a reply. Check Vercel logs for `[WA_WEBHOOK]` and Firestore **whatsapp_inbound** to confirm production receives webhooks.
+
+- **GET /api/debug/whatsapp-webhook-health**  
+  Returns `{ ok: true, now: ISO, webhook: "/api/webhooks/twilio/whatsapp" }`. Use to verify routing on Vercel.
 
 - **POST /api/whatsapp/send-booking-confirmation**  
   Body: `{ "siteId": "...", "bookingId": "..." }`.  
@@ -239,5 +263,6 @@ When a booking is created with **startAt** less than 24 hours in the future (and
 
 ## Security
 
-- Webhook validates `X-Twilio-Signature` using `TWILIO_AUTH_TOKEN` and the **raw POST body** (Next.js route reads body with `request.text()` before parsing).
+- Webhook validates `X-Twilio-Signature` using `TWILIO_AUTH_TOKEN` and the **raw POST body** (Next.js route reads body with `request.text()` before parsing). The URL used for validation is: **TWILIO_WEBHOOK_URL** if set (recommended in production), else derived from `x-forwarded-proto`, `x-forwarded-host`/`host`, and path.
+- On signature failure the handler logs `[WA_WEBHOOK] signature_failed` with `inboundId` and `urlForSig`, writes **whatsapp_inbound** with `status: "signature_failed"`, and returns 403 with TwiML.
 - Protect the reminder cron with `CRON_SECRET` if the route is publicly reachable.
