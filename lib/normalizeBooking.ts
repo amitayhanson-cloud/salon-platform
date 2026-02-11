@@ -231,6 +231,11 @@ export function isBookingCancelled(b: { status?: string; cancelled?: boolean }):
 }
 
 /** True if booking is archived (soft-deleted). Archived bookings are hidden from calendar but shown in client history. */
-export function isBookingArchived(b: { isArchived?: boolean }): boolean {
-  return b.isArchived === true;
+export function isBookingArchived<T>(b: T): boolean {
+  const o = b as { isArchived?: boolean; archivedAt?: unknown; status?: string } | null | undefined;
+  if (o == null) return false;
+  if (o.isArchived === true) return true;
+  if (o.archivedAt != null) return true;
+  if ((o.status ?? "") === "archived") return true;
+  return false;
 }
