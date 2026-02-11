@@ -51,6 +51,7 @@ In `.env.local` (and Vercel env for production):
 | `TWILIO_WHATSAPP_FROM` | Yes | Sender, e.g. `whatsapp:+14155238886` (sandbox or prod) |
 | `WEBHOOK_BASE_URL` | For ngrok | Base URL for signature validation (e.g. `https://abc.ngrok.io`) |
 | `TWILIO_WEBHOOK_URL` | **Production** | **Exact** URL Twilio calls (e.g. `https://YOURDOMAIN.vercel.app/api/webhooks/twilio/whatsapp`). Use this for signature validation behind proxies; do not rely on `WEBHOOK_BASE_URL` in production. |
+| `TWILIO_SIGNATURE_MODE` | Optional | `enforce` (default) or `log_only`. If `log_only`, signature failures are logged but not blocked (replies still work). Use **temporarily** to verify Twilio reaches the endpoint; switch back to `enforce` after fixing the URL. |
 | `CRON_SECRET` | For cron | Bearer token for `POST /api/cron/send-whatsapp-reminders` |
 | `SKIP_TWILIO_SIGNATURE` | DEV only | Set to `true` to skip webhook signature validation when `NODE_ENV !== "production"` (never use in production) |
 
@@ -81,6 +82,8 @@ Twilio sends webhooks to that URL. Signature validation uses the full URL + raw 
 **Vercel env (required for signature validation behind proxy):** set  
 `TWILIO_WEBHOOK_URL=https://YOURDOMAIN.vercel.app/api/webhooks/twilio/whatsapp`  
 to the **exact** URL configured in Twilio Console. When set, the app uses this URL for signature validation and does **not** use `request.url` or `Host`/`x-forwarded-*` (so it works behind Vercel’s proxy). If you see `[WA_WEBHOOK] signature_failed` in logs, add or fix `TWILIO_WEBHOOK_URL` so it matches Twilio’s “When a message comes in” URL exactly. Each request logs `[WA_WEBHOOK] signature_url` with `host`, `requestUrl`, `urlUsedForSignature`, and `signatureSource` (no secrets) for debugging.
+
+**Temporary debug when signature keeps failing:** set `TWILIO_SIGNATURE_MODE=log_only` in Vercel. The webhook will **not** block on signature failure; it will log `[WA_WEBHOOK] signature_debug` with `urlForSig`, `requestUrl`, `host`, `xForwardedHost`, `xForwardedProto`, and `twilioSignaturePresent`, and continue processing so replies work. Use this to confirm Twilio is reaching the endpoint and to compare the URL Twilio uses with `TWILIO_WEBHOOK_URL`. After you correct the Twilio webhook URL (or env) so they match, set `TWILIO_SIGNATURE_MODE=enforce` or remove the var (default is enforce) so signature validation is enforced again.
 
 **Verify routing:** open **GET** `https://YOURDOMAIN.vercel.app/api/debug/whatsapp-webhook-health` in a browser. You should see `{ "ok": true, "now": "...", "webhook": "/api/webhooks/twilio/whatsapp" }`.
 

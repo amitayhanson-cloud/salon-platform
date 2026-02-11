@@ -90,31 +90,48 @@ export async function POST(request: NextRequest) {
   const signature = request.headers.get("x-twilio-signature") ?? "";
   const skipSignature =
     process.env.NODE_ENV !== "production" && process.env.SKIP_TWILIO_SIGNATURE === "true";
+  const signatureMode = process.env.TWILIO_SIGNATURE_MODE?.trim()?.toLowerCase() === "log_only"
+    ? "log_only"
+    : "enforce";
 
-  if (!skipSignature && !validateTwilioSignature(authToken, signature, urlForSig, rawBody)) {
-    console.error("[WA_WEBHOOK] signature_failed", {
-      inboundId,
-      urlForSig,
-      signatureSource,
-      hasTwilioWebhookUrl: !!process.env.TWILIO_WEBHOOK_URL,
-    });
-    try {
-      await createInboundDoc({
-        inboundId,
-        from: From,
-        to: To,
-        body: Body,
-        messageSid: MessageSid,
-        status: "signature_failed",
-        errorMessage: "Invalid signature",
+  const signatureValid = skipSignature || validateTwilioSignature(authToken, signature, urlForSig, rawBody);
+  if (!signatureValid) {
+    const xForwardedHost = request.headers.get("x-forwarded-host") ?? null;
+    if (signatureMode === "log_only") {
+      console.log("[WA_WEBHOOK] signature_debug", {
+        urlForSig,
+        requestUrl,
+        host: requestHost,
+        xForwardedHost,
+        xForwardedProto,
+        twilioSignaturePresent: !!signature,
       });
-    } catch (e) {
-      console.error("[WA_WEBHOOK] failed to write inbound doc", e);
+      // Continue processing so replies work while debugging
+    } else {
+      console.error("[WA_WEBHOOK] signature_failed", {
+        inboundId,
+        urlForSig,
+        signatureSource,
+        hasTwilioWebhookUrl: !!process.env.TWILIO_WEBHOOK_URL,
+      });
+      try {
+        await createInboundDoc({
+          inboundId,
+          from: From,
+          to: To,
+          body: Body,
+          messageSid: MessageSid,
+          status: "signature_failed",
+          errorMessage: "Invalid signature",
+        });
+      } catch (e) {
+        console.error("[WA_WEBHOOK] failed to write inbound doc", e);
+      }
+      return new NextResponse(twimlMessage(From, "Invalid request."), {
+        status: 403,
+        headers: { "Content-Type": "text/xml; charset=utf-8" },
+      });
     }
-    return new NextResponse(twimlMessage(From, "Invalid request."), {
-      status: 403,
-      headers: { "Content-Type": "text/xml; charset=utf-8" },
-    });
   }
 
   try {
