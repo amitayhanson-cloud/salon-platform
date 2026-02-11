@@ -113,16 +113,18 @@ export async function checkWorkerConflicts(params: CheckWorkerConflictsParams): 
     where("dateISO", "==", dayISO)
   );
   const snapshot = await getDocs(q);
-  const bookings: BookingLikeForConflict[] = snapshot.docs.map((doc) => {
-    const d = doc.data();
-    return {
-      id: doc.id,
-      workerId: d.workerId ?? null,
-      startAt: d.startAt,
-      endAt: d.endAt,
-      dateISO: (d.dateISO ?? d.date ?? "") as string,
-      status: (d.status as string) ?? "confirmed",
-    };
-  });
+  const bookings: BookingLikeForConflict[] = snapshot.docs
+    .filter((doc) => doc.data().isArchived !== true)
+    .map((doc) => {
+      const d = doc.data();
+      return {
+        id: doc.id,
+        workerId: d.workerId ?? null,
+        startAt: d.startAt,
+        endAt: d.endAt,
+        dateISO: (d.dateISO ?? d.date ?? "") as string,
+        status: (d.status as string) ?? "confirmed",
+      };
+    });
   return findWorkerConflictFromBookings(bookings, workerId, dayISO, startAt, endAt, [...exclude]);
 }

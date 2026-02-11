@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { useRouter } from "next/navigation";
+import { isPlatformAdmin } from "@/lib/platformAdmin";
 
 interface SiteListItem {
   siteId: string;
@@ -11,10 +14,20 @@ interface SiteListItem {
 }
 
 export default function PlatformAdminPage() {
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [sites, setSites] = useState<SiteListItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+    if (!isPlatformAdmin(user.email)) {
+      return;
+    }
     if (typeof window === "undefined") return;
 
     try {
@@ -31,7 +44,29 @@ export default function PlatformAdminPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user, authLoading, router]);
+
+  if (authLoading || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50" dir="rtl">
+        <p className="text-sm text-slate-500">טוען…</p>
+      </div>
+    );
+  }
+
+  if (!isPlatformAdmin(user.email)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50" dir="rtl">
+        <div className="text-center text-slate-700">
+          <p className="font-semibold">אין הרשאה</p>
+          <p className="text-sm mt-2">אין לך גישה לפאנל ניהול הפלטפורמה.</p>
+          <Link href="/" className="text-[#2EC4C6] hover:underline mt-4 inline-block">
+            חזרה לדף הבית
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -53,12 +88,20 @@ export default function PlatformAdminPage() {
               כאן אפשר לראות את כל האתרים שנוצרו במערכת.
             </p>
           </div>
+          <div className="flex items-center gap-3">
+          <Link
+            href="/admin/landing"
+            className="text-xs text-sky-700 hover:text-sky-800"
+          >
+            עריכת דף נחיתה
+          </Link>
           <Link
             href="/"
             className="text-xs text-sky-700 hover:text-sky-800"
           >
             חזרה לדף הבית
           </Link>
+        </div>
         </header>
 
         {sites.length === 0 ? (

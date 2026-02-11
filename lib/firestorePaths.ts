@@ -72,3 +72,9 @@ export function personalPricingDoc(siteId: string, clientId: string, serviceType
   console.warn("[DEPRECATED] personalPricingDoc - use client doc field instead");
   return doc(db, "sites", siteId, "clients", clientId, "personalPricing", serviceTypeId);
 }
+
+/** platform/landing — main platform landing page content (CMS) */
+export function platformLandingDoc() {
+  if (!db) throw new Error("Firestore db not initialized");
+  return doc(db, "platform", "landing");
+}

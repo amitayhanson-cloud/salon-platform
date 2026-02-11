@@ -197,7 +197,7 @@ export default function TeamPerformancePage() {
         const items: Booking[] = [];
         snapshot.docs.forEach((doc) => {
           const data = doc.data();
-          
+          if (data.isArchived === true) return;
           // Filter by status - only include confirmed/completed bookings
           const status = data.status || "confirmed";
           if (status === "cancelled" || status === "canceled" || status === "cancelled_by_salon" || status === "no_show") {

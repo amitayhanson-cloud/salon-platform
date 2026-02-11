@@ -37,6 +37,10 @@ interface Booking {
   createdAt?: any; // Timestamp or ISO string
   note?: string;
   price?: number; // If available
+  /** Soft-deleted from calendar; still shown in client history */
+  isArchived?: boolean;
+  archivedAt?: any; // Timestamp or ISO string
+  archivedReason?: "manual" | "auto";
 }
 
 export default function ClientCardPage() {
@@ -230,6 +234,9 @@ export default function ClientCardPage() {
               createdAt: data.createdAt,
               note: data.note || undefined,
               price: data.price || undefined,
+              isArchived: data.isArchived === true,
+              archivedAt: data.archivedAt,
+              archivedReason: data.archivedReason ?? undefined,
             });
           });
           
@@ -875,50 +882,85 @@ export default function ClientCardPage() {
                               key={booking.id}
                               className="p-4 border border-slate-200 rounded-lg hover:shadow-md transition-shadow"
                             >
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                                <div>
-                                  <span className="text-slate-600">תאריך:</span>{" "}
-                                  <span className="font-medium">
-                                    {new Date(booking.date + "T00:00:00").toLocaleDateString("he-IL")}
-                                  </span>
-                                </div>
-                                <div>
-                                  <span className="text-slate-600">שעה:</span>{" "}
-                                  <span className="font-medium">{booking.time || "N/A"}</span>
-                                </div>
-                                <div>
-                                  <span className="text-slate-600">שירות:</span>{" "}
-                                  <span className="font-medium">
-                                    {booking.serviceType
-                                      ? `${booking.serviceName} - ${booking.serviceType}`
-                                      : booking.serviceName}
-                                  </span>
-                                </div>
-                                {booking.workerName && (
+                              {booking.isArchived ? (
+                                /* Archived (deleted) booking: show only date, service, service type, worker */
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm items-center">
                                   <div>
-                                    <span className="text-slate-600">עובד:</span>{" "}
-                                    <span className="font-medium">{booking.workerName}</span>
+                                    <span className="text-slate-600">תאריך:</span>{" "}
+                                    <span className="font-medium">
+                                      {new Date(booking.date + "T00:00:00").toLocaleDateString("he-IL")}
+                                    </span>
                                   </div>
-                                )}
-                                {booking.note && (
-                                  <div className="md:col-span-4">
-                                    <span className="text-slate-600">הערה:</span>{" "}
-                                    <span className="font-medium">{booking.note}</span>
+                                  <div>
+                                    <span className="text-slate-600">שירות:</span>{" "}
+                                    <span className="font-medium">
+                                      {booking.serviceType
+                                        ? `${booking.serviceName} - ${booking.serviceType}`
+                                        : booking.serviceName}
+                                    </span>
                                   </div>
-                                )}
-                                <div>
-                                  <span className="text-slate-600">סטטוס:</span>{" "}
-                                  <span
-                                    className={`font-medium ${
-                                      booking.status === "confirmed"
-                                        ? "text-emerald-600"
-                                        : "text-red-600"
-                                    }`}
-                                  >
-                                    {booking.status === "confirmed" ? "מאושר" : "בוטל"}
-                                  </span>
+                                  {booking.workerName && (
+                                    <div>
+                                      <span className="text-slate-600">עובד:</span>{" "}
+                                      <span className="font-medium">{booking.workerName}</span>
+                                    </div>
+                                  )}
+                                  <div className="md:col-span-4 flex items-center gap-2">
+                                    <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                                      הוסר מיומן
+                                      {booking.archivedAt != null &&
+                                        ` (${typeof (booking.archivedAt as { toDate?: () => Date }).toDate === "function"
+                                          ? new Date((booking.archivedAt as { toDate: () => Date }).toDate()).toLocaleDateString("he-IL")
+                                          : new Date(booking.archivedAt as string).toLocaleDateString("he-IL")})`}
+                                    </span>
+                                  </div>
                                 </div>
-                              </div>
+                              ) : (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                  <div>
+                                    <span className="text-slate-600">תאריך:</span>{" "}
+                                    <span className="font-medium">
+                                      {new Date(booking.date + "T00:00:00").toLocaleDateString("he-IL")}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-600">שעה:</span>{" "}
+                                    <span className="font-medium">{booking.time || "N/A"}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-600">שירות:</span>{" "}
+                                    <span className="font-medium">
+                                      {booking.serviceType
+                                        ? `${booking.serviceName} - ${booking.serviceType}`
+                                        : booking.serviceName}
+                                    </span>
+                                  </div>
+                                  {booking.workerName && (
+                                    <div>
+                                      <span className="text-slate-600">עובד:</span>{" "}
+                                      <span className="font-medium">{booking.workerName}</span>
+                                    </div>
+                                  )}
+                                  {booking.note && (
+                                    <div className="md:col-span-4">
+                                      <span className="text-slate-600">הערה:</span>{" "}
+                                      <span className="font-medium">{booking.note}</span>
+                                    </div>
+                                  )}
+                                  <div>
+                                    <span className="text-slate-600">סטטוס:</span>{" "}
+                                    <span
+                                      className={`font-medium ${
+                                        booking.status === "confirmed"
+                                          ? "text-emerald-600"
+                                          : "text-red-600"
+                                      }`}
+                                    >
+                                      {booking.status === "confirmed" ? "מאושר" : "בוטל"}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>

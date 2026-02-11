@@ -9,7 +9,7 @@ import {
   getDocs,
   Timestamp,
 } from "firebase/firestore";
-import type { User, Website, SetupStatus } from "@/types/user";
+import type { User, UserRole, Website, SetupStatus } from "@/types/user";
 
 const USERS_COLLECTION = "users";
 const WEBSITES_COLLECTION = "websites";

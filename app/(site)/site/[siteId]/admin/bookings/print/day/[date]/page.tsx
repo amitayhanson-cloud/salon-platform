@@ -9,7 +9,7 @@ import { query, where, orderBy, onSnapshot } from "firebase/firestore";
 import { bookingsCollection, workerDoc, workersCollection } from "@/lib/firestorePaths";
 import { clientDocRef } from "@/lib/firestoreClientRefs";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
-import { normalizeBooking, isBookingCancelled, type NormalizedBooking } from "@/lib/normalizeBooking";
+import { normalizeBooking, isBookingCancelled, isBookingArchived, type NormalizedBooking } from "@/lib/normalizeBooking";
 import WorkerDayPrintView, { type PrintBookingRow } from "@/components/admin/WorkerDayPrintView";
 import type { ChemicalCardPrintData } from "@/components/admin/WorkerDayPrintView";
 
@@ -104,7 +104,7 @@ export default function PrintDayPage() {
         normalizeBooking(d as { id: string; data: () => Record<string, unknown> })
       );
       const forDay = normalized.filter((b) => b.dateStr === dateKey);
-      const notCancelled = forDay.filter((b) => !isBookingCancelled(b));
+      const notCancelled = forDay.filter((b) => !isBookingCancelled(b) && !isBookingArchived(b));
       setBookings(notCancelled);
     }, (err) => console.error("[PrintDay] bookings error", err));
     return () => unsubscribe();

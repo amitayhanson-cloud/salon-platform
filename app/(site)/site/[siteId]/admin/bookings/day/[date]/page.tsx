@@ -16,7 +16,7 @@ import {
   bookingsCollection,
   workersCollection,
 } from "@/lib/firestorePaths";
-import { normalizeBooking, isBookingCancelled } from "@/lib/normalizeBooking";
+import { normalizeBooking, isBookingCancelled, isBookingArchived } from "@/lib/normalizeBooking";
 import { parseDateParamToDayKey } from "@/lib/dateLocal";
 import { fromYYYYMMDD, getMinutesSinceStartOfDay } from "@/lib/calendarUtils";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
@@ -33,7 +33,7 @@ import MultiWorkerScheduleView from "@/components/admin/MultiWorkerScheduleView"
 import WorkerFilter from "@/components/admin/WorkerFilter";
 import AdminBookingFormSimple from "@/components/admin/AdminBookingFormSimple";
 import AdminCreateBookingForm from "@/components/admin/AdminCreateBookingForm";
-import { cancelBooking } from "@/lib/booking";
+import { deleteBooking } from "@/lib/booking";
 import { X, Plus, Printer } from "lucide-react";
 import type { AdminBookingFormSimpleEditData } from "@/components/admin/AdminBookingFormSimple";
 
@@ -326,7 +326,7 @@ export default function DaySchedulePage() {
       (snapshot) => {
         const normalized = snapshot.docs.map((d) => normalizeBooking(d as { id: string; data: () => Record<string, unknown> }));
         const forDay = normalized.filter((b) => (b.dateStr ?? (b as { date?: string }).date) === dateKey);
-        const notCancelled = forDay.filter((b) => !isBookingCancelled(b));
+        const notCancelled = forDay.filter((b) => !isBookingCancelled(b) && !isBookingArchived(b));
         notCancelled.sort((a, b) => (a.timeHHmm || "").localeCompare(b.timeHHmm || ""));
         const withWorkerNames = notCancelled.map((b) => {
           const worker = workers.find((w) => w.id === b.workerId);
@@ -350,7 +350,7 @@ export default function DaySchedulePage() {
             (snapshot) => {
               const normalized = snapshot.docs.map((d) => normalizeBooking(d as { id: string; data: () => Record<string, unknown> }));
               const forDay = normalized.filter((b) => b.dateStr === dateKey);
-              const notCancelled = forDay.filter((b) => !isBookingCancelled(b));
+              const notCancelled = forDay.filter((b) => !isBookingCancelled(b) && !isBookingArchived(b));
               notCancelled.sort((a, b) => (a.timeHHmm || "").localeCompare(b.timeHHmm || ""));
               const withWorkerNames = notCancelled.map((b) => {
                 const worker = workers.find((w) => w.id === b.workerId);
@@ -452,7 +452,7 @@ export default function DaySchedulePage() {
   const forSelectedDay = bookingsWithColors.filter(
     (b) => ((b as { dateStr?: string }).dateStr ?? b.date) === dateKey
   );
-  const filteredBookings = forSelectedDay.filter((b) => !isBookingCancelled(b));
+  const filteredBookings = forSelectedDay.filter((b) => !isBookingCancelled(b) && !isBookingArchived(b));
 
   // Get working hours from config (default 8-20)
   const startHour = 8;
@@ -475,7 +475,7 @@ export default function DaySchedulePage() {
     setDeleteError(null);
 
     try {
-      await cancelBooking(siteId, deleteTarget.id);
+      await deleteBooking(siteId, deleteTarget.id);
       setDeleteTarget(null);
       // Bookings will update automatically via onSnapshot (cancelled bookings are filtered out)
     } catch (e) {
@@ -630,7 +630,7 @@ export default function DaySchedulePage() {
     setDeleteSuccess(false);
 
     try {
-      await cancelBooking(siteId, selectedBooking.id);
+      await deleteBooking(siteId, selectedBooking.id);
       setDeleteSuccess(true);
       // Close modal after a brief delay to show success
       setTimeout(() => {
@@ -1087,13 +1087,13 @@ export default function DaySchedulePage() {
         </div>
       )}
 
-      {/* Cancel Confirmation Modal (legacy - kept for backward compatibility) */}
+      {/* Remove from calendar (archive) – booking stays in client history */}
       {deleteTarget && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" dir="rtl">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-6 text-right">
-            <h3 className="text-lg font-bold text-slate-900">ביטול תור</h3>
+            <h3 className="text-lg font-bold text-slate-900">הסרת תור מיומן</h3>
             <p className="mt-2 text-sm text-slate-600">
-              לבטל את התור של {deleteTarget.customerName || "לקוח"} בתאריך {deleteTarget.date} בשעה {deleteTarget.time}?
+              להסיר את התור של {deleteTarget.customerName || "לקוח"} מתאריך {deleteTarget.date} בשעה {deleteTarget.time}? התור יוסר מהיומן אך יישמר בהיסטוריית הלקוח.
             </p>
 
             {deleteError && (
@@ -1118,7 +1118,7 @@ export default function DaySchedulePage() {
                 disabled={deleting}
                 className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {deleting ? "מבטל..." : "בטל"}
+                {deleting ? "מסיר..." : "הסר"}
               </button>
             </div>
           </div>

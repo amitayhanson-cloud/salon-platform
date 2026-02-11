@@ -167,10 +167,9 @@ async function getBookingsForDayAnyStorage(
       .get();
     console.log("[getBookingsForDayAnyStorage] Strategy A (sites subcollection by date):", snapA.docs.length);
     snapA.docs.forEach((doc) => {
-      if (!seenIds.has(doc.id)) {
-        allBookings.push(normalizeBooking(doc.id, doc.data()));
-        seenIds.add(doc.id);
-      }
+      if (doc.data().isArchived === true || seenIds.has(doc.id)) return;
+      allBookings.push(normalizeBooking(doc.id, doc.data()));
+      seenIds.add(doc.id);
     });
   } catch (err: any) {
     console.warn("[getBookingsForDayAnyStorage] Strategy A failed:", err.message);
@@ -186,10 +185,9 @@ async function getBookingsForDayAnyStorage(
       .get();
     console.log("[getBookingsForDayAnyStorage] Strategy B (top-level by date):", snapB.docs.length);
     snapB.docs.forEach((doc) => {
-      if (!seenIds.has(doc.id)) {
-        allBookings.push(normalizeBooking(doc.id, doc.data()));
-        seenIds.add(doc.id);
-      }
+      if (doc.data().isArchived === true || seenIds.has(doc.id)) return;
+      allBookings.push(normalizeBooking(doc.id, doc.data()));
+      seenIds.add(doc.id);
     });
   } catch (err: any) {
     console.warn("[getBookingsForDayAnyStorage] Strategy B failed:", err.message);
@@ -216,10 +214,9 @@ async function getBookingsForDayAnyStorage(
       .get();
     console.log("[getBookingsForDayAnyStorage] Strategy C (sites subcollection by startAt):", snapC.docs.length);
     snapC.docs.forEach((doc) => {
-      if (!seenIds.has(doc.id)) {
-        allBookings.push(normalizeBooking(doc.id, doc.data()));
-        seenIds.add(doc.id);
-      }
+      if (doc.data().isArchived === true || seenIds.has(doc.id)) return;
+      allBookings.push(normalizeBooking(doc.id, doc.data()));
+      seenIds.add(doc.id);
     });
   } catch (err: any) {
     console.warn("[getBookingsForDayAnyStorage] Strategy C failed:", err.message);
@@ -236,10 +233,9 @@ async function getBookingsForDayAnyStorage(
       .get();
     console.log("[getBookingsForDayAnyStorage] Strategy D (top-level by startAt):", snapD.docs.length);
     snapD.docs.forEach((doc) => {
-      if (!seenIds.has(doc.id)) {
-        allBookings.push(normalizeBooking(doc.id, doc.data()));
-        seenIds.add(doc.id);
-      }
+      if (doc.data().isArchived === true || seenIds.has(doc.id)) return;
+      allBookings.push(normalizeBooking(doc.id, doc.data()));
+      seenIds.add(doc.id);
     });
   } catch (err: any) {
     console.warn("[getBookingsForDayAnyStorage] Strategy D failed:", err.message);

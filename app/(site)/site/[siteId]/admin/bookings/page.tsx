@@ -19,10 +19,10 @@ import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
 import { bookingEnabled } from "@/lib/bookingEnabled";
 import type { SiteConfig } from "@/types/siteConfig";
 import { getDateRange, getTwoWeekStart, getSundayStart, toYYYYMMDD } from "@/lib/calendarUtils";
-import { normalizeBooking, isBookingCancelled } from "@/lib/normalizeBooking";
+import { normalizeBooking, isBookingCancelled, isBookingArchived } from "@/lib/normalizeBooking";
 import TwoWeekCalendar from "@/components/admin/TwoWeekCalendar";
 import TaskListPanel from "@/components/admin/TaskListPanel";
-import { ChevronLeft, ChevronRight, RefreshCw, Timer } from "lucide-react";
+import { ChevronLeft, ChevronRight, Timer } from "lucide-react";
 import { useRouter } from "next/navigation";
 import AutoCleanupSettings from "@/components/admin/AutoCleanupSettings";
 
@@ -56,7 +56,6 @@ export default function BookingsAdminPage() {
   const [bookingsCount, setBookingsCount] = useState<number>(0);
   const [bookingsLoading, setBookingsLoading] = useState(true);
   const [bookingsError, setBookingsError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
 
   // Two-week calendar state
   // Always starts on Sunday of the current week (week 1) + next week (week 2) = 14 days
@@ -185,7 +184,7 @@ export default function BookingsAdminPage() {
       bookingsQuery,
       (snapshot) => {
         const raw = snapshot.docs.map((d) => normalizeBooking(d as { id: string; data: () => Record<string, unknown> }));
-        const normalized = raw.filter((b) => !isBookingCancelled(b));
+        const normalized = raw.filter((b) => !isBookingCancelled(b) && !isBookingArchived(b));
         setBookings(normalized);
         setBookingsCount(normalized.length);
         setBookingsLoading(false);
@@ -203,7 +202,7 @@ export default function BookingsAdminPage() {
             fallbackQuery,
             (snapshot) => {
               const raw = snapshot.docs.map((d) => normalizeBooking(d as { id: string; data: () => Record<string, unknown> }));
-              const normalized = raw.filter((b) => !isBookingCancelled(b));
+              const normalized = raw.filter((b) => !isBookingCancelled(b) && !isBookingArchived(b));
               normalized.sort((a, b) => {
                 const dc = (a.dateStr || "").localeCompare(b.dateStr || "");
                 if (dc !== 0) return dc;
@@ -268,34 +267,6 @@ export default function BookingsAdminPage() {
     setDeleteTarget(null);
     setDeleteError(null);
   };
-
-  // Refresh handler - re-subscribe to force refresh
-  const handleRefresh = () => {
-    if (refreshing || !siteId || !db) return;
-    
-    setRefreshing(true);
-    setBookingsLoading(true);
-    setBookingsError(null);
-    
-    // Unsubscribe from current listener
-    if (unsubscribeRef.current) {
-      unsubscribeRef.current();
-      unsubscribeRef.current = null;
-    }
-    
-    // Small delay to ensure cleanup, then re-subscribe
-    setTimeout(() => {
-      const cleanup = setupRealtimeListeners();
-      unsubscribeRef.current = cleanup;
-      
-      // Reset refreshing state after a brief moment
-      // (actual loading state is managed by setupRealtimeListeners)
-      setTimeout(() => {
-        setRefreshing(false);
-      }, 500);
-    }, 100);
-  };
-
 
   // Get 14-day date range
   const dateRange = getDateRange(rangeStart, 14);
@@ -427,17 +398,6 @@ export default function BookingsAdminPage() {
                   </>
                 )}
               </div>
-              <button
-                onClick={handleRefresh}
-                disabled={refreshing || bookingsLoading}
-                className="px-3 py-1.5 bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-                title="רענן תורים"
-              >
-                <RefreshCw 
-                  className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} 
-                />
-                רענן
-              </button>
               <Link
                 href={`/site/${siteId}/admin`}
                 className="text-sm text-sky-700 hover:text-sky-800"

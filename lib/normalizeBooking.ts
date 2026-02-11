@@ -41,6 +41,10 @@ export interface NormalizedBooking {
   serviceOrder?: number | null;
   primaryWorkerId?: string | null;
   secondaryWorkerId?: string | null;
+  /** Soft delete: hidden from calendar, still in client history */
+  isArchived?: boolean;
+  archivedAt?: Date | { toDate: () => Date } | null;
+  archivedReason?: "manual" | "auto" | null;
   primaryDurationMin?: number;
   waitMin?: number;
   secondaryDurationMin?: number;
@@ -208,6 +212,10 @@ export function normalizeBooking(doc: FirestoreDoc): NormalizedBooking {
     parentBookingId: parentBookingId ?? undefined,
     visitGroupId: (d.visitGroupId as string | undefined) ?? undefined,
     serviceOrder: typeof d.serviceOrder === "number" ? d.serviceOrder : undefined,
+    isArchived: d.isArchived === true,
+    archivedAt: (d.archivedAt as Date | { toDate: () => Date } | undefined) ?? undefined,
+    archivedReason: (d.archivedReason as "manual" | "auto" | undefined) ?? undefined,
+    whatsappStatus: (d.whatsappStatus as string) ?? "booked",
   } as NormalizedBooking;
 }
 
@@ -220,4 +228,9 @@ export function isBookingCancelled(b: { status?: string; cancelled?: boolean }):
   if (s === "cancelled" || s === "canceled") return true;
   if (b.cancelled === true) return true;
   return false;
+}
+
+/** True if booking is archived (soft-deleted). Archived bookings are hidden from calendar but shown in client history. */
+export function isBookingArchived(b: { isArchived?: boolean }): boolean {
+  return b.isArchived === true;
 }

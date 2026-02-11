@@ -4,8 +4,8 @@ import { useMemo } from "react";
 import { isBookingCancelled } from "@/lib/normalizeBooking";
 import DayGrid from "./DayGrid";
 
-/** Height of the worker header row (outside scroll so labels and grid scroll together). */
-const HEADER_HEIGHT_PX = 40;
+/** Height of the worker header row so worker names can wrap and stay visible. */
+const HEADER_HEIGHT_PX = 56;
 interface Booking {
   id: string;
   date: string;
@@ -209,19 +209,21 @@ export default function MultiWorkerScheduleView({
         <div
           className="shrink-0 bg-white border-b-2 border-slate-300 grid"
           style={{
-            gridTemplateColumns: `${56}px repeat(${workersToRender.length}, minmax(120px, 1fr))`,
+            gridTemplateColumns: `${56}px repeat(${workersToRender.length}, minmax(140px, 1fr))`,
             height: HEADER_HEIGHT_PX,
-            minWidth: `${56 + workersToRender.length * 120}px`,
+            minWidth: `${56 + workersToRender.length * 140}px`,
           }}
         >
           <div className="flex items-center justify-end pr-2 text-slate-500 text-xs font-medium border-r border-slate-200" />
           {workersToRender.map((worker, index) => (
             <div
               key={worker.id}
-              className="flex items-center justify-center bg-slate-50 border-r border-slate-200 px-2"
+              className="flex items-center justify-center bg-slate-50 border-r border-slate-200 px-2 py-1"
               style={{ borderLeft: index === 0 ? "1px solid rgb(226 232 240)" : undefined }}
             >
-              <span className="text-sm font-semibold text-slate-900 text-center truncate">{worker.name}</span>
+              <span className="text-sm font-semibold text-slate-900 text-center leading-tight break-words" style={{ wordBreak: "break-word" }}>
+                {worker.name}
+              </span>
             </div>
           ))}
         </div>

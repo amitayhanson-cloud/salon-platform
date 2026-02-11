@@ -57,7 +57,9 @@ export async function listBookingsForDate(
       const startAtSnapshot = await startAtQuery.get();
       console.log("[listBookingsForDate] startAt query returned", startAtSnapshot.docs.length, "docs");
 
-      bookings = startAtSnapshot.docs.map((doc) => {
+      bookings = startAtSnapshot.docs
+        .filter((doc) => doc.data().isArchived !== true)
+        .map((doc) => {
         const data = doc.data();
         const startAt = data.startAt?.toDate() || new Date();
         return {
@@ -139,17 +141,15 @@ export async function listBookingsForDate(
         };
 
         dateSnapshot.docs.forEach((doc) => {
-          if (!seenIds.has(doc.id)) {
-            bookings.push(processDoc(doc));
-            seenIds.add(doc.id);
-          }
+          if (doc.data().isArchived === true || seenIds.has(doc.id)) return;
+          bookings.push(processDoc(doc));
+          seenIds.add(doc.id);
         });
 
         legacySnapshot.docs.forEach((doc) => {
-          if (!seenIds.has(doc.id)) {
-            bookings.push(processDoc(doc));
-            seenIds.add(doc.id);
-          }
+          if (doc.data().isArchived === true || seenIds.has(doc.id)) return;
+          bookings.push(processDoc(doc));
+          seenIds.add(doc.id);
         });
       } catch (fallbackErr: any) {
         console.error("[listBookingsForDate] fallback query also failed", fallbackErr.message);

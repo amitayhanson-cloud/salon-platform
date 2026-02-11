@@ -1,5 +1,5 @@
 {
-  "name": "salon-platform",
+  "name": "caleno",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -26,6 +26,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "tailwind-merge": "^2.6.0",
+    "twilio": "^5.12.1",
     "xlsx": "^0.18.5",
     "zod": "^4.3.5"
   },

@@ -16,6 +16,7 @@ import {
 import { getBookingDisplayInfo } from "@/lib/bookingDisplay";
 import { isBookingCancelled } from "@/lib/normalizeBooking";
 import { getTextColorHex } from "@/lib/colorUtils";
+import { getBookingDisplayStatus } from "@/lib/bookingDisplayStatus";
 import { bookingToBlock, type RenderBlock } from "./MultiWorkerScheduleView";
 
 const SLOT_MINUTES = 15;
@@ -78,6 +79,7 @@ export interface DayGridProps {
     serviceType?: string;
     serviceColor?: string | null;
     status?: string;
+    whatsappStatus?: string | null;
   }>;
   workers: Array<{ id: string; name: string }>;
   startHour?: number;
@@ -195,10 +197,10 @@ export default function DayGrid({
       <div
         className="grid min-w-max"
         style={{
-          gridTemplateColumns: `${TIME_COLUMN_WIDTH_PX}px repeat(${workers.length}, minmax(120px, 1fr))`,
+          gridTemplateColumns: `${TIME_COLUMN_WIDTH_PX}px repeat(${workers.length}, minmax(140px, 1fr))`,
           gridTemplateRows: `repeat(${totalRows}, ${SLOT_HEIGHT_PX}px)`,
           width: "100%",
-          minWidth: `${TIME_COLUMN_WIDTH_PX + workers.length * 120}px`,
+          minWidth: `${TIME_COLUMN_WIDTH_PX + workers.length * 140}px`,
         }}
       >
         {/* Time column: one cell per row; label at TIME_LABEL_INTERVAL steps (same row index as grid) */}
@@ -280,6 +282,25 @@ export default function DayGrid({
                     2
                   </span>
                 )}
+                {booking && (() => {
+                  const { label, color } = getBookingDisplayStatus(booking);
+                  const colorClass =
+                    color === "green"
+                      ? "bg-emerald-100 text-emerald-800"
+                      : color === "yellow"
+                        ? "bg-amber-100 text-amber-800"
+                        : color === "red"
+                          ? "bg-red-100 text-red-800"
+                          : "bg-slate-100 text-slate-700";
+                  return (
+                    <span
+                      className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] font-medium ${colorClass}`}
+                      title={label}
+                    >
+                      {label}
+                    </span>
+                  );
+                })()}
                 <span className="font-semibold">{block.clientName}</span>
                 <span> — {block.serviceName}</span>
               </div>

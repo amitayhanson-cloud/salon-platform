@@ -144,8 +144,22 @@ export const expiredBookingsCleanup = functions.pubsub
         let batchCount = 0;
         for (const doc of snapshot.docs) {
           const d = doc.data();
+          if (d.isArchived === true) continue; // already archived
           if (!isBookingExpired(d, nowMillis, todayYMD)) continue;
-          batch.delete(doc.ref);
+          const dateStr = (d.date as string) ?? (d.dateISO as string) ?? "";
+          const minimal: Record<string, unknown> = {
+            date: dateStr,
+            serviceName: (d.serviceName as string) ?? "",
+            serviceType: (d.serviceType as string) ?? null,
+            workerId: (d.workerId as string) ?? null,
+            workerName: (d.workerName as string) ?? null,
+            customerPhone: (d.customerPhone as string) ?? (d.phone as string) ?? "",
+            customerName: (d.customerName as string) ?? (d.name as string) ?? "",
+            isArchived: true,
+            archivedAt: admin.firestore.FieldValue.serverTimestamp(),
+            archivedReason: "auto",
+          };
+          batch.set(doc.ref, minimal);
           batchCount++;
           deleted++;
           const dateStr = (d.date as string) || "";

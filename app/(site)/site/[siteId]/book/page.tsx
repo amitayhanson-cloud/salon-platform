@@ -591,6 +591,7 @@ export default function BookingPage() {
         const bookings: BookingForDate[] = [];
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
+          if (data.isArchived === true) return;
           const timeVal = data.timeHHmm ?? data.time ?? "";
           const durationMin = data.durationMin ?? data.duration ?? 60;
           bookings.push({
@@ -909,11 +910,22 @@ export default function BookingPage() {
           setSubmitError("אין זמינות להשלמת כל השירותים. נא בחר שעה אחרת.");
           return;
         }
-        await saveMultiServiceBooking(siteId, resolved, {
+        const { firstBookingId } = await saveMultiServiceBooking(siteId, resolved, {
           name: clientName.trim(),
           phone: clientPhone.trim(),
           note: clientNote.trim() || undefined,
         });
+        if (firstBookingId) {
+          try {
+            await fetch("/api/whatsapp/send-booking-confirmation", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ siteId, bookingId: firstBookingId }),
+            });
+          } catch (_) {
+            // Non-blocking: booking is saved; WhatsApp may be sent by reminder or retry
+          }
+        }
         setPhase2WorkerAssigned(null);
       } else {
         const selectedPricingItem = selectedServices[0]!.pricingItem;
@@ -942,7 +954,7 @@ export default function BookingPage() {
           });
         }
 
-        await saveBooking(
+        const bookingId = await saveBooking(
           siteId,
           {
             serviceId: selectedService.name,
@@ -967,6 +979,17 @@ export default function BookingPage() {
           selectedPricingItem,
           selectedService.color
         );
+        if (bookingId) {
+          try {
+            await fetch("/api/whatsapp/send-booking-confirmation", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ siteId, bookingId }),
+            });
+          } catch (_) {
+            // Non-blocking: booking is saved; WhatsApp may be sent by reminder or retry
+          }
+        }
         setPhase2WorkerAssigned(secondaryWorker);
       }
       setStep(6);

@@ -1,4 +1,4 @@
-import { addDoc, getDocs, query, where, orderBy, serverTimestamp, Timestamp, deleteDoc, updateDoc } from "firebase/firestore";
+import { addDoc, getDocs, getDoc, setDoc, query, where, orderBy, serverTimestamp, Timestamp, updateDoc } from "firebase/firestore";
 import { db } from "./firebaseClient";
 import { bookingsCollection, bookingDoc } from "./firestorePaths";
 import { getOrCreateClient } from "./firestoreClients";
@@ -479,19 +479,52 @@ export async function cancelBooking(
 }
 
 /**
- * Delete a booking from Firestore (hard delete - kept for backward compatibility)
- * @deprecated Use cancelBooking instead for soft cancellation
+ * Archive a booking (soft delete). It disappears from the calendar but remains in DB and in client history.
+ * Replaces the document with only: date, serviceName, serviceType, workerId, workerName, customerPhone,
+ * customerName, and archive metadata (isArchived, archivedAt, archivedReason) to save space.
+ * Use archivedReason "manual" for user-initiated delete, "auto" for expired/cleanup.
  */
-export async function deleteBooking(siteId: string, bookingId: string): Promise<void> {
+export async function archiveBooking(
+  siteId: string,
+  bookingId: string,
+  reason: "manual" | "auto"
+): Promise<void> {
   if (!db) {
     throw new Error("Firestore db not initialized");
   }
-
+  const ref = bookingDoc(siteId, bookingId);
   try {
-    await deleteDoc(bookingDoc(siteId, bookingId));
-    console.log("[deleteBooking] deleted booking", { siteId, bookingId });
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      throw new Error("Booking not found");
+    }
+    const d = snap.data();
+    const dateStr = (d.date as string) ?? (d.dateISO as string) ?? "";
+    const customerPhone = (d.customerPhone as string) ?? (d.phone as string) ?? "";
+    const minimal: Record<string, unknown> = {
+      date: dateStr,
+      serviceName: (d.serviceName as string) ?? "",
+      serviceType: (d.serviceType as string) ?? null,
+      workerId: (d.workerId as string) ?? null,
+      workerName: (d.workerName as string) ?? null,
+      customerPhone,
+      customerName: (d.customerName as string) ?? (d.name as string) ?? "",
+      isArchived: true,
+      archivedAt: serverTimestamp(),
+      archivedReason: reason,
+    };
+    await setDoc(ref, cleanUndefined(minimal));
+    console.log("[archiveBooking] archived and trimmed booking", { siteId, bookingId, reason });
   } catch (e) {
-    console.error("Failed to delete booking from Firestore", e);
+    console.error("Failed to archive booking in Firestore", e);
     throw e;
   }
+}
+
+/**
+ * "Delete" a booking: archives it (soft delete) so it stays in client history but is hidden from the calendar.
+ * UI wording can stay "delete"; behavior is archive.
+ */
+export async function deleteBooking(siteId: string, bookingId: string): Promise<void> {
+  await archiveBooking(siteId, bookingId, "manual");
 }
