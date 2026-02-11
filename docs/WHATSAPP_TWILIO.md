@@ -9,9 +9,13 @@ One WhatsApp sender number for the whole platform. Every message includes the sa
 2. **Last-minute booking** (start time &lt; 24h from now): the same reminder/confirmation-request message is sent immediately after the confirmation (so the customer gets confirmation + “מגיע/ה? כן, אגיע / לא...” in one go). The cron will not send it again because `reminder24hSentAt` is set.
 3. **24 hours before** (for bookings not already sent above) → reminder WhatsApp:  
    `{SalonName} ✂️ Reminder: your appointment is tomorrow at {time}. Reply YES to confirm.`
-4. **Customer replies YES** → booking marked confirmed, reply:  
-   `{SalonName} ✂️ Confirmed ✅ See you at {time}.`
-5. **Customer replies NO** → booking cancelled, reply with cancellation message.
+4. **Customer replies YES** (כן / yes / אגיע etc.) → booking `whatsappStatus: "confirmed"`, `confirmationReceivedAt` set; reply:  
+   `אושר ✅ נתראה ב-{time} ב-{salonName}.`  
+   UI shows booking as מאושר (green).
+5. **Customer replies NO** (לא / no / בטל etc.) → booking is **cancelled** (not deleted):  
+   `whatsappStatus: "cancelled"`, `status: "cancelled"`, `cancelledAt`, `archivedAt`, `archivedReason: "customer_cancelled_via_whatsapp"`.  
+   Reply: `הבנתי, ביטלתי את התור.`  
+   Booking is **removed from calendar** and **shown in client history** as בוטל (cancelled).
 
 ## Data model (Firestore)
 
@@ -22,9 +26,10 @@ One WhatsApp sender number for the whole platform. Every message includes the sa
   - Existing fields plus WhatsApp-related:
   - `customerPhoneE164` (string, E.164) – set when confirmation is sent.
   - `whatsappStatus`: `"booked"` | `"awaiting_confirmation"` | `"confirmed"` | `"cancelled"`.
-  - `confirmationRequestedAt` (Timestamp | null) – set when 24h reminder is sent.
+  - `confirmationRequestedAt` (Timestamp | null) – set when 24h reminder is sent (pending confirmation).
   - `reminder24hSentAt` (Timestamp | null) – set when 24h reminder is sent (idempotency; skip if already set).
   - `confirmationReceivedAt` (Timestamp | null) – set when user replies YES.
+  - When user replies NO: `whatsappStatus: "cancelled"`, `status: "cancelled"`, `cancelledAt`, `archivedAt`, `archivedReason: "customer_cancelled_via_whatsapp"`. Document is **not** deleted; it is hidden from calendar and shown in client history as cancelled.
 
 - **whatsapp_messages/{messageId}**  
   - `direction`: `"outbound"` | `"inbound"`.
@@ -224,6 +229,13 @@ When a booking is created with **startAt** less than 24 hours in the future (and
 - Every outbound message includes **salon name** and **time**.
 - Inbound YES: we find the single booking with `customerPhoneE164` match, `whatsappStatus === "awaiting_confirmation"`, `startAt > now`, ordered by `startAt` asc (limit 2 to detect ambiguity). If exactly one, we confirm it and reply; otherwise we ask the user to clarify.
 - NO: same lookup; we mark that booking cancelled and reply.
+
+## Verification (YES/NO and UI)
+
+- **Booking created** → `whatsappStatus: "booked"`.
+- **Reminder sent** (cron or immediate for last-minute) → `whatsappStatus: "awaiting_confirmation"` (pending), `confirmationRequestedAt` and `reminder24hSentAt` set.
+- **Reply "כן" (or yes / אגיע etc.)** → `whatsappStatus: "confirmed"`, `confirmationReceivedAt` set. UI shows the booking as מאושר (green).
+- **Reply "לא" (or no / בטל etc.)** → `whatsappStatus: "cancelled"`, `cancelledAt`, `archivedAt`, `archivedReason: "customer_cancelled_via_whatsapp"` set. The booking is **removed from calendar/active views** (filtered by `isBookingCancelled` / `isBookingArchived`) and **visible in the client’s booking history** as בוטל (Cancelled). The Firestore document is **not** deleted.
 
 ## Security
 

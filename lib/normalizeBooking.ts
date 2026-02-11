@@ -224,18 +224,28 @@ export function normalizeBooking(doc: FirestoreDoc): NormalizedBooking {
 
 /**
  * Only exclude bookings that are explicitly cancelled.
- * Do NOT exclude "confirmed" or missing status.
+ * Includes legacy status/cancelled and whatsappStatus === "cancelled" (e.g. customer cancelled via WhatsApp).
  */
-export function isBookingCancelled(b: { status?: string; cancelled?: boolean }): boolean {
+export function isBookingCancelled(b: {
+  status?: string | null;
+  cancelled?: boolean;
+  whatsappStatus?: string | null;
+}): boolean {
   const s = (b.status ?? "").toLowerCase();
   if (s === "cancelled" || s === "canceled") return true;
   if (b.cancelled === true) return true;
+  if ((b.whatsappStatus ?? "").toLowerCase() === "cancelled") return true;
   return false;
 }
 
 /** True if booking is archived (soft-deleted). Archived bookings are hidden from calendar but shown in client history. */
 export function isBookingArchived<T>(b: T): boolean {
-  const o = b as { isArchived?: boolean; archivedAt?: unknown; status?: string } | null | undefined;
+  const o = b as {
+    isArchived?: boolean;
+    archivedAt?: unknown;
+    status?: string;
+    whatsappStatus?: string;
+  } | null | undefined;
   if (o == null) return false;
   if (o.isArchived === true) return true;
   if (o.archivedAt != null) return true;

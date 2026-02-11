@@ -9,11 +9,12 @@ import {
   validateTwilioSignature,
   getWebhookUrl,
   logInboundWhatsApp,
+  logAmbiguousWhatsApp,
   sendWhatsApp,
   normalizeE164,
   isYes,
   isNo,
-  findNextAwaitingConfirmationByPhone,
+  findAwaitingConfirmationByPhone,
   findNextBookingByPhoneWithStatus,
   markBookingConfirmed,
   markBookingCancelledByWhatsApp,
@@ -28,7 +29,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Server misconfiguration" }, { status: 500 });
   }
 
-  // Read raw body for signature validation (must be done before parsing)
   let rawBody: string;
   try {
     rawBody = await request.text();
@@ -63,11 +63,62 @@ export async function POST(request: NextRequest) {
     twilioMessageSid: messageSid,
   });
 
-  if (isYes(body)) {
-    const booking = await findNextAwaitingConfirmationByPhone(fromE164);
-    if (booking) {
+  const isYesReply = isYes(body);
+  const isNoReply = isNo(body);
+
+  if (isYesReply || isNoReply) {
+    const { bookings, count } = await findAwaitingConfirmationByPhone(fromE164);
+    console.log("[whatsapp-webhook]", { fromE164, foundCount: count, bookingRef: count === 1 ? `sites/${bookings[0].siteId}/bookings/${bookings[0].id}` : null });
+
+    if (count === 0) {
+      if (isYesReply) {
+        const alreadyConfirmed = await findNextBookingByPhoneWithStatus(fromE164, "confirmed");
+        if (alreadyConfirmed) {
+          await sendWhatsApp({ toE164: fromE164, body: "התור כבר מאושר 😊" });
+          return new NextResponse('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', {
+            headers: { "Content-Type": "text/xml" },
+          });
+        }
+      }
+      if (isNoReply) {
+        const alreadyCancelled = await findNextBookingByPhoneWithStatus(fromE164, "cancelled");
+        if (alreadyCancelled) {
+          await sendWhatsApp({ toE164: fromE164, body: "התור כבר בוטל." });
+          return new NextResponse('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', {
+            headers: { "Content-Type": "text/xml" },
+          });
+        }
+      }
+      const reply =
+        "לא מצאתי תור שממתין לאישור עבור המספר הזה. אם קבעת תור, אפשר לפנות למספרה.";
+      await sendWhatsApp({ toE164: fromE164, body: reply });
+      return new NextResponse('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', {
+        headers: { "Content-Type": "text/xml" },
+      });
+    }
+
+    if (count > 1) {
+      const bookingRefs = bookings.map((b) => `sites/${b.siteId}/bookings/${b.id}`);
+      await logAmbiguousWhatsApp({
+        fromPhone: from,
+        toPhone: to,
+        body,
+        twilioMessageSid: messageSid,
+        bookingRefs,
+      });
+      const reply =
+        "יש לך יותר מתור אחד שממתין לאישור. אנא פנה למספרה עם שעת התור שברצונך לאשר או לבטל.";
+      await sendWhatsApp({ toE164: fromE164, body: reply });
+      return new NextResponse('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', {
+        headers: { "Content-Type": "text/xml" },
+      });
+    }
+
+    const booking = bookings[0];
+    const bookingRef = `sites/${booking.siteId}/bookings/${booking.id}`;
+
+    if (isYesReply) {
       await markBookingConfirmed(booking.siteId, booking.id);
-      const bookingRef = `sites/${booking.siteId}/bookings/${booking.id}`;
       console.log("[whatsapp-webhook] booking updated", { bookingRef, newStatus: "confirmed" });
       const timeStr = formatIsraelTime(booking.startAt);
       const reply = `אושר ✅ נתראה ב-${timeStr} ב-${booking.salonName}.`;
@@ -82,30 +133,11 @@ export async function POST(request: NextRequest) {
         headers: { "Content-Type": "text/xml" },
       });
     }
-    const alreadyConfirmed = await findNextBookingByPhoneWithStatus(fromE164, "confirmed");
-    if (alreadyConfirmed) {
-      const reply = "התור כבר מאושר 😊";
-      await sendWhatsApp({ toE164: fromE164, body: reply });
-      return new NextResponse('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', {
-        headers: { "Content-Type": "text/xml" },
-      });
-    }
-    console.log("[whatsapp-webhook] no booking found for YES", { fromE164 });
-    const reply =
-      "לא מצאתי תור שממתין לאישור עבור המספר הזה. אם קבעת תור, אפשר לפנות למספרה.";
-    await sendWhatsApp({ toE164: fromE164, body: reply });
-    return new NextResponse('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', {
-      headers: { "Content-Type": "text/xml" },
-    });
-  }
 
-  if (isNo(body)) {
-    const booking = await findNextAwaitingConfirmationByPhone(fromE164);
-    if (booking) {
+    if (isNoReply) {
       await markBookingCancelledByWhatsApp(booking.siteId, booking.id);
-      const bookingRef = `sites/${booking.siteId}/bookings/${booking.id}`;
       console.log("[whatsapp-webhook] booking updated", { bookingRef, newStatus: "cancelled" });
-      const reply = `${booking.salonName}: התור בוטל. מקווים לראותך בפעם הבאה.`;
+      const reply = "הבנתי, ביטלתי את התור.";
       await sendWhatsApp({
         toE164: fromE164,
         body: reply,
@@ -117,18 +149,6 @@ export async function POST(request: NextRequest) {
         headers: { "Content-Type": "text/xml" },
       });
     }
-    const alreadyCancelled = await findNextBookingByPhoneWithStatus(fromE164, "cancelled");
-    if (alreadyCancelled) {
-      const reply = "התור כבר בוטל.";
-      await sendWhatsApp({ toE164: fromE164, body: reply });
-      return new NextResponse('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', {
-        headers: { "Content-Type": "text/xml" },
-      });
-    }
-    console.log("[whatsapp-webhook] no booking found for NO", { fromE164 });
-    return new NextResponse('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', {
-      headers: { "Content-Type": "text/xml" },
-    });
   }
 
   const help = 'כדי לאשר תור השב/השיבי "כן", כדי לבטל השב/השיבי "לא".';

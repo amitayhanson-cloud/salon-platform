@@ -149,3 +149,26 @@ export async function logInboundWhatsApp(params: {
     error: null,
   });
 }
+
+/**
+ * Log ambiguous YES/NO when multiple bookings await confirmation for this phone.
+ */
+export async function logAmbiguousWhatsApp(params: {
+  fromPhone: string;
+  toPhone: string;
+  body: string;
+  twilioMessageSid: string;
+  bookingRefs: string[];
+}): Promise<void> {
+  const db = getAdminDb();
+  await db.collection("whatsapp_messages").add({
+    direction: "inbound",
+    status: "ambiguous",
+    fromPhone: params.fromPhone,
+    toPhone: params.toPhone,
+    body: params.body,
+    twilioMessageSid: params.twilioMessageSid,
+    bookingRefs: params.bookingRefs,
+    createdAt: Timestamp.now(),
+  });
+}

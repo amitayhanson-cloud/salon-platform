@@ -40,7 +40,8 @@ interface Booking {
   /** Soft-deleted from calendar; still shown in client history */
   isArchived?: boolean;
   archivedAt?: any; // Timestamp or ISO string
-  archivedReason?: "manual" | "auto";
+  archivedReason?: "manual" | "auto" | "customer_cancelled_via_whatsapp";
+  whatsappStatus?: string;
 }
 
 export default function ClientCardPage() {
@@ -237,6 +238,7 @@ export default function ClientCardPage() {
               isArchived: data.isArchived === true,
               archivedAt: data.archivedAt,
               archivedReason: data.archivedReason ?? undefined,
+              whatsappStatus: data.whatsappStatus ?? undefined,
             });
           });
           
@@ -907,7 +909,9 @@ export default function ClientCardPage() {
                                   )}
                                   <div className="md:col-span-4 flex items-center gap-2">
                                     <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-                                      הוסר מיומן
+                                      {booking.whatsappStatus === "cancelled" || booking.status === "cancelled"
+                                        ? "בוטל"
+                                        : "הוסר מיומן"}
                                       {booking.archivedAt != null &&
                                         ` (${typeof (booking.archivedAt as { toDate?: () => Date }).toDate === "function"
                                           ? new Date((booking.archivedAt as { toDate: () => Date }).toDate()).toLocaleDateString("he-IL")
