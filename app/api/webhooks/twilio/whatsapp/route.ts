@@ -154,17 +154,42 @@ export async function POST(request: NextRequest) {
   try {
     return await handleInbound();
   } catch (err) {
-    console.error("[WA_WEBHOOK] unexpected error", { inboundId, error: err });
+    const errObj = err as { code?: number; message?: string; name?: string; stack?: string };
+    const errCode = errObj?.code;
+    const errMessage = errObj?.message ?? String(err);
+    const isIndexError = errCode === 9 && /index/i.test(errMessage);
+
+    console.error("[WA_WEBHOOK] error", {
+      inboundId,
+      messageSid: MessageSid,
+      from: From,
+      body: Body,
+      errName: errObj?.name,
+      errCode: errCode ?? null,
+      errMessage,
+      errStack: errObj?.stack ?? null,
+    });
+    if (isIndexError) {
+      console.error("[WA_WEBHOOK] missing_index", { inboundId, errMessage });
+    }
     try {
       await updateInboundDoc(inboundId, {
-        status: "error",
-        errorMessage: err instanceof Error ? err.message : String(err),
+        status: isIndexError ? "missing_index" : "error",
+        errorCode: errCode ?? null,
+        errorMessage: errMessage,
+        errorStack: errObj?.stack ?? null,
       });
     } catch {
       // ignore
     }
-    const friendly = "Something went wrong. Please contact the salon.";
-    return xmlResponse(twimlMessage(From || "", friendly));
+    if (isIndexError) {
+      return xmlResponse(
+        twimlMessage(From || "", "System needs a database index. Please contact the salon.")
+      );
+    }
+    return xmlResponse(
+      twimlMessage(From || "", "Something went wrong. Please contact the salon.")
+    );
   }
 
   async function handleInbound(): Promise<NextResponse> {
@@ -199,11 +224,12 @@ export async function POST(request: NextRequest) {
 
     if (isYesReply || isNoReply) {
       const { bookings, count } = await findAwaitingConfirmationByPhone(fromE164);
-      console.log("[WA_WEBHOOK]", {
-        fromE164,
-        foundCount: count,
-        bookingRef: count === 1 ? `sites/${bookings[0].siteId}/bookings/${bookings[0].id}` : null,
-      });
+      if (count === 1) {
+        console.log("[WA_WEBHOOK] booking_found", {
+          inboundId,
+          bookingRef: `sites/${bookings[0].siteId}/bookings/${bookings[0].id}`,
+        });
+      }
 
       if (count === 0) {
         try {
@@ -261,7 +287,7 @@ export async function POST(request: NextRequest) {
 
       if (isYesReply) {
         await markBookingConfirmed(booking.siteId, booking.id);
-        console.log("[WA_WEBHOOK] updated booking", { inboundId, bookingRef, newStatus: "confirmed" });
+        console.log("[WA_WEBHOOK] booking_updated", { inboundId, bookingRef, newStatus: "confirmed" });
         try {
           await updateInboundDoc(inboundId, { status: "matched_yes", bookingRef });
         } catch {
@@ -275,7 +301,7 @@ export async function POST(request: NextRequest) {
 
       if (isNoReply) {
         await markBookingCancelledByWhatsApp(booking.siteId, booking.id);
-        console.log("[WA_WEBHOOK] updated booking", { inboundId, bookingRef, newStatus: "cancelled" });
+        console.log("[WA_WEBHOOK] booking_updated", { inboundId, bookingRef, newStatus: "cancelled" });
         try {
           await updateInboundDoc(inboundId, { status: "matched_no", bookingRef });
         } catch {

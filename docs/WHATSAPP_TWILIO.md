@@ -37,8 +37,8 @@ One WhatsApp sender number for the whole platform. Every message includes the sa
 
 - **whatsapp_inbound/{inboundId}** (top-level; production diagnostics)  
   - Written at webhook entry: `inboundId`, `receivedAt`, `from`, `to`, `body`, `messageSid`, `status: "received"`.  
-  - Updated after processing: `status` one of `"matched_yes"` | `"matched_no"` | `"no_match"` | `"no_booking"` | `"ambiguous"` | `"signature_failed"` | `"error"`, optional `bookingRef`, `errorMessage`, `updatedAt`.  
-  - Use to confirm production is receiving webhooks even if the UI doesn’t update (e.g. Vercel logs show `[WA_WEBHOOK] start` and a doc appears in **whatsapp_inbound**).
+  - Updated after processing: `status` one of `"matched_yes"` | `"matched_no"` | `"no_match"` | `"no_booking"` | `"ambiguous"` | `"signature_failed"` | `"error"` | `"missing_index"`, optional `bookingRef`, `errorMessage`, `errorCode`, `errorStack`, `updatedAt`.  
+  - Use to confirm production is receiving webhooks even if the UI doesn’t update (e.g. Vercel logs show `[WA_WEBHOOK] start` and a doc appears in **whatsapp_inbound**). When the customer gets “Something went wrong” or “System needs a database index”, check Vercel logs for `[WA_WEBHOOK] error` (or `[WA_WEBHOOK] missing_index`) and the **whatsapp_inbound** doc for this `inboundId`: `status`, `errorMessage`, `errorCode`, `errorStack`.
 
 ## Required env vars
 
@@ -94,6 +94,9 @@ to the **exact** URL configured in Twilio Console. When set, the app uses this U
 
 - **GET /api/debug/whatsapp-webhook-health**  
   Returns `{ ok: true, now: ISO, webhook: "/api/webhooks/twilio/whatsapp" }`. Use to verify routing on Vercel.
+
+- **POST /api/debug/whatsapp-find-booking?secret=CRON_SECRET**  
+  Body: `{ "phoneE164": "+972..." }`. Returns `{ foundCount, matches }` (up to 5 bookings awaiting confirmation for that phone; each match has `bookingRef`, `startAt`, `whatsappStatus`, `siteId`). Uses the same Firestore query as the webhook (Admin SDK). Use to verify the production query and index without sending a real WhatsApp message.
 
 - **POST /api/whatsapp/send-booking-confirmation**  
   Body: `{ "siteId": "...", "bookingId": "..." }`.  

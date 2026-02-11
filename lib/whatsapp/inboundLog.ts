@@ -13,7 +13,8 @@ export type InboundStatus =
   | "no_match"
   | "no_booking"
   | "ambiguous"
-  | "error";
+  | "error"
+  | "missing_index";
 
 export async function createInboundDoc(params: {
   inboundId: string;
@@ -43,12 +44,14 @@ export async function updateInboundDoc(
     status: InboundStatus;
     bookingRef?: string | null;
     errorMessage?: string | null;
+    errorCode?: number | string | null;
+    errorStack?: string | null;
   }
 ): Promise<void> {
   const db = getAdminDb();
   const ref = db.collection("whatsapp_inbound").doc(inboundId);
-  await ref.update({
-    ...update,
-    updatedAt: Timestamp.now(),
-  });
+  const data: Record<string, unknown> = { ...update, updatedAt: Timestamp.now() };
+  if (update.errorCode !== undefined) data.errorCode = update.errorCode;
+  if (update.errorStack !== undefined) data.errorStack = update.errorStack;
+  await ref.update(data);
 }
