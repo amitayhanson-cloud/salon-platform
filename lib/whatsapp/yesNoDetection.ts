@@ -6,10 +6,11 @@
 const raw = (body: string): string => (body ?? "").trim();
 const msg = (body: string): string => raw(body).toLowerCase();
 
-/** Normalize for matching: collapse spaces, trim, lowercase */
+/** Normalize for matching: collapse spaces, trim, remove punctuation and slash, lowercase */
 function normalizeForMatch(s: string): string {
   return s
     .replace(/\s+/g, " ")
+    .replace(/\//g, "") // "לא מגיע/ה" -> "לא מגיעה"
     .replace(/[.,!?\s]+/g, " ")
     .trim()
     .toLowerCase();
@@ -20,10 +21,7 @@ const YES_PHRASES = new Set([
   "yes",
   "y",
   "כן",
-  "כן.",
-  "כן!",
   "כן אגיע",
-  "כן, אגיע",
   "אני מגיע",
   "אגיע",
   "כן מגיע",
@@ -37,6 +35,7 @@ const YES_PHRASES = new Set([
   "אני באה",
   "מאשר",
   "מאשרת",
+  "אישור",
 ]);
 
 /** Hebrew NO phrases */
@@ -44,14 +43,13 @@ const NO_PHRASES = new Set([
   "no",
   "n",
   "לא",
-  "לא.",
-  "לא!",
   "לא אגיע",
   "אני לא מגיע",
   "אני לא אגיע",
   "לא מגיע",
   "לא אני לא מגיע",
   "לא מגיעה",
+  "לא לא אגיע",
   "לא יכול",
   "לא יכולה",
   "לא אוכל",

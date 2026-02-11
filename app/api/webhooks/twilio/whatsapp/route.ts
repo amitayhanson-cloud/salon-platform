@@ -1,7 +1,7 @@
 /**
  * POST /api/webhooks/twilio/whatsapp
- * Inbound WhatsApp webhook. Validate Twilio signature (SDK with parsed params from raw body),
- * log to whatsapp_inbound. Handles YES/NO and selection menu (multiple bookings).
+ * Inbound WhatsApp webhook. Idempotent by MessageSid; always responds with TwiML and HTTP 200.
+ * Validates Twilio signature, logs to whatsapp_inbound, handles YES/NO and selection menu.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -10,7 +10,6 @@ import {
   getWebhookUrl,
   logInboundWhatsApp,
   logAmbiguousWhatsApp,
-  sendWhatsApp,
   normalizeE164,
   normalizeInbound,
   findBookingsAwaitingConfirmationByPhoneMulti,
@@ -24,8 +23,10 @@ import {
 } from "@/lib/whatsapp";
 import {
   getInboundByMessageSid,
+  isInboundProcessed,
   tryClaimInbound,
   setInboundProcessed,
+  setInboundError,
   writeInboundReceived,
   writeInboundSignatureFailed,
   updateInboundDoc,
@@ -34,13 +35,10 @@ import { formatIsraelTime, formatIsraelDateTime } from "@/lib/datetime/formatIsr
 
 const WEBHOOK_PATH = "/api/webhooks/twilio/whatsapp";
 
-function twimlMessage(to: string, body: string): string {
-  const escaped = String(body)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-  return `<?xml version="1.0" encoding="UTF-8"?><Response><Message to="${to}">${escaped}</Message></Response>`;
+function buildTwimlResponse(body: string): string {
+  const twiml = new twilio.twiml.MessagingResponse();
+  twiml.message(body);
+  return twiml.toString();
 }
 
 function xmlResponse(body: string, status = 200): NextResponse {
@@ -50,10 +48,7 @@ function xmlResponse(body: string, status = 200): NextResponse {
   });
 }
 
-function emptyResponse(messageSid?: string): NextResponse {
-  console.log("[WA_WEBHOOK] http_200_empty", messageSid != null ? { messageSid } : {});
-  return new NextResponse(null, { status: 200 });
-}
+const SAFE_APOLOGY = "משהו השתבש. אנא פנה/י למספרה.";
 
 export async function POST(request: NextRequest) {
   console.log("[WA_WEBHOOK] start", { ts: new Date().toISOString() });
@@ -61,7 +56,7 @@ export async function POST(request: NextRequest) {
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   if (!authToken) {
     console.error("[WA_WEBHOOK] missing TWILIO_AUTH_TOKEN");
-    return xmlResponse(twimlMessage("", "משהו השתבש. אנא פנה/י למספרה."), 200);
+    return xmlResponse(buildTwimlResponse(SAFE_APOLOGY), 200);
   }
 
   let rawBody: string;
@@ -69,7 +64,7 @@ export async function POST(request: NextRequest) {
     rawBody = await request.text();
   } catch (e) {
     console.error("[WA_WEBHOOK] failed to read body", { error: e });
-    return xmlResponse(twimlMessage("", "משהו השתבש. אנא פנה/י למספרה."), 200);
+    return xmlResponse(buildTwimlResponse(SAFE_APOLOGY), 200);
   }
 
   const params = new URLSearchParams(rawBody);
@@ -122,10 +117,7 @@ export async function POST(request: NextRequest) {
       } catch (e) {
         console.error("[WA_WEBHOOK] failed to write inbound doc", e);
       }
-      return new NextResponse(twimlMessage(From, "Invalid request."), {
-        status: 403,
-        headers: { "Content-Type": "text/xml; charset=utf-8" },
-      });
+      return xmlResponse(buildTwimlResponse("Invalid request."), 200);
     }
   }
 
@@ -141,14 +133,20 @@ export async function POST(request: NextRequest) {
     console.warn("[WA_WEBHOOK] missing MessageSid, using fallback", { docId });
   } else {
     const existing = await getInboundByMessageSid(MessageSid);
-    if (existing?.processedAt != null) {
+    if (isInboundProcessed(existing)) {
+      const storedTwiml =
+        existing!.twimlResponse ||
+        buildTwimlResponse(existing!.replyBody || "תשובה נשמרה.");
       console.log("[WA_WEBHOOK] dedupe_hit", { messageSid: MessageSid });
-      return emptyResponse(docId);
+      return xmlResponse(storedTwiml, 200);
     }
     const claimed = await tryClaimInbound(MessageSid, { fromE164, to: To, body: Body });
     if (!claimed) {
+      const again = await getInboundByMessageSid(MessageSid);
+      const storedTwiml =
+        again?.twimlResponse || buildTwimlResponse(again?.replyBody || "תשובה נשמרה.");
       console.log("[WA_WEBHOOK] dedupe_hit", { messageSid: MessageSid });
-      return emptyResponse(docId);
+      return xmlResponse(storedTwiml, 200);
     }
   }
 
@@ -160,7 +158,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  console.log("[WA_WEBHOOK] inbound_received", { messageSid: docId });
+  console.log("[WA_WEBHOOK] parsed", { messageSid: docId, from: From, body: Body });
 
   try {
     return await handleInbound();
@@ -184,13 +182,18 @@ export async function POST(request: NextRequest) {
     }
     const errorReply = isIndexError
       ? "System needs a database index. Please contact the salon."
-      : "משהו השתבש. אנא פנה/י למספרה.";
+      : SAFE_APOLOGY;
+    const twimlStr = buildTwimlResponse(errorReply);
     try {
-      await setInboundProcessed(docId, {
-        resultStatus: isIndexError ? "missing_index" : "error",
-        replyBody: errorReply,
-        error: errMessage,
+      await setInboundError(docId, {
+        twimlResponse: twimlStr,
+        errorMessage: errMessage,
+        errorCode: errCode ?? undefined,
       });
+    } catch {
+      // ignore
+    }
+    try {
       await updateInboundDoc(docId, {
         status: isIndexError ? "missing_index" : "error",
         errorCode: errCode ?? null,
@@ -200,15 +203,8 @@ export async function POST(request: NextRequest) {
     } catch {
       // ignore
     }
-    try {
-      await sendWhatsApp({ toE164: fromE164, body: errorReply });
-    } catch (e) {
-      console.error("[WA_WEBHOOK] sendWhatsApp failed", { messageSid: docId, error: e });
-    }
-    return emptyResponse(docId);
+    return xmlResponse(twimlStr, 200);
   }
-
-  const SAFE_ERROR_MSG = "משהו השתבש. אנא פנה/י למספרה.";
 
   async function handleInbound(): Promise<NextResponse> {
     if (!From || !MessageSid) {
@@ -217,7 +213,7 @@ export async function POST(request: NextRequest) {
       } catch {
         // ignore
       }
-      return emptyResponse(docId);
+      return xmlResponse(buildTwimlResponse(SAFE_APOLOGY), 200);
     }
 
     await logInboundWhatsApp({
@@ -229,19 +225,22 @@ export async function POST(request: NextRequest) {
 
     const { intent, selection } = normalizeInbound(Body);
 
-    async function recordAndSendReply(
+    async function recordAndReturnReply(
       replyBody: string,
       resultStatus: string,
-      bookingRef?: string | null
-    ): Promise<void> {
-      await setInboundProcessed(docId, { resultStatus, replyBody, bookingRef });
-      console.log("[WA_WEBHOOK] replying_once", { messageSid: docId });
-      try {
-        await sendWhatsApp({ toE164: fromE164, body: replyBody });
-      } catch (e) {
-        console.error("[WA_WEBHOOK] sendWhatsApp failed", { messageSid: docId, error: e });
-      }
-      console.log("[WA_WEBHOOK] replied", { messageSid: docId });
+      bookingRef?: string | null,
+      action?: "confirmed" | "cancelled" | null
+    ): Promise<NextResponse> {
+      const twimlStr = buildTwimlResponse(replyBody);
+      await setInboundProcessed(docId, {
+        resultStatus,
+        replyBody,
+        twimlResponse: twimlStr,
+        bookingRef,
+        action,
+      });
+      console.log("[WA_WEBHOOK] reply_sent", { messageSid: docId });
+      return xmlResponse(twimlStr, 200);
     }
 
     if (selection !== null) {
@@ -249,16 +248,14 @@ export async function POST(request: NextRequest) {
       if (!session) {
         const reply =
           "לא מצאתי בחירה פעילה. אנא השב/י שוב על הודעת התזכורת עם כן או לא.";
-        await recordAndSendReply(reply, "no_session");
-        return emptyResponse(docId);
+        return recordAndReturnReply(reply, "no_session");
       }
       const n = selection;
       const choices = session.choices;
-      console.log("[WA_WEBHOOK] selection_received", { phoneE164: fromE164, n });
+      console.log("[WA_WEBHOOK] matched_number", { phoneE164: fromE164, n });
       if (n < 1 || n > choices.length) {
         const reply = `מספר לא תקין. אנא השב/י עם מספר בין 1 ל-${choices.length}.`;
-        await recordAndSendReply(reply, "invalid_selection");
-        return emptyResponse(docId);
+        return recordAndReturnReply(reply, "invalid_selection");
       }
       const chosen = choices[n - 1]!;
       const booking = await getBookingByRefIfAwaitingConfirmation(chosen.bookingRef);
@@ -266,30 +263,27 @@ export async function POST(request: NextRequest) {
         const reply =
           "נראה שהתור הזה כבר עודכן. אם צריך עזרה, דבר/י עם העסק.";
         await deleteWhatsAppSession(fromE164);
-        await recordAndSendReply(reply, "booking_updated");
-        return emptyResponse(docId);
+        return recordAndReturnReply(reply, "booking_updated");
       }
       if (session.intent === "confirm") {
         await markBookingConfirmed(booking.siteId, booking.bookingId);
-        console.log("[WA_WEBHOOK] selection_applied", {
+        console.log("[WA_WEBHOOK] firestore_updated", {
           bookingRef: chosen.bookingRef,
-          intent: "confirm",
+          action: "confirmed",
         });
         const timeStr = formatIsraelTime(booking.startAt);
         const reply = `אושר ✅ נתראה ב-${timeStr} אצל ${booking.salonName}.`;
         await deleteWhatsAppSession(fromE164);
-        await recordAndSendReply(reply, "matched_yes", chosen.bookingRef);
-        return emptyResponse(docId);
+        return recordAndReturnReply(reply, "matched_yes", chosen.bookingRef, "confirmed");
       }
       await markBookingCancelledByWhatsApp(booking.siteId, booking.bookingId);
-      console.log("[WA_WEBHOOK] selection_applied", {
+      console.log("[WA_WEBHOOK] firestore_updated", {
         bookingRef: chosen.bookingRef,
-        intent: "cancel",
+        action: "cancelled",
       });
       const reply = `בוטל ✅. אם תרצה/י לקבוע מחדש, דבר/י עם ${booking.salonName}.`;
       await deleteWhatsAppSession(fromE164);
-      await recordAndSendReply(reply, "matched_no", chosen.bookingRef);
-      return emptyResponse(docId);
+      return recordAndReturnReply(reply, "matched_no", chosen.bookingRef, "cancelled");
     }
 
     if (intent === "yes" || intent === "no") {
@@ -300,47 +294,43 @@ export async function POST(request: NextRequest) {
         if (intent === "yes") {
           const alreadyConfirmed = await findNextBookingByPhoneWithStatus(fromE164, "confirmed");
           if (alreadyConfirmed) {
-            await recordAndSendReply("התור כבר מאושר 😊", "no_booking");
-            return emptyResponse(docId);
+            return recordAndReturnReply("כבר מאושר ✅", "no_booking");
           }
         }
         if (intent === "no") {
           const alreadyCancelled = await findNextBookingByPhoneWithStatus(fromE164, "cancelled");
           if (alreadyCancelled) {
-            await recordAndSendReply("התור כבר בוטל.", "no_booking");
-            return emptyResponse(docId);
+            return recordAndReturnReply("כבר בוטל ✅", "no_booking");
           }
         }
         const reply =
           "לא מצאתי תור שממתין לאישור עבור המספר הזה. אם קבעת תור, אפשר לפנות למספרה.";
-        await recordAndSendReply(reply, "no_booking");
-        return emptyResponse(docId);
+        return recordAndReturnReply(reply, "no_booking");
       }
 
       if (matches.length === 1) {
         const choice = matches[0]!;
         const bookingRef = choice.bookingRef;
-        console.log("[WA_WEBHOOK] booking_found", { messageSid: docId, bookingRef });
+        console.log("[WA_WEBHOOK] matched_yes/no", { messageSid: docId, bookingRef, intent });
         if (intent === "yes") {
           await markBookingConfirmed(choice.siteId, choice.bookingId);
-          console.log("[WA_WEBHOOK] booking_updated", {
+          console.log("[WA_WEBHOOK] firestore_updated", {
             messageSid: docId,
             bookingRef,
-            newStatus: "confirmed",
+            action: "confirmed",
           });
           const timeStr = formatIsraelTime(choice.startAt.toDate());
           const reply = `אושר ✅ נתראה ב-${timeStr} ב-${choice.siteName}.`;
-          await recordAndSendReply(reply, "matched_yes", bookingRef);
-          return emptyResponse(docId);
+          return recordAndReturnReply(reply, "matched_yes", bookingRef, "confirmed");
         }
         await markBookingCancelledByWhatsApp(choice.siteId, choice.bookingId);
-        console.log("[WA_WEBHOOK] booking_updated", {
+        console.log("[WA_WEBHOOK] firestore_updated", {
           messageSid: docId,
           bookingRef,
-          newStatus: "cancelled",
+          action: "cancelled",
         });
-        await recordAndSendReply("הבנתי, ביטלתי את התור.", "matched_no", bookingRef);
-        return emptyResponse(docId);
+        const reply = "הבנתי, ביטלתי את התור.";
+        return recordAndReturnReply(reply, "matched_no", bookingRef, "cancelled");
       }
 
       const choices = matches.slice(0, 5);
@@ -370,12 +360,10 @@ export async function POST(request: NextRequest) {
       });
       const list = lines.join("\n");
       const reply = `יש לך כמה תורים שממתינים לאישור. על איזה מהם מדובר?\n\n${list}\n\nהשב/י עם מספר (1-${choices.length}).`;
-      await recordAndSendReply(reply, "ambiguous");
-      return emptyResponse(docId);
+      return recordAndReturnReply(reply, "ambiguous");
     }
 
     const help = 'כדי לאשר תור השב/השיבי "כן", כדי לבטל השב/השיבי "לא".';
-    await recordAndSendReply(help, "no_match");
-    return emptyResponse(docId);
+    return recordAndReturnReply(help, "no_match");
   }
 }

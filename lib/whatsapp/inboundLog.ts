@@ -11,6 +11,7 @@ const serverTimestamp = () => admin.firestore.FieldValue.serverTimestamp();
 
 export type InboundStatus =
   | "received"
+  | "processed"
   | "signature_failed"
   | "matched_yes"
   | "matched_no"
@@ -20,21 +21,36 @@ export type InboundStatus =
   | "error"
   | "missing_index";
 
-/** If doc exists and has processedAt, the message was already replied to (dedupe). */
+/** If doc exists and status is "processed", the message was already replied to (dedupe). Returns stored twimlResponse for replay. */
 export async function getInboundByMessageSid(messageSid: string): Promise<{
+  status: string;
   processedAt: Timestamp | null;
   replyBody?: string;
+  twimlResponse?: string;
 } | null> {
   const db = getAdminDb();
   const snap = await db.collection("whatsapp_inbound").doc(messageSid).get();
   if (!snap.exists) return null;
   const data = snap.data()!;
+  const status = (data.status as string) ?? "";
   const processedAt =
     data.processedAt != null && data.processedAt instanceof Timestamp ? data.processedAt : null;
+  const isProcessed = status === "processed" || processedAt != null;
   return {
+    status,
     processedAt,
     replyBody: data.replyBody as string | undefined,
+    twimlResponse: data.twimlResponse as string | undefined,
+    ...(isProcessed ? {} : {}),
   };
+}
+
+/** True if this MessageSid was already processed (dedupe: return stored or built TwiML). */
+export function isInboundProcessed(
+  existing: { status: string; processedAt: Timestamp | null; twimlResponse?: string; replyBody?: string } | null
+): boolean {
+  if (!existing) return false;
+  return existing.status === "processed" || existing.processedAt != null;
 }
 
 /** Atomically create doc if not exists. Returns true if we claimed (created), false if doc already existed. */
@@ -59,13 +75,15 @@ export async function tryClaimInbound(
   });
 }
 
-/** Write processed result and reply; call before sending so dedupe can skip send. */
+/** Write processed result, TwiML reply, and optional action; use for idempotent replay on dedupe. */
 export async function setInboundProcessed(
   docId: string,
   params: {
     resultStatus: string;
     replyBody?: string | null;
+    twimlResponse: string;
     bookingRef?: string | null;
+    action?: "confirmed" | "cancelled" | null;
     error?: string | null;
   }
 ): Promise<void> {
@@ -73,9 +91,12 @@ export async function setInboundProcessed(
   const ref = db.collection("whatsapp_inbound").doc(docId);
   await ref.update({
     processedAt: serverTimestamp(),
+    status: "processed",
     resultStatus: params.resultStatus,
-    ...(params.replyBody != null && { replyBody: params.replyBody }),
+    replyBody: params.replyBody ?? undefined,
+    twimlResponse: params.twimlResponse,
     ...(params.bookingRef != null && { bookingRef: params.bookingRef }),
+    ...(params.action != null && { action: params.action }),
     ...(params.error != null && { error: params.error }),
     updatedAt: serverTimestamp(),
   });
@@ -154,4 +175,21 @@ export async function updateInboundDoc(
   if (update.errorCode !== undefined) data.errorCode = update.errorCode;
   if (update.errorStack !== undefined) data.errorStack = update.errorStack;
   await ref.update(data);
+}
+
+/** Store error state and TwiML reply so we can return 200 + same TwiML on retries (idempotent). */
+export async function setInboundError(
+  docId: string,
+  params: { twimlResponse: string; errorMessage: string; errorCode?: number | string | null }
+): Promise<void> {
+  const db = getAdminDb();
+  const ref = db.collection("whatsapp_inbound").doc(docId);
+  await ref.update({
+    status: "error",
+    processedAt: serverTimestamp(),
+    twimlResponse: params.twimlResponse,
+    error: params.errorMessage,
+    errorCode: params.errorCode ?? null,
+    updatedAt: serverTimestamp(),
+  });
 }
