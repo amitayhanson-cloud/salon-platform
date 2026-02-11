@@ -15,7 +15,10 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { sendWhatsApp, getBookingPhoneE164 } from "@/lib/whatsapp";
+import { buildReminderMessage } from "@/lib/whatsapp/messages";
 import { formatIsraelDateShort, formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
+
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
 async function getSiteSalonName(db: ReturnType<typeof getAdminDb>, siteId: string): Promise<string> {
   const siteSnap = await db.collection("sites").doc(siteId).get();
@@ -82,4 +85,46 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
     whatsappStatus: "booked",
     updatedAt: Timestamp.now(),
   });
+
+  // Last-minute booking: if start is within 24h from now, send reminder immediately
+  // so customer can confirm without waiting for the cron. Idempotent: we just set
+  // whatsappStatus="booked"; reminder24hSentAt is still null. Cron will skip later
+  // because we set reminder24hSentAt below.
+  const nowMs = Date.now();
+  const startMs = startAt.getTime();
+  const diffMs = startMs - nowMs;
+
+  if (diffMs > 0 && diffMs <= TWENTY_FOUR_HOURS_MS) {
+    const timeStr = formatIsraelTime(startAt);
+    const reminderBody = buildReminderMessage(salonName, timeStr);
+
+    await sendWhatsApp({
+      toE164: customerPhoneE164,
+      body: reminderBody,
+      bookingId,
+      siteId,
+      bookingRef: `sites/${siteId}/bookings/${bookingId}`,
+      meta: { reminder_sent_immediately_due_to_last_minute_booking: true },
+    });
+
+    await bookingRef.update({
+      whatsappStatus: "awaiting_confirmation",
+      reminder24hSentAt: Timestamp.now(),
+      confirmationRequestedAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    });
+
+    console.log("[onBookingCreated] reminder_sent_immediately_due_to_last_minute_booking: true", {
+      siteId,
+      bookingId,
+      startAt: startAt.toISOString(),
+      diffHours: (diffMs / (60 * 60 * 1000)).toFixed(2),
+    });
+  } else {
+    console.log("[onBookingCreated] reminder_sent_immediately_due_to_last_minute_booking: false", {
+      siteId,
+      bookingId,
+      reason: diffMs <= 0 ? "booking_in_past" : "start_more_than_24h_away",
+    });
+  }
 }

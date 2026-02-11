@@ -32,6 +32,8 @@ export type SendWhatsAppParams = {
   bookingRef?: string | null;
   /** @deprecated Use siteId */
   salonId?: string | null;
+  /** Optional metadata stored in whatsapp_messages (e.g. reminder_sent_immediately_due_to_last_minute_booking) */
+  meta?: Record<string, unknown> | null;
 };
 
 /**
@@ -46,6 +48,7 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
     bookingId = null,
     bookingRef = null,
     salonId: salonIdParam = null,
+    meta = null,
   } = params;
   const siteId = siteIdParam ?? salonIdParam;
   const from = getFrom();
@@ -73,6 +76,7 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
       twilioMessageSid: null,
       status,
       error,
+      meta,
     });
     throw e;
   }
@@ -87,6 +91,7 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
     twilioMessageSid: sid,
     status,
     error: null,
+    meta,
   });
   return { sid };
 }
@@ -101,9 +106,10 @@ async function logOutbound(params: {
   twilioMessageSid: string | null;
   status: "sent" | "failed";
   error: string | null;
+  meta?: Record<string, unknown> | null;
 }): Promise<void> {
   const db = getAdminDb();
-  await db.collection("whatsapp_messages").add({
+  const doc: Record<string, unknown> = {
     direction: "outbound",
     toPhone: params.toPhone,
     fromPhone: params.fromPhone,
@@ -114,7 +120,11 @@ async function logOutbound(params: {
     twilioMessageSid: params.twilioMessageSid ?? null,
     createdAt: Timestamp.now(),
     error: params.error ?? null,
-  });
+  };
+  if (params.meta && typeof params.meta === "object") {
+    Object.assign(doc, params.meta);
+  }
+  await db.collection("whatsapp_messages").add(doc);
 }
 
 /**

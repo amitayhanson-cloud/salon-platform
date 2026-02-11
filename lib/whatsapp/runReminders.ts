@@ -7,6 +7,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { sendWhatsApp, normalizeE164 } from "@/lib/whatsapp";
 import { getReminderWindow } from "@/lib/whatsapp/reminderWindow";
+import { buildReminderMessage } from "@/lib/whatsapp/messages";
 import { formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
 
 export type ReminderDetail = {
@@ -123,13 +124,7 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
     try {
       await sendWhatsApp({
         toE164: customerPhoneE164,
-        body: `${salonName} ✂️
-תזכורת: התור שלך מחר בשעה ${timeStr}.
-מגיע/ה?
-השב/השיבי:
-כן, אגיע
-או
-לא, בסוף לא אוכל להגיע`,
+        body: buildReminderMessage(salonName, timeStr),
         bookingId: doc.id,
         siteId,
         bookingRef: `sites/${siteId}/bookings/${doc.id}`,

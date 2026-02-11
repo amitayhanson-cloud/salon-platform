@@ -6,11 +6,12 @@ One WhatsApp sender number for the whole platform. Every message includes the sa
 
 1. **Booking created** (public or admin) → immediate confirmation WhatsApp:  
    `{SalonName} ✂️ Thanks for booking! Your appointment is {date} at {time}. We'll remind you 24 hours before.`
-2. **24 hours before** → reminder WhatsApp:  
+2. **Last-minute booking** (start time &lt; 24h from now): the same reminder/confirmation-request message is sent immediately after the confirmation (so the customer gets confirmation + “מגיע/ה? כן, אגיע / לא...” in one go). The cron will not send it again because `reminder24hSentAt` is set.
+3. **24 hours before** (for bookings not already sent above) → reminder WhatsApp:  
    `{SalonName} ✂️ Reminder: your appointment is tomorrow at {time}. Reply YES to confirm.`
-3. **Customer replies YES** → booking marked confirmed, reply:  
+4. **Customer replies YES** → booking marked confirmed, reply:  
    `{SalonName} ✂️ Confirmed ✅ See you at {time}.`
-4. **Customer replies NO** → booking cancelled, reply with cancellation message.
+5. **Customer replies NO** → booking cancelled, reply with cancellation message.
 
 ## Data model (Firestore)
 
@@ -201,10 +202,19 @@ The query is: `collectionGroup("bookings").where("startAt", ">=", ...).where("st
 
 Bookings are nested under `sites/{siteId}/bookings/{bookingId}`; collection group queries run across all sites.
 
+### Last-minute bookings (start &lt; 24h from now)
+
+When a booking is created with **startAt** less than 24 hours in the future (and in the future), `onBookingCreated` sends the confirmation WhatsApp and then **immediately** sends the same reminder/confirmation-request message (“מגיע/ה? כן, אגיע / לא...”). It then sets `reminder24hSentAt`, `confirmationRequestedAt`, and `whatsappStatus: "awaiting_confirmation"` so the cron will not send the reminder again. All times use server timestamps (UTC) for the 24h check; displayed times in messages use Asia/Jerusalem.
+
+**Local verification:**
+
+- **Booking 2 hours from now:** Customer should receive (1) confirmation and (2) reminder/confirmation-request within a short time. In Firestore: `whatsappStatus: "awaiting_confirmation"`, `reminder24hSentAt` and `confirmationRequestedAt` set. In `whatsapp_messages`, the reminder entry has `reminder_sent_immediately_due_to_last_minute_booking: true`.
+- **Booking 30 hours from now:** Customer receives only the confirmation. Reminder is sent later by the cron when the booking enters the 24h window. In Firestore: `whatsappStatus: "booked"`, `reminder24hSentAt` null until cron runs.
+
 ### Manual testing
 
-1. **Create a booking** (public book page or admin) so it has a customer phone. After creation, the app calls `/api/whatsapp/send-booking-confirmation`, which sets `customerPhoneE164` and `whatsappStatus: "booked"`.
-2. **Trigger 24h reminder:** An external scheduler (e.g. cron-job.org) calls **POST /api/cron/whatsapp-reminders?secret=CRON_SECRET** every 5 minutes. For a booking whose **startAt** is in the next **[now+24h−60min, now+24h+60min)** window, the reminder is sent. Confirm runs in production by checking the **cron_runs** collection in Firestore. To test without waiting, use **POST /api/cron/debug-reminder** with `{ siteId, bookingId }` to see if the booking would match, or **POST /api/cron/test-whatsapp-reminder** with `{ siteId, bookingId, forceSend: true }` to send now (booking must be in window and `whatsappStatus: "booked"`, no `reminder24hSentAt`).
+1. **Create a booking** (public book page or admin) so it has a customer phone. After creation, the app calls `/api/whatsapp/send-booking-confirmation` (which uses `onBookingCreated`), which sets `customerPhoneE164` and `whatsappStatus: "booked"`. If the booking starts within 24h, the reminder is also sent immediately and status becomes `"awaiting_confirmation"`.
+2. **Trigger 24h reminder:** An external scheduler (e.g. cron-job.org) calls **POST /api/cron/whatsapp-reminders?secret=CRON_SECRET** every 5 minutes. For a booking whose **startAt** is in the next **[now+24h−60min, now+24h+60min)** window and still has `whatsappStatus === "booked"` and no `reminder24hSentAt`, the reminder is sent. Last-minute bookings already have `reminder24hSentAt` set, so the cron skips them. Confirm runs in production by checking the **cron_runs** collection in Firestore. To test without waiting, use **POST /api/cron/debug-reminder** with `{ siteId, bookingId }` to see if the booking would match, or **POST /api/cron/test-whatsapp-reminder** with `{ siteId, bookingId, forceSend: true }` to send now (booking must be in window and `whatsappStatus: "booked"`, no `reminder24hSentAt`).
 3. **Reply YES** from the customer’s WhatsApp number. The webhook finds the single `awaiting_confirmation` booking for that phone, updates it to `whatsappStatus: "confirmed"` and `confirmationReceivedAt`, and replies in Hebrew.
 4. **Reply NO** to cancel the same booking.
 5. **Reply anything else** to get the help message.
