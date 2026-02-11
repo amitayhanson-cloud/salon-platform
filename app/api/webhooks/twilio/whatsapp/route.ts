@@ -74,13 +74,30 @@ export async function POST(request: NextRequest) {
 
   console.log("[WA_WEBHOOK] inbound", { inboundId, From, To, Body, MessageSid, NumMedia });
 
-  const urlForSig = getWebhookUrl(WEBHOOK_PATH, request);
+  const { url: urlForSig, source: signatureSource } = getWebhookUrl(WEBHOOK_PATH, request);
+  const requestHost = request.headers.get("host") ?? "";
+  const xForwardedProto = request.headers.get("x-forwarded-proto") ?? null;
+  const requestUrl = request.url;
+  console.log("[WA_WEBHOOK] signature_url", {
+    inboundId,
+    host: requestHost,
+    xForwardedProto,
+    requestUrl,
+    urlUsedForSignature: urlForSig,
+    signatureSource,
+  });
+
   const signature = request.headers.get("x-twilio-signature") ?? "";
   const skipSignature =
     process.env.NODE_ENV !== "production" && process.env.SKIP_TWILIO_SIGNATURE === "true";
 
   if (!skipSignature && !validateTwilioSignature(authToken, signature, urlForSig, rawBody)) {
-    console.error("[WA_WEBHOOK] signature_failed", { inboundId, urlForSig });
+    console.error("[WA_WEBHOOK] signature_failed", {
+      inboundId,
+      urlForSig,
+      signatureSource,
+      hasTwilioWebhookUrl: !!process.env.TWILIO_WEBHOOK_URL,
+    });
     try {
       await createInboundDoc({
         inboundId,

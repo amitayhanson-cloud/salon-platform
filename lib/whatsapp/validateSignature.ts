@@ -24,25 +24,31 @@ export function validateTwilioSignature(
   }
 }
 
+export type WebhookUrlSource = "TWILIO_WEBHOOK_URL" | "inferred";
+
 /**
  * Build full webhook URL for Twilio signature validation.
- * Prefer TWILIO_WEBHOOK_URL (exact URL Twilio calls) for production behind proxies.
- * Else use x-forwarded-proto/host when present, fallback to request url.
+ * When TWILIO_WEBHOOK_URL is set, use it exactly — do not use request.url or headers
+ * (production behind proxies: Twilio signs the URL they call, which may differ from
+ * Host/x-forwarded-*). Otherwise infer from request (WEBHOOK_BASE_URL or headers/url).
  */
-export function getWebhookUrl(path: string, request: Request): string {
+export function getWebhookUrl(
+  path: string,
+  request: Request
+): { url: string; source: WebhookUrlSource } {
   const explicit = process.env.TWILIO_WEBHOOK_URL?.trim();
   if (explicit) {
-    return explicit.replace(/\/$/, "");
+    return { url: explicit.replace(/\/$/, ""), source: "TWILIO_WEBHOOK_URL" };
   }
   const base = process.env.WEBHOOK_BASE_URL?.trim();
   if (base) {
-    return `${base.replace(/\/$/, "")}${path}`;
+    return { url: `${base.replace(/\/$/, "")}${path}`, source: "inferred" };
   }
   const proto = request.headers.get("x-forwarded-proto") ?? "https";
   const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "";
   if (host) {
-    return `${proto}://${host}${path}`;
+    return { url: `${proto}://${host}${path}`, source: "inferred" };
   }
   const url = new URL(request.url);
-  return url.origin + path;
+  return { url: url.origin + path, source: "inferred" };
 }

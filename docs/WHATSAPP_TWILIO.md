@@ -78,9 +78,9 @@ Twilio sends webhooks to that URL. Signature validation uses the full URL + raw 
   (replace `YOURDOMAIN` with your Vercel project domain, e.g. `caleno-xxx`).
 - **Method:** **POST**.
 
-**Vercel env (recommended):** set  
+**Vercel env (required for signature validation behind proxy):** set  
 `TWILIO_WEBHOOK_URL=https://YOURDOMAIN.vercel.app/api/webhooks/twilio/whatsapp`  
-so signature validation uses the same URL Twilio calls (proxies can change `Host`/protocol).
+to the **exact** URL configured in Twilio Console. When set, the app uses this URL for signature validation and does **not** use `request.url` or `Host`/`x-forwarded-*` (so it works behind Vercel’s proxy). If you see `[WA_WEBHOOK] signature_failed` in logs, add or fix `TWILIO_WEBHOOK_URL` so it matches Twilio’s “When a message comes in” URL exactly. Each request logs `[WA_WEBHOOK] signature_url` with `host`, `requestUrl`, `urlUsedForSignature`, and `signatureSource` (no secrets) for debugging.
 
 **Verify routing:** open **GET** `https://YOURDOMAIN.vercel.app/api/debug/whatsapp-webhook-health` in a browser. You should see `{ "ok": true, "now": "...", "webhook": "/api/webhooks/twilio/whatsapp" }`.
 

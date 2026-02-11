@@ -2,7 +2,11 @@ export { sendWhatsApp, logInboundWhatsApp, logAmbiguousWhatsApp } from "./send";
 export { normalizeE164, normalizeToE164, toWhatsAppTo, isValidE164 } from "./e164";
 export { getBookingPhoneE164 } from "./getBookingPhone";
 export type { BookingLike } from "./getBookingPhone";
-export { validateTwilioSignature, getWebhookUrl } from "./validateSignature";
+export {
+  validateTwilioSignature,
+  getWebhookUrl,
+  type WebhookUrlSource,
+} from "./validateSignature";
 export { normalizeInboundBody, isYes, isNo } from "./yesNoDetection";
 export {
   findNextAwaitingConfirmationByPhone,
