@@ -1,9 +1,10 @@
 /**
- * GET/POST /api/cron/whatsapp-reminders
- * 24-hour reminder job. Protected: ?secret=CRON_SECRET (for Vercel Cron which cannot send headers).
+ * POST /api/cron/whatsapp-reminders
+ * 24-hour reminder job for external scheduler (e.g. cron-job.org).
+ * Protected: ?secret=CRON_SECRET (query param only; no Authorization header).
  *
- * Same logic as send-whatsapp-reminders; use this URL in vercel.json so cron runs every 5 minutes.
- * Window: startAt in [now+24h-30min, now+24h+30min). Idempotent.
+ * Window: startAt in [now+24h-30min, now+24h+30min). Idempotent: only sends when
+ * whatsappStatus === "booked" and reminder24hSentAt is null/missing.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -25,13 +26,23 @@ function isIndexRequiredError(e: unknown): boolean {
   return code === 9 || message.includes("FAILED_PRECONDITION") || message.includes("requires an index");
 }
 
-async function run(request: NextRequest) {
+export async function POST(request: NextRequest) {
   if (!checkCronAuth(request)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  const nowISO = new Date().toISOString();
+  console.log("[whatsapp-reminders] cron run started", { timestamp: nowISO });
+
   try {
     const db = getAdminDb();
     const result = await runReminders(db);
+
+    console.log("[whatsapp-reminders] bookings in window", result.bookingCount);
+    result.details.forEach((d) => {
+      console.log("[whatsapp-reminders] processed", { bookingRef: d.bookingRef, result: d.result });
+    });
+    console.log("[whatsapp-reminders] total sent", result.sent, "errors", result.errors);
+
     return NextResponse.json(result);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -47,12 +58,4 @@ async function run(request: NextRequest) {
     }
     throw e;
   }
-}
-
-export async function GET(request: NextRequest) {
-  return run(request);
-}
-
-export async function POST(request: NextRequest) {
-  return run(request);
 }

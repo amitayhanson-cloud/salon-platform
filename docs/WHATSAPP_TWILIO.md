@@ -95,23 +95,29 @@ await onBookingCreated(siteId, bookingId);
 - **Time field:** The system uses **startAt** (with fallback to **appointmentAt** when reading a single doc). Bookings under `sites/{siteId}/bookings/{bookingId}` use **startAt**.
 - **Idempotent:** Each booking is updated with `reminder24hSentAt` when a reminder is sent; the cron never sends twice for the same booking.
 
-### How the cron runs on Vercel
+### Using External Scheduler (cron-job.org)
 
-- **vercel.json** is configured to call **GET /api/cron/send-whatsapp-reminders** every 5 minutes (`*/5 * * * *`).
-- Vercel Cron sends a **GET** request; the route accepts either **Authorization: Bearer CRON_SECRET** or the **vercel-cron** User-Agent, so no secret is needed in the URL.
-- Set **CRON_SECRET** in Vercel Environment Variables for manual/external calls that use Bearer auth.
+Vercel Hobby plan does not include built-in Cron. Use an external scheduler (e.g. [cron-job.org](https://cron-job.org)) to trigger the reminder endpoint every 5 minutes.
 
-**Trigger reminders manually (Bearer):**
+- **Endpoint URL:**  
+  `https://YOUR_DOMAIN/api/cron/whatsapp-reminders?secret=CRON_SECRET`
+- **Method:** POST
+- **Frequency:** every 5 minutes (e.g. `*/5 * * * *`)
+- **CRON_SECRET** must be set in Vercel Environment Variables; use the same value in the URL when configuring the cron job.
+
+The route accepts only POST. It checks the `secret` query parameter against `process.env.CRON_SECRET`. If they do not match, it returns `403` with `{ "error": "Forbidden" }`.
+
+**Trigger reminders manually:**
+
+```bash
+curl -X POST "https://your-domain.vercel.app/api/cron/whatsapp-reminders?secret=YOUR_CRON_SECRET"
+```
+
+**Alternative (Bearer auth) for send-whatsapp-reminders:**
 
 ```bash
 curl -X POST "https://your-domain.vercel.app/api/cron/send-whatsapp-reminders" \
   -H "Authorization: Bearer YOUR_CRON_SECRET"
-```
-
-**Alternative (query secret, e.g. external cron):**
-
-```bash
-curl "https://your-domain.vercel.app/api/cron/whatsapp-reminders?secret=YOUR_CRON_SECRET"
 ```
 
 ### Test without waiting (debug endpoint)
@@ -157,7 +163,7 @@ Bookings are nested under `sites/{siteId}/bookings/{bookingId}`; collection grou
 ### Manual testing
 
 1. **Create a booking** (public book page or admin) so it has a customer phone. After creation, the app calls `/api/whatsapp/send-booking-confirmation`, which sets `customerPhoneE164` and `whatsappStatus: "booked"`.
-2. **Trigger 24h reminder:** The cron runs every 5 minutes on Vercel. For a booking whose **startAt** is in the next **[now+24h−30min, now+24h+30min)** window, the reminder is sent. To test without waiting, use **POST /api/cron/test-whatsapp-reminder** with `{ siteId, bookingId, forceSend: true }` (booking must be in window and `whatsappStatus: "booked"`, no `reminder24hSentAt`).
+2. **Trigger 24h reminder:** An external scheduler (e.g. cron-job.org) calls **POST /api/cron/whatsapp-reminders?secret=CRON_SECRET** every 5 minutes. For a booking whose **startAt** is in the next **[now+24h−30min, now+24h+30min)** window, the reminder is sent. To test without waiting, use **POST /api/cron/test-whatsapp-reminder** with `{ siteId, bookingId, forceSend: true }` (booking must be in window and `whatsappStatus: "booked"`, no `reminder24hSentAt`).
 3. **Reply YES** from the customer’s WhatsApp number. The webhook finds the single `awaiting_confirmation` booking for that phone, updates it to `whatsappStatus: "confirmed"` and `confirmationReceivedAt`, and replies in Hebrew.
 4. **Reply NO** to cancel the same booking.
 5. **Reply anything else** to get the help message.
