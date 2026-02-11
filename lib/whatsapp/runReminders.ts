@@ -7,6 +7,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { sendWhatsApp, normalizeE164 } from "@/lib/whatsapp";
 import { getReminderWindow } from "@/lib/whatsapp/reminderWindow";
+import { formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
 
 export type ReminderDetail = {
   bookingRef: string;
@@ -116,8 +117,7 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
       // keep default
     }
 
-    const timeStr =
-      startAt?.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" }) ?? "";
+    const timeStr = startAt ? formatIsraelTime(startAt) : "";
 
     try {
       await sendWhatsApp({

@@ -15,12 +15,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { sendWhatsApp, getBookingPhoneE164 } from "@/lib/whatsapp";
-
-function formatDateAndTime(startAt: Date): { date: string; time: string } {
-  const date = startAt.toLocaleDateString("he-IL", { weekday: "short", day: "numeric", month: "short" });
-  const time = startAt.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
-  return { date, time };
-}
+import { formatIsraelDateShort, formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
 
 async function getSiteSalonName(db: ReturnType<typeof getAdminDb>, siteId: string): Promise<string> {
   const siteSnap = await db.collection("sites").doc(siteId).get();
@@ -66,7 +61,8 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
     data.startAt instanceof Timestamp
       ? data.startAt.toDate()
       : new Date((data.startAt?.seconds ?? 0) * 1000);
-  const { date, time } = formatDateAndTime(startAt);
+  const date = formatIsraelDateShort(startAt);
+  const time = formatIsraelTime(startAt);
 
   const messageBody = `${salonName} ✂️
 תודה שקבעת תור!

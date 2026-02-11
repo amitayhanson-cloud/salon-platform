@@ -8,6 +8,9 @@
  *   [now_utc + 24h - 30min, now_utc + 24h + 30min]. This is equivalent to "24h before"
  *   regardless of server location; no Israel-specific conversion is needed for the query.
  * - getNowIsraelISO() is for logging only (so logs show Israel time for debugging).
+ * - When building the reminder message text, always format the displayed time with
+ *   formatIsraelTime() from @/lib/datetime/formatIsraelTime so it shows in Asia/Jerusalem
+ *   (e.g. 11:45 Israel, not 09:45 UTC). Do not use toLocaleTimeString without timeZone.
  */
 
 const ISRAEL_TZ = "Asia/Jerusalem";

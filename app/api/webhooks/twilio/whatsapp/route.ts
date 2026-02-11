@@ -18,12 +18,9 @@ import {
   markBookingConfirmed,
   markBookingCancelledByWhatsApp,
 } from "@/lib/whatsapp";
+import { formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
 
 const WEBHOOK_PATH = "/api/webhooks/twilio/whatsapp";
-
-function formatTimeOnly(d: Date): string {
-  return d.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
-}
 
 export async function POST(request: NextRequest) {
   const authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -72,7 +69,7 @@ export async function POST(request: NextRequest) {
       await markBookingConfirmed(booking.siteId, booking.id);
       const bookingRef = `sites/${booking.siteId}/bookings/${booking.id}`;
       console.log("[whatsapp-webhook] booking updated", { bookingRef, newStatus: "confirmed" });
-      const timeStr = formatTimeOnly(booking.startAt);
+      const timeStr = formatIsraelTime(booking.startAt);
       const reply = `אושר ✅ נתראה ב-${timeStr} ב-${booking.salonName}.`;
       await sendWhatsApp({
         toE164: fromE164,
