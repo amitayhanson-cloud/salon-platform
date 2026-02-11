@@ -34,7 +34,8 @@ import WorkerFilter from "@/components/admin/WorkerFilter";
 import AdminBookingFormSimple from "@/components/admin/AdminBookingFormSimple";
 import AdminCreateBookingForm from "@/components/admin/AdminCreateBookingForm";
 import { deleteBooking } from "@/lib/booking";
-import { X, Plus, Printer } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { X, Plus, Printer, Trash2 } from "lucide-react";
 import type { AdminBookingFormSimpleEditData } from "@/components/admin/AdminBookingFormSimple";
 
 const DAY_LABELS: Record<string, string> = {
@@ -157,6 +158,13 @@ export default function DaySchedulePage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteSuccess, setDeleteSuccess] = useState(false);
+
+  // Delete all client bookings state
+  const [deleteAllClientConfirmOpen, setDeleteAllClientConfirmOpen] = useState(false);
+  const [deleteAllClientLoading, setDeleteAllClientLoading] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastError, setToastError] = useState(false);
+  const { firebaseUser } = useAuth();
 
   // Map workers to WorkerWithServices (add label to availability for AdminBookingForm)
   const workersForForm = useMemo(() => {
@@ -489,6 +497,46 @@ export default function DaySchedulePage() {
   const onCancelDelete = () => {
     setDeleteTarget(null);
     setDeleteError(null);
+  };
+
+  const onRequestDeleteAllClient = () => {
+    setDeleteAllClientConfirmOpen(true);
+  };
+
+  const onConfirmDeleteAllClient = async () => {
+    if (!selectedBooking || !siteId || !firebaseUser) return;
+    setDeleteAllClientLoading(true);
+    setToastMessage(null);
+    setToastError(false);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const clientId = (selectedBooking as { clientId?: string | null }).clientId ?? undefined;
+      const res = await fetch("/api/bookings/archive-all-by-client", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          siteId,
+          customerPhone: selectedBooking.customerPhone || selectedBooking.phone,
+          ...(clientId ? { clientId } : {}),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setToastMessage(data.error === "forbidden" ? "אין הרשאה" : data.error || "שגיאה במחיקה");
+        setToastError(true);
+        return;
+      }
+      setToastMessage("כל התורים של הלקוח נמחקו מהיומן");
+      setToastError(false);
+      setDeleteAllClientConfirmOpen(false);
+      setSelectedBooking(null);
+      setTimeout(() => setToastMessage(null), 3000);
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "שגיאה במחיקה");
+      setToastError(true);
+    } finally {
+      setDeleteAllClientLoading(false);
+    }
   };
 
   /** Build initial data for the simple edit form (date, time, worker, duration + preserved phase1/phase2 for merge on save). */
@@ -1007,7 +1055,7 @@ export default function DaySchedulePage() {
             </div>
 
             {/* Footer */}
-            <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex justify-end gap-3">
+            <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex flex-wrap justify-end gap-3">
               <button
                 type="button"
                 onClick={() => selectedBooking && handleEditBooking(selectedBooking)}
@@ -1030,8 +1078,57 @@ export default function DaySchedulePage() {
               >
                 {deleting ? "מבטל..." : "בטל תור"}
               </button>
+              <button
+                type="button"
+                onClick={onRequestDeleteAllClient}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium"
+              >
+                <Trash2 className="w-4 h-4" />
+                מחק את כל התורים של הלקוח
+              </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Delete all client bookings confirmation */}
+      {deleteAllClientConfirmOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-[60]" dir="rtl">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-6 text-right">
+            <h3 className="text-lg font-bold text-slate-900">מחיקת כל התורים של הלקוח</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              האם אתה בטוח שברצונך להסיר מהיומן את כל התורים של הלקוח הזה? פעולה זו תמחק/תארכב את כל השירותים והמעקבים שלו מהיומן.
+            </p>
+            <div className="mt-6 flex gap-3 justify-start">
+              <button
+                type="button"
+                onClick={() => setDeleteAllClientConfirmOpen(false)}
+                disabled={deleteAllClientLoading}
+                className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                onClick={onConfirmDeleteAllClient}
+                disabled={deleteAllClientLoading}
+                className="px-4 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {deleteAllClientLoading ? "מוחק..." : "כן, מחק הכל"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toastMessage && (
+        <div
+          className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[70] px-4 py-2 rounded-lg shadow-lg text-sm font-medium ${
+            toastError ? "bg-red-600 text-white" : "bg-slate-800 text-white"
+          }`}
+        >
+          {toastMessage}
         </div>
       )}
 

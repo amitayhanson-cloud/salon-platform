@@ -41,6 +41,8 @@ export interface NormalizedBooking {
   serviceOrder?: number | null;
   primaryWorkerId?: string | null;
   secondaryWorkerId?: string | null;
+  /** Client document id (phone); used for "all bookings for this client" */
+  clientId?: string | null;
   /** Soft delete: hidden from calendar, still in client history */
   isArchived?: boolean;
   archivedAt?: Date | { toDate: () => Date } | null;
@@ -212,6 +214,7 @@ export function normalizeBooking(doc: FirestoreDoc): NormalizedBooking {
     parentBookingId: parentBookingId ?? undefined,
     visitGroupId: (d.visitGroupId as string | undefined) ?? undefined,
     serviceOrder: typeof d.serviceOrder === "number" ? d.serviceOrder : undefined,
+    clientId: (d.clientId as string | undefined) ?? undefined,
     isArchived: d.isArchived === true,
     archivedAt: (d.archivedAt as Date | { toDate: () => Date } | undefined) ?? undefined,
     archivedReason: (d.archivedReason as "manual" | "auto" | undefined) ?? undefined,

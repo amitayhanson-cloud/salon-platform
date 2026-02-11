@@ -1,6 +1,6 @@
 /**
  * Shared logic for 24h WhatsApp reminder cron.
- * Window: startAt in [now+24h-30min, now+24h+30min), whatsappStatus "booked", reminder24hSentAt null.
+ * Window: startAt in [now+24h-60min, now+24h+60min), whatsappStatus "booked", reminder24hSentAt null.
  */
 
 import { Timestamp } from "firebase-admin/firestore";
@@ -19,6 +19,7 @@ export type ReminderDetail = {
 export type RunRemindersResult = {
   sent: number;
   errors: number;
+  skippedCount: number;
   bookingCount: number;
   serverNow: string;
   windowStart: string;
@@ -155,11 +156,13 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
     }
   }
 
-  console.log("[whatsapp-reminders] bookings in window", snapshot.docs.length, "sent", sent, "errors", errors);
+  const skippedCount = snapshot.docs.length - sent - errors;
+  console.log("[whatsapp-reminders] bookings in window", snapshot.docs.length, "sent", sent, "errors", errors, "skipped", skippedCount);
 
   return {
     sent,
     errors,
+    skippedCount,
     bookingCount: snapshot.docs.length,
     serverNow: nowISO,
     windowStart: windowStartISO,
