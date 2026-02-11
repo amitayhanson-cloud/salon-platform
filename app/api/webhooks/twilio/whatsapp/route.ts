@@ -1,13 +1,13 @@
 /**
  * POST /api/webhooks/twilio/whatsapp
- * Inbound WhatsApp webhook. Validate Twilio signature (raw body), log to whatsapp_inbound,
- * handle YES/NO confirmation. Replies via TwiML so WhatsApp always gets a response.
+ * Inbound WhatsApp webhook. Validate Twilio signature (SDK with parsed params from raw body),
+ * log to whatsapp_inbound, handle YES/NO confirmation. Replies via TwiML.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
+import twilio from "twilio";
 import {
-  validateTwilioSignature,
   getWebhookUrl,
   logInboundWhatsApp,
   logAmbiguousWhatsApp,
@@ -66,37 +66,30 @@ export async function POST(request: NextRequest) {
   }
 
   const params = new URLSearchParams(rawBody);
-  const From = String(params.get("From") ?? "").trim();
-  const To = String(params.get("To") ?? "").trim();
-  const Body = String(params.get("Body") ?? "").trim();
-  const MessageSid = String(params.get("MessageSid") ?? "").trim();
-  const NumMedia = String(params.get("NumMedia") ?? "").trim();
+  const twilioParams: Record<string, string | string[]> = {};
+  for (const key of Array.from(new Set(params.keys()))) {
+    const vals = params.getAll(key);
+    twilioParams[key] = vals.length === 1 ? vals[0] : vals;
+  }
 
-  console.log("[WA_WEBHOOK] inbound", { inboundId, From, To, Body, MessageSid, NumMedia });
-
-  const { url: urlForSig, source: signatureSource } = getWebhookUrl(WEBHOOK_PATH, request);
-  const requestHost = request.headers.get("host") ?? "";
-  const xForwardedProto = request.headers.get("x-forwarded-proto") ?? null;
-  const requestUrl = request.url;
-  console.log("[WA_WEBHOOK] signature_url", {
-    inboundId,
-    host: requestHost,
-    xForwardedProto,
-    requestUrl,
-    urlUsedForSignature: urlForSig,
-    signatureSource,
-  });
-
-  const signature = request.headers.get("x-twilio-signature") ?? "";
+  const urlForSig =
+    process.env.TWILIO_WEBHOOK_URL?.trim()?.replace(/\/$/, "") ??
+    getWebhookUrl(WEBHOOK_PATH, request).url;
+  const twilioSignature = request.headers.get("x-twilio-signature") ?? "";
   const skipSignature =
     process.env.NODE_ENV !== "production" && process.env.SKIP_TWILIO_SIGNATURE === "true";
   const signatureMode = process.env.TWILIO_SIGNATURE_MODE?.trim()?.toLowerCase() === "log_only"
     ? "log_only"
     : "enforce";
 
-  const signatureValid = skipSignature || validateTwilioSignature(authToken, signature, urlForSig, rawBody);
+  const signatureValid =
+    skipSignature || twilio.validateRequest(authToken, twilioSignature, urlForSig, twilioParams);
+
   if (!signatureValid) {
+    const requestHost = request.headers.get("host") ?? "";
     const xForwardedHost = request.headers.get("x-forwarded-host") ?? null;
+    const xForwardedProto = request.headers.get("x-forwarded-proto") ?? null;
+    const requestUrl = request.url;
     if (signatureMode === "log_only") {
       console.log("[WA_WEBHOOK] signature_debug", {
         urlForSig,
@@ -104,16 +97,20 @@ export async function POST(request: NextRequest) {
         host: requestHost,
         xForwardedHost,
         xForwardedProto,
-        twilioSignaturePresent: !!signature,
+        twilioSignaturePresent: !!twilioSignature,
       });
-      // Continue processing so replies work while debugging
     } else {
       console.error("[WA_WEBHOOK] signature_failed", {
         inboundId,
         urlForSig,
-        signatureSource,
-        hasTwilioWebhookUrl: !!process.env.TWILIO_WEBHOOK_URL,
+        signatureHeaderLength: twilioSignature.length,
+        rawBodyLength: rawBody.length,
+        paramKeys: Object.keys(twilioParams).sort(),
       });
+      const From = String(twilioParams["From"] ?? "").trim();
+      const To = String(twilioParams["To"] ?? "").trim();
+      const Body = String(twilioParams["Body"] ?? "").trim();
+      const MessageSid = String(twilioParams["MessageSid"] ?? "").trim();
       try {
         await createInboundDoc({
           inboundId,
@@ -133,6 +130,13 @@ export async function POST(request: NextRequest) {
       });
     }
   }
+
+  const From = String(twilioParams["From"] ?? "").trim();
+  const To = String(twilioParams["To"] ?? "").trim();
+  const Body = String(twilioParams["Body"] ?? "").trim();
+  const MessageSid = String(twilioParams["MessageSid"] ?? "").trim();
+  const NumMedia = String(twilioParams["NumMedia"] ?? "").trim();
+  console.log("[WA_WEBHOOK] inbound", { inboundId, From, To, Body, MessageSid, NumMedia });
 
   try {
     await createInboundDoc({

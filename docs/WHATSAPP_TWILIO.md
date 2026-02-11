@@ -68,7 +68,7 @@ In `.env.local` (and Vercel env for production):
    - Method: **POST**.
 6. Restart the dev server so it picks up `WEBHOOK_BASE_URL`.
 
-Twilio sends webhooks to that URL. Signature validation uses the full URL + raw body; `WEBHOOK_BASE_URL` ensures the signed URL matches when behind ngrok. For local testing without ngrok signature issues, set `SKIP_TWILIO_SIGNATURE=true` in `.env.local` (dev only).
+Twilio sends webhooks to that URL. Signature validation uses the **raw request body** (read with `request.text()`), parsed via `URLSearchParams` into a params object; the handler uses Twilio’s `validateRequest(authToken, signature, url, params)` and does **not** use `request.formData()` for validation (to avoid altering encoding of Hebrew or other content). `WEBHOOK_BASE_URL` is used only when `TWILIO_WEBHOOK_URL` is not set. For local testing without ngrok signature issues, set `SKIP_TWILIO_SIGNATURE=true` in `.env.local` (dev only).
 
 ### Production webhook (critical)
 
@@ -81,7 +81,7 @@ Twilio sends webhooks to that URL. Signature validation uses the full URL + raw 
 
 **Vercel env (required for signature validation behind proxy):** set  
 `TWILIO_WEBHOOK_URL=https://YOURDOMAIN.vercel.app/api/webhooks/twilio/whatsapp`  
-to the **exact** URL configured in Twilio Console. When set, the app uses this URL for signature validation and does **not** use `request.url` or `Host`/`x-forwarded-*` (so it works behind Vercel’s proxy). If you see `[WA_WEBHOOK] signature_failed` in logs, add or fix `TWILIO_WEBHOOK_URL` so it matches Twilio’s “When a message comes in” URL exactly. Each request logs `[WA_WEBHOOK] signature_url` with `host`, `requestUrl`, `urlUsedForSignature`, and `signatureSource` (no secrets) for debugging.
+to the **exact** URL configured in Twilio Console. When set, the app uses this URL for signature validation and does **not** use `request.url` or `Host`/`x-forwarded-*` (so it works behind Vercel’s proxy). If you see `[WA_WEBHOOK] signature_failed` in logs, add or fix `TWILIO_WEBHOOK_URL` so it matches Twilio’s “When a message comes in” URL exactly. On signature failure the handler logs `inboundId`, `urlForSig`, `signatureHeaderLength`, `rawBodyLength`, and `paramKeys` (no secrets).
 
 **Temporary debug when signature keeps failing:** set `TWILIO_SIGNATURE_MODE=log_only` in Vercel. The webhook will **not** block on signature failure; it will log `[WA_WEBHOOK] signature_debug` with `urlForSig`, `requestUrl`, `host`, `xForwardedHost`, `xForwardedProto`, and `twilioSignaturePresent`, and continue processing so replies work. Use this to confirm Twilio is reaching the endpoint and to compare the URL Twilio uses with `TWILIO_WEBHOOK_URL`. After you correct the Twilio webhook URL (or env) so they match, set `TWILIO_SIGNATURE_MODE=enforce` or remove the var (default is enforce) so signature validation is enforced again.
 
@@ -266,6 +266,6 @@ When a booking is created with **startAt** less than 24 hours in the future (and
 
 ## Security
 
-- Webhook validates `X-Twilio-Signature` using `TWILIO_AUTH_TOKEN` and the **raw POST body** (Next.js route reads body with `request.text()` before parsing). The URL used for validation is: **TWILIO_WEBHOOK_URL** if set (recommended in production), else derived from `x-forwarded-proto`, `x-forwarded-host`/`host`, and path.
-- On signature failure the handler logs `[WA_WEBHOOK] signature_failed` with `inboundId` and `urlForSig`, writes **whatsapp_inbound** with `status: "signature_failed"`, and returns 403 with TwiML.
+- Webhook validates `X-Twilio-Signature` using Twilio’s `validateRequest(authToken, signature, url, params)`. The request body is read as **raw text** (`request.text()`), parsed with `URLSearchParams` into a params object (no `formData()`), so encoding (e.g. Hebrew) is not altered. The URL is **TWILIO_WEBHOOK_URL** if set, else derived from request. Body is only trimmed/normalized **after** validation for YES/NO matching.
+- On signature failure the handler logs `[WA_WEBHOOK] signature_failed` with `inboundId`, `urlForSig`, `signatureHeaderLength`, `rawBodyLength`, `paramKeys`, writes **whatsapp_inbound** with `status: "signature_failed"`, and returns 403 with TwiML.
 - Protect the reminder cron with `CRON_SECRET` if the route is publicly reachable.
