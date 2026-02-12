@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useParams, useRouter } from "next/navigation";
 import { ChevronDown, Menu, X, ExternalLink } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { isOnTenantSubdomainClient, getAdminBasePath } from "@/lib/url";
 
 type MenuItem = {
   label: string;
@@ -12,10 +13,7 @@ type MenuItem = {
   items?: { label: string; href: string }[];
 };
 
-function getMenuItems(siteId: string | null): MenuItem[] {
-  // Use /site/me/admin for routes if siteId is null or "me"
-  const basePath = !siteId || siteId === "me" ? "/site/me/admin" : `/site/${siteId}/admin`;
-  
+function getMenuItems(basePath: string): MenuItem[] {
   return [
     {
       label: "ניהול אתר",
@@ -53,16 +51,19 @@ export default function AdminHeader() {
   const router = useRouter();
   const siteId = params?.siteId as string | null;
   const { user, loading: authLoading } = useAuth();
-  const menuItems = getMenuItems(siteId || null);
+  const adminBasePath =
+    !siteId || siteId === "me"
+      ? "/site/me/admin"
+      : getAdminBasePath(siteId, isOnTenantSubdomainClient());
+  const menuItems = getMenuItems(adminBasePath);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
 
-  // Get public site URL by removing /admin from current pathname
+  // Get public site URL: on tenant subdomain use /; on root use path without /admin
   const getPublicPath = (): string => {
-    // Remove /admin and everything after it
+    if (isOnTenantSubdomainClient()) return "/";
     const publicPath = pathname.replace(/\/admin(\/.*)?$/, "");
-    // If result is empty, fallback to root
     return publicPath || "/";
   };
 
@@ -136,7 +137,7 @@ export default function AdminHeader() {
           {/* Logo/Brand */}
           <div className="flex-shrink-0">
             <Link
-              href={siteId && siteId !== "me" ? `/site/${siteId}/admin` : "/site/me/admin"}
+              href={adminBasePath}
               className="text-xl font-bold text-slate-900 hover:text-sky-600 transition-colors"
             >
               פאנל ניהול

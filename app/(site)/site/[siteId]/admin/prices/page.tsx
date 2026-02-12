@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { getAdminBasePathFromSiteId } from "@/lib/url";
 
 /**
  * Redirect from /prices to /services
@@ -13,8 +14,7 @@ export default function PricesRedirectPage() {
   const siteId = params?.siteId as string;
 
   useEffect(() => {
-    // Redirect to /services route
-    const basePath = siteId === "me" ? "/site/me/admin" : `/site/${siteId}/admin`;
+    const basePath = getAdminBasePathFromSiteId(siteId);
     router.replace(`${basePath}/services`);
   }, [siteId, router]);
 

@@ -13,6 +13,7 @@ import { defaultBookingState } from "@/types/booking";
 import { HAIR_HERO_IMAGES, HAIR_ABOUT_IMAGES } from "@/lib/hairImages";
 import { Timestamp } from "firebase/firestore";
 import { validateTenantSlug, getSitePublicUrl } from "@/lib/tenant";
+import { getAdminBasePath, isOnTenantSubdomainClient } from "@/lib/url";
 
 /*
  * Manual test steps (signup wizard + subdomain):
@@ -102,8 +103,7 @@ export default function BuilderPage() {
         const userDoc = await getUserDocument(user.id);
         
         if (userDoc?.siteId) {
-          // User has a siteId - redirect to admin (only if not already there)
-          const targetPath = `/site/${userDoc.siteId}/admin`;
+          const targetPath = getAdminBasePath(userDoc.siteId, isOnTenantSubdomainClient());
           if (pathname === targetPath) {
             // Already on target page, don't redirect
             if (process.env.NODE_ENV === "development") {

@@ -12,6 +12,7 @@ import { autoDetectMapping, CLIENT_IMPORT_FIELDS } from "@/lib/import/mapRow";
 import { computeMappingStats } from "@/lib/import/validateMapping";
 import type { RawRow, ColumnMapping, DryRunResult, ExecuteResult } from "@/lib/import/types";
 import { Upload, CheckCircle, AlertCircle, Download } from "lucide-react";
+import { getAdminBasePathFromSiteId } from "@/lib/url";
 
 type Step = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -28,7 +29,7 @@ export default function ImportPage() {
   const router = useRouter();
   const siteId = params?.siteId as string;
   const { firebaseUser } = useAuth();
-  const basePath = siteId && siteId !== "me" ? `/site/${siteId}/admin` : "/site/me/admin";
+  const basePath = getAdminBasePathFromSiteId(siteId);
 
   const [step, setStep] = useState<Step>(0);
   const [file, setFile] = useState<File | null>(null);

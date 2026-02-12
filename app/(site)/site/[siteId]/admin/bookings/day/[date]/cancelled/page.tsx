@@ -27,6 +27,7 @@ import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
 import { bookingEnabled } from "@/lib/bookingEnabled";
 import type { SiteConfig } from "@/types/siteConfig";
 import { useAuth } from "@/hooks/useAuth";
+import { getAdminBasePathFromSiteId } from "@/lib/url";
 import { X, Pencil, Trash2 } from "lucide-react";
 
 const DAY_LABELS: Record<string, string> = {
@@ -66,6 +67,7 @@ export default function CancelledBookingsPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const siteId = params?.siteId as string;
+  const adminBasePath = getAdminBasePathFromSiteId(siteId);
   const dateParam = params?.date as string;
 
   // Scope: "day" (default) = by day; "all" = all
@@ -510,7 +512,7 @@ export default function CancelledBookingsPage() {
               באתר הזה לא הופעלה אפשרות הזמנות אונליין.
             </p>
             <Link
-              href={`/site/${siteId}/admin`}
+              href={adminBasePath}
               className="inline-block px-6 py-3 bg-sky-500 hover:bg-sky-600 text-white font-semibold rounded-lg transition-colors"
             >
               חזרה לפאנל
@@ -539,7 +541,7 @@ export default function CancelledBookingsPage() {
                     onChange={(e) => {
                       const newKey = e.target.value;
                       if (newKey && siteId) {
-                        router.push(`/site/${siteId}/admin/bookings/day/${newKey}/cancelled?scope=day`);
+                        router.push(`${adminBasePath}/bookings/day/${newKey}/cancelled?scope=day`);
                       }
                     }}
                     className="rounded-lg border border-slate-300 px-3 py-2 text-base font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500"
@@ -581,7 +583,7 @@ export default function CancelledBookingsPage() {
                 מחק הכל
               </button>
               <Link
-                href={`/site/${siteId}/admin/bookings/day/${dateKey}`}
+                href={`${adminBasePath}/bookings/day/${dateKey}`}
                 className="text-sm text-sky-700 hover:text-sky-800"
               >
                 ← חזרה ללוח זמנים

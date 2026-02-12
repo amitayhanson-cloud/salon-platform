@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "./AuthProvider";
+import { getAdminBasePath, isOnTenantSubdomainClient } from "@/lib/url";
 
 type RouteGuardProps = {
   children: React.ReactNode;
@@ -32,11 +33,11 @@ export function RouteGuard({
       // If wizard route, check that user has no siteId
       if (requireNoSite && user) {
         if (user.siteId) {
-          // User has siteId → redirect to dashboard
+          const path = getAdminBasePath(user.siteId, isOnTenantSubdomainClient());
           if (process.env.NODE_ENV === "development") {
-            console.log(`[RouteGuard] uid=${user.id}, siteId=${user.siteId} -> redirecting to /site/${user.siteId}/admin`);
+            console.log(`[RouteGuard] uid=${user.id}, siteId=${user.siteId} -> redirecting to`, path);
           }
-          router.replace(`/site/${user.siteId}/admin`);
+          router.replace(path);
           return;
         }
       }

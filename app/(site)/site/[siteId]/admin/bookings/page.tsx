@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { getAdminBasePathFromSiteId } from "@/lib/url";
 import {
   query,
   where,
@@ -343,7 +344,7 @@ export default function BookingsAdminPage() {
               באתר הזה לא הופעלה אפשרות הזמנות אונליין.
             </p>
             <Link
-              href={`/site/${siteId}/admin`}
+              href={getAdminBasePathFromSiteId(siteId)}
               className="inline-block px-6 py-3 bg-sky-500 hover:bg-sky-600 text-white font-semibold rounded-lg transition-colors"
             >
               חזרה לפאנל
@@ -399,7 +400,7 @@ export default function BookingsAdminPage() {
                 )}
               </div>
               <Link
-                href={`/site/${siteId}/admin`}
+                href={getAdminBasePathFromSiteId(siteId)}
                 className="text-sm text-sky-700 hover:text-sky-800"
               >
                 ← חזרה לפאנל ניהול
@@ -441,7 +442,7 @@ export default function BookingsAdminPage() {
                     const todayKey = toYYYYMMDD(today);
                     // Get current workerId from URL if available, or use first worker
                     // For now, navigate without workerId - the day page will handle default selection
-                    router.push(`/site/${siteId}/admin/bookings/day/${todayKey}`);
+                    router.push(`${getAdminBasePathFromSiteId(siteId)}/bookings/day/${todayKey}`);
                   }}
                   className="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-sm"
                 >

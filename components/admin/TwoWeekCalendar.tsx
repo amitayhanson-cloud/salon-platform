@@ -3,6 +3,7 @@
 import { ymdLocal } from "@/lib/dateLocal";
 import { toYYYYMMDD } from "@/lib/calendarUtils";
 import { useRouter } from "next/navigation";
+import { getAdminBasePathFromSiteId } from "@/lib/url";
 
 const DAY_LABELS: Record<string, string> = {
   "0": "ראשון",
@@ -52,8 +53,7 @@ export default function TwoWeekCalendar({
   const handleDayClick = (date: Date) => {
     const dayKey = toYYYYMMDD(date);
     onDayClick(dayKey);
-    // Navigate to day schedule page
-    router.push(`/site/${siteId}/admin/bookings/day/${dayKey}`);
+    router.push(`${getAdminBasePathFromSiteId(siteId)}/bookings/day/${dayKey}`);
   };
 
   return (

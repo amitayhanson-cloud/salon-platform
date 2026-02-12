@@ -33,6 +33,7 @@ import MultiWorkerScheduleView from "@/components/admin/MultiWorkerScheduleView"
 import WorkerFilter from "@/components/admin/WorkerFilter";
 import AdminBookingFormSimple from "@/components/admin/AdminBookingFormSimple";
 import AdminCreateBookingForm from "@/components/admin/AdminCreateBookingForm";
+import { getAdminBasePathFromSiteId } from "@/lib/url";
 import { deleteBooking } from "@/lib/booking";
 import { useAuth } from "@/hooks/useAuth";
 import { X, Plus, Printer, Trash2 } from "lucide-react";
@@ -110,6 +111,7 @@ export default function DaySchedulePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const siteId = params?.siteId as string;
+  const adminBasePath = getAdminBasePathFromSiteId(siteId);
   const dateParam = params?.date as string;
 
   // Stable YYYY-MM-DD only (same as main calendar); avoid DD/MM vs MM/DD
@@ -410,13 +412,11 @@ export default function DaySchedulePage() {
   // Update URL when worker filter changes
   useEffect(() => {
     if (selectedWorkerId === ALL_WORKERS) {
-      // "All workers" - set workerId=all in URL
-      router.replace(`/site/${siteId}/admin/bookings/day/${dateKey}?workerId=${ALL_WORKERS}`, { scroll: false });
+      router.replace(`${adminBasePath}/bookings/day/${dateKey}?workerId=${ALL_WORKERS}`, { scroll: false });
     } else {
-      // Specific worker - add workerId to URL
-      router.replace(`/site/${siteId}/admin/bookings/day/${dateKey}?workerId=${selectedWorkerId}`, { scroll: false });
+      router.replace(`${adminBasePath}/bookings/day/${dateKey}?workerId=${selectedWorkerId}`, { scroll: false });
     }
-  }, [selectedWorkerId, siteId, dateKey, router]);
+  }, [selectedWorkerId, adminBasePath, dateKey, router]);
 
   // Update bookings with worker names when workers load
   useEffect(() => {
@@ -791,7 +791,7 @@ export default function DaySchedulePage() {
               באתר הזה לא הופעלה אפשרות הזמנות אונליין.
             </p>
             <Link
-              href={`/site/${siteId}/admin`}
+              href={adminBasePath}
               className="inline-block px-6 py-3 bg-sky-500 hover:bg-sky-600 text-white font-semibold rounded-lg transition-colors"
             >
               חזרה לפאנל
@@ -808,7 +808,7 @@ export default function DaySchedulePage() {
     if (!selectedWorkerId) return;
     const workerParam =
       selectedWorkerId === ALL_WORKERS ? "all" : encodeURIComponent(selectedWorkerId);
-    const url = `/site/${siteId}/admin/bookings/print/day/${dateKey}?workerId=${workerParam}`;
+    const url = `${adminBasePath}/bookings/print/day/${dateKey}?workerId=${workerParam}`;
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
@@ -829,7 +829,7 @@ export default function DaySchedulePage() {
                   const newKey = e.target.value;
                   if (newKey && siteId) {
                     const query = selectedWorkerId && selectedWorkerId !== ALL_WORKERS ? `?workerId=${encodeURIComponent(selectedWorkerId)}` : "";
-                    router.push(`/site/${siteId}/admin/bookings/day/${newKey}${query}`);
+                    router.push(`${adminBasePath}/bookings/day/${newKey}${query}`);
                   }
                 }}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-base font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500"
@@ -863,13 +863,13 @@ export default function DaySchedulePage() {
                 הוסף תור
               </button>
               <Link
-                href={`/site/${siteId}/admin/bookings/day/${dateKey}/cancelled`}
+                href={`${adminBasePath}/bookings/day/${dateKey}/cancelled`}
                 className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm font-medium transition-colors"
               >
                 תורים שבוטלו
               </Link>
               <Link
-                href={`/site/${siteId}/admin/bookings`}
+                href={`${adminBasePath}/bookings`}
                 className="text-sm text-sky-700 hover:text-sky-800"
               >
                 ← חזרה ליומן

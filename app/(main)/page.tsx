@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useRouter } from "next/navigation";
 import { routeAfterAuth } from "@/lib/authRedirect";
+import { getAdminBasePath, isOnTenantSubdomainClient } from "@/lib/url";
 import { getLandingContent } from "@/lib/firestoreLanding";
 import { DEFAULT_LANDING_CONTENT } from "@/lib/landingContentDefaults";
 import type { LandingContent } from "@/types/landingContent";
@@ -27,11 +28,15 @@ export default function Home() {
     if (!user) return;
     try {
       const redirectPath = await routeAfterAuth(user.id);
-      router.replace(redirectPath);
+      const path =
+        redirectPath.startsWith("/site/") && redirectPath.endsWith("/admin") && isOnTenantSubdomainClient()
+          ? "/admin"
+          : redirectPath;
+      router.replace(path);
     } catch (error) {
       console.error("Error determining redirect path:", error);
       if (user.siteId) {
-        router.replace(`/site/${user.siteId}/admin`);
+        router.replace(getAdminBasePath(user.siteId, isOnTenantSubdomainClient()));
       } else {
         router.replace("/builder");
       }

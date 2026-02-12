@@ -7,6 +7,7 @@ import { useParams, useRouter, usePathname } from "next/navigation";
 export const dynamic = "force-dynamic";
 import AdminHeader from "@/components/admin/AdminHeader";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { isOnTenantSubdomainClient, getAdminBasePath } from "@/lib/url";
 
 export default function AdminLayout({
   children,
@@ -47,9 +48,11 @@ export default function AdminLayout({
       return;
     }
 
-    // Not logged in - redirect to login with returnTo parameter
+    // Not logged in - redirect to login with returnTo (path-only so we return to same host)
     if (!user) {
-      const loginPath = `/login?returnTo=${encodeURIComponent(`/site/${siteId}/admin`)}`;
+      const onSubdomain = isOnTenantSubdomainClient();
+      const returnToPath = getAdminBasePath(siteId, onSubdomain);
+      const loginPath = `/login?returnTo=${encodeURIComponent(returnToPath)}`;
       
       // Prevent redirect loop: don't redirect if already on login page
       if (pathname?.startsWith("/login")) {
@@ -218,8 +221,9 @@ export default function AdminLayout({
             const userDoc = await getUserDocument(user.id);
             
             if (userDoc?.siteId) {
-              // User has their own site - redirect to their admin (only if different)
-              const targetPath = `/site/${userDoc.siteId}/admin`;
+              // User has their own site - redirect to their admin (path-only; keep same host)
+              const onSubdomain = isOnTenantSubdomainClient();
+              const targetPath = getAdminBasePath(userDoc.siteId, onSubdomain);
               if (pathname === targetPath) {
                 // Already on target page, don't redirect
                 if (process.env.NODE_ENV === "development") {
@@ -233,8 +237,16 @@ export default function AdminLayout({
               if (process.env.NODE_ENV === "development") {
                 console.log(`[ADMIN GUARD] Redirecting to user's own site admin`, {
                   currentPath: pathname,
-                  targetPath
+                  targetPath,
+                  onSubdomain,
                 });
+              }
+              // On someone else's subdomain: full URL to root so they get their admin
+              if (onSubdomain && userDoc.siteId !== siteId) {
+                const rootUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://caleno.co";
+                const rootPath = getAdminBasePath(userDoc.siteId, false);
+                window.location.href = `${rootUrl.replace(/\/$/, "")}${rootPath}`;
+                return;
               }
               router.replace(targetPath);
             } else {

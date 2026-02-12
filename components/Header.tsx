@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { routeAfterAuth } from "@/lib/authRedirect";
+import { getAdminBasePath, isOnTenantSubdomainClient } from "@/lib/url";
 
 export function Header() {
   const { user, logout } = useAuth();
@@ -17,15 +18,17 @@ export function Header() {
 
   const handleGoToDashboard = async () => {
     if (!user) return;
-    
     try {
       const redirectPath = await routeAfterAuth(user.id);
-      router.replace(redirectPath);
+      const path =
+        redirectPath.startsWith("/site/") && redirectPath.endsWith("/admin") && isOnTenantSubdomainClient()
+          ? "/admin"
+          : redirectPath;
+      router.replace(path);
     } catch (error) {
       console.error("Error determining redirect path:", error);
-      // Fallback: check if user has siteId directly
       if (user.siteId) {
-        router.replace(`/site/${user.siteId}/admin`);
+        router.replace(getAdminBasePath(user.siteId, isOnTenantSubdomainClient()));
       } else {
         router.replace("/builder");
       }

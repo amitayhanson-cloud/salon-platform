@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { getUserDocument } from "@/lib/firestoreUsers";
+import { getAdminBasePath, isOnTenantSubdomainClient } from "@/lib/url";
 
 export default function AdminLayout({
   children,
@@ -26,7 +27,7 @@ export default function AdminLayout({
       try {
         const userDoc = await getUserDocument(user.id);
         if (userDoc?.siteId) {
-          router.replace(`/site/${userDoc.siteId}/admin`);
+          router.replace(getAdminBasePath(userDoc.siteId, isOnTenantSubdomainClient()));
         } else {
           // User has no site - redirect to builder
           router.replace("/builder");

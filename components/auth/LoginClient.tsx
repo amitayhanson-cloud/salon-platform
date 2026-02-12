@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { isOnTenantSubdomainClient } from "@/lib/url";
 
 function LoginForm() {
   const router = useRouter();
@@ -34,28 +35,34 @@ function LoginForm() {
     }
 
     if (returnTo) {
-      // Verify the returnTo is a valid admin path before redirecting
-      // This prevents open redirect vulnerabilities
+      // Accept path-only returnTo (same origin): /admin, /site/.../admin, etc. Reject full URLs to prevent open redirect.
       try {
-        if (returnTo.startsWith("/site/") && returnTo.includes("/admin")) {
-          // Redirect to the intended admin URL
+        const isPathOnly =
+          returnTo.startsWith("/") &&
+          !returnTo.includes("://") &&
+          !returnTo.startsWith("//");
+        if (isPathOnly && (returnTo.startsWith("/admin") || (returnTo.startsWith("/site/") && returnTo.includes("/admin")))) {
           router.replace(returnTo);
           return;
         }
       } catch (redirectErr) {
         console.warn("[LoginForm] Invalid returnTo, using default:", redirectErr);
-        // Fall through to default redirect
       }
     }
 
-    // Use the default redirect path from login function
-    // This will be /site/{siteId}/admin if user has siteId, or /builder if not
+    // Use the default redirect path from login function (path-only so we stay on same host)
+    // When on tenant subdomain, prefer /admin over /site/{siteId}/admin so URL stays canonical
     if (redirectPath) {
       try {
-        router.replace(redirectPath);
+        const path =
+          isOnTenantSubdomainClient() &&
+          redirectPath.startsWith("/site/") &&
+          redirectPath.endsWith("/admin")
+            ? "/admin"
+            : redirectPath;
+        router.replace(path);
       } catch (redirectErr) {
         console.error("[LoginForm] Redirect failed:", redirectErr);
-        // Fallback to builder
         router.replace("/builder");
       }
     } else {
