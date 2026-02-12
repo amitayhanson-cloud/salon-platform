@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 // Builder is dynamic - it requires authentication and loads user data
 export const dynamic = "force-dynamic";
@@ -12,6 +12,15 @@ import { defaultSiteConfig } from "@/types/siteConfig";
 import { defaultBookingState } from "@/types/booking";
 import { HAIR_HERO_IMAGES, HAIR_ABOUT_IMAGES } from "@/lib/hairImages";
 import { Timestamp } from "firebase/firestore";
+import { validateTenantSlug, getSitePublicUrl } from "@/lib/tenant";
+
+/*
+ * Manual test steps (signup wizard + subdomain):
+ * 1. Sign up through wizard; at step "בחר תת-דומיין" enter slug "testamitay", check availability, continue and complete.
+ * 2. Firestore: tenants/testamitay exists with correct siteId; sites/<siteId> has slug "testamitay"; users/<uid>.siteId set.
+ * 3. GET /api/tenants/resolve?slug=testamitay returns 200 { siteId: "..." }.
+ * 4. Open https://testamitay.caleno.co/admin (or localhost /admin?tenant=testamitay); should load and prompt login if needed.
+ */
 
 // Reusable component for the "editable later" hint
 function EditableLaterHint() {
@@ -43,7 +52,7 @@ const SERVICE_OPTIONS: Record<SiteConfig["salonType"], string[]> = {
 export default function BuilderPage() {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, authReady, loading: authLoading } = useAuth();
+  const { user, firebaseUser, authReady, loading: authLoading } = useAuth();
   
   // Redirect guard: prevent users with site from accessing builder
   const didRedirect = useRef(false);
@@ -142,24 +151,67 @@ export default function BuilderPage() {
   const [customService, setCustomService] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [wizardSlug, setWizardSlug] = useState("");
+  const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
+  const [slugCheckLoading, setSlugCheckLoading] = useState(false);
 
-  const totalSteps = 6;
+  const totalSteps = 7;
 
   const updateConfig = (updates: Partial<SiteConfig>) => {
     setConfig((prev) => ({ ...prev, ...updates }));
   };
 
+  const checkSlugAvailability = useCallback(async (slug: string) => {
+    const trimmed = slug.trim().toLowerCase();
+    if (!trimmed) {
+      setSlugAvailable(null);
+      return;
+    }
+    const v = validateTenantSlug(trimmed);
+    if (!v.ok) {
+      setSlugAvailable(false);
+      return;
+    }
+    setSlugCheckLoading(true);
+    setSlugAvailable(null);
+    try {
+      const res = await fetch(
+        `/api/tenants/resolve?slug=${encodeURIComponent(trimmed)}`
+      );
+      if (res.status === 404) setSlugAvailable(true);
+      else setSlugAvailable(false);
+    } catch {
+      setSlugAvailable(null);
+    } finally {
+      setSlugCheckLoading(false);
+    }
+  }, []);
+
+  // Debounced auto-check slug availability when user types a valid slug
+  useEffect(() => {
+    const trimmed = wizardSlug.trim().toLowerCase();
+    if (!trimmed || !validateTenantSlug(trimmed).ok) return;
+    const t = setTimeout(() => checkSlugAvailability(trimmed), 500);
+    return () => clearTimeout(t);
+  }, [wizardSlug, checkSlugAvailability]);
+
   const isStepValid = (): boolean => {
     switch (step) {
       case 1:
         return config.salonName.trim() !== "";
-      case 2:
-        return !!(config.address && config.address.trim() !== "");
+      case 2: {
+        const trimmed = wizardSlug.trim().toLowerCase();
+        if (!trimmed) return false;
+        if (!validateTenantSlug(trimmed).ok) return false;
+        return slugAvailable === true;
+      }
       case 3:
-        return config.mainGoals.length > 0;
+        return !!(config.address && config.address.trim() !== "");
       case 4:
+        return config.mainGoals.length > 0;
+      case 5:
         return config.services.length > 0;
-      case 5: {
+      case 6: {
         const hasContact =
           (config.phoneNumber && config.phoneNumber.trim() !== "") ||
           (config.whatsappNumber && config.whatsappNumber.trim() !== "") ||
@@ -176,11 +228,10 @@ export default function BuilderPage() {
           );
         }
 
-        // simple_form or none are fine as long as we have at least one contact method
         return true;
       }
-      case 6:
-        return true; // Step 6 is optional
+      case 7:
+        return true;
       default:
         return false;
     }
@@ -200,8 +251,10 @@ export default function BuilderPage() {
 
   const handleFinish = async () => {
     if (!config.salonName.trim()) return;
+    const slug = wizardSlug.trim().toLowerCase();
+    if (!validateTenantSlug(slug).ok || slugAvailable !== true) return;
 
-    if (!user) {
+    if (!user || !firebaseUser) {
       setSaveError("משתמש לא מחובר. אנא רענן את הדף.");
       return;
     }
@@ -210,19 +263,14 @@ export default function BuilderPage() {
     setSaveError(null);
 
     try {
-      // Check if user already has a siteId
       const { getUserDocument } = await import("@/lib/firestoreUsers");
       const userDoc = await getUserDocument(user.id);
-      
+
       if (userDoc?.siteId) {
-        // User already has a site - redirect to it
-        console.log(`[handleFinish] User already has siteId=${userDoc.siteId}, redirecting`);
         router.replace(`/site/${userDoc.siteId}/admin`);
         return;
       }
 
-      // Convert selected services (strings) to SiteService objects
-      const { saveSiteServices } = await import("@/lib/firestoreSiteServices");
       const siteServices = config.services.map((serviceName, index) => ({
         id: `svc_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`,
         name: serviceName,
@@ -230,33 +278,44 @@ export default function BuilderPage() {
         sortOrder: index,
       }));
 
-      // Create new site from template with builder config
-      const { createSiteFromTemplate } = await import("@/lib/firestoreSites");
-      const newSiteId = await createSiteFromTemplate(user.id, config);
-      
-      // Save services to the new site
-      await saveSiteServices(newSiteId, siteServices);
-      
-      // Update user document with siteId
-      const { updateUserSiteId } = await import("@/lib/firestoreUsers");
-      await updateUserSiteId(user.id, newSiteId);
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch("/api/onboarding/complete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          slug,
+          config: { ...config, slug },
+          services: siteServices,
+        }),
+      });
 
-      console.log(`[handleFinish] Created site ${newSiteId} for user ${user.id}`);
+      const data = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        error?: string;
+        siteId?: string;
+        publicUrl?: string;
+      };
 
-      if (process.env.NODE_ENV === "development") {
-        console.log(`[handleFinish] Redirecting to /site/${newSiteId}/admin`);
+      if (!res.ok || !data.success) {
+        setSaveError(data.error || "שגיאה ביצירת האתר");
+        setIsSaving(false);
+        return;
       }
 
-      // Also save to localStorage for backward compatibility
+      const newSiteId = data.siteId!;
+      const publicUrl = data.publicUrl ?? getSitePublicUrl(slug);
+
       if (typeof window !== "undefined") {
-        // Save per-site config (using siteId as key)
         window.localStorage.setItem(
           `siteConfig:${newSiteId}`,
           JSON.stringify(config)
         );
-
-        // Save per-site booking state (initialize with default if not exists)
-        const existingBookingState = window.localStorage.getItem(`bookingState:${newSiteId}`);
+        const existingBookingState = window.localStorage.getItem(
+          `bookingState:${newSiteId}`
+        );
         if (!existingBookingState) {
           window.localStorage.setItem(
             `bookingState:${newSiteId}`,
@@ -265,11 +324,16 @@ export default function BuilderPage() {
         }
       }
 
-      // Navigate to admin dashboard after wizard completion
-      // Use replace to prevent going back to builder
-      router.replace(`/site/${newSiteId}/admin`);
+      const isLocalhost =
+        typeof window !== "undefined" &&
+        window.location.hostname === "localhost";
+      if (isLocalhost) {
+        router.replace(`/admin?tenant=${encodeURIComponent(slug)}`);
+      } else {
+        window.location.href = `${publicUrl}/admin`;
+      }
     } catch (err) {
-      console.error("Failed to save site config to Firestore", err);
+      console.error("Failed to complete onboarding", err);
       const errorMessage = err instanceof Error ? err.message : String(err);
       setSaveError(`שגיאה בשמירה: ${errorMessage}`);
       setIsSaving(false);
@@ -460,8 +524,71 @@ export default function BuilderPage() {
             </div>
           )}
 
-          {/* Step 2 - Location */}
+          {/* Step 2 - Choose your link (subdomain) */}
           {step === 2 && (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-slate-900 mb-6">
+                בחר תת-דומיין / Choose your link
+              </h2>
+              <div>
+                <label
+                  htmlFor="wizardSlug"
+                  className="block text-sm font-medium text-slate-700 mb-2"
+                >
+                  קישור לאתר *
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="text"
+                    id="wizardSlug"
+                    value={wizardSlug}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      const normalized = raw.toLowerCase().replace(/[^a-z0-9-]/g, "");
+                      setWizardSlug(normalized);
+                      setSlugAvailable(null);
+                    }}
+                    className="flex-1 min-w-[140px] rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                    placeholder="mysalon"
+                    maxLength={30}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => checkSlugAvailability(wizardSlug.trim().toLowerCase())}
+                    disabled={slugCheckLoading || !wizardSlug.trim()}
+                    className="px-4 py-2 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {slugCheckLoading ? "בודק..." : "בדוק זמינות"}
+                  </button>
+                </div>
+                {wizardSlug.trim() && (
+                  <p className="text-sm text-slate-600 mt-2 text-right">
+                    תצוגה מקדימה: {getSitePublicUrl(wizardSlug.trim().toLowerCase(), "")}
+                  </p>
+                )}
+                {wizardSlug.trim() && (() => {
+                  const v = validateTenantSlug(wizardSlug.trim().toLowerCase());
+                  return !v.ok ? (
+                    <p className="text-sm text-amber-600 mt-1 text-right">
+                      {v.error}
+                    </p>
+                  ) : null;
+                })()}
+                {slugAvailable === true && (
+                  <p className="text-sm text-green-600 mt-1 text-right">הקישור פנוי</p>
+                )}
+                {slugAvailable === false && (
+                  <p className="text-sm text-red-600 mt-1 text-right">הקישור תפוס או לא תקין</p>
+                )}
+                <p className="text-xs text-slate-500 mt-1 text-right">
+                  3–30 תווים, אותיות באנגלית, ספרות ומקף. לא להתחיל או לסיים במקף.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3 - Location */}
+          {step === 3 && (
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-slate-900 mb-6">מיקום</h2>
               <EditableLaterHint />
@@ -488,8 +615,8 @@ export default function BuilderPage() {
             </div>
           )}
 
-          {/* Step 3 - Main goal */}
-          {step === 3 && (
+          {/* Step 4 - Main goal */}
+          {step === 4 && (
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-slate-900 mb-6">
                 מה המטרה העיקרית של האתר? *
@@ -514,8 +641,8 @@ export default function BuilderPage() {
             </div>
           )}
 
-          {/* Step 4 - Services */}
-          {step === 4 && (
+          {/* Step 5 - Services */}
+          {step === 5 && (
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-slate-900 mb-6">
                 איזה שירותים יש בסלון? *
@@ -599,8 +726,8 @@ export default function BuilderPage() {
             </div>
           )}
 
-          {/* Step 5 - Contact & booking */}
-          {step === 5 && (
+          {/* Step 6 - Contact & booking */}
+          {step === 6 && (
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-slate-900 mb-6">
                 איך לקוחות יכולים ליצור קשר? *
@@ -730,7 +857,7 @@ export default function BuilderPage() {
           )}
 
           {/* Step 6 - Extra pages and note */}
-          {step === 6 && (
+          {step === 7 && (
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-slate-900 mb-6">
                 איזה עמודים נוספים תרצה באתר?
