@@ -13,18 +13,61 @@ service cloud.firestore {
       allow create: if request.auth != null && request.resource.data.ownerUserId == request.auth.uid;
     }
 
-    // Sites: only owner can write; owner (or template exception) can read.
+    // Sites: public read for public site + booking; only owner can write.
     match /sites/{siteId} {
-      allow read: if request.auth != null
-        && (resource.data.ownerUid == request.auth.uid
-            || resource.data.ownerUserId == request.auth.uid
-            || siteId == 'amitay-hair-mk6krumy');
+      allow read: if true;
       allow create: if request.auth != null && request.resource.data.ownerUid == request.auth.uid;
       allow update, delete: if request.auth != null
         && (resource.data.ownerUid == request.auth.uid || resource.data.ownerUserId == request.auth.uid);
     }
 
-    // Subcollections under sites: only if user owns the site
+    // Workers: public read for booking flow; write only if user owns the site.
+    match /sites/{siteId}/workers/{workerId} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && (get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUid == request.auth.uid
+            || get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUserId == request.auth.uid);
+    }
+
+    // Booking settings: public read for business hours/availability; write only owner.
+    match /sites/{siteId}/settings/booking {
+      allow read: if true;
+      allow write: if request.auth != null
+        && (get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUid == request.auth.uid
+            || get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUserId == request.auth.uid);
+    }
+
+    // Bookings: public create (submit booking); read/update/delete only site owner.
+    match /sites/{siteId}/bookings/{bookingId} {
+      allow create: if true;
+      allow read, update, delete: if request.auth != null
+        && (get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUid == request.auth.uid
+            || get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUserId == request.auth.uid);
+    }
+
+    // Pricing items/categories: public read for booking flow; write only owner.
+    match /sites/{siteId}/pricingItems/{itemId} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && (get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUid == request.auth.uid
+            || get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUserId == request.auth.uid);
+    }
+    match /sites/{siteId}/pricingCategories/{categoryId} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && (get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUid == request.auth.uid
+            || get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUserId == request.auth.uid);
+    }
+
+    // Clients: public create (getOrCreateClient when submitting booking); read/update/delete only site owner.
+    match /sites/{siteId}/clients/{clientId} {
+      allow create: if true;
+      allow read, update, delete: if request.auth != null
+        && (get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUid == request.auth.uid
+            || get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUserId == request.auth.uid);
+    }
+
+    // Other subcollections under sites (tasks, etc.): only if user owns the site
     match /sites/{siteId}/{subcollection}/{docId} {
       allow read, write: if request.auth != null
         && (get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUid == request.auth.uid
