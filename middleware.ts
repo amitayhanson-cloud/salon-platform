@@ -4,8 +4,17 @@ import { getHostKind } from "@/lib/tenant";
 /** Path prefixes we never rewrite (Next.js internals, API, static) */
 const SKIP_PREFIXES = ["/_next", "/api", "/favicon.ico", "/favicon", "/static", "/images", "/brand", "/not-found-tenant"];
 
+/** Auth (and similar) paths never rewritten on tenant subdomains — serve same as root (e.g. /login) */
+const TENANT_PASSTHROUGH_PREFIXES = ["/login", "/signup", "/register", "/forgot-password", "/account"];
+
 function shouldSkipRewrite(pathname: string): boolean {
   return SKIP_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
+function isTenantPassthroughPath(pathname: string): boolean {
+  return TENANT_PASSTHROUGH_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`)
+  );
 }
 
 export async function middleware(request: NextRequest): Promise<NextResponse> {
@@ -36,6 +45,11 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   }
 
   if (!slug) {
+    return NextResponse.next();
+  }
+
+  // Auth and account paths: do not rewrite on tenant subdomain (serve same as root)
+  if (isTenantPassthroughPath(pathname)) {
     return NextResponse.next();
   }
 
