@@ -2,11 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createWebsiteDocument, updateUserSiteId } from "@/lib/firestoreUsers";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { defaultSiteConfig } from "@/types/siteConfig";
-import {
-  validateTenantSlug,
-  normalizeTenantSlug,
-  getSitePublicUrl,
-} from "@/lib/tenant";
+import { validateSlug } from "@/lib/slug";
+import { getSitePublicUrl } from "@/lib/tenant";
 
 const TENANTS_COLLECTION = "tenants";
 
@@ -44,14 +41,14 @@ export async function POST(request: NextRequest) {
     let slug: string;
 
     if (typeof rawSlug === "string" && rawSlug.trim()) {
-      const validation = validateTenantSlug(rawSlug);
+      const validation = validateSlug(rawSlug);
       if (!validation.ok) {
         return NextResponse.json(
           { success: false, error: validation.error },
           { status: 400 }
         );
       }
-      slug = normalizeTenantSlug(rawSlug);
+      slug = validation.normalized;
       const existingTenant = await db.collection(TENANTS_COLLECTION).doc(slug).get();
       if (existingTenant.exists) {
         return NextResponse.json(
@@ -63,11 +60,12 @@ export async function POST(request: NextRequest) {
       let candidate = generateSlugFromName(salonName ?? "");
       let resolvedSlug: string | null = null;
       for (let attempts = 0; attempts < 10; attempts++) {
-        const validation = validateTenantSlug(candidate);
+        const validation = validateSlug(candidate);
         if (validation.ok) {
-          const exists = await db.collection(TENANTS_COLLECTION).doc(candidate).get();
+          const slugToUse = validation.normalized;
+          const exists = await db.collection(TENANTS_COLLECTION).doc(slugToUse).get();
           if (!exists.exists) {
-            resolvedSlug = candidate;
+            resolvedSlug = slugToUse;
             break;
           }
         }

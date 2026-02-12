@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
-import {
-  validateTenantSlug,
-  normalizeTenantSlug,
-  getSitePublicUrl,
-} from "@/lib/tenant";
+import { validateSlug } from "@/lib/slug";
+import { getSitePublicUrl } from "@/lib/tenant";
 import type { SiteConfig } from "@/types/siteConfig";
 import type { SiteService } from "@/types/siteConfig";
 
@@ -45,14 +42,14 @@ export async function POST(request: NextRequest) {
 
     const body = (await request.json().catch(() => ({}))) as Partial<Body>;
     const rawSlug = typeof body.slug === "string" ? body.slug : "";
-    const validation = validateTenantSlug(rawSlug);
+    const validation = validateSlug(rawSlug);
     if (!validation.ok) {
       return NextResponse.json(
         { success: false, error: validation.error },
         { status: 400 }
       );
     }
-    const slug = normalizeTenantSlug(rawSlug);
+    const slug = validation.normalized;
 
     const config = body.config as SiteConfig | undefined;
     if (!config || typeof config !== "object" || !config.salonName?.trim()) {

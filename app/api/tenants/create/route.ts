@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
-import { validateTenantSlug, normalizeTenantSlug, getSitePublicUrl } from "@/lib/tenant";
+import { validateSlug } from "@/lib/slug";
+import { getSitePublicUrl } from "@/lib/tenant";
 import { getUserDocument } from "@/lib/firestoreUsers";
 
 const TENANTS_COLLECTION = "tenants";
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const validation = validateTenantSlug(rawSlug);
+    const validation = validateSlug(rawSlug);
     if (!validation.ok) {
       return NextResponse.json(
         { success: false, error: validation.error },
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const slug = normalizeTenantSlug(rawSlug);
+    const slug = validation.normalized;
     const db = getAdminDb();
     const tenantRef = db.collection(TENANTS_COLLECTION).doc(slug);
     const existing = await tenantRef.get();

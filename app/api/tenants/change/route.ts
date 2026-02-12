@@ -2,19 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
 import { getUserDocument } from "@/lib/firestoreUsers";
 import { getSlugBySiteId } from "@/lib/tenant-data";
-import {
-  validateTenantSlug,
-  normalizeTenantSlug,
-  getSitePublicUrl,
-} from "@/lib/tenant";
+import { validateSlug } from "@/lib/slug";
+import { getSitePublicUrl } from "@/lib/tenant";
 
 const TENANTS_COLLECTION = "tenants";
+const SITES_COLLECTION = "sites";
+const USERS_COLLECTION = "users";
 
 /**
  * POST /api/tenants/change
  * Change (rename) the current user's tenant slug.
  * Body: { newSlug: string }
  * Auth: Bearer token.
+ * Uses a Firestore transaction to avoid partial state.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const validation = validateTenantSlug(rawNewSlug);
+    const validation = validateSlug(rawNewSlug);
     if (!validation.ok) {
       return NextResponse.json(
         { success: false, error: validation.error },
@@ -62,56 +62,75 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const newSlug = normalizeTenantSlug(rawNewSlug);
+    const newSlug = validation.normalized;
     const siteId = userDoc.siteId;
     const oldSlug = await getSlugBySiteId(siteId);
 
     const db = getAdminDb();
     const newTenantRef = db.collection(TENANTS_COLLECTION).doc(newSlug);
-    const newTenantSnap = await newTenantRef.get();
-    if (newTenantSnap.exists) {
+    const siteRef = db.collection(SITES_COLLECTION).doc(siteId);
+    const userRef = db.collection(USERS_COLLECTION).doc(uid);
+    const now = new Date();
+
+    await db.runTransaction(async (tx) => {
+      const newTenantSnap = await tx.get(newTenantRef);
+      if (newTenantSnap.exists) {
+        throw new Error("TENANT_TAKEN");
+      }
+
+      const siteSnap = await tx.get(siteRef);
+      if (!siteSnap.exists) {
+        throw new Error("SITE_NOT_FOUND");
+      }
+      const siteData = siteSnap.data() as { ownerUid?: string; ownerUserId?: string };
+      if (siteData.ownerUid !== uid && siteData.ownerUserId !== uid) {
+        throw new Error("FORBIDDEN");
+      }
+
+      tx.set(newTenantRef, {
+        siteId,
+        ownerUid: uid,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      if (oldSlug && oldSlug !== newSlug) {
+        const oldTenantRef = db.collection(TENANTS_COLLECTION).doc(oldSlug);
+        tx.delete(oldTenantRef);
+      }
+
+      tx.update(siteRef, { slug: newSlug, updatedAt: now });
+      tx.update(userRef, { primarySlug: newSlug, updatedAt: now });
+    });
+
+    const url = getSitePublicUrl(newSlug);
+
+    return NextResponse.json({
+      success: true,
+      slug: newSlug,
+      url,
+      publicUrl: url,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg === "TENANT_TAKEN") {
       return NextResponse.json(
         { success: false, error: "This subdomain is already taken." },
         { status: 409 }
       );
     }
-
-    const now = new Date();
-
-    if (oldSlug && oldSlug !== newSlug) {
-      const oldTenantRef = db.collection(TENANTS_COLLECTION).doc(oldSlug);
-      const siteRef = db.collection("sites").doc(siteId);
-      const batch = db.batch();
-      batch.set(newTenantRef, {
-        siteId,
-        ownerUid: uid,
-        createdAt: now,
-        updatedAt: now,
-      });
-      batch.delete(oldTenantRef);
-      batch.update(siteRef, { slug: newSlug, updatedAt: now });
-      await batch.commit();
-    } else {
-      const siteRef = db.collection("sites").doc(siteId);
-      const batch = db.batch();
-      batch.set(newTenantRef, {
-        siteId,
-        ownerUid: uid,
-        createdAt: now,
-        updatedAt: now,
-      });
-      batch.update(siteRef, { slug: newSlug, updatedAt: now });
-      await batch.commit();
+    if (msg === "SITE_NOT_FOUND") {
+      return NextResponse.json(
+        { success: false, error: "Site not found." },
+        { status: 404 }
+      );
     }
-
-    const publicUrl = getSitePublicUrl(newSlug);
-
-    return NextResponse.json({
-      success: true,
-      slug: newSlug,
-      publicUrl,
-    });
-  } catch (err) {
+    if (msg === "FORBIDDEN") {
+      return NextResponse.json(
+        { success: false, error: "You can only change the subdomain of your own site." },
+        { status: 403 }
+      );
+    }
     console.error("[tenants/change]", err);
     return NextResponse.json(
       {

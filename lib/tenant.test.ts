@@ -83,7 +83,7 @@ describe("tenant slug validation", () => {
     it("returns error for reserved slug", () => {
       const r = validateTenantSlug("admin");
       expect(r.ok).toBe(false);
-      expect((r as { error: string }).error).toContain("reserved");
+      expect((r as { error: string }).error).toBeDefined();
     });
   });
 

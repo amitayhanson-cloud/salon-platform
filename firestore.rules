@@ -2,8 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Authenticated users can read and write only their own user document.
-    // Fixes: [AuthProvider] Error fetching user document: Missing or insufficient permissions
+    // Users: only the owner can read/write their own document.
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
@@ -14,7 +13,7 @@ service cloud.firestore {
       allow create: if request.auth != null && request.resource.data.ownerUserId == request.auth.uid;
     }
 
-    // Sites: owner can read/write; template site readable by any authenticated user (for createSiteFromTemplate)
+    // Sites: only owner can write; owner (or template exception) can read.
     match /sites/{siteId} {
       allow read: if request.auth != null
         && (resource.data.ownerUid == request.auth.uid
@@ -38,9 +37,14 @@ service cloud.firestore {
       allow write: if request.auth != null;
     }
 
-    // Tenants (subdomain slugs): server-only via Admin SDK; no client read/write
+    // Tenants (subdomain slug -> siteId): public read for routing; create only when ownerUid == auth; update/delete only owner; no changing ownerUid/siteId on update.
     match /tenants/{slug} {
-      allow read, write: if false;
+      allow read: if true;
+      allow create: if request.auth != null && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if request.auth != null
+        && resource.data.ownerUid == request.auth.uid
+        && (request.resource.data.ownerUid == resource.data.ownerUid)
+        && (request.resource.data.siteId == resource.data.siteId);
     }
   }
 }

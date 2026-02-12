@@ -85,25 +85,48 @@ Set `NEXT_PUBLIC_APP_URL=https://caleno.co` in production (see `env.local.exampl
 
 Each tenant (subdomain) maps to a **site** via Firestore:
 
-- **Tenant mapping:** `tenants/<slug>` → doc fields `{ siteId, ownerUid?, createdAt, updatedAt }`. Middleware resolves the request host (e.g. `alice.caleno.co`) to a slug, calls `GET /api/tenants/resolve?slug=alice`, then rewrites to **`/site/<siteId>/...`** (so the same app routes as the root domain, with no `/t/` segment).
-- **Site document:** `sites/<siteId>` can include a top-level **`slug`** field; when set, the UI prefers the public URL `https://<slug>.caleno.co` over `/site/<siteId>` for links.
+- **Tenant mapping:** `tenants/<slug>` → doc fields `{ siteId, ownerUid, createdAt, updatedAt }`. The document ID is the slug. Middleware resolves the request host (e.g. `alice.caleno.co`) to a slug, calls `GET /api/tenants/resolve?slug=alice`, then rewrites to **`/site/<siteId>/...`** (same app routes as the root domain).
+- **Site document:** `sites/<siteId>` includes **`slug`** when the site has a subdomain; the UI uses `https://<slug>.caleno.co` for links when available.
+- **User document:** `users/<uid>` has **`siteId`** (primary site) and optionally **`primarySlug`** (current subdomain); used when creating or changing tenants.
+
+**Slug rules (single source of truth: `lib/slug.ts`):**
+
+- Length 3–30 characters.
+- Allowed characters: `a-z`, `0-9`, hyphen. No leading or trailing hyphen; no consecutive hyphens (they are normalized to one).
+- Reserved slugs cannot be used: `www`, `admin`, `api`, `login`, `app`, `mail`, `support`, `help`, `static`, `assets`, `cdn`, `dashboard`, `docs`, `billing`, `settings`, `auth`, `oauth`, `_next`.
+- Validation: `validateSlug(slug)` returns `{ ok: true, normalized }` or `{ ok: false, error }` (Hebrew-friendly errors).
+
+**How to change subdomain:**
+
+1. Go to **Account** (or account/settings).
+2. Under "תת-דומיין (Caleno)", enter the new slug and click **"בדוק זמינות"** (Check availability). This calls `GET /api/tenants/check?slug=<slug>` and shows whether the slug is available or the reason it is not.
+3. Click **"החלף תת-דומיין"** (Change subdomain). This calls `POST /api/tenants/change` with `{ newSlug }` (auth required). The API runs a Firestore transaction: creates `tenants/<newSlug>`, deletes `tenants/<oldSlug>`, updates `sites/<siteId>.slug` and `users/<uid>.primarySlug`.
+4. After success, the new URL is shown. **Note:** The old subdomain will stop working (no aliases in this MVP).
+
+**APIs:**
+
+- **`GET /api/tenants/check?slug=<slug>`** — Returns `200 { available: true }` if valid and not taken, or `200 { available: false, reason? }` if taken or invalid. Used for real-time validation in the wizard and account page.
+- **`POST /api/tenants/change`** — Body `{ newSlug }`, auth required. Changes the current user’s tenant slug (transaction). Returns `{ success, slug, url, publicUrl }`.
+- **`POST /api/tenants/create`** — Body `{ slug }`, auth required. Creates a tenant for the user’s site.
+- **`GET /api/tenants/resolve?slug=<slug>`** — Returns `200 { siteId }` or 404. Used by middleware for routing.
 
 **Local development:**
 
-- **Query param:** On localhost, use `?tenant=<slug>` to simulate a tenant. Example: [http://localhost:3000?tenant=alice](http://localhost:3000?tenant=alice) behaves like `alice.caleno.co`.
-- **Subdomain:** If supported, [http://alice.localhost:3000](http://alice.localhost:3000) works without the query param.
+- **Query param:** On localhost, use **`?tenant=<slug>`** to simulate a tenant. Example: [http://localhost:3000?tenant=alice](http://localhost:3000?tenant=alice) behaves like `alice.caleno.co`.
+- **Subdomain:** If your environment supports it, [http://alice.localhost:3000](http://alice.localhost:3000) works without the query param.
 
-**Firestore documents involved:**
+**Firestore security:**
 
-- **`tenants/<slug>`** (doc id = slug): `siteId` (required), `ownerUid?`, `createdAt`, `updatedAt`. Server-only (Admin SDK); no client read/write in rules.
-- **`sites/<siteId>`**: include **`slug`** (string) when the site has a subdomain; used for resolving slug → siteId and for UI public URLs.
-- **`users/<uid>`**: `siteId` (primary site). Used when creating/linking tenants.
+- **`tenants/<slug>`**: Public read (for routing). Create only when `request.resource.data.ownerUid == request.auth.uid`. Update/delete only by owner; update cannot change `ownerUid` or `siteId`.
+- **`users/<userId>`**: Read/write only by the authenticated user (same `userId`).
+- **`sites/<siteId>`**: Read/write only by the owner (`ownerUid` / `ownerUserId`). Deploy rules with `firebase deploy --only firestore:rules`.
 
-**Creating / changing subdomain:**
+**Manual test steps (subdomain + slug):**
 
-- **Account** page: shows current subdomain (if any), create or change via "צור תת-דומיין" / "החלף תת-דומיין". Slug rules: 3–30 chars, a-z, 0-9, hyphen, no leading/trailing hyphen; reserved slugs (e.g. `www`, `admin`, `api`, `login`) are rejected.
-- **Create site:** `POST /api/create-website` accepts optional **`slug`**; if provided it is validated and used for both the website subdomain and the tenant. Response includes **`publicUrl`** (e.g. `https://<slug>.caleno.co`).
-- **Rename subdomain:** `POST /api/tenants/change` with **`newSlug`** (auth required); updates `tenants`, `sites/<siteId>.slug`, and removes the old tenant doc.
+1. **Check endpoint:** `GET /api/tenants/check?slug=testfoo` → 200 with `{ available: true }` or `{ available: false, reason? }` (e.g. try reserved `admin` or an existing slug).
+2. **Create via wizard:** Sign up through the builder; at step "בחר תת-דומיין" enter a valid slug (e.g. `testamitay`), click "בדוק זמינות", then complete the wizard. Firestore should have `tenants/testamitay` with correct `siteId`; `GET /api/tenants/resolve?slug=testamitay` returns 200.
+3. **Change subdomain:** Log in, go to Account, enter a new slug, click "בדוק זמינות", then "החלף תת-דומיין". Response includes `url`; Firestore has `tenants/<newSlug>`, old `tenants/<oldSlug>` removed, `sites/<siteId>.slug` and `users/<uid>.primarySlug` updated.
+4. **Verify old slug 404s:** After changing, `GET /api/tenants/resolve?slug=<oldSlug>` returns 404; `GET /api/tenants/resolve?slug=<newSlug>` returns 200. Open `https://<newSlug>.caleno.co/admin` (or localhost with `?tenant=<newSlug>`) and confirm it loads.
 
 ## Deploy on Vercel
 
