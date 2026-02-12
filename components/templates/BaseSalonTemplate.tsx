@@ -561,8 +561,7 @@ export function BaseSalonTemplate({ config }: BaseSalonTemplateProps) {
       <footer className="bg-white border-t border-slate-200 py-8 mt-20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center sm:text-right">
           <p className="text-sm text-slate-600">
-            © {currentYear} {config.salonName || "הסלון שלך"} – נבנה בפלטפורמת
-            הסלון שלי
+            © {currentYear} {config.salonName || "הסלון שלך"} – נבנה ב-Caleno
           </p>
         </div>
       </footer>

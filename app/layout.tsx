@@ -3,7 +3,7 @@ import "./globals.css";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 
 export const metadata: Metadata = {
-  title: "SalonPlatform - בונים אתר מושלם לסלון שלך בדקות",
+  title: "Caleno - בונים אתר מושלם לסלון שלך בדקות",
   description: "בונים אתר מקצועי לסלון שלך ללא צורך בידע טכני. מתאים לספריות, מכוני יופי וספא.",
 };
 

@@ -1,4 +1,4 @@
-# Setup Instructions for Salon Platform Authentication
+# Setup Instructions for Caleno Authentication
 
 ## Quick Start Guide
 

@@ -316,8 +316,30 @@ export default function DaySchedulePage() {
     setBookingsLoading(true);
     setError(null);
 
-    // Always load ALL bookings for the day (no worker filter) so phase 2 can find its parent (phase 1)
-    // for correct slot positioning. Worker filter is applied only for display (which columns to show).
+    // Load by both "date" and "dateISO" so slot generation sees the same set as save/conflict check (checkWorkerConflicts uses dateISO).
+    type DocSnap = { id: string; data: () => Record<string, unknown> };
+    const refByDate = { current: [] as DocSnap[] };
+    const refByDateISO = { current: [] as DocSnap[] };
+
+    function mergeAndSetBookings() {
+      const byId = new Map<string, DocSnap>();
+      for (const d of refByDate.current) byId.set(d.id, d);
+      for (const d of refByDateISO.current) byId.set(d.id, d);
+      const merged = Array.from(byId.values());
+      const normalized = merged.map((d) => normalizeBooking(d));
+      const forDay = normalized.filter((b) => (b.dateStr ?? (b as { date?: string }).date) === dateKey);
+      const notCancelled = forDay.filter((b) => !isBookingCancelled(b) && !isBookingArchived(b));
+      notCancelled.sort((a, b) => (a.timeHHmm || "").localeCompare(b.timeHHmm || ""));
+      const withWorkerNames = notCancelled.map((b) => {
+        const worker = workers.find((w) => w.id === b.workerId);
+        return { ...b, workerName: worker?.name } as unknown as Booking;
+      });
+      setBookings(withWorkerNames);
+      setBookingsLoading(false);
+      setLoading(false);
+    }
+
+    // Query by "date" (with orderBy if index exists)
     let bookingsQuery;
     try {
       bookingsQuery = query(
@@ -329,44 +351,21 @@ export default function DaySchedulePage() {
       bookingsQuery = query(bookingsCollection(siteId), where("date", "==", dateKey));
     }
 
-    const unsubscribe = onSnapshot(
+    const unsubscribeDate = onSnapshot(
       bookingsQuery,
       (snapshot) => {
-        const normalized = snapshot.docs.map((d) => normalizeBooking(d as { id: string; data: () => Record<string, unknown> }));
-        const forDay = normalized.filter((b) => (b.dateStr ?? (b as { date?: string }).date) === dateKey);
-        const notCancelled = forDay.filter((b) => !isBookingCancelled(b) && !isBookingArchived(b));
-        notCancelled.sort((a, b) => (a.timeHHmm || "").localeCompare(b.timeHHmm || ""));
-        const withWorkerNames = notCancelled.map((b) => {
-          const worker = workers.find((w) => w.id === b.workerId);
-          return { ...b, workerName: worker?.name } as unknown as Booking;
-        });
-        setBookings(withWorkerNames);
-        setBookingsLoading(false);
-        setLoading(false);
+        refByDate.current = snapshot.docs as DocSnap[];
+        mergeAndSetBookings();
       },
       (err) => {
-        console.error("[DaySchedule] Failed to load bookings", err);
-        // Try fallback query without orderBy
+        console.error("[DaySchedule] Failed to load bookings (date)", err);
         if (err.message?.includes("index") || err.message?.includes("orderBy")) {
-          // Fallback query without orderBy (still all bookings for the day)
-          const fallbackQuery = query(
-            bookingsCollection(siteId),
-            where("date", "==", dateKey)
-          );
+          const fallbackQuery = query(bookingsCollection(siteId), where("date", "==", dateKey));
           const fallbackUnsubscribe = onSnapshot(
             fallbackQuery,
             (snapshot) => {
-              const normalized = snapshot.docs.map((d) => normalizeBooking(d as { id: string; data: () => Record<string, unknown> }));
-              const forDay = normalized.filter((b) => b.dateStr === dateKey);
-              const notCancelled = forDay.filter((b) => !isBookingCancelled(b) && !isBookingArchived(b));
-              notCancelled.sort((a, b) => (a.timeHHmm || "").localeCompare(b.timeHHmm || ""));
-              const withWorkerNames = notCancelled.map((b) => {
-                const worker = workers.find((w) => w.id === b.workerId);
-                return { ...b, workerName: worker?.name } as unknown as Booking;
-              });
-              setBookings(withWorkerNames);
-              setBookingsLoading(false);
-              setLoading(false);
+              refByDate.current = snapshot.docs as DocSnap[];
+              mergeAndSetBookings();
             },
             (fallbackErr) => {
               console.error("[DaySchedule] Fallback query also failed", fallbackErr);
@@ -378,14 +377,31 @@ export default function DaySchedulePage() {
           fallbackUnsubRef.current = fallbackUnsubscribe;
         } else {
           setError(err.message || "שגיאה בטעינת התורים");
-          setBookingsLoading(false);
-          setLoading(false);
+          mergeAndSetBookings();
         }
       }
     );
 
+    // Query by "dateISO" so we match the same docs the conflict check uses
+    const queryDateISO = query(
+      bookingsCollection(siteId),
+      where("dateISO", "==", dateKey)
+    );
+    const unsubscribeDateISO = onSnapshot(
+      queryDateISO,
+      (snapshot) => {
+        refByDateISO.current = snapshot.docs as DocSnap[];
+        mergeAndSetBookings();
+      },
+      (err) => {
+        console.error("[DaySchedule] Failed to load bookings (dateISO)", err);
+        mergeAndSetBookings();
+      }
+    );
+
     return () => {
-      unsubscribe();
+      unsubscribeDate();
+      unsubscribeDateISO();
       fallbackUnsubRef.current?.();
       fallbackUnsubRef.current = null;
     };
@@ -417,41 +433,55 @@ export default function DaySchedulePage() {
     }
   }, [workers]);
 
-  // Resolve service colors for bookings using services lookup
-  // Create lookup maps: serviceName -> color, serviceId -> color
+  // Resolve service colors and serviceId for bookings using services lookup
+  // Create lookup maps: serviceName -> color, serviceId -> color, serviceName -> serviceId (fallback when doc has no serviceId)
   const serviceColorLookup = useMemo(() => {
     const byName = new Map<string, string>();
     const byId = new Map<string, string>();
-    
+    const nameToId = new Map<string, string>();
+    const normalize = (s: string) => (s ?? "").trim().toLowerCase();
+
     services.forEach((service) => {
       const color = service.color || "#3B82F6"; // Default blue
       if (service.name) {
         byName.set(service.name, color);
+        nameToId.set(service.name, service.id ?? service.name);
+        nameToId.set(normalize(service.name), service.id ?? service.name);
       }
       if (service.id) {
         byId.set(service.id, color);
       }
     });
-    
-    return { byName, byId };
+
+    return { byName, byId, nameToId, normalize };
   }, [services]);
 
-  // Resolve colors for bookings
+  // Resolve colors and serviceId for bookings. Phase-2 uses THAT item's service. Fallback: resolve serviceId from serviceName when missing.
   const bookingsWithColors = useMemo(() => {
     const DEFAULT_COLOR = "#3B82F6"; // Default blue
-    
+
     return bookings.map((booking) => {
-      // Priority: 1) booking.serviceColor (denormalized), 2) lookup by serviceName, 3) lookup by serviceId, 4) default
-      const serviceId = (booking as any).serviceId;
-      const resolvedColor = 
-        booking.serviceColor || 
-        serviceColorLookup.byName.get(booking.serviceName) ||
-        (serviceId ? serviceColorLookup.byId.get(serviceId) : null) ||
-        DEFAULT_COLOR;
-      
+      let serviceId = (booking as { serviceId?: string }).serviceId;
+      if (serviceId == null && booking.serviceName) {
+        const resolved = serviceColorLookup.nameToId.get(booking.serviceName) ?? serviceColorLookup.nameToId.get(serviceColorLookup.normalize(booking.serviceName));
+        if (resolved) serviceId = resolved;
+      }
+      const phase = (booking as { phase?: number }).phase;
+      const resolvedColor =
+        phase === 2
+          ? serviceColorLookup.byName.get(booking.serviceName) ??
+            (serviceId ? serviceColorLookup.byId.get(serviceId) : null) ??
+            booking.serviceColor ??
+            DEFAULT_COLOR
+          : booking.serviceColor ||
+            serviceColorLookup.byName.get(booking.serviceName) ||
+            (serviceId ? serviceColorLookup.byId.get(serviceId) : null) ||
+            DEFAULT_COLOR;
+
       return {
         ...booking,
         serviceColor: resolvedColor,
+        serviceId: serviceId ?? (booking as { serviceId?: string }).serviceId,
       };
     });
   }, [bookings, serviceColorLookup]);
@@ -598,6 +628,7 @@ export default function DaySchedulePage() {
         serviceTypeId: b1.serviceTypeId ?? (b1 as { serviceTypeId?: string }).serviceTypeId ?? null,
         serviceType: (b1 as { serviceType?: string }).serviceType ?? null,
         serviceColor: b1.serviceColor ?? null,
+        serviceId: (b1 as { serviceId?: string }).serviceId ?? null,
       },
       phase2:
         phase2Doc && phase2ServiceName
@@ -608,6 +639,8 @@ export default function DaySchedulePage() {
               durationMin: phase2DurationMin,
               workerId: phase2Doc.workerId ?? null,
               workerName: phase2Doc.workerName ?? (phase2Doc as { secondaryWorkerName?: string }).secondaryWorkerName ?? null,
+              serviceId: (phase2Doc as { serviceId?: string }).serviceId ?? null,
+              serviceColor: phase2Doc.serviceColor ?? null,
             }
           : null,
     };

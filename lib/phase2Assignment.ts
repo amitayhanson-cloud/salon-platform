@@ -21,17 +21,17 @@ export interface WorkerForPhase2 {
 }
 
 export interface GetEligiblePhase2WorkersParams {
-  dateStr: string; // YYYY-MM-DD
-  phase1StartMinutes: number; // minutes from midnight (phase 1 start)
+  dateStr: string;
+  phase1StartMinutes: number;
   phase1DurationMin: number;
   waitMin: number;
   phase2DurationMin: number;
   phase2ServiceName: string;
+  /** Prefer for eligibility (Workers page stores service IDs). */
+  phase2ServiceId?: string | null;
   workers: WorkerForPhase2[];
   bookingsForDate: Array<BookingLike & { status?: string }>;
-  /** Optional: only consider workers whose working window contains the phase 2 window. Key = worker.id */
   workerWindowByWorkerId?: Record<string, { startMin: number; endMin: number } | null>;
-  /** Optional: business window; if provided, phase 2 must fit within it when worker window is used */
   businessWindow?: { startMin: number; endMin: number } | null;
 }
 
@@ -47,6 +47,7 @@ export function getEligiblePhase2Workers(params: GetEligiblePhase2WorkersParams)
     waitMin,
     phase2DurationMin,
     phase2ServiceName,
+    phase2ServiceId,
     workers,
     bookingsForDate,
     workerWindowByWorkerId,
@@ -55,34 +56,41 @@ export function getEligiblePhase2Workers(params: GetEligiblePhase2WorkersParams)
 
   const phase2StartMin = phase1StartMinutes + phase1DurationMin + waitMin;
   const phase2EndMin = phase2StartMin + phase2DurationMin;
+  const phase2NameTrim = (phase2ServiceName && String(phase2ServiceName).trim()) ? String(phase2ServiceName).trim() : "";
+  const phase2IdTrim = (phase2ServiceId && String(phase2ServiceId).trim()) ? String(phase2ServiceId).trim() : null;
+  const serviceIdentifier = phase2NameTrim || phase2IdTrim || "";
 
-  const eligible: WorkerForPhase2[] = [];
-
-  for (const worker of workers) {
-    if (!canWorkerPerformService(worker, phase2ServiceName)) continue;
-
-    const busyIntervals = getWorkerBusyIntervals(bookingsForDate, worker.id, dateStr);
-    const hasConflict = busyIntervals.some((interval) =>
-      overlaps(phase2StartMin, phase2EndMin, interval.startMin, interval.endMin)
-    );
-    if (hasConflict) continue;
-
-    if (workerWindowByWorkerId) {
-      const window = workerWindowByWorkerId[worker.id];
-      if (!window) continue;
-      const effectiveStart = businessWindow
-        ? Math.max(window.startMin, businessWindow.startMin)
-        : window.startMin;
-      const effectiveEnd = businessWindow
-        ? Math.min(window.endMin, businessWindow.endMin)
-        : window.endMin;
-      if (effectiveEnd <= effectiveStart) continue;
-      if (phase2StartMin < effectiveStart || phase2EndMin > effectiveEnd) continue;
+  function collectEligible(identifier: string): WorkerForPhase2[] {
+    const out: WorkerForPhase2[] = [];
+    for (const worker of workers) {
+      if (!canWorkerPerformService(worker, identifier)) continue;
+      const busyIntervals = getWorkerBusyIntervals(bookingsForDate, worker.id, dateStr);
+      const hasConflict = busyIntervals.some((interval) =>
+        overlaps(phase2StartMin, phase2EndMin, interval.startMin, interval.endMin)
+      );
+      if (hasConflict) continue;
+      if (workerWindowByWorkerId) {
+        const window = workerWindowByWorkerId[worker.id];
+        if (window) {
+          const effectiveStart = businessWindow
+            ? Math.max(window.startMin, businessWindow.startMin)
+            : window.startMin;
+          const effectiveEnd = businessWindow
+            ? Math.min(window.endMin, businessWindow.endMin)
+            : window.endMin;
+          if (effectiveEnd <= effectiveStart) continue;
+          if (phase2StartMin < effectiveStart || phase2EndMin > effectiveEnd) continue;
+        }
+      }
+      out.push(worker);
     }
-
-    eligible.push(worker);
+    return out;
   }
 
+  let eligible = collectEligible(phase2NameTrim);
+  if (eligible.length === 0 && phase2IdTrim && phase2IdTrim !== phase2NameTrim) {
+    eligible = collectEligible(phase2IdTrim);
+  }
   return eligible;
 }
 
@@ -122,9 +130,7 @@ export function autoAssignPhase2Worker(
 }
 
 export interface ResolvePhase2WorkerParams {
-  /** The selected phase 1 worker (preferred for phase 2 if capable and available). */
   phase1Worker: { id: string; name: string };
-  /** User-selected worker; try first for phase 2 if eligible and available. */
   preferredWorkerId?: string | null;
   dateStr: string;
   phase1StartMinutes: number;
@@ -132,6 +138,7 @@ export interface ResolvePhase2WorkerParams {
   waitMin: number;
   phase2DurationMin: number;
   phase2ServiceName: string;
+  phase2ServiceId?: string | null;
   workers: WorkerForPhase2[];
   bookingsForDate: Array<BookingLike & { status?: string }>;
   workerWindowByWorkerId?: Record<string, { startMin: number; endMin: number } | null>;
@@ -154,6 +161,7 @@ export function resolvePhase2Worker(params: ResolvePhase2WorkerParams): { id: st
     waitMin,
     phase2DurationMin,
     phase2ServiceName,
+    phase2ServiceId,
     workers,
     bookingsForDate,
     workerWindowByWorkerId,
@@ -167,6 +175,7 @@ export function resolvePhase2Worker(params: ResolvePhase2WorkerParams): { id: st
     waitMin,
     phase2DurationMin,
     phase2ServiceName,
+    phase2ServiceId: phase2ServiceId ?? undefined,
     workers,
     bookingsForDate,
     workerWindowByWorkerId,

@@ -1,4 +1,6 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Caleno
+
+[Caleno](https://caleno.co) – build a professional site for your salon in minutes. Next.js app with Firebase.
 
 ## Getting Started
 
@@ -71,6 +73,24 @@ For API routes that use Firebase Admin SDK, you need to set up service account c
    - Vercel will handle newlines automatically
 
 **Important:** Without this variable, production builds will fail with "Missing FIREBASE_SERVICE_ACCOUNT_JSON" error.
+
+## Domains
+
+- **Primary:** https://caleno.co  
+- **Redirect:** https://www.caleno.co → https://caleno.co  
+
+Set `NEXT_PUBLIC_APP_URL=https://caleno.co` in production (see `env.local.example`).
+
+### Multi-tenant subdomains
+
+Each tenant gets a subdomain: `https://<slug>.caleno.co` (e.g. `https://alice.caleno.co`). The root domain and `www` serve the main app; subdomains are rewritten internally to `/t/<slug>/...` and rendered by `app/t/[tenant]/`.
+
+**Local development (localhost):**
+
+- **Option A – Query param:** Use `?tenant=<slug>` to simulate a tenant. Example: [http://localhost:3000?tenant=alice](http://localhost:3000?tenant=alice) behaves like `alice.caleno.co`, and [http://localhost:3000/pricing?tenant=alice](http://localhost:3000/pricing?tenant=alice) like `alice.caleno.co/pricing`.
+- **Option B – Subdomain:** If your OS supports it, open [http://alice.localhost:3000](http://alice.localhost:3000) to get the same behavior without a query param.
+
+Create a tenant from the **Account** page (logged in): enter a slug (3–30 chars, a-z, 0-9, hyphens) and click "צור תת-דומיין". The tenant is stored in Firestore `tenants/<slug>` with `ownerUid` and timestamps.
 
 ## Deploy on Vercel
 

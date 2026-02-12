@@ -8,10 +8,18 @@ import {
   resolveChainWorkers,
   computeChainSlots,
   getChainTotalDuration,
+  repairInvalidAssignments,
+  validateChainAssignments,
+  computeAvailableSlots,
+  buildChainWithFinishingService,
   type ChainServiceInput,
 } from "@/lib/multiServiceChain";
 import { getWorkerBusyIntervals, overlaps } from "@/lib/bookingPhases";
 import { resolvePhase2Worker } from "@/lib/phase2Assignment";
+import {
+  workersWhoCanPerformServiceForService,
+  workerCanDoServiceForService,
+} from "@/lib/workerServiceCompatibility";
 import { minutesToTime } from "@/lib/calendarUtils";
 import { subscribeBookingSettings } from "@/lib/firestoreBookingSettings";
 import { defaultBookingSettings } from "@/types/bookingSettings";
@@ -133,6 +141,7 @@ export default function AdminCreateBookingForm({
   const [customerPhone, setCustomerPhone] = useState("");
   const [selectedClientId, setSelectedClientId] = useState("");
   const [workerId, setWorkerId] = useState<string>(""); // empty = auto-assign
+  const [timeUpdatedByWorkerMessage, setTimeUpdatedByWorkerMessage] = useState(false);
   const slotIdRef = useRef(0);
   const [slots, setSlots] = useState<ServiceSlot[]>([]);
 
@@ -256,12 +265,82 @@ export default function AdminCreateBookingForm({
   }, [bookingSettings, selectedDate]);
 
   const chain: ChainServiceInput[] = useMemo(
-    () => slots.map((s) => ({ service: s.service, pricingItem: s.pricingItem })),
-    [slots]
+    () =>
+      buildChainWithFinishingService(
+        slots.map((s) => ({ service: s.service, pricingItem: s.pricingItem })),
+        services,
+        pricingItems
+      ),
+    [slots, services, pricingItems]
   );
+
+  // Workers eligible for the first (phase 1) service only — used for dropdown and slot validity (no availability here)
+  const eligibleWorkersForMainService = useMemo(() => {
+    if (chain.length === 0) return workers;
+    const firstService = chain[0]!.service;
+    return workersWhoCanPerformServiceForService(workers, {
+      id: firstService.id,
+      name: firstService.name,
+      displayName: (firstService as { displayName?: string }).displayName,
+    });
+  }, [chain, workers]);
+
+  // TODO: Remove TEMP debug block and workerEligibilityDebug UI once eligibility is verified in production
+  // TEMP debug: worker eligibility
+  const workerEligibilityDebug =
+    process.env.NODE_ENV === "development" &&
+    chain.length > 0 &&
+    (() => {
+      const firstService = chain[0]!.service;
+      const serviceKey = {
+        serviceId: firstService.id,
+        serviceName: firstService.name,
+        categoryId: (firstService as { category?: string }).category,
+      };
+      const first10 = workers.slice(0, 10).map((w) => {
+        const allowedRaw = (w as { services?: unknown[] }).services ?? [];
+        const canDo = workerCanDoServiceForService(w, {
+          id: firstService.id,
+          name: firstService.name,
+          displayName: (firstService as { displayName?: string }).displayName,
+        });
+        return {
+          workerId: w.id,
+          workerName: w.name,
+          allowedServicesRaw: JSON.stringify(allowedRaw),
+          workerCanDoService: canDo,
+        };
+      });
+      if (typeof console !== "undefined" && console.table) {
+        console.log("[AdminCreateBooking] Worker eligibility — service key:", serviceKey);
+        console.log("[AdminCreateBooking] Workers loaded:", workers.length, "Eligible:", eligibleWorkersForMainService.length);
+        console.table(first10);
+      }
+      return {
+        workersLoaded: workers.length,
+        workersEligible: eligibleWorkersForMainService.length,
+        serviceKeyUsed: `${serviceKey.serviceId ?? ""}|${serviceKey.serviceName ?? ""}`.trim() || "(empty)",
+      };
+    })();
+
+  // Clear selected worker when they become ineligible (e.g. first service changed)
+  useEffect(() => {
+    if (chain.length === 0 || !workerId) return;
+    const isEligible = eligibleWorkersForMainService.some((w) => w.id === workerId);
+    if (!isEligible) {
+      setWorkerId("");
+      setErrors((prev) => ({ ...prev, worker: "העובד שנבחר לא מבצע את השירות הזה" }));
+    }
+  }, [chain, workerId, eligibleWorkersForMainService]);
 
   const availableTimeSlots = useMemo(() => {
     if (chain.length === 0 || !businessWindow) return [];
+
+    // If a worker is selected, they must be eligible for the first service
+    if (workerId && chain.length >= 1) {
+      const isEligible = eligibleWorkersForMainService.some((w) => w.id === workerId);
+      if (!isEligible) return [];
+    }
 
     const dayKey = String(selectedDate.getDay()) as "0" | "1" | "2" | "3" | "4" | "5" | "6";
     const dayConfig = bookingSettings.days[dayKey];
@@ -301,64 +380,24 @@ export default function AdminCreateBookingForm({
       return busy.some((iv) => overlaps(slotStartMin, slotEndMin, iv.startMin, iv.endMin));
     };
 
-    if (chain.length > 1) {
-      return generated.filter((t) => {
-        const [hh, mm] = t.split(":").map(Number);
-        const startAt = new Date(selectedDate);
-        startAt.setHours(hh, mm, 0, 0);
-        const resolved = resolveChainWorkers({
-          chain,
-          startAt,
-          dateStr,
-          workers,
-          bookingsForDate,
-          preferredWorkerId: workerId || null,
-          workerWindowByWorkerId,
-          businessWindow,
-        });
-        return resolved !== null;
-      });
-    }
-
-    const { pricingItem } = chain[0]!;
-    const primaryDurationMin = pricingItem.durationMaxMinutes ?? pricingItem.durationMinMinutes ?? 30;
-    const hasFollowUp = pricingItem.hasFollowUp === true && pricingItem.followUp?.name?.trim() && (pricingItem.followUp?.durationMinutes ?? 0) >= 1;
-    const waitMin = hasFollowUp ? Math.max(0, pricingItem.followUp!.waitMinutes ?? 0) : 0;
-    const phase2DurationMin = hasFollowUp ? pricingItem.followUp!.durationMinutes : 0;
-    const phase2ServiceName = hasFollowUp ? pricingItem.followUp!.name!.trim() : "";
-
-    if (!workerId) return [];
-
-    const worker = workers.find((w) => w.id === workerId);
-    if (!worker) return [];
-
-    const workerWindow = workerWindowByWorkerId[workerId] ?? null;
-
-    return generated.filter((t) => {
-      const slotStartMin = timeToMinutes(t);
-      const slotEndMin = slotStartMin + primaryDurationMin;
-
-      if (!isSlotWithinWindows(slotStartMin, slotEndMin, businessWindow, workerWindow)) return false;
-      if (doesSlotConflict(slotStartMin, slotEndMin, workerId)) return false;
-
-      if (hasFollowUp && phase2ServiceName && phase2DurationMin >= 1) {
-        const phase2 = resolvePhase2Worker({
-          phase1Worker: { id: worker.id, name: worker.name },
-          dateStr,
-          phase1StartMinutes: slotStartMin,
-          phase1DurationMin: primaryDurationMin,
-          waitMin,
-          phase2DurationMin,
-          phase2ServiceName,
-          workers,
-          bookingsForDate,
-          workerWindowByWorkerId,
-          businessWindow: businessWindow ?? undefined,
-        });
-        if (phase2 === null) return false;
-      }
-      return true;
+    const preferredWorkerId = !workerId || workerId.trim() === "" ? null : workerId;
+    const slots = computeAvailableSlots({
+      date: selectedDate,
+      dateStr,
+      chain,
+      preferredWorkerId,
+      workers,
+      bookingsForDate,
+      workerWindowByWorkerId,
+      businessWindow,
+      candidateTimes: generated,
     });
+
+    if (process.env.NODE_ENV === "development") {
+      const serviceKey = chain.map((s) => s.service?.id ?? s.service?.name ?? "").join(",");
+      console.log("recomputeSlots", { workerId: workerId || null, date, serviceKey, slotsCount: slots.length });
+    }
+    return slots;
   }, [
     chain,
     date,
@@ -369,17 +408,20 @@ export default function AdminCreateBookingForm({
     workers,
     workerWindowByWorkerId,
     bookingsForDate,
+    eligibleWorkersForMainService,
   ]);
 
   const totalDuration = useMemo(() => getChainTotalDuration(chain), [chain]);
 
   const timeOptions = availableTimeSlots.length > 0 ? availableTimeSlots : [""];
 
+  // When worker (or date/slots) changes, clear selected time if it's no longer valid and show inline message
   useEffect(() => {
-    if (availableTimeSlots.length > 0 && time && !availableTimeSlots.includes(time)) {
-      setTime(availableTimeSlots[0]!);
-    }
-  }, [availableTimeSlots, time]);
+    if (availableTimeSlots.length === 0 || !time) return;
+    if (availableTimeSlots.includes(time)) return;
+    setTime(availableTimeSlots[0]!);
+    setTimeUpdatedByWorkerMessage(true);
+  }, [workerId, availableTimeSlots, time]);
 
   const previewSlots = useMemo(() => {
     if (chain.length === 0) return null;
@@ -433,7 +475,7 @@ export default function AdminCreateBookingForm({
     if (!customerPhone.trim()) next.customerPhone = "נא להזין טלפון";
     if (slots.length === 0) next.services = "נא לבחור לפחות שירות אחד";
     if (slots.some((s) => !s.service || !s.pricingItem)) next.services = "כל שירות חייב להיות תקין";
-    if (chain.length === 1 && !workerId) next.worker = "לשירות יחיד יש לבחור מטפל";
+    // workerId can be empty = "ללא העדפה"; resolution will assign eligible workers per service
     if (previewSlots === null && chain.length > 0) {
       next.worker = "אין זמינות להשלמת התור. נא לשנות מטפל או שעה.";
     }
@@ -451,7 +493,7 @@ export default function AdminCreateBookingForm({
       const [hh, mm] = time.split(":").map(Number);
       const startAt = new Date(y, m - 1, d, hh || 0, mm || 0, 0, 0);
 
-      if (chain.length === 1) {
+      if (chain.length === 1 && workerId) {
         const { service, pricingItem } = chain[0]!;
         const durationMin = pricingItem.durationMaxMinutes ?? pricingItem.durationMinMinutes ?? 30;
         const hasFollowUp =
@@ -461,6 +503,42 @@ export default function AdminCreateBookingForm({
 
         const worker = workers.find((w) => w.id === workerId);
         if (!worker) throw new Error("נא לבחור מטפל");
+
+        let phase2Payload: { enabled: true; serviceName: string; waitMinutes: number; durationMin: number; workerIdOverride?: string; workerNameOverride?: string; serviceColor?: string | null; serviceId?: string | null } | null = null;
+        if (hasFollowUp && pricingItem.followUp) {
+          const slotStartMin = timeToMinutes(time);
+          const phase2Worker = resolvePhase2Worker({
+            phase1Worker: { id: worker.id, name: worker.name },
+            preferredWorkerId: worker.id,
+            dateStr: date,
+            phase1StartMinutes: slotStartMin,
+            phase1DurationMin: durationMin,
+            waitMin: Math.max(0, pricingItem.followUp.waitMinutes ?? 0),
+            phase2DurationMin: pricingItem.followUp.durationMinutes,
+            phase2ServiceName: pricingItem.followUp.name.trim(),
+            phase2ServiceId: pricingItem.followUp.serviceId ?? undefined,
+            workers,
+            bookingsForDate,
+            workerWindowByWorkerId,
+            businessWindow: businessWindow ?? undefined,
+          });
+          if (!phase2Worker) {
+            throw new Error("אין עובד זמין לשירות ההמשך. נא לנסות שעה או מטפל אחר.");
+          }
+          const followUpService = services.find(
+            (s) => s.id === pricingItem.followUp?.serviceId || s.name === pricingItem.followUp?.name?.trim()
+          );
+          phase2Payload = {
+            enabled: true,
+            serviceName: pricingItem.followUp.name.trim(),
+            waitMinutes: pricingItem.followUp.waitMinutes ?? 0,
+            durationMin: pricingItem.followUp.durationMinutes,
+            workerIdOverride: phase2Worker.id,
+            workerNameOverride: phase2Worker.name,
+            serviceColor: followUpService?.color ?? null,
+            serviceId: followUpService?.id ?? null,
+          };
+        }
 
         await createAdminBooking(siteId, {
           customerName: customerName.trim(),
@@ -475,25 +553,59 @@ export default function AdminCreateBookingForm({
             workerName: worker.name,
             durationMin,
             serviceColor: service.color ?? null,
+            serviceId: service.id ?? null,
           },
-          phase2: hasFollowUp && pricingItem.followUp
-            ? {
-                enabled: true,
-                serviceName: pricingItem.followUp.name.trim(),
-                waitMinutes: pricingItem.followUp.waitMinutes ?? 0,
-                durationMin: pricingItem.followUp.durationMinutes,
-              }
-            : null,
+          phase2: phase2Payload,
           note: null,
           status: "confirmed",
           price: null,
         });
-      } else if (previewSlots && previewSlots.length > 0) {
-        await saveMultiServiceBooking(siteId, previewSlots, {
+      } else if (chain.length === 1 && !workerId) {
+        // "ללא העדפה": resolve at selected time, then save multi-service (never store preferredWorkerId in DB)
+        const resolved = resolveChainWorkers({
+          chain,
+          startAt,
+          dateStr: date,
+          workers,
+          bookingsForDate,
+          preferredWorkerId: null,
+          workerWindowByWorkerId,
+          businessWindow,
+        });
+        if (!resolved) throw new Error("אין זמינות להשלמת התור. נא לנסות שעה אחרת.");
+        const repaired = repairInvalidAssignments(resolved, workers, {
+          dateStr: date,
+          bookingsForDate,
+          workerWindowByWorkerId,
+          businessWindow,
+        });
+        if (!repaired) throw new Error("אין עובד זמין לאחד השירותים. נא לנסות שעה או מטפל אחר.");
+        const validation = validateChainAssignments(repaired, workers);
+        if (!validation.valid) throw new Error(validation.errors[0] ?? "ההקצאה אינה תקינה");
+        await saveMultiServiceBooking(siteId, repaired, {
           name: customerName.trim(),
           phone: customerPhone.trim(),
           note: undefined,
+        }, { workers });
+      } else if (previewSlots && previewSlots.length > 0) {
+        const repaired = repairInvalidAssignments(previewSlots, workers, {
+          dateStr: date,
+          bookingsForDate,
+          workerWindowByWorkerId,
+          businessWindow,
         });
+        if (!repaired) {
+          throw new Error("אין עובד זמין לאחד השירותים. נא לנסות שעה או מטפל אחר.");
+        }
+        const validation = validateChainAssignments(repaired, workers);
+        if (!validation.valid) {
+          throw new Error(validation.errors[0] ?? "ההקצאה אינה תקינה");
+        }
+        await saveMultiServiceBooking(siteId, repaired, {
+          name: customerName.trim(),
+          phone: customerPhone.trim(),
+          note: undefined,
+        }, { workers });
       } else {
         throw new Error("אין זמינות להשלמת התור");
       }
@@ -722,11 +834,15 @@ export default function AdminCreateBookingForm({
           <label className="block text-sm font-medium text-slate-700 mb-1">מטפל</label>
           <select
             value={workerId}
-            onChange={(e) => setWorkerId(e.target.value)}
+            onChange={(e) => {
+              setWorkerId(e.target.value);
+              setErrors((prev) => ({ ...prev, worker: "" }));
+              setTimeUpdatedByWorkerMessage(false);
+            }}
             className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right bg-white"
           >
             <option value="">ללא העדפה (הקצאה אוטומטית)</option>
-            {workers.map((w) => (
+            {eligibleWorkersForMainService.map((w) => (
               <option key={w.id} value={w.id}>
                 {w.name}
               </option>
@@ -735,8 +851,18 @@ export default function AdminCreateBookingForm({
           {chain.length === 1 && (
             <p className="text-xs text-slate-500 mt-1">לשירות יחיד יש לבחור מטפל</p>
           )}
+          {chain.length >= 1 && eligibleWorkersForMainService.length === 0 && (
+            <p className="text-xs text-amber-600 mt-1">אין עובדים שמבצעים את השירות הזה</p>
+          )}
           {errors.worker && (
             <p className="text-xs text-red-600 mt-0.5">{errors.worker}</p>
+          )}
+          {workerEligibilityDebug && (
+            <div className="mt-2 p-2 rounded bg-amber-50 border border-amber-200 text-left text-xs font-mono" dir="ltr">
+              <div>Workers loaded: {workerEligibilityDebug.workersLoaded}</div>
+              <div>Workers eligible: {workerEligibilityDebug.workersEligible}</div>
+              <div>Service key used: {workerEligibilityDebug.serviceKeyUsed}</div>
+            </div>
           )}
         </div>
 
@@ -747,7 +873,10 @@ export default function AdminCreateBookingForm({
             <input
               type="date"
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={(e) => {
+                setDate(e.target.value);
+                setTimeUpdatedByWorkerMessage(false);
+              }}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
             />
             {errors.date && <p className="text-xs text-red-600 mt-0.5">{errors.date}</p>}
@@ -756,11 +885,16 @@ export default function AdminCreateBookingForm({
             <label className="block text-sm font-medium text-slate-700 mb-1">שעת התחלה *</label>
             <select
               value={timeOptions.includes(time) ? time : (availableTimeSlots[0] ?? "")}
-              onChange={(e) => setTime(e.target.value)}
+              onChange={(e) => {
+                setTime(e.target.value);
+                setTimeUpdatedByWorkerMessage(false);
+              }}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right bg-white"
             >
               {availableTimeSlots.length === 0 ? (
-                <option value="">אין זמנים זמינים ביום זה</option>
+                <option value="">
+                  {workerId ? "אין שעות זמינות לעובד שנבחר" : "אין זמנים זמינים ביום זה"}
+                </option>
               ) : (
                 timeOptions.map((t) => (
                   <option key={t} value={t}>
@@ -769,8 +903,13 @@ export default function AdminCreateBookingForm({
                 ))
               )}
             </select>
-            {availableTimeSlots.length === 0 && chain.length > 0 && (chain.length > 1 || workerId) && (
-              <p className="text-xs text-amber-600 mt-0.5">בחר תאריך אחר או מטפל אחר</p>
+            {availableTimeSlots.length === 0 && chain.length > 0 && (
+              <p className="text-xs text-amber-600 mt-0.5">
+                {workerId ? "אין שעות זמינות לעובד שנבחר" : "בחר תאריך אחר או מטפל אחר"}
+              </p>
+            )}
+            {timeUpdatedByWorkerMessage && (
+              <p className="text-xs text-slate-600 mt-0.5">שעת התחלה עודכנה לפי העובד שנבחר</p>
             )}
             {errors.time && <p className="text-xs text-red-600 mt-0.5">{errors.time}</p>}
           </div>

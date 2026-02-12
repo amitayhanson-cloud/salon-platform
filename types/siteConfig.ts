@@ -37,6 +37,10 @@ export type SiteService = {
   color?: string; // Hex color for service (e.g., "#3B82F6")
   /** Optional image URL for public site services grid */
   imageUrl?: string | null;
+  /** When true, a single finishing service (e.g. פן) is appended once at the end of multi-service chains. */
+  requiresFinish?: boolean;
+  /** Gap in minutes after this service ends before the finishing service starts. Used when this is the last selected service and needsFinish is true. Default 0. */
+  finishGapMinutes?: number;
 };
 
 export type SiteConfig = {

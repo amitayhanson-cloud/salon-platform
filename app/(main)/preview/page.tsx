@@ -436,8 +436,7 @@ function HairLuxuryPreview({
       >
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center sm:text-right">
           <p style={{ color: colors.textOnDark }} className="text-sm">
-            © {currentYear} {config.salonName || "הסלון שלך"} – נבנה בפלטפורמת
-            הסלון שלי
+            © {currentYear} {config.salonName || "הסלון שלך"} – נבנה ב-Caleno
           </p>
         </div>
       </footer>

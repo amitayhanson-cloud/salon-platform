@@ -621,8 +621,7 @@ export function LuxurySalonTemplate({ config }: LuxurySalonTemplateProps) {
       <footer className="bg-black border-t border-slate-800 py-8">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center sm:text-right">
           <p className="text-sm text-slate-400">
-            © {currentYear} {config.salonName || "הסלון שלך"} – נבנה בפלטפורמת
-            הסלון שלי
+            © {currentYear} {config.salonName || "הסלון שלך"} – נבנה ב-Caleno
           </p>
         </div>
       </footer>

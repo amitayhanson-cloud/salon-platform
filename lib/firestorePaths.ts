@@ -2,7 +2,7 @@ import { collection, doc, type Firestore } from "firebase/firestore";
 import { db } from "./firebaseClient";
 
 /**
- * Standardized Firestore path helpers for multi-tenant salon platform
+ * Standardized Firestore path helpers for multi-tenant Caleno platform
  * All paths follow: sites/{siteId}/...
  * Note: siteId is the site document ID, not userId
  */

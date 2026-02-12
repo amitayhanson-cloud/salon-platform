@@ -1,6 +1,6 @@
 # Authentication Implementation
 
-This document describes the authentication and user-website ownership implementation for the Salon Platform SaaS application.
+This document describes the authentication and user-website ownership implementation for the Caleno SaaS application.
 
 ## Overview
 
@@ -187,7 +187,7 @@ service cloud.firestore {
 ## File Structure
 
 ```
-salon-platform/
+caleno/
 ├── app/
 │   ├── (main)/
 │   │   └── page.tsx                    # Landing page (updated)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/firebaseClient";
@@ -30,14 +30,82 @@ import { subscribePricingItems } from "@/lib/firestorePricing";
 import type { PricingItem } from "@/types/pricingItem";
 import type { OpeningHours } from "@/types/booking";
 import { getWorkerBusyIntervals, overlaps } from "@/lib/bookingPhases";
-import { canWorkerPerformService, workersWhoCanPerformService } from "@/lib/workerServiceCompatibility";
-import { resolvePhase2Worker } from "@/lib/phase2Assignment";
+import {
+  canWorkerPerformService,
+  workersWhoCanPerformService,
+  workersWhoCanPerformServiceForService,
+  workerCanDoServiceForService,
+} from "@/lib/workerServiceCompatibility";
 import {
   getChainTotalDuration,
   resolveChainWorkers,
+  repairInvalidAssignments,
+  validateChainAssignments,
+  computeAvailableSlots,
+  buildChainWithFinishingService,
   type ChainServiceInput,
 } from "@/lib/multiServiceChain";
-import { saveBooking, saveMultiServiceBooking } from "@/lib/booking";
+import { saveMultiServiceBooking } from "@/lib/booking";
+
+type TimestampLike = { toDate: () => Date };
+
+function normalizeTimestampLike(value: unknown): TimestampLike | undefined {
+  if (value == null) return undefined;
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toDate" in value &&
+    typeof (value as { toDate: unknown }).toDate === "function"
+  ) {
+    const v = value as { toDate: () => Date };
+    try {
+      const d = v.toDate();
+      if (d instanceof Date && !Number.isNaN(d.getTime())) return v;
+    } catch {
+      return undefined;
+    }
+  }
+  if (typeof value === "string") {
+    const d = new Date(value);
+    if (!Number.isNaN(d.getTime())) return { toDate: () => d };
+    return undefined;
+  }
+  if (value instanceof Date) {
+    if (!Number.isNaN(value.getTime())) return { toDate: () => value };
+    return undefined;
+  }
+  return undefined;
+}
+
+type PhaseForDate = {
+  kind: string;
+  startAt: TimestampLike;
+  endAt: TimestampLike;
+  durationMin: number;
+  workerId?: string | null;
+};
+
+function normalizePhases(value: unknown): PhaseForDate[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out: PhaseForDate[] = [];
+  for (const item of value) {
+    if (item == null || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const kind = typeof o.kind === "string" ? o.kind : undefined;
+    const durationMin = typeof o.durationMin === "number" ? o.durationMin : undefined;
+    const startAt = normalizeTimestampLike(o.startAt);
+    const endAt = normalizeTimestampLike(o.endAt);
+    if (kind === undefined || durationMin === undefined || !startAt || !endAt) continue;
+    out.push({
+      kind,
+      startAt,
+      endAt,
+      durationMin,
+      workerId: o.workerId === undefined || o.workerId === null ? undefined : (o.workerId as string) ?? null,
+    });
+  }
+  return out.length ? out : undefined;
+}
 
 type BookingStep = 1 | 2 | 3 | 4 | 5 | 6; // 6 = success
 
@@ -67,6 +135,7 @@ export default function BookingPage() {
     status: string;
     durationMin?: number;
     date?: string;
+    dateISO?: string;
     waitMin?: number;
     waitMinutes?: number;
     secondaryDurationMin?: number;
@@ -93,6 +162,7 @@ export default function BookingPage() {
   const [phase2WorkerAssigned, setPhase2WorkerAssigned] = useState<{ id: string; name: string } | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string>("");
+  const [timeUpdatedByWorkerMessage, setTimeUpdatedByWorkerMessage] = useState(false);
   const [clientName, setClientName] = useState("");
   const [clientPhone, setClientPhone] = useState("");
   const [clientNote, setClientNote] = useState("");
@@ -571,7 +641,8 @@ export default function BookingPage() {
     };
   }, [siteId, config]);
 
-  // Load bookings for selected date
+  // Load bookings for selected date: query by both "date" and "dateISO" so we match
+  // the same set the save/conflict path uses (checkWorkerConflicts queries by dateISO).
   useEffect(() => {
     if (!db || !siteId || !selectedDate) {
       setBookingsForDate([]);
@@ -579,52 +650,93 @@ export default function BookingPage() {
     }
 
     const dateStr = ymdLocal(selectedDate);
-    const q = query(
+
+    function docToBooking(docSnap: { id: string; data: () => Record<string, unknown> }, dateLabel: string): BookingForDate | null {
+      const data = docSnap.data();
+      if (data.isArchived === true) return null;
+      const timeVal = (data.timeHHmm ?? data.time ?? "") as string;
+      const durationMin = (data.durationMin ?? data.duration ?? 60) as number;
+      return {
+        id: docSnap.id,
+        workerId: (data.workerId as string) || null,
+        time: timeVal,
+        status: (data.status as string) || "confirmed",
+        durationMin: typeof durationMin === "number" ? durationMin : 60,
+        date: dateLabel,
+        dateISO: (data.dateISO ?? data.date ?? dateLabel) as string,
+        startAt: normalizeTimestampLike(data.startAt),
+        endAt: normalizeTimestampLike(data.endAt),
+        waitMin: (data.waitMin ?? data.waitMinutes ?? 0) as number,
+        waitMinutes: (data.waitMinutes ?? data.waitMin ?? 0) as number,
+        secondaryDurationMin: (data.secondaryDurationMin ?? 0) as number,
+        secondaryWorkerId: (data.secondaryWorkerId as string) || null,
+        secondaryStartAt: normalizeTimestampLike(data.secondaryStartAt),
+        secondaryEndAt: normalizeTimestampLike(data.secondaryEndAt),
+        followUpStartAt: normalizeTimestampLike(data.followUpStartAt),
+        followUpEndAt: normalizeTimestampLike(data.followUpEndAt),
+        followUpWorkerId: (data.followUpWorkerId as string) || null,
+        followUpServiceId: (data.followUpServiceId as string) || null,
+        phases: normalizePhases(data.phases),
+      };
+    }
+
+    const byDateRef = { current: [] as BookingForDate[] };
+    const byDateISORef = { current: [] as BookingForDate[] };
+    function mergeAndSet() {
+      const byId = new Map<string, BookingForDate>();
+      for (const b of byDateRef.current) byId.set(b.id, b);
+      for (const b of byDateISORef.current) byId.set(b.id, b);
+      setBookingsForDate(Array.from(byId.values()));
+    }
+
+    const qByDate = query(
       bookingsCollection(siteId),
       where("date", "==", dateStr),
       where("status", "in", ["confirmed", "active"])
     );
-
-    const unsubscribe = onSnapshot(
-      q,
+    const unsubDate = onSnapshot(
+      qByDate,
       (snapshot) => {
-        const bookings: BookingForDate[] = [];
+        const list: BookingForDate[] = [];
         snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          if (data.isArchived === true) return;
-          const timeVal = data.timeHHmm ?? data.time ?? "";
-          const durationMin = data.durationMin ?? data.duration ?? 60;
-          bookings.push({
-            id: docSnap.id,
-            workerId: data.workerId || null,
-            time: timeVal,
-            status: data.status || "confirmed",
-            durationMin: typeof durationMin === "number" ? durationMin : 60,
-            date: dateStr,
-            startAt: data.startAt,
-            endAt: data.endAt,
-            waitMin: data.waitMin ?? data.waitMinutes ?? 0,
-            waitMinutes: data.waitMinutes ?? data.waitMin ?? 0,
-            secondaryDurationMin: data.secondaryDurationMin ?? 0,
-            secondaryWorkerId: data.secondaryWorkerId ?? null,
-            secondaryStartAt: data.secondaryStartAt,
-            secondaryEndAt: data.secondaryEndAt,
-            followUpStartAt: data.followUpStartAt,
-            followUpEndAt: data.followUpEndAt,
-            followUpWorkerId: data.followUpWorkerId ?? null,
-            followUpServiceId: data.followUpServiceId ?? null,
-            phases: data.phases,
-          });
+          const b = docToBooking(docSnap, dateStr);
+          if (b) list.push(b);
         });
-        setBookingsForDate(bookings);
+        byDateRef.current = list;
+        mergeAndSet();
       },
       (err) => {
-        console.error("Failed to load bookings for date", err);
-        setBookingsForDate([]);
+        console.error("Failed to load bookings for date (date)", err);
+        mergeAndSet();
       }
     );
 
-    return () => unsubscribe();
+    const qByDateISO = query(
+      bookingsCollection(siteId),
+      where("dateISO", "==", dateStr),
+      where("status", "in", ["confirmed", "active"])
+    );
+    const unsubDateISO = onSnapshot(
+      qByDateISO,
+      (snapshot) => {
+        const list: BookingForDate[] = [];
+        snapshot.forEach((docSnap) => {
+          const b = docToBooking(docSnap, dateStr);
+          if (b) list.push(b);
+        });
+        byDateISORef.current = list;
+        mergeAndSet();
+      },
+      (err) => {
+        console.error("Failed to load bookings for date (dateISO)", err);
+        mergeAndSet();
+      }
+    );
+
+    return () => {
+      unsubDate();
+      unsubDateISO();
+    };
   }, [siteId, selectedDate]);
 
   /**
@@ -753,17 +865,21 @@ export default function BookingPage() {
   const availableDates = generateDateWindow(dateWindowStart, DATE_WINDOW_SIZE);
 
   // ============================================================================
-  // STEP 1 → STEP 2: Filter workers by first service (+ phase 2 feasibility for single-service)
+  // STEP 1 → STEP 2: Filter workers by first service only (workerCanDoService). No availability here.
   // ============================================================================
+  const firstServiceForEligibility = selectedServices.length > 0 ? selectedServices[0]!.service : null;
   const eligibleWorkers = (() => {
-    if (selectedServices.length === 0) return [];
-    const firstService = selectedServices[0]!.service;
+    if (selectedServices.length === 0 || !firstServiceForEligibility) return [];
+    const firstService = firstServiceForEligibility;
     const firstPricing = selectedServices[0]!.pricingItem;
-    const phase1ServiceName = firstService.name;
+    // Use id + name so both ID and name matching work (workers store names in worker.services)
+    const canDoPhase1 = workersWhoCanPerformServiceForService(workers, {
+      id: firstService.id,
+      name: firstService.name,
+      displayName: (firstService as { displayName?: string }).displayName,
+    });
 
-    const canDoPhase1 = workers.filter((worker) => canWorkerPerformService(worker, phase1ServiceName));
-
-    // Single-service with follow-up: gate by phase 2 worker availability
+    // Single-service with follow-up: only capability — at least one worker must be able to do phase 2
     if (selectedServices.length === 1) {
       const phase2Name = firstPricing?.followUp?.name?.trim() ?? "";
       const workersWhoCanDoPhase2 = phase2Name
@@ -780,15 +896,60 @@ export default function BookingPage() {
     return canDoPhase1;
   })();
 
-  // Reset worker if not eligible when services change
+  // TODO: Remove TEMP debug block and workerEligibilityDebug UI once eligibility is verified in production
+  // TEMP debug: worker eligibility
+  const workerEligibilityDebug =
+    process.env.NODE_ENV === "development" &&
+    firstServiceForEligibility &&
+    (() => {
+      const serviceKey = {
+        serviceId: firstServiceForEligibility.id,
+        serviceName: firstServiceForEligibility.name,
+        categoryId: (firstServiceForEligibility as { category?: string }).category,
+      };
+      const first10 = workers.slice(0, 10).map((w) => {
+        const allowedRaw = (w as { services?: unknown[] }).services ?? [];
+        const canDo = workerCanDoServiceForService(w, {
+          id: firstServiceForEligibility.id,
+          name: firstServiceForEligibility.name,
+          displayName: (firstServiceForEligibility as { displayName?: string }).displayName,
+        });
+        return {
+          workerId: w.id,
+          workerName: w.name,
+          allowedServicesRaw: JSON.stringify(allowedRaw),
+          workerCanDoService: canDo,
+        };
+      });
+      if (typeof console !== "undefined" && console.table) {
+        console.log("[Booking] Worker eligibility — service key:", serviceKey);
+        console.log("[Booking] Workers loaded:", workers.length, "Eligible:", eligibleWorkers.length);
+        console.table(first10);
+      }
+      return {
+        workersLoaded: workers.length,
+        workersEligible: eligibleWorkers.length,
+        serviceKeyUsed: `${serviceKey.serviceId ?? ""}|${serviceKey.serviceName ?? ""}`.trim() || "(empty)",
+      };
+    })();
+
+  const [ineligibleWorkerMessage, setIneligibleWorkerMessage] = useState(false);
+
+  // Reset worker if not eligible when services change; show message when cleared
   useEffect(() => {
     if (selectedServices.length > 0 && selectedWorker) {
       const isEligible = eligibleWorkers.some((w) => w.id === selectedWorker.id);
       if (!isEligible) {
+        setIneligibleWorkerMessage(true);
         setSelectedWorker(null);
       }
     }
   }, [selectedServices, eligibleWorkers, selectedWorker]);
+
+  // Clear ineligible message when user selects a worker or changes services
+  useEffect(() => {
+    if (selectedWorker !== null || selectedServices.length === 0) setIneligibleWorkerMessage(false);
+  }, [selectedWorker, selectedServices.length]);
 
   // Reset date window to today when worker changes
   useEffect(() => {
@@ -894,104 +1055,55 @@ export default function BookingPage() {
       }
       const businessWindow = getBusinessWindow(selectedDate);
 
-      if (selectedServices.length > 1) {
-        const chain: ChainServiceInput[] = selectedServices.map((s) => ({ service: s.service, pricingItem: s.pricingItem }));
-        const resolved = resolveChainWorkers({
-          chain,
-          startAt,
-          dateStr: bookingDate,
-          workers,
-          bookingsForDate,
-          preferredWorkerId: selectedWorker?.id ?? null,
-          workerWindowByWorkerId,
-          businessWindow,
-        });
-        if (!resolved) {
-          setSubmitError("אין זמינות להשלמת כל השירותים. נא בחר שעה אחרת.");
-          return;
-        }
-        const { firstBookingId } = await saveMultiServiceBooking(siteId, resolved, {
-          name: clientName.trim(),
-          phone: clientPhone.trim(),
-          note: clientNote.trim() || undefined,
-        });
-        if (firstBookingId) {
-          try {
-            await fetch("/api/whatsapp/send-booking-confirmation", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ siteId, bookingId: firstBookingId }),
-            });
-          } catch (_) {
-            // Non-blocking: booking is saved; WhatsApp may be sent by reminder or retry
-          }
-        }
-        setPhase2WorkerAssigned(null);
-      } else {
-        const selectedPricingItem = selectedServices[0]!.pricingItem;
-        const selectedService = selectedServices[0]!.service;
-        const hasSecondary = selectedPricingItem.hasFollowUp === true && !!selectedPricingItem.followUp?.name?.trim();
-        const primaryDurationMin = selectedPricingItem.durationMaxMinutes ?? selectedPricingItem.durationMinMinutes ?? 30;
-        const waitMin = selectedPricingItem.followUp?.waitMinutes ?? 0;
-        const phase2DurationMin = selectedPricingItem.followUp?.durationMinutes ?? 0;
-        const phase2ServiceName = selectedPricingItem.followUp?.name?.trim() ?? "";
-
-        let secondaryWorker: { id: string; name: string } | null = null;
-        if (hasSecondary && phase2ServiceName && phase2DurationMin >= 1 && selectedWorker) {
-          const slotStartMinutes = timeToMinutes(selectedTime);
-          secondaryWorker = resolvePhase2Worker({
-            phase1Worker: { id: selectedWorker.id, name: selectedWorker.name },
-            dateStr: bookingDate,
-            phase1StartMinutes: slotStartMinutes,
-            phase1DurationMin: primaryDurationMin,
-            waitMin,
-            phase2DurationMin,
-            phase2ServiceName,
-            workers,
-            bookingsForDate,
-            workerWindowByWorkerId,
-            businessWindow: businessWindow ?? undefined,
-          });
-        }
-
-        const bookingId = await saveBooking(
-          siteId,
-          {
-            serviceId: selectedService.name,
-            serviceName: selectedService.name,
-            serviceType: selectedPricingItem.type || null,
-            pricingItemId: selectedPricingItem.id || null,
-            serviceColor: selectedService.color || null,
-            workerId: selectedWorker?.id || null,
-            workerName: selectedWorker?.name || null,
-            secondaryWorkerId: secondaryWorker?.id ?? null,
-            secondaryWorkerName: secondaryWorker?.name ?? null,
-            secondaryServiceName: selectedPricingItem.followUp?.name?.trim() ?? undefined,
-            secondaryServiceType: undefined,
-            secondaryServiceColor: undefined,
-            date: bookingDate,
-            time: selectedTime,
-            name: clientName.trim(),
-            phone: clientPhone.trim(),
-            note: clientNote.trim() || undefined,
-            createdAt: new Date().toISOString(),
-          },
-          selectedPricingItem,
-          selectedService.color
-        );
-        if (bookingId) {
-          try {
-            await fetch("/api/whatsapp/send-booking-confirmation", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ siteId, bookingId }),
-            });
-          } catch (_) {
-            // Non-blocking: booking is saved; WhatsApp may be sent by reminder or retry
-          }
-        }
-        setPhase2WorkerAssigned(secondaryWorker);
+      // Single and multi-service: same path. When needsFinish, one finishing service (e.g. פן) appended at end; no phase2 from first service.
+      const baseChain: ChainServiceInput[] = selectedServices.map((s) => ({ service: s.service, pricingItem: s.pricingItem }));
+      const chain = buildChainWithFinishingService(baseChain, services, pricingItems);
+      const resolved = resolveChainWorkers({
+        chain,
+        startAt,
+        dateStr: bookingDate,
+        workers,
+        bookingsForDate,
+        preferredWorkerId: selectedWorker?.id ?? null,
+        workerWindowByWorkerId,
+        businessWindow,
+      });
+      if (!resolved) {
+        setSubmitError("אין זמינות להשלמת כל השירותים. נא בחר שעה אחרת.");
+        return;
       }
+      const repaired = repairInvalidAssignments(resolved, workers, {
+        dateStr: bookingDate,
+        bookingsForDate,
+        workerWindowByWorkerId,
+        businessWindow,
+      });
+      if (!repaired) {
+        setSubmitError("אין עובד זמין לאחד השירותים. נא לנסות שעה אחרת.");
+        return;
+      }
+      const validation = validateChainAssignments(repaired, workers);
+      if (!validation.valid) {
+        setSubmitError(validation.errors[0] ?? "ההקצאה אינה תקינה. נא לנסות שוב.");
+        return;
+      }
+      const { firstBookingId } = await saveMultiServiceBooking(siteId, repaired, {
+        name: clientName.trim(),
+        phone: clientPhone.trim(),
+        note: clientNote.trim() || undefined,
+      }, { workers });
+      if (firstBookingId) {
+        try {
+          await fetch("/api/whatsapp/send-booking-confirmation", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ siteId, bookingId: firstBookingId }),
+          });
+        } catch (_) {
+          // Non-blocking: booking is saved; WhatsApp may be sent by reminder or retry
+        }
+      }
+      setPhase2WorkerAssigned(null);
       setStep(6);
     } catch (err) {
       console.error("Failed to save booking", err);
@@ -1124,7 +1236,7 @@ export default function BookingPage() {
               <div className="flex justify-between items-center pb-3 border-b" style={{ borderColor: "var(--border)" }}>
                 <span className="text-sm" style={{ color: "var(--muted)" }}>מעצב:</span>
                 <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-                  {selectedWorker?.name}
+                  {selectedWorker ? selectedWorker.name : "ללא העדפה"}
                 </span>
               </div>
               {phase2WorkerAssigned && (
@@ -1242,14 +1354,6 @@ export default function BookingPage() {
   // - there exists at least one available time slot on that date
   const isDateAvailable = (date: Date): boolean => {
     if (selectedServices.length === 0) return false;
-    // Use selected worker or first eligible for window check (multi-service allows "no preference")
-    const workerId = selectedWorker?.id ?? eligibleWorkers[0]?.id;
-    if (!workerId) return false;
-
-    const worker = workers.find((w) => w.id === workerId);
-    if (!worker) {
-      return false;
-    }
 
     // Rank 1: Business must be open on this date
     const businessDayConfig = resolveBusinessDayConfig(date);
@@ -1260,54 +1364,54 @@ export default function BookingPage() {
       return false;
     }
 
-    // Rank 2: Worker must be working on this date
-    if (!isWorkerWorkingOnDate(worker, date)) {
-      if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
-        console.log(`[Booking] Step 2→3: Date ${ymdLocal(date)} disabled - worker not available`);
-      }
-      return false;
-    }
-
-    // Check if there's at least one available time slot on this date
-    // (This will be computed in Step 3→4, but we need to verify slots exist)
     const businessWindow = getBusinessWindow(date);
-    const workerWindow = getWorkerWorkingWindow(worker, date);
-    
-    if (!businessWindow) {
-      return false; // Business closed
-    }
+    if (!businessWindow) return false;
 
-    // If worker has no config, use business window only
-    const effectiveStart = workerWindow ? Math.max(businessWindow.startMin, workerWindow.startMin) : businessWindow.startMin;
-    const effectiveEnd = workerWindow ? Math.min(businessWindow.endMin, workerWindow.endMin) : businessWindow.endMin;
+    const baseChain: ChainServiceInput[] = selectedServices.map((s) => ({ service: s.service, pricingItem: s.pricingItem }));
+    const chainInput = buildChainWithFinishingService(baseChain, services, pricingItems);
+    const serviceDurationMinutes = getChainTotalDuration(chainInput);
+    const slotIntervalMinutes = 15;
 
-    if (effectiveEnd <= effectiveStart) {
-      if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
-        console.log(`[Booking] Step 2→3: Date ${ymdLocal(date)} disabled - no time window overlap`);
+    // ללא העדפה: date available if business open and at least one eligible worker works this day (duration fits in business window)
+    // With preferred worker: that worker must work this date
+    if (selectedWorker) {
+      const worker = workers.find((w) => w.id === selectedWorker.id);
+      if (!worker || !isWorkerWorkingOnDate(worker, date)) {
+        if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+          console.log(`[Booking] Step 2→3: Date ${ymdLocal(date)} disabled - selected worker not available`);
+        }
+        return false;
       }
-      return false; // No overlap
-    }
-
-    // Check if at least one slot can fit (chain total duration for multi-service)
-    const chainInput: ChainServiceInput[] = selectedServices.map((s) => ({ service: s.service, pricingItem: s.pricingItem }));
-    const serviceDurationMinutes =
-      chainInput.length > 1 ? getChainTotalDuration(chainInput) : selectedPricingItem
-        ? selectedPricingItem.durationMaxMinutes || selectedPricingItem.durationMinMinutes || 30
-        : 30;
-    const slotIntervalMinutes = 15; // Time picker uses 15-min steps
-    const canFitSlot = (effectiveEnd - effectiveStart) >= Math.max(slotIntervalMinutes, serviceDurationMinutes);
-
-    if (!canFitSlot) {
-      if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
-        console.log(`[Booking] Step 2→3: Date ${ymdLocal(date)} disabled - no slots can fit (window=${effectiveEnd - effectiveStart}min, need=${Math.max(slotIntervalMinutes, serviceDurationMinutes)}min)`);
+      const workerWindow = getWorkerWorkingWindow(worker, date);
+      const effectiveStart = workerWindow ? Math.max(businessWindow.startMin, workerWindow.startMin) : businessWindow.startMin;
+      const effectiveEnd = workerWindow ? Math.min(businessWindow.endMin, workerWindow.endMin) : businessWindow.endMin;
+      if (effectiveEnd <= effectiveStart || (effectiveEnd - effectiveStart) < Math.max(slotIntervalMinutes, serviceDurationMinutes)) {
+        if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+          console.log(`[Booking] Step 2→3: Date ${ymdLocal(date)} disabled - no time window overlap or slot cannot fit`);
+        }
+        return false;
       }
-      return false;
+    } else {
+      // No preference: at least one eligible worker must work this date and duration must fit in business window
+      const anyEligibleWorks = eligibleWorkers.some((w) => isWorkerWorkingOnDate(w, date));
+      if (!anyEligibleWorks) {
+        if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+          console.log(`[Booking] Step 2→3: Date ${ymdLocal(date)} disabled - no eligible worker available this day`);
+        }
+        return false;
+      }
+      const canFitInBusiness = (businessWindow.endMin - businessWindow.startMin) >= Math.max(slotIntervalMinutes, serviceDurationMinutes);
+      if (!canFitInBusiness) {
+        if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+          console.log(`[Booking] Step 2→3: Date ${ymdLocal(date)} disabled - duration does not fit in business window`);
+        }
+        return false;
+      }
     }
 
     if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
-      console.log(`[Booking] Step 2→3: Date ${ymdLocal(date)} enabled - business open, worker available, slots can fit`);
+      console.log(`[Booking] Step 2→3: Date ${ymdLocal(date)} enabled`);
     }
-
     return true;
   };
 
@@ -1365,8 +1469,9 @@ export default function BookingPage() {
     return slots;
   };
 
-  // Filter time slots: single-service uses existing logic; multi-service uses resolveChainWorkers
-  const availableTimeSlots = (() => {
+  // Reactive slot computation: depends on date, chain, preferred worker, workers, bookings.
+  // Recomputes when selectedWorker changes so slots always match the selected worker or "ללא העדפה".
+  const availableTimeSlots = useMemo(() => {
     if (!selectedDate || selectedServices.length === 0) return [];
 
     const dateStr = ymdLocal(selectedDate);
@@ -1376,73 +1481,51 @@ export default function BookingPage() {
     }
     const businessWindow = getBusinessWindow(selectedDate);
 
-    // Multi-service: use chain resolution
-    if (selectedServices.length > 1) {
-      const chain: ChainServiceInput[] = selectedServices.map((s) => ({ service: s.service, pricingItem: s.pricingItem }));
-      const totalDuration = getChainTotalDuration(chain);
-      const generatedSlots = generateTimeSlotsForDate(totalDuration);
-      const preferredWorkerId = selectedWorker?.id ?? null;
+    const baseChain: ChainServiceInput[] = selectedServices.map((s) => ({ service: s.service, pricingItem: s.pricingItem }));
+    const chain = buildChainWithFinishingService(baseChain, services, pricingItems);
+    const totalDuration = getChainTotalDuration(chain);
+    const candidateTimes = generateTimeSlotsForDate(totalDuration);
+    const preferredWorkerId = selectedWorker == null ? null : selectedWorker.id;
 
-      return generatedSlots.filter((time) => {
-        const [hh, mm] = time.split(":").map(Number);
-        const startAt = new Date(selectedDate);
-        startAt.setHours(hh, mm, 0, 0);
-        const resolved = resolveChainWorkers({
-          chain,
-          startAt,
-          dateStr,
-          workers,
-          bookingsForDate,
-          preferredWorkerId,
-          workerWindowByWorkerId,
-          businessWindow,
-        });
-        return resolved !== null;
+    const slots = computeAvailableSlots({
+      date: selectedDate,
+      dateStr,
+      chain,
+      preferredWorkerId,
+      workers,
+      bookingsForDate,
+      workerWindowByWorkerId,
+      businessWindow,
+      candidateTimes,
+    });
+
+    if (process.env.NODE_ENV === "development") {
+      const serviceKey = selectedServices.map((s) => s.service?.id ?? s.service?.name ?? "").join(",");
+      console.log("recomputeSlots", {
+        workerId: preferredWorkerId ?? null,
+        date: dateStr,
+        serviceKey,
+        slotsCount: slots.length,
       });
     }
+    return slots;
+  }, [
+    selectedDate,
+    selectedServices,
+    selectedWorker,
+    workers,
+    bookingsForDate,
+    bookingSettings,
+  ]);
 
-    // Single-service: existing logic
-    const primaryDurationMin = selectedPricingItem
-      ? selectedPricingItem.durationMaxMinutes || selectedPricingItem.durationMinMinutes || 30
-      : 30;
-    const waitMin = selectedPricingItem?.followUp?.waitMinutes ?? 0;
-    const secondaryDurationMin = selectedPricingItem?.followUp?.durationMinutes ?? 0;
-    const phase2ServiceName = selectedPricingItem?.followUp?.name?.trim() ?? "";
-
-    const workerId = selectedWorker?.id ?? eligibleWorkers[0]?.id;
-    if (!workerId) return [];
-    const worker = workers.find((w) => w.id === workerId);
-    if (!worker) return [];
-
-    const generatedSlots = generateTimeSlotsForDate(primaryDurationMin);
-    const workerWindow = getWorkerWorkingWindow(worker, selectedDate);
-
-    return generatedSlots.filter((time) => {
-      const slotStartMinutes = timeToMinutes(time);
-      const slotEndMinutes = slotStartMinutes + primaryDurationMin;
-
-      if (!isSlotWithinWindows(slotStartMinutes, slotEndMinutes, businessWindow, workerWindow)) return false;
-      if (doesSlotConflictWithWorker(slotStartMinutes, slotEndMinutes, worker.id, bookingsForDate, dateStr)) return false;
-
-      if (secondaryDurationMin > 0 && phase2ServiceName) {
-        const resolved = resolvePhase2Worker({
-          phase1Worker: { id: worker.id, name: worker.name },
-          dateStr,
-          phase1StartMinutes: slotStartMinutes,
-          phase1DurationMin: primaryDurationMin,
-          waitMin,
-          phase2DurationMin: secondaryDurationMin,
-          phase2ServiceName,
-          workers,
-          bookingsForDate,
-          workerWindowByWorkerId,
-          businessWindow: businessWindow ?? undefined,
-        });
-        if (resolved === null) return false;
-      }
-      return true;
-    });
-  })();
+  // When worker or date (or slots) change, clear selected time if it's no longer valid and show inline message
+  useEffect(() => {
+    if (!selectedTime) return;
+    if (availableTimeSlots.length === 0 || !availableTimeSlots.includes(selectedTime)) {
+      setSelectedTime(availableTimeSlots[0] ?? "");
+      setTimeUpdatedByWorkerMessage(true);
+    }
+  }, [selectedWorker, selectedDate, availableTimeSlots, selectedTime]);
 
 
   // Debug info for step 4 (dev only)
@@ -1757,18 +1840,28 @@ export default function BookingPage() {
                 ) : eligibleWorkers.length === 0 ? (
                   <div className="p-4 border rounded-xl text-right" style={{ backgroundColor: "#fef2f2", borderColor: "#fecaca" }}>
                     <p className="text-sm font-semibold mb-2" style={{ color: "#991b1b" }}>
-                      אין עובדים זמינים לשירות זה
+                      אין עובדים שמבצעים את השירות הזה
                     </p>
                     <p className="text-xs" style={{ color: "#991b1b" }}>
                       אנא פנה למנהל המערכת כדי להגדיר עובדים {selectedServices.length === 1 ? `לשירות "${selectedService?.name}"` : "לשירותים אלה"}
                     </p>
+                    {workerEligibilityDebug && (
+                      <div className="mt-3 p-2 rounded bg-amber-50 border border-amber-200 text-left text-xs font-mono" dir="ltr">
+                        <div>Workers loaded: {workerEligibilityDebug.workersLoaded}</div>
+                        <div>Workers eligible: {workerEligibilityDebug.workersEligible}</div>
+                        <div>Service key used: {workerEligibilityDebug.serviceKeyUsed}</div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <>
                     {/* "No preference" option */}
                     <button
                       type="button"
-                      onClick={() => setSelectedWorker(null)}
+                      onClick={() => {
+                        setSelectedWorker(null);
+                        setTimeUpdatedByWorkerMessage(false);
+                      }}
                       className="w-full text-right p-4 rounded-2xl border-2 transition-all hover:opacity-90"
                       style={{
                         borderColor: selectedWorker === null ? "var(--primary)" : "var(--border)",
@@ -1794,9 +1887,10 @@ export default function BookingPage() {
                       <button
                         key={worker.id}
                         type="button"
-                        onClick={() =>
-                          setSelectedWorker({ id: worker.id, name: worker.name })
-                        }
+                        onClick={() => {
+                          setSelectedWorker({ id: worker.id, name: worker.name });
+                          setTimeUpdatedByWorkerMessage(false);
+                        }}
                         className="w-full text-right p-4 rounded-2xl border-2 transition-all hover:opacity-90"
                         style={{
                           borderColor: selectedWorker?.id === worker.id ? "var(--primary)" : "var(--border)",
@@ -1820,6 +1914,18 @@ export default function BookingPage() {
                     ))}
                     {/* No phase 2 worker picker — phase 2 is auto-assigned at booking time */}
                   </>
+                )}
+                {ineligibleWorkerMessage && (
+                  <p className="text-sm mt-2" style={{ color: "var(--primary)" }}>
+                    העובד שנבחר לא מבצע את השירות הזה
+                  </p>
+                )}
+                {workerEligibilityDebug && eligibleWorkers.length > 0 && (
+                  <div className="mt-3 p-2 rounded bg-amber-50 border border-amber-200 text-left text-xs font-mono" dir="ltr">
+                    <div>Workers loaded: {workerEligibilityDebug.workersLoaded}</div>
+                    <div>Workers eligible: {workerEligibilityDebug.workersEligible}</div>
+                    <div>Service key used: {workerEligibilityDebug.serviceKeyUsed}</div>
+                  </div>
                 )}
               </div>
             </div>
@@ -1888,7 +1994,12 @@ export default function BookingPage() {
                     <button
                       key={ymdLocal(date)}
                       type="button"
-                      onClick={() => available && setSelectedDate(date)}
+                      onClick={() => {
+                        if (available) {
+                          setSelectedDate(date);
+                          setTimeUpdatedByWorkerMessage(false);
+                        }
+                      }}
                       disabled={!available}
                       className="p-3 rounded-xl border-2 text-sm transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                       style={{
@@ -1952,9 +2063,16 @@ export default function BookingPage() {
                 return null;
               })()}
 
+              {timeUpdatedByWorkerMessage && (
+                <p className="text-sm text-right" style={{ color: "var(--muted)" }}>
+                  שעת התחלה עודכנה לפי העובד שנבחר
+                </p>
+              )}
               {availableTimeSlots.length === 0 ? (
                 <p className="text-sm text-right" style={{ color: "var(--muted)" }}>
-                  אין שעות זמינות לתאריך זה
+                  {selectedWorker != null
+                    ? "אין שעות זמינות לעובד שנבחר"
+                    : "אין שעות זמינות לתאריך זה"}
                 </p>
               ) : (
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
@@ -1965,7 +2083,10 @@ export default function BookingPage() {
                       <button
                         key={time}
                         type="button"
-                        onClick={() => setSelectedTime(time)}
+                        onClick={() => {
+                          setSelectedTime(time);
+                          setTimeUpdatedByWorkerMessage(false);
+                        }}
                         className="p-3 rounded-xl border-2 text-sm font-medium transition-all hover:opacity-90"
                         style={{
                           borderColor: isSelected ? "var(--primary)" : "var(--border)",

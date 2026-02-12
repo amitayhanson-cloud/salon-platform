@@ -5,6 +5,8 @@ import { getOrCreateClient } from "./firestoreClients";
 import { computePhases } from "./bookingPhasesTiming";
 import { getPersonalPricing } from "./firestorePersonalPricing";
 import { resolveServicePrice } from "./pricingUtils";
+import { validateChainAssignments, type WorkersForValidation } from "./multiServiceChain";
+import { workerCanDoService } from "./workerServiceCompatibility";
 
 /** Removes keys with value undefined so Firestore never receives undefined. Preserves Timestamp and FieldValue. */
 function cleanUndefined<T>(value: T): T {
@@ -225,6 +227,9 @@ export async function saveBooking(
     const payloadA = cleanUndefined(bookingA) as Record<string, unknown>;
     const refA = await addDoc(bookingsRef, payloadA);
     const bookingAId = refA.id;
+    if (process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+      console.log("TRACE_BOOKING_SAVED", JSON.stringify({ siteId, bookingGroupId: null, documentId: refA.id, workerId: primaryWorkerId, serviceId: booking.pricingItemId ?? null, serviceName: booking.serviceName, phase: 1 }));
+    }
     if (process.env.NODE_ENV !== "production" && hasFollowUp) {
       const gapMinutes = diffMinutes(phases.phase2StartAt, phases.phase1EndAt);
       console.log("[saveBooking] phase1 duration=" + durationMinutes + " min, waitMin=" + waitMin + ", computed gap=" + gapMinutes + " min", gapMinutes === waitMin ? "(ok)" : "MISMATCH");
@@ -240,6 +245,10 @@ export async function saveBooking(
       // Phase 2 may be assigned to a different worker (secondaryWorkerId) or same as phase 1
       const phase2WorkerId = booking.secondaryWorkerId ?? primaryWorkerId;
       const phase2WorkerName = booking.secondaryWorkerName ?? booking.workerName ?? null;
+
+      if (process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+        console.log("TRACE_BOOKING_ASSIGNMENT", JSON.stringify({ siteId, bookingGroupId: null, itemIndex: 2, phase: 2, serviceId: null, serviceName: followUp!.name.trim(), requestedPreferredWorkerId: primaryWorkerId, candidateWorkerIdsConsidered: [], chosenWorkerId: phase2WorkerId, chosenWorkerName: phase2WorkerName, chosenWorkerAllowedServices: [], workerCanDoServiceResult: null, workerCanDoWhy: "single_booking_path" }));
+      }
 
       const bookingB: Record<string, unknown> = {
         siteId,
@@ -270,6 +279,9 @@ export async function saveBooking(
       };
       const payloadB = cleanUndefined(bookingB) as Record<string, unknown>;
       const refB = await addDoc(bookingsRef, payloadB);
+      if (process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+        console.log("TRACE_BOOKING_SAVED", JSON.stringify({ siteId, bookingGroupId: null, documentId: refB.id, workerId: phase2WorkerId, serviceId: null, serviceName: followUp!.name.trim(), phase: 2 }));
+      }
       console.log("[saveBooking] booking B created id:", refB.id, "parentBookingId:", bookingAId);
     }
 
@@ -284,6 +296,7 @@ export async function saveBooking(
 export interface ChainSlotForSave {
   serviceOrder: number;
   serviceName: string;
+  serviceId?: string | null;
   serviceType: string | null;
   durationMin: number;
   startAt: Date;
@@ -294,6 +307,7 @@ export interface ChainSlotForSave {
   pricingItemId?: string | null;
   followUp?: {
     serviceName: string;
+    serviceId?: string | null;
     durationMin: number;
     waitMin: number;
     startAt: Date;
@@ -303,22 +317,140 @@ export interface ChainSlotForSave {
   };
 }
 
+/** One booking document = one service item. Worker is per item, not shared across the chain. */
+export interface ServiceItemForSave {
+  serviceId: string | null;
+  serviceName: string;
+  workerId: string | null;
+  workerName: string | null;
+  startAt: Date;
+  endAt: Date;
+  durationMin: number;
+  serviceOrder: number;
+  phase: 1 | 2;
+  pricingItemId?: string | null;
+  serviceType?: string | null;
+  serviceColor?: string | null;
+}
+
+/**
+ * Build a flat list of service items from chain slots. Each item has its own workerId and time window.
+ * No single workerId at chain level; main and follow-up are independent items.
+ */
+export function buildServiceItemsFromChain(chainSlots: ChainSlotForSave[]): ServiceItemForSave[] {
+  const items: ServiceItemForSave[] = [];
+  for (const slot of chainSlots) {
+    const serviceId = (slot.serviceId && slot.serviceId.trim()) ? slot.serviceId : null;
+    items.push({
+      serviceId,
+      serviceName: slot.serviceName,
+      workerId: slot.workerId,
+      workerName: slot.workerName ?? null,
+      startAt: slot.startAt,
+      endAt: slot.endAt,
+      durationMin: slot.durationMin,
+      serviceOrder: slot.serviceOrder,
+      phase: 1,
+      pricingItemId: slot.pricingItemId ?? null,
+      serviceType: slot.serviceType ?? null,
+      serviceColor: slot.serviceColor ?? null,
+    });
+    if (slot.followUp && slot.followUp.durationMin >= 1 && slot.followUp.serviceName) {
+      const fu = slot.followUp;
+      const fuServiceId = (fu.serviceId && fu.serviceId.trim()) ? fu.serviceId : null;
+      items.push({
+        serviceId: fuServiceId,
+        serviceName: fu.serviceName,
+        workerId: fu.workerId,
+        workerName: fu.workerName ?? null,
+        startAt: fu.startAt,
+        endAt: fu.endAt,
+        durationMin: fu.durationMin,
+        serviceOrder: slot.serviceOrder,
+        phase: 2,
+        pricingItemId: null,
+        serviceType: null,
+        serviceColor: null,
+      });
+    }
+  }
+  return items;
+}
+
 /**
  * Save multi-service booking chain. Creates one booking doc per service (and per follow-up).
- * Adds visitGroupId and serviceOrder. Does not change existing saveBooking.
+ * If workers are provided, validates every (workerId, serviceId) with workerCanDoService before write.
  */
 export async function saveMultiServiceBooking(
   siteId: string,
   chainSlots: ChainSlotForSave[],
-  client: { name: string; phone: string; note?: string }
+  client: { name: string; phone: string; note?: string },
+  options?: { workers?: WorkersForValidation }
 ): Promise<{ visitGroupId: string; firstBookingId: string }> {
   if (!db) throw new Error("Firestore db not initialized");
   if (chainSlots.length === 0) throw new Error("Chain must have at least one service");
 
-  const visitGroupId =
+  const workers = options?.workers ?? [];
+  if (workers.length > 0) {
+    const validation = validateChainAssignments(chainSlots, workers);
+    if (!validation.valid) {
+      const msg = validation.errors[0] ?? "ההקצאה אינה תקינה";
+      throw new Error(msg);
+    }
+  }
+
+  if (process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+    for (let i = 0; i < chainSlots.length; i++) {
+      const slot = chainSlots[i]!;
+      const serviceId = (slot.serviceId && slot.serviceId.trim()) ? slot.serviceId : slot.serviceName;
+      const worker = slot.workerId ? workers.find((w) => w.id === slot.workerId) : null;
+      const allowedLen = worker && Array.isArray(worker.services) ? worker.services.length : 0;
+      const canDo = worker && slot.workerId ? workerCanDoService(worker, serviceId) : false;
+      console.debug("[saveMultiServiceBooking] slot", i + 1, { serviceId, chosenWorkerId: slot.workerId, chosenWorkerAllowedServiceIdsLength: allowedLen, workerCanDoService: canDo });
+      if (slot.followUp && slot.followUp.workerId && slot.followUp.serviceName) {
+        const fuId = (slot.followUp.serviceId && slot.followUp.serviceId.trim()) ? slot.followUp.serviceId : slot.followUp.serviceName;
+        const fuWorker = workers.find((w) => w.id === slot.followUp!.workerId);
+        const fuAllowedLen = fuWorker && Array.isArray(fuWorker.services) ? fuWorker.services.length : 0;
+        const fuCanDo = fuWorker ? workerCanDoService(fuWorker, fuId) : false;
+        console.debug("[saveMultiServiceBooking] slot", i + 1, "followUp", { serviceId: fuId, chosenWorkerId: slot.followUp!.workerId, chosenWorkerAllowedServiceIdsLength: fuAllowedLen, workerCanDoService: fuCanDo });
+      }
+    }
+  }
+
+  const serviceItems = buildServiceItemsFromChain(chainSlots);
+  const bookingGroupId =
     typeof crypto !== "undefined" && crypto.randomUUID
       ? crypto.randomUUID()
       : `visit-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+
+  if (process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+    serviceItems.forEach((item, index) => {
+      const worker = item.workerId ? workers.find((w) => w.id === item.workerId) : null;
+      const chosenWorkerAllowedServices = worker && Array.isArray(worker.services) ? [...worker.services] : [];
+      const canDoById = worker && (item.serviceId && String(item.serviceId).trim()) ? workerCanDoService(worker, String(item.serviceId)) : false;
+      const canDoByName = worker && item.serviceName ? workerCanDoService(worker, String(item.serviceName)) : false;
+      const workerCanDoResult = canDoById || canDoByName;
+      const why = workerCanDoResult ? (canDoByName ? "match_by_name" : "match_by_id") : "no_match";
+      console.log(
+        "TRACE_BOOKING_ASSIGNMENT",
+        JSON.stringify({
+          siteId,
+          bookingGroupId,
+          itemIndex: index + 1,
+          phase: item.phase,
+          serviceId: item.serviceId ?? null,
+          serviceName: item.serviceName,
+          requestedPreferredWorkerId: null,
+          candidateWorkerIdsConsidered: [],
+          chosenWorkerId: item.workerId,
+          chosenWorkerName: item.workerName ?? null,
+          chosenWorkerAllowedServices: chosenWorkerAllowedServices,
+          workerCanDoServiceResult: workerCanDoResult,
+          workerCanDoWhy: why,
+        })
+      );
+    });
+  }
 
   const clientId = await getOrCreateClient(siteId, {
     name: client.name,
@@ -329,97 +461,74 @@ export async function saveMultiServiceBooking(
 
   const bookingsRef = bookingsCollection(siteId);
   let firstBookingId = "";
+  let lastPhase1DocId: string | null = null;
 
-  for (const slot of chainSlots) {
+  for (const item of serviceItems) {
     const dateStr =
-      slot.startAt.getFullYear() +
+      item.startAt.getFullYear() +
       "-" +
-      String(slot.startAt.getMonth() + 1).padStart(2, "0") +
+      String(item.startAt.getMonth() + 1).padStart(2, "0") +
       "-" +
-      String(slot.startAt.getDate()).padStart(2, "0");
+      String(item.startAt.getDate()).padStart(2, "0");
     const timeStr =
-      String(slot.startAt.getHours()).padStart(2, "0") +
+      String(item.startAt.getHours()).padStart(2, "0") +
       ":" +
-      String(slot.startAt.getMinutes()).padStart(2, "0");
+      String(item.startAt.getMinutes()).padStart(2, "0");
 
-    const phase1: Record<string, unknown> = {
+    const payload: Record<string, unknown> = {
       siteId,
       clientId,
+      bookingGroupId,
+      visitGroupId: bookingGroupId,
       customerName: client.name,
       customerPhone: client.phone,
-      workerId: slot.workerId,
-      workerName: slot.workerName ?? null,
-      serviceTypeId: slot.pricingItemId ?? null,
-      serviceName: slot.serviceName,
-      serviceType: slot.serviceType ?? null,
-      durationMin: slot.durationMin,
-      startAt: Timestamp.fromDate(slot.startAt),
-      endAt: Timestamp.fromDate(slot.endAt),
+      workerId: item.workerId,
+      workerName: item.workerName ?? null,
+      serviceId: item.serviceId ?? null,
+      serviceName: item.serviceName,
+      serviceTypeId: item.phase === 1 ? item.pricingItemId ?? null : null,
+      serviceType: item.serviceType ?? null,
+      durationMin: item.durationMin,
+      startAt: Timestamp.fromDate(item.startAt),
+      endAt: Timestamp.fromDate(item.endAt),
       dateISO: dateStr,
       timeHHmm: timeStr,
       date: dateStr,
       time: timeStr,
       status: "confirmed",
-      phase: 1,
+      phase: item.phase,
+      serviceOrder: item.serviceOrder,
       note: client.note ?? null,
-      serviceColor: slot.serviceColor ?? null,
+      serviceColor: item.serviceColor ?? null,
       price: null,
       priceSource: null,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      visitGroupId,
-      serviceOrder: slot.serviceOrder,
-      ...(slot.followUp && slot.followUp.durationMin >= 1 && { waitMinutes: slot.followUp.waitMin }),
     };
-    const refA = await addDoc(bookingsRef, cleanUndefined(phase1) as Record<string, unknown>);
-    if (!firstBookingId) firstBookingId = refA.id;
+    if (item.phase === 2 && lastPhase1DocId) {
+      payload.parentBookingId = lastPhase1DocId;
+    }
+    const ref = await addDoc(bookingsRef, cleanUndefined(payload) as Record<string, unknown>);
+    if (!firstBookingId) firstBookingId = ref.id;
+    if (item.phase === 1) lastPhase1DocId = ref.id;
 
-    if (slot.followUp && slot.followUp.durationMin >= 1 && slot.followUp.serviceName) {
-      const fu = slot.followUp;
-      const fuDateStr =
-        fu.startAt.getFullYear() +
-        "-" +
-        String(fu.startAt.getMonth() + 1).padStart(2, "0") +
-        "-" +
-        String(fu.startAt.getDate()).padStart(2, "0");
-      const fuTimeStr =
-        String(fu.startAt.getHours()).padStart(2, "0") +
-        ":" +
-        String(fu.startAt.getMinutes()).padStart(2, "0");
-      const phase2: Record<string, unknown> = {
-        siteId,
-        clientId,
-        customerName: client.name,
-        customerPhone: client.phone,
-        workerId: fu.workerId,
-        workerName: fu.workerName ?? null,
-        serviceTypeId: null,
-        serviceName: fu.serviceName,
-        serviceType: null,
-        durationMin: fu.durationMin,
-        startAt: Timestamp.fromDate(fu.startAt),
-        endAt: Timestamp.fromDate(fu.endAt),
-        dateISO: fuDateStr,
-        timeHHmm: fuTimeStr,
-        date: fuDateStr,
-        time: fuTimeStr,
-        status: "confirmed",
-        phase: 2,
-        parentBookingId: refA.id,
-        note: client.note ?? null,
-        serviceColor: slot.serviceColor ?? null,
-        price: null,
-        priceSource: null,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        visitGroupId,
-        serviceOrder: slot.serviceOrder,
-      };
-      await addDoc(bookingsRef, cleanUndefined(phase2) as Record<string, unknown>);
+    if (process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+      console.log(
+        "TRACE_BOOKING_SAVED",
+        JSON.stringify({
+          siteId,
+          bookingGroupId,
+          documentId: ref.id,
+          workerId: item.workerId ?? null,
+          serviceId: item.serviceId ?? null,
+          serviceName: item.serviceName,
+          phase: item.phase,
+        })
+      );
     }
   }
 
-  return { visitGroupId, firstBookingId };
+  return { visitGroupId: bookingGroupId, firstBookingId };
 }
 
 /**
@@ -505,10 +614,13 @@ export async function archiveBooking(
       date: dateStr,
       serviceName: (d.serviceName as string) ?? "",
       serviceType: (d.serviceType as string) ?? null,
+      serviceId: (d.serviceId as string) ?? null,
       workerId: (d.workerId as string) ?? null,
       workerName: (d.workerName as string) ?? null,
       customerPhone,
       customerName: (d.customerName as string) ?? (d.name as string) ?? "",
+      clientId: (d.clientId as string) ?? null,
+      bookingGroupId: (d.bookingGroupId as string) ?? (d.visitGroupId as string) ?? null,
       isArchived: true,
       archivedAt: serverTimestamp(),
       archivedReason: reason,

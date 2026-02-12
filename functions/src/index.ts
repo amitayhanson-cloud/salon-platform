@@ -1,5 +1,5 @@
 /**
- * Firebase Cloud Functions for salon platform
+ * Firebase Cloud Functions for Caleno
  * - expiredBookingsCleanup: scheduled deletion of expired (past) bookings per site setting
  * - deleteArchivedBookings: callable to delete cancelled (+ legacy expired) bookings (admin only)
  * - scheduledArchiveCleanup: weekly scheduled deletion per site archiveRetention

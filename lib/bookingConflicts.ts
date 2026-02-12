@@ -69,7 +69,7 @@ export function findWorkerConflictFromBookings(
     if (!w || w !== workerId) continue;
     const docDay = (b.dateISO ?? b.date ?? b.dateStr ?? "") as string;
     if (docDay !== dayISO) continue;
-    if (b.status === "cancelled") continue;
+    if (b.status === "cancelled" || (b.status as string)?.toLowerCase() === "canceled") continue;
     const existingStart = toDate(b.startAt ?? b.start);
     const existingEnd = toDate(b.endAt ?? b.end);
     if (!existingStart || !existingEnd) continue;

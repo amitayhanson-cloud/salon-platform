@@ -56,6 +56,7 @@ export interface AdminBookingFormSimpleEditData {
     serviceTypeId?: string | null;
     serviceType?: string | null;
     serviceColor?: string | null;
+    serviceId?: string | null;
   };
   phase2: {
     enabled: boolean;
@@ -64,6 +65,8 @@ export interface AdminBookingFormSimpleEditData {
     durationMin: number;
     workerId: string | null;
     workerName: string | null;
+    serviceId?: string | null;
+    serviceColor?: string | null;
   } | null;
 }
 
@@ -213,6 +216,7 @@ export default function AdminBookingFormSimple({
         workerName,
         durationMin: Math.max(1, Math.min(DURATION_MIN_MAX, durationMin)),
         serviceColor: initialData.phase1.serviceColor ?? null,
+        serviceId: initialData.phase1.serviceId ?? null,
       },
       phase2: initialData.phase2
         ? {
@@ -222,6 +226,8 @@ export default function AdminBookingFormSimple({
             durationMin: initialData.phase2.durationMin,
             workerIdOverride: initialData.phase2.workerId,
             workerNameOverride: initialData.phase2.workerName,
+            serviceId: initialData.phase2.serviceId ?? null,
+            serviceColor: initialData.phase2.serviceColor ?? null,
           }
         : null,
       note: initialData.note ?? null,

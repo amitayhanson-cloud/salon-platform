@@ -190,6 +190,8 @@ export function phasesToDoc(phases: BookingPhaseInput[]): BookingPhaseDoc[] {
 export interface BusyInterval {
   startMin: number; // minutes from midnight (local day)
   endMin: number;
+  /** For debug: which booking this interval came from */
+  bookingId?: string;
 }
 
 /**
@@ -215,11 +217,26 @@ export function getWorkerBusyIntervals(
       if (event.workerId !== workerId) continue;
       const startMin = (event.startAt.getTime() - dayStart.getTime()) / (60 * 1000);
       const endMin = (event.endAt.getTime() - dayStart.getTime()) / (60 * 1000);
-      intervals.push({ startMin, endMin });
+      intervals.push({ startMin, endMin, bookingId: event.bookingId });
     }
   }
 
   return intervals;
+}
+
+/**
+ * Returns the first busy interval that overlaps the slot, or null. For debug logging when a slot is rejected.
+ */
+export function getConflictingBusyInterval(
+  bookings: Array<BookingLike & { status?: string }>,
+  workerId: string,
+  dateStr: string,
+  slotStartMin: number,
+  slotEndMin: number
+): (BusyInterval & { bookingId?: string }) | null {
+  const intervals = getWorkerBusyIntervals(bookings, workerId, dateStr);
+  const iv = intervals.find((i) => overlaps(slotStartMin, slotEndMin, i.startMin, i.endMin));
+  return iv ?? null;
 }
 
 /** Standard overlap: (aStart, aEnd) overlaps (bStart, bEnd) */

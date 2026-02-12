@@ -37,6 +37,10 @@ export interface AdminPhase2Payload {
   /** If set, use this worker for phase 2; otherwise auto-resolve. */
   workerIdOverride?: string | null;
   workerNameOverride?: string | null;
+  /** Phase-2 service color for calendar display (follow-up service, not phase-1). */
+  serviceColor?: string | null;
+  /** Phase-2 service id for calendar/display (follow-up service, not phase-1). */
+  serviceId?: string | null;
 }
 
 export interface AdminBookingPayload {
@@ -52,6 +56,8 @@ export interface AdminBookingPayload {
     workerName: string;
     durationMin: number;
     serviceColor?: string | null;
+    /** Main service id for calendar/display. */
+    serviceId?: string | null;
   };
   phase2?: AdminPhase2Payload | null;
   note?: string | null;
@@ -142,6 +148,7 @@ export async function createAdminBooking(
     serviceTypeId: payload.phase1.serviceTypeId ?? null,
     serviceName: payload.phase1.serviceName,
     serviceType: payload.phase1.serviceType ?? null,
+    serviceId: payload.phase1.serviceId ?? null,
     durationMin,
     startAt: Timestamp.fromDate(phases.phase1StartAt),
     endAt: Timestamp.fromDate(phases.phase1EndAt),
@@ -161,6 +168,9 @@ export async function createAdminBooking(
   };
   const refA = await addDoc(bookingsCollection(siteId), cleanUndefined(bookingA) as Record<string, unknown>);
   const phase1Id = refA.id;
+  if (process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+    console.log("TRACE_BOOKING_SAVED", JSON.stringify({ siteId, bookingGroupId: null, documentId: refA.id, workerId: payload.phase1.workerId, serviceId: payload.phase1.serviceId ?? null, serviceName: payload.phase1.serviceName, phase: 1 }));
+  }
 
   let phase2Id: string | undefined;
   if (hasPhase2 && payload.phase2) {
@@ -180,6 +190,10 @@ export async function createAdminBooking(
       payload.phase2.workerIdOverride ?? payload.phase1.workerId;
     const phase2WorkerName =
       payload.phase2.workerNameOverride ?? payload.phase1.workerName;
+
+    if (process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+      console.log("TRACE_BOOKING_ASSIGNMENT", JSON.stringify({ siteId, bookingGroupId: null, itemIndex: 2, phase: 2, serviceId: null, serviceName: payload.phase2.serviceName.trim(), requestedPreferredWorkerId: payload.phase1.workerId, candidateWorkerIdsConsidered: [], chosenWorkerId: phase2WorkerId, chosenWorkerName: phase2WorkerName, chosenWorkerAllowedServices: [], workerCanDoServiceResult: null, workerCanDoWhy: phase2WorkerId !== payload.phase1.workerId ? "override" : "inherited_from_phase1" }));
+    }
 
     const bookingB: Record<string, unknown> = {
       siteId,
@@ -202,7 +216,7 @@ export async function createAdminBooking(
       phase: 2,
       parentBookingId: phase1Id,
       note: payload.note ?? null,
-      serviceColor: payload.phase1.serviceColor ?? null,
+      serviceColor: payload.phase2.serviceColor ?? null,
       price: null,
       priceSource: null,
       createdAt: serverTimestamp(),
@@ -210,6 +224,9 @@ export async function createAdminBooking(
     };
     const refB = await addDoc(bookingsCollection(siteId), cleanUndefined(bookingB) as Record<string, unknown>);
     phase2Id = refB.id;
+    if (process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+      console.log("TRACE_BOOKING_SAVED", JSON.stringify({ siteId, bookingGroupId: null, documentId: refB.id, workerId: phase2WorkerId, serviceId: null, serviceName: payload.phase2.serviceName.trim(), phase: 2 }));
+    }
   }
 
   return { phase1Id, phase2Id };
@@ -306,6 +323,7 @@ export async function updateAdminBooking(
     serviceTypeId: payload.phase1.serviceTypeId ?? null,
     serviceName: payload.phase1.serviceName,
     serviceType: payload.phase1.serviceType ?? null,
+    serviceId: payload.phase1.serviceId ?? null,
     durationMin,
     startAt: Timestamp.fromDate(phases.phase1StartAt),
     endAt: Timestamp.fromDate(phases.phase1EndAt),
@@ -349,6 +367,7 @@ export async function updateAdminBooking(
         workerId: phase2WorkerId,
         workerName: phase2WorkerName,
         serviceName: payload.phase2.serviceName.trim(),
+        serviceId: payload.phase2.serviceId ?? null,
         durationMin: payload.phase2.durationMin,
         startAt: Timestamp.fromDate(phase2Start),
         endAt: Timestamp.fromDate(phase2End),
@@ -358,6 +377,7 @@ export async function updateAdminBooking(
         time: phase2TimeStr,
         status,
         note: payload.note ?? null,
+        serviceColor: payload.phase2.serviceColor ?? null,
         updatedAt: serverTimestamp(),
       }) as Record<string, unknown>);
     }
@@ -398,6 +418,7 @@ export async function updateAdminBooking(
       serviceTypeId: null,
       serviceName: payload.phase2.serviceName.trim(),
       serviceType: null,
+      serviceId: payload.phase2.serviceId ?? null,
       durationMin: payload.phase2.durationMin,
       startAt: Timestamp.fromDate(phase2Start),
       endAt: Timestamp.fromDate(phase2End),
@@ -409,7 +430,7 @@ export async function updateAdminBooking(
       phase: 2,
       parentBookingId: phase1Id,
       note: payload.note ?? null,
-      serviceColor: payload.phase1.serviceColor ?? null,
+      serviceColor: payload.phase2.serviceColor ?? null,
       price: null,
       priceSource: null,
       createdAt: serverTimestamp(),
@@ -486,6 +507,7 @@ export async function updatePhase2Only(
 
 /** Admin multi-service visit: one slot per service, sequential timing. */
 export interface AdminMultiServiceSlot {
+  serviceId?: string | null;
   serviceName: string;
   durationMin: number;
   workerId: string;
@@ -510,7 +532,7 @@ export async function createAdminMultiServiceVisit(
   if (!db) throw new Error("Firestore not initialized");
   if (payload.slots.length === 0) throw new Error("At least one service required");
 
-  const visitGroupId =
+  const bookingGroupId =
     typeof crypto !== "undefined" && crypto.randomUUID
       ? crypto.randomUUID()
       : `visit-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -560,10 +582,13 @@ export async function createAdminMultiServiceVisit(
     const doc: Record<string, unknown> = {
       siteId,
       clientId,
+      bookingGroupId,
+      visitGroupId: bookingGroupId,
       customerName: payload.customerName.trim(),
       customerPhone: payload.customerPhone.trim(),
       workerId: slot.workerId,
       workerName: slot.workerName,
+      serviceId: (slot.serviceId && String(slot.serviceId).trim()) ? slot.serviceId : null,
       serviceName: slot.serviceName,
       serviceTypeId: null,
       serviceType: null,
@@ -582,13 +607,15 @@ export async function createAdminMultiServiceVisit(
       priceSource: null,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      visitGroupId,
       serviceOrder: i,
     };
     const ref = await addDoc(bookingsRef, cleanUndefined(doc) as Record<string, unknown>);
     if (!firstBookingId) firstBookingId = ref.id;
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[createAdminMultiServiceVisit] saved document", { docId: ref.id, serviceId: slot.serviceId ?? slot.serviceName, workerId: slot.workerId });
+    }
     cursor = endAt;
   }
 
-  return { visitGroupId, firstBookingId };
+  return { visitGroupId: bookingGroupId, firstBookingId };
 }
