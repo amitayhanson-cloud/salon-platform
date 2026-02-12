@@ -1,8 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getHostKind } from "@/lib/tenant";
 
-/** Path prefixes we never rewrite (Next.js internals, API, static) */
-const SKIP_PREFIXES = ["/_next", "/api", "/favicon.ico", "/favicon", "/static", "/images", "/brand", "/not-found-tenant"];
+/** Path prefixes we never rewrite (Next.js internals, API, static assets) */
+const SKIP_PREFIXES = [
+  "/_next",
+  "/api",
+  "/favicon.ico",
+  "/favicon",
+  "/static",
+  "/images",
+  "/brand",
+  "/templates",
+  "/robots.txt",
+  "/sitemap.xml",
+  "/not-found-tenant",
+];
 
 /** Auth and dashboard paths: never rewritten on tenant subdomains — serve same as root so redirect uses current user */
 const TENANT_PASSTHROUGH_PREFIXES = ["/login", "/signup", "/register", "/forgot-password", "/account", "/dashboard"];
@@ -87,6 +99,6 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 
 export const config = {
   matcher: [
-    "/((?!_next/|_next/static|api/|favicon.ico|favicon|static/|images/|brand/).*)",
+    "/((?!_next/|_next/static|api/|favicon.ico|favicon|static/|images/|brand/|templates/|robots\\.txt|sitemap\\.xml).*)",
   ],
 };

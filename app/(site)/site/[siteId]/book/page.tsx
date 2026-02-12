@@ -1125,6 +1125,68 @@ export default function BookingPage() {
   // Get theme colors with defaults
   const theme = config?.themeColors || defaultThemeColors;
 
+  // Generate time slots based on business hours (must be before early returns to keep hook order stable)
+  const generateTimeSlotsForDate = (durationMin: number = 30): string[] => {
+    if (!selectedDate) return [];
+    const businessDayConfig = resolveBusinessDayConfig(selectedDate);
+    if (!businessDayConfig || !businessDayConfig.enabled) return [];
+    const openMin = timeToMinutes(businessDayConfig.start);
+    const closeMin = timeToMinutes(businessDayConfig.end);
+    const slotIntervalMinutes = 15;
+    if (closeMin <= openMin) return [];
+    const lastStartMin = closeMin - durationMin;
+    if (lastStartMin < openMin) return [];
+    const slots: string[] = [];
+    let currentTime = openMin;
+    while (currentTime <= lastStartMin) {
+      slots.push(minutesToTime(currentTime));
+      currentTime += slotIntervalMinutes;
+    }
+    return slots;
+  };
+
+  const availableTimeSlots = useMemo(() => {
+    if (!selectedDate || selectedServices.length === 0) return [];
+    const dateStr = ymdLocal(selectedDate);
+    const workerWindowByWorkerId: Record<string, { startMin: number; endMin: number } | null> = {};
+    for (const w of workers) {
+      workerWindowByWorkerId[w.id] = getWorkerWorkingWindow(w, selectedDate);
+    }
+    const businessWindow = getBusinessWindow(selectedDate);
+    const baseChain: ChainServiceInput[] = selectedServices.map((s) => ({ service: s.service, pricingItem: s.pricingItem }));
+    const chain = buildChainWithFinishingService(baseChain, services, pricingItems);
+    const totalDuration = getChainTotalDuration(chain);
+    const candidateTimes = generateTimeSlotsForDate(totalDuration);
+    const preferredWorkerId = selectedWorker == null ? null : selectedWorker.id;
+    const slots = computeAvailableSlots({
+      date: selectedDate,
+      dateStr,
+      chain,
+      preferredWorkerId,
+      workers,
+      bookingsForDate,
+      workerWindowByWorkerId,
+      businessWindow,
+      candidateTimes,
+    });
+    return slots;
+  }, [
+    selectedDate,
+    selectedServices,
+    selectedWorker,
+    workers,
+    bookingsForDate,
+    bookingSettings,
+  ]);
+
+  useEffect(() => {
+    if (!selectedTime) return;
+    if (availableTimeSlots.length === 0 || !availableTimeSlots.includes(selectedTime)) {
+      setSelectedTime(availableTimeSlots[0] ?? "");
+      setTimeUpdatedByWorkerMessage(true);
+    }
+  }, [selectedWorker, selectedDate, availableTimeSlots, selectedTime]);
+
   if (loading || !config) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "var(--bg)" }}>
@@ -1415,119 +1477,6 @@ export default function BookingPage() {
     }
     return true;
   };
-
-  // ============================================================================
-  // STEP 3 → STEP 4: Filter time slots by business hours + worker hours + duration + conflicts
-  // ============================================================================
-  // After selecting a date, show ONLY time slots where:
-  // - within business open hours for that date (Rank 1)
-  // - within worker hours for that date (Rank 2)
-  // - slot duration fits fully (service duration)
-  // - does not conflict with existing bookings for that worker (Rank 4)
-  
-  // Generate time slots based on business hours (Rank 1).
-  // Last selectable start = close - durationMin (e.g. close 19:00, duration 30 → last start 18:30).
-  // durationMin: service duration in minutes; default 30 if unknown.
-  const generateTimeSlotsForDate = (durationMin: number = 30): string[] => {
-    if (!selectedDate) return [];
-
-    const businessDayConfig = resolveBusinessDayConfig(selectedDate);
-
-    if (!businessDayConfig || !businessDayConfig.enabled) {
-      if (process.env.NODE_ENV !== "production") {
-        console.log(`[Booking] Step 3→4: generateTimeSlotsForDate - Day is disabled or missing config for date ${ymdLocal(selectedDate)}`);
-      }
-      return [];
-    }
-
-    const openMin = timeToMinutes(businessDayConfig.start);
-    const closeMin = timeToMinutes(businessDayConfig.end);
-    const slotIntervalMinutes = 15; // Time picker: 15-minute increments (00, 15, 30, 45)
-
-    if (closeMin <= openMin) {
-      if (process.env.NODE_ENV !== "production") {
-        console.warn(`[Booking] Step 3→4: Invalid hours for date ${ymdLocal(selectedDate)}: ${businessDayConfig.start}-${businessDayConfig.end}`);
-      }
-      return [];
-    }
-
-    // Last valid start time so the booking fits before close: closeMin - durationMin
-    const lastStartMin = closeMin - durationMin;
-    if (lastStartMin < openMin) return [];
-
-    const slots: string[] = [];
-    let currentTime = openMin;
-
-    while (currentTime <= lastStartMin) {
-      slots.push(minutesToTime(currentTime));
-      currentTime += slotIntervalMinutes;
-    }
-
-    if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
-      console.log(`[Booking] Step 3→4: Generated ${slots.length} slots for date ${ymdLocal(selectedDate)} (open=${minutesToTime(openMin)} close=${minutesToTime(closeMin)} duration=${durationMin}min lastStart=${minutesToTime(lastStartMin)})`);
-    }
-
-    return slots;
-  };
-
-  // Reactive slot computation: depends on date, chain, preferred worker, workers, bookings.
-  // Recomputes when selectedWorker changes so slots always match the selected worker or "ללא העדפה".
-  const availableTimeSlots = useMemo(() => {
-    if (!selectedDate || selectedServices.length === 0) return [];
-
-    const dateStr = ymdLocal(selectedDate);
-    const workerWindowByWorkerId: Record<string, { startMin: number; endMin: number } | null> = {};
-    for (const w of workers) {
-      workerWindowByWorkerId[w.id] = getWorkerWorkingWindow(w, selectedDate);
-    }
-    const businessWindow = getBusinessWindow(selectedDate);
-
-    const baseChain: ChainServiceInput[] = selectedServices.map((s) => ({ service: s.service, pricingItem: s.pricingItem }));
-    const chain = buildChainWithFinishingService(baseChain, services, pricingItems);
-    const totalDuration = getChainTotalDuration(chain);
-    const candidateTimes = generateTimeSlotsForDate(totalDuration);
-    const preferredWorkerId = selectedWorker == null ? null : selectedWorker.id;
-
-    const slots = computeAvailableSlots({
-      date: selectedDate,
-      dateStr,
-      chain,
-      preferredWorkerId,
-      workers,
-      bookingsForDate,
-      workerWindowByWorkerId,
-      businessWindow,
-      candidateTimes,
-    });
-
-    if (process.env.NODE_ENV === "development") {
-      const serviceKey = selectedServices.map((s) => s.service?.id ?? s.service?.name ?? "").join(",");
-      console.log("recomputeSlots", {
-        workerId: preferredWorkerId ?? null,
-        date: dateStr,
-        serviceKey,
-        slotsCount: slots.length,
-      });
-    }
-    return slots;
-  }, [
-    selectedDate,
-    selectedServices,
-    selectedWorker,
-    workers,
-    bookingsForDate,
-    bookingSettings,
-  ]);
-
-  // When worker or date (or slots) change, clear selected time if it's no longer valid and show inline message
-  useEffect(() => {
-    if (!selectedTime) return;
-    if (availableTimeSlots.length === 0 || !availableTimeSlots.includes(selectedTime)) {
-      setSelectedTime(availableTimeSlots[0] ?? "");
-      setTimeUpdatedByWorkerMessage(true);
-    }
-  }, [selectedWorker, selectedDate, availableTimeSlots, selectedTime]);
-
 
   // Debug info for step 4 (dev only)
   const debugInfo = (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true" && selectedDate && selectedService) ? (() => {
