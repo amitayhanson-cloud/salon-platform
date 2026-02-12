@@ -12,8 +12,6 @@ import {
   type User as FirebaseUser,
 } from "firebase/auth";
 import { getUserDocument, createUserDocument } from "@/lib/firestoreUsers";
-import { routeAfterAuth } from "@/lib/authRedirect";
-import { getDashboardUrl } from "@/lib/url";
 import { normalizeFirebaseError, logFirebaseError } from "@/lib/firebaseErrors";
 import type { User } from "@/types/user";
 
@@ -285,16 +283,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       setUser(userDoc);
 
-      const result = await routeAfterAuth(userCredential.user.uid);
-      const redirectPath = result.siteId
-        ? getDashboardUrl({ slug: result.slug, siteId: result.siteId })
-        : result.path;
-
+      // Always send user to /dashboard; it will redirect to current user's tenant (server-computed).
       if (process.env.NODE_ENV === "development") {
-        console.log(`[AuthProvider.login] uid=${userCredential.user.uid} -> redirectPath=${redirectPath}`);
+        console.log(`[AuthProvider.login] uid=${userCredential.user.uid} -> redirectPath=/dashboard`);
       }
-
-      return { success: true, redirectPath };
+      return { success: true, redirectPath: "/dashboard" };
     } catch (error: unknown) {
       // Log full error details for debugging
       const errorInfo = logFirebaseError("login", error);
@@ -348,16 +341,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       setUser(userDoc);
 
-      const result = await routeAfterAuth(userCredential.user.uid);
-      const redirectPath = result.siteId
-        ? getDashboardUrl({ slug: result.slug, siteId: result.siteId })
-        : result.path;
-
+      // Always send user to /dashboard; it will redirect to current user's tenant (server-computed).
       if (process.env.NODE_ENV === "development") {
-        console.log(`[AuthProvider.loginWithGoogle] uid=${userCredential.user.uid} -> redirectPath=${redirectPath}`);
+        console.log(`[AuthProvider.loginWithGoogle] uid=${userCredential.user.uid} -> redirectPath=/dashboard`);
       }
-
-      return { success: true, redirectPath };
+      return { success: true, redirectPath: "/dashboard" };
     } catch (error: unknown) {
       // Log full error details for debugging
       const errorInfo = logFirebaseError("loginWithGoogle", error);
@@ -416,8 +404,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     if (!auth) return;
-    
     try {
+      const { clearStaleRedirectStorage } = await import("@/lib/clearStaleRedirectStorage");
+      clearStaleRedirectStorage();
       await signOut(auth);
       setUser(null);
       setFirebaseUser(null);

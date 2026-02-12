@@ -2,20 +2,12 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { useAuth } from "@/components/auth/AuthProvider";
-import { useRouter } from "next/navigation";
-import { useTenantInfo } from "@/hooks/useTenantInfo";
-import { routeAfterAuth } from "@/lib/authRedirect";
-import { getDashboardUrl } from "@/lib/url";
 import { getLandingContent } from "@/lib/firestoreLanding";
 import { DEFAULT_LANDING_CONTENT } from "@/lib/landingContentDefaults";
 import type { LandingContent } from "@/types/landingContent";
 import { Accordion } from "@/components/admin/Accordion";
 
 export default function Home() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-  const { data: tenantInfo } = useTenantInfo();
   const [content, setContent] = useState<LandingContent>(DEFAULT_LANDING_CONTENT);
   const [contentLoading, setContentLoading] = useState(true);
 
@@ -25,36 +17,6 @@ export default function Home() {
       .catch(() => setContent(DEFAULT_LANDING_CONTENT))
       .finally(() => setContentLoading(false));
   }, []);
-
-  const handleGoToDashboard = async () => {
-    if (!user) return;
-    if (tenantInfo?.dashboardUrl) {
-      const url = tenantInfo.dashboardUrl;
-      if (url.startsWith("http")) window.location.href = url;
-      else router.replace(url);
-      return;
-    }
-    try {
-      const result = await routeAfterAuth(user.id);
-      const url = result.siteId
-        ? getDashboardUrl({ slug: result.slug, siteId: result.siteId })
-        : result.path;
-      if (url.startsWith("http")) {
-        window.location.href = url;
-      } else {
-        router.replace(url);
-      }
-    } catch (error) {
-      console.error("Error determining redirect path:", error);
-      if (user.siteId) {
-        const fallback = getDashboardUrl({ slug: user.primarySlug ?? null, siteId: user.siteId });
-        if (fallback.startsWith("http")) window.location.href = fallback;
-        else router.replace(fallback);
-      } else {
-        router.replace("/builder");
-      }
-    }
-  };
 
   const hero = content.hero;
   const about = content.about;
@@ -80,30 +42,18 @@ export default function Home() {
                 : hero.subheadline}
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
-              {user ? (
-                <button
-                  onClick={handleGoToDashboard}
-                  disabled={loading}
-                  className="inline-block px-6 py-3 bg-[#2EC4C6] hover:bg-[#22A6A8] text-white font-semibold rounded-full shadow-sm transition-colors text-center disabled:opacity-50"
-                >
-                  {loading ? "טוען..." : "לדשבורד"}
-                </button>
-              ) : (
-                <>
-                  <Link
-                    href="/signup"
-                    className="inline-block px-6 py-3 bg-[#2EC4C6] hover:bg-[#22A6A8] text-white font-semibold rounded-full shadow-sm transition-colors text-center"
-                  >
-                    {hero.primaryCtaLabel}
-                  </Link>
-                  <Link
-                    href="#how-it-works"
-                    className="inline-block px-6 py-3 bg-white border border-[#2EC4C6] text-[#2EC4C6] hover:bg-[#EEF7F9] rounded-full font-medium transition-colors text-center"
-                  >
-                    {hero.secondaryCtaLabel}
-                  </Link>
-                </>
-              )}
+              <Link
+                href="/signup"
+                className="inline-block px-6 py-3 bg-[#2EC4C6] hover:bg-[#22A6A8] text-white font-semibold rounded-full shadow-sm transition-colors text-center"
+              >
+                {contentLoading ? DEFAULT_LANDING_CONTENT.hero.primaryCtaLabel : hero.primaryCtaLabel}
+              </Link>
+              <Link
+                href="/dashboard"
+                className="inline-block px-6 py-3 bg-white border border-[#2EC4C6] text-[#2EC4C6] hover:bg-[#EEF7F9] rounded-full font-medium transition-colors text-center"
+              >
+                התחברות
+              </Link>
             </div>
           </div>
         </div>

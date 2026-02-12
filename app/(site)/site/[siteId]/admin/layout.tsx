@@ -48,11 +48,9 @@ export default function AdminLayout({
       return;
     }
 
-    // Not logged in - redirect to login with returnTo (path-only so we return to same host)
+    // Not logged in - redirect to login; returnTo=/dashboard so after login we resolve current user's tenant (not this host's slug)
     if (!user) {
-      const onSubdomain = isOnTenantSubdomainClient();
-      const returnToPath = getAdminBasePath(siteId, onSubdomain);
-      const loginPath = `/login?returnTo=${encodeURIComponent(returnToPath)}`;
+      const loginPath = "/login?returnTo=" + encodeURIComponent("/dashboard");
       
       // Prevent redirect loop: don't redirect if already on login page
       if (pathname?.startsWith("/login")) {
@@ -305,7 +303,13 @@ export default function AdminLayout({
           <p className="text-slate-600 mb-6">
             {ownershipRepairError || "אין לך הרשאה לגשת לפאנל הניהול של אתר זה."}
           </p>
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
+            <button
+              onClick={() => router.push("/dashboard")}
+              className="px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-colors"
+            >
+              לדשבורד שלי
+            </button>
             <button
               onClick={() => router.push("/")}
               className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"

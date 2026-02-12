@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { clearStaleRedirectStorage } from "@/lib/clearStaleRedirectStorage";
 
 function LoginForm() {
   const router = useRouter();
@@ -15,41 +16,21 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
+  useEffect(() => {
+    clearStaleRedirectStorage();
+  }, []);
+
   // Redirect if already logged in
   useEffect(() => {
     if (!authLoading && user) {
       // Redirect logic is handled by login function's redirectPath
-      // This effect will be triggered after login completes
     }
   }, [user, authLoading, router]);
 
   const handleRedirect = (redirectPath: string | undefined) => {
-    // Defensively read returnTo parameter with error handling
-    let returnTo: string | null = null;
-    try {
-      returnTo = searchParams?.get("returnTo") || null;
-    } catch (err) {
-      console.warn("[LoginForm] Failed to read returnTo param:", err);
-      // Continue without returnTo - use default redirect
-    }
-
-    if (returnTo) {
-      // Accept path-only returnTo (same origin): /admin, /site/.../admin, etc. Reject full URLs to prevent open redirect.
-      try {
-        const isPathOnly =
-          returnTo.startsWith("/") &&
-          !returnTo.includes("://") &&
-          !returnTo.startsWith("//");
-        if (isPathOnly && (returnTo.startsWith("/admin") || (returnTo.startsWith("/site/") && returnTo.includes("/admin")))) {
-          router.replace(returnTo);
-          return;
-        }
-      } catch (redirectErr) {
-        console.warn("[LoginForm] Invalid returnTo, using default:", redirectErr);
-      }
-    }
-
-    if (redirectPath) {
+    // Never use returnTo for admin/site/tenant - always use current user's canonical dashboard.
+    // Redirect to /dashboard so server/API computes URL from users/<uid>.primarySlug and siteId.
+    if (redirectPath && redirectPath !== "/dashboard") {
       try {
         if (redirectPath.startsWith("http")) {
           window.location.href = redirectPath;
@@ -58,10 +39,10 @@ function LoginForm() {
         }
       } catch (redirectErr) {
         console.error("[LoginForm] Redirect failed:", redirectErr);
-        router.replace("/builder");
+        router.replace("/dashboard");
       }
     } else {
-      router.replace("/builder");
+      router.replace("/dashboard");
     }
   };
 

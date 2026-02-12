@@ -2,45 +2,9 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
-import { useAuth } from "@/components/auth/AuthProvider";
-import { useTenantInfo } from "@/hooks/useTenantInfo";
-import { routeAfterAuth } from "@/lib/authRedirect";
-import { getDashboardUrl } from "@/lib/url";
 
+/** Marketing header: always logged-out UI. "התחברות" → /dashboard (then redirect to /login or tenant admin). */
 export function Header() {
-  const { user, logout } = useAuth();
-  const router = useRouter();
-
-  const handleLogout = () => {
-    logout();
-    router.push("/");
-  };
-
-  const handleGoToDashboard = async () => {
-    if (!user) return;
-    try {
-      const result = await routeAfterAuth(user.id);
-      const url = result.siteId
-        ? getDashboardUrl({ slug: result.slug, siteId: result.siteId })
-        : result.path;
-      if (url.startsWith("http")) {
-        window.location.href = url;
-      } else {
-        router.replace(url);
-      }
-    } catch (error) {
-      console.error("Error determining redirect path:", error);
-      if (user.siteId) {
-        const fallback = getDashboardUrl({ slug: user.primarySlug ?? null, siteId: user.siteId });
-        if (fallback.startsWith("http")) window.location.href = fallback;
-        else router.replace(fallback);
-      } else {
-        router.replace("/builder");
-      }
-    }
-  };
-
   return (
     <header className="border-b border-[#E2EEF2] bg-white sticky top-0 z-50 h-[72px]" dir="ltr">
       <nav className="container mx-auto px-4 h-full">
@@ -71,37 +35,18 @@ export function Header() {
             >
               מחירים
             </Link>
-            {user ? (
-              <>
-                <button
-                  onClick={handleGoToDashboard}
-                  className="text-lg text-[#475569] hover:text-[#0F172A] transition-colors"
-                >
-                  {user.name || user.email}
-                </button>
-                <button
-                  onClick={handleLogout}
-                  className="text-lg text-[#475569] hover:text-[#0F172A] transition-colors"
-                >
-                  התנתקות
-                </button>
-              </>
-            ) : (
-              <>
-                <Link
-                  href="/login"
-                  className="text-lg text-[#475569] hover:text-[#0F172A] transition-colors"
-                >
-                  התחברות
-                </Link>
-                <Link
-                  href="/signup"
-                  className="px-4 py-2 bg-[#2EC4C6] hover:bg-[#22A6A8] text-white rounded-lg text-lg font-medium transition-colors"
-                >
-                  הרשמה
-                </Link>
-              </>
-            )}
+            <Link
+              href="/dashboard"
+              className="text-lg text-[#475569] hover:text-[#0F172A] transition-colors"
+            >
+              התחברות
+            </Link>
+            <Link
+              href="/signup"
+              className="px-4 py-2 bg-[#2EC4C6] hover:bg-[#22A6A8] text-white rounded-lg text-lg font-medium transition-colors"
+            >
+              הרשמה
+            </Link>
           </div>
         </div>
       </nav>

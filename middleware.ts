@@ -4,8 +4,8 @@ import { getHostKind } from "@/lib/tenant";
 /** Path prefixes we never rewrite (Next.js internals, API, static) */
 const SKIP_PREFIXES = ["/_next", "/api", "/favicon.ico", "/favicon", "/static", "/images", "/brand", "/not-found-tenant"];
 
-/** Auth (and similar) paths never rewritten on tenant subdomains — serve same as root (e.g. /login) */
-const TENANT_PASSTHROUGH_PREFIXES = ["/login", "/signup", "/register", "/forgot-password", "/account"];
+/** Auth and dashboard paths: never rewritten on tenant subdomains — serve same as root so redirect uses current user */
+const TENANT_PASSTHROUGH_PREFIXES = ["/login", "/signup", "/register", "/forgot-password", "/account", "/dashboard"];
 
 function shouldSkipRewrite(pathname: string): boolean {
   return SKIP_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
