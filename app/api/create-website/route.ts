@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createWebsiteDocument, updateUserSiteId } from "@/lib/firestoreUsers";
+import { createWebsiteDocumentServer, updateUserSiteIdServer } from "@/lib/firestoreUsersServer";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { defaultSiteConfig } from "@/types/siteConfig";
 import { validateSlug } from "@/lib/slug";
@@ -80,9 +80,10 @@ export async function POST(request: NextRequest) {
       slug = resolvedSlug;
     }
 
-    let website;
+    let websiteId: string;
     try {
-      website = await createWebsiteDocument(userId, slug, "luxury");
+      const website = await createWebsiteDocumentServer(userId, slug, "luxury");
+      websiteId = website.id;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes("Subdomain already taken")) {
@@ -94,16 +95,9 @@ export async function POST(request: NextRequest) {
       throw err;
     }
 
-    if (!website) {
-      return NextResponse.json(
-        { success: false, error: "Failed to create website" },
-        { status: 500 }
-      );
-    }
+    await updateUserSiteIdServer(userId, websiteId);
 
-    await updateUserSiteId(userId, website.id);
-
-    const siteId = website.id;
+    const siteId = websiteId;
     const now = new Date();
     const initialConfig = {
       ...defaultSiteConfig,
@@ -133,8 +127,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      siteId: website.id,
-      subdomain: website.subdomain,
+      siteId,
+      subdomain: slug,
       slug,
       publicUrl,
     });

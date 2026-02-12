@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
-import { getUserDocument } from "@/lib/firestoreUsers";
+import { getServerUserDocument } from "@/lib/firestoreUsersServer";
 import { getSlugBySiteId } from "@/lib/tenant-data";
 import { validateSlug } from "@/lib/slug";
 import { getSitePublicUrl } from "@/lib/tenant";
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const userDoc = await getUserDocument(uid);
+    const userDoc = await getServerUserDocument(uid);
     if (!userDoc?.siteId) {
       return NextResponse.json(
         { success: false, error: "No site linked to your account." },

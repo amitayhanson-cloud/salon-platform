@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { getAdminAuth } from "@/lib/firebaseAdmin";
 import { getSlugBySiteId } from "@/lib/tenant-data";
-import { getUserDocument } from "@/lib/firestoreUsers";
+import { getServerUserDocument } from "@/lib/firestoreUsersServer";
 import { getSitePublicUrl } from "@/lib/tenant";
 
 /**
  * GET /api/tenants/me
  * Returns the current user's tenant slug and public URL (if any).
- * Auth: Bearer token.
+ * Auth: Bearer token (Firebase ID token).
  */
 export async function GET(request: Request) {
   try {
@@ -22,12 +22,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
 
-    const userDoc = await getUserDocument(decoded.uid);
+    const userDoc = await getServerUserDocument(decoded.uid);
     if (!userDoc?.siteId) {
       return NextResponse.json({ slug: null, publicUrl: null, siteId: null });
     }
 
-    const slug = await getSlugBySiteId(userDoc.siteId);
+    const slug = userDoc.primarySlug ?? (await getSlugBySiteId(userDoc.siteId));
     const publicUrl = slug ? getSitePublicUrl(slug) : null;
 
     return NextResponse.json({
@@ -35,7 +35,8 @@ export async function GET(request: Request) {
       publicUrl,
       siteId: userDoc.siteId,
     });
-  } catch {
+  } catch (err) {
+    console.error("[tenants/me]", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

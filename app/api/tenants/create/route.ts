@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
 import { validateSlug } from "@/lib/slug";
 import { getSitePublicUrl } from "@/lib/tenant";
-import { getUserDocument } from "@/lib/firestoreUsers";
+import { getServerUserDocument } from "@/lib/firestoreUsersServer";
 
 const TENANTS_COLLECTION = "tenants";
 
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const userDoc = await getUserDocument(uid);
+    const userDoc = await getServerUserDocument(uid);
     const body = await request.json().catch(() => ({}));
     const rawSlug = typeof body?.slug === "string" ? body.slug : "";
     if (!rawSlug.trim()) {
