@@ -11,7 +11,7 @@
 import type { NextRequest } from "next/server";
 
 /** Root hostname (e.g. "caleno.co"). Uses NEXT_PUBLIC_APP_URL when available. */
-function getRootHost(): string {
+export function getRootHost(): string {
   if (typeof process === "undefined" || !process.env) return "caleno.co";
   const url = process.env.NEXT_PUBLIC_APP_URL;
   if (url) {
@@ -22,6 +22,68 @@ function getRootHost(): string {
     }
   }
   return "caleno.co";
+}
+
+/** User doc shape for slug resolution. Prefer primarySlug; fallback is from sites/<siteId>.slug (API). */
+export type UserDocForSlug = {
+  siteId?: string | null;
+  primarySlug?: string | null;
+};
+
+/**
+ * Returns the tenant slug for a user doc. Prefer users/<uid>.primarySlug.
+ * Caller may use /api/tenants/me for resolved slug (primarySlug ?? sites/<siteId>.slug).
+ */
+export function getTenantSlugForUser(userDoc: UserDocForSlug | null | undefined): string | null {
+  if (!userDoc) return null;
+  const s = userDoc.primarySlug;
+  return typeof s === "string" && s.trim() ? s.trim() : null;
+}
+
+/**
+ * Full dashboard URL or path for redirects/links.
+ * - If slug exists: full URL (subdomain). On localhost: http://localhost:3000/admin?tenant=<slug>.
+ * - Else: path /site/<siteId>/admin for in-app navigation.
+ * Use for "Go to dashboard" and post-login redirects. If result starts with "http", use window.location.href.
+ */
+export function getDashboardUrl(params: { slug: string | null; siteId: string | null }): string {
+  const { slug, siteId } = params;
+  if (!siteId || siteId === "me") return "/site/me/admin";
+
+  const hasSlug = typeof slug === "string" && slug.trim().length > 0;
+  if (typeof window !== "undefined" && window.location.hostname === "localhost" && hasSlug) {
+    return `http://localhost:3000/admin?tenant=${encodeURIComponent(slug!.trim())}`;
+  }
+  if (hasSlug) {
+    const root = getRootHost();
+    return `https://${slug!.trim()}.${root}/admin`;
+  }
+  return `/site/${siteId}/admin`;
+}
+
+/**
+ * Admin URL with optional path (e.g. "/bookings", "/settings").
+ * Same rules as getDashboardUrl; path is appended.
+ */
+export function getAdminUrl(params: {
+  slug: string | null;
+  siteId: string | null;
+  path?: string;
+}): string {
+  const { slug, siteId, path = "" } = params;
+  const normalizedPath = path.startsWith("/") ? path : path ? `/${path}` : "";
+  if (!siteId || siteId === "me") return `/site/me/admin${normalizedPath}`;
+
+  const hasSlug = typeof slug === "string" && slug.trim().length > 0;
+  if (typeof window !== "undefined" && window.location.hostname === "localhost" && hasSlug) {
+    const base = `http://localhost:3000/admin?tenant=${encodeURIComponent(slug!.trim())}`;
+    return normalizedPath ? `${base}${normalizedPath}` : base;
+  }
+  if (hasSlug) {
+    const root = getRootHost();
+    return `https://${slug!.trim()}.${root}/admin${normalizedPath}`;
+  }
+  return `/site/${siteId}/admin${normalizedPath}`;
 }
 
 /**

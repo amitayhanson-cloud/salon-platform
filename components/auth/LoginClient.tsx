@@ -4,7 +4,6 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { isOnTenantSubdomainClient } from "@/lib/url";
 
 function LoginForm() {
   const router = useRouter();
@@ -50,17 +49,13 @@ function LoginForm() {
       }
     }
 
-    // Use the default redirect path from login function (path-only so we stay on same host)
-    // When on tenant subdomain, prefer /admin over /site/{siteId}/admin so URL stays canonical
     if (redirectPath) {
       try {
-        const path =
-          isOnTenantSubdomainClient() &&
-          redirectPath.startsWith("/site/") &&
-          redirectPath.endsWith("/admin")
-            ? "/admin"
-            : redirectPath;
-        router.replace(path);
+        if (redirectPath.startsWith("http")) {
+          window.location.href = redirectPath;
+        } else {
+          router.replace(redirectPath);
+        }
       } catch (redirectErr) {
         console.error("[LoginForm] Redirect failed:", redirectErr);
         router.replace("/builder");

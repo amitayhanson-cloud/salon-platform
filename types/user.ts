@@ -3,6 +3,7 @@ export type User = {
   email: string;
   name?: string;
   siteId: string | null; // Reference to the user's site (null = no site yet, needs wizard)
+  primarySlug?: string | null; // Tenant subdomain; prefer for dashboard links
   createdAt: Date;
   updatedAt?: Date;
 };

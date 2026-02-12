@@ -4,8 +4,9 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { useTenantInfo } from "@/hooks/useTenantInfo";
 import { routeAfterAuth } from "@/lib/authRedirect";
-import { getAdminBasePath, isOnTenantSubdomainClient } from "@/lib/url";
+import { getDashboardUrl } from "@/lib/url";
 
 export function Header() {
   const { user, logout } = useAuth();
@@ -19,16 +20,21 @@ export function Header() {
   const handleGoToDashboard = async () => {
     if (!user) return;
     try {
-      const redirectPath = await routeAfterAuth(user.id);
-      const path =
-        redirectPath.startsWith("/site/") && redirectPath.endsWith("/admin") && isOnTenantSubdomainClient()
-          ? "/admin"
-          : redirectPath;
-      router.replace(path);
+      const result = await routeAfterAuth(user.id);
+      const url = result.siteId
+        ? getDashboardUrl({ slug: result.slug, siteId: result.siteId })
+        : result.path;
+      if (url.startsWith("http")) {
+        window.location.href = url;
+      } else {
+        router.replace(url);
+      }
     } catch (error) {
       console.error("Error determining redirect path:", error);
       if (user.siteId) {
-        router.replace(getAdminBasePath(user.siteId, isOnTenantSubdomainClient()));
+        const fallback = getDashboardUrl({ slug: user.primarySlug ?? null, siteId: user.siteId });
+        if (fallback.startsWith("http")) window.location.href = fallback;
+        else router.replace(fallback);
       } else {
         router.replace("/builder");
       }

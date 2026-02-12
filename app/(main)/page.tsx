@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useRouter } from "next/navigation";
+import { useTenantInfo } from "@/hooks/useTenantInfo";
 import { routeAfterAuth } from "@/lib/authRedirect";
-import { getAdminBasePath, isOnTenantSubdomainClient } from "@/lib/url";
+import { getDashboardUrl } from "@/lib/url";
 import { getLandingContent } from "@/lib/firestoreLanding";
 import { DEFAULT_LANDING_CONTENT } from "@/lib/landingContentDefaults";
 import type { LandingContent } from "@/types/landingContent";
@@ -14,6 +15,7 @@ import { Accordion } from "@/components/admin/Accordion";
 export default function Home() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const { data: tenantInfo } = useTenantInfo();
   const [content, setContent] = useState<LandingContent>(DEFAULT_LANDING_CONTENT);
   const [contentLoading, setContentLoading] = useState(true);
 
@@ -26,17 +28,28 @@ export default function Home() {
 
   const handleGoToDashboard = async () => {
     if (!user) return;
+    if (tenantInfo?.dashboardUrl) {
+      const url = tenantInfo.dashboardUrl;
+      if (url.startsWith("http")) window.location.href = url;
+      else router.replace(url);
+      return;
+    }
     try {
-      const redirectPath = await routeAfterAuth(user.id);
-      const path =
-        redirectPath.startsWith("/site/") && redirectPath.endsWith("/admin") && isOnTenantSubdomainClient()
-          ? "/admin"
-          : redirectPath;
-      router.replace(path);
+      const result = await routeAfterAuth(user.id);
+      const url = result.siteId
+        ? getDashboardUrl({ slug: result.slug, siteId: result.siteId })
+        : result.path;
+      if (url.startsWith("http")) {
+        window.location.href = url;
+      } else {
+        router.replace(url);
+      }
     } catch (error) {
       console.error("Error determining redirect path:", error);
       if (user.siteId) {
-        router.replace(getAdminBasePath(user.siteId, isOnTenantSubdomainClient()));
+        const fallback = getDashboardUrl({ slug: user.primarySlug ?? null, siteId: user.siteId });
+        if (fallback.startsWith("http")) window.location.href = fallback;
+        else router.replace(fallback);
       } else {
         router.replace("/builder");
       }

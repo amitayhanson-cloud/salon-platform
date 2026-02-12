@@ -62,7 +62,8 @@ export async function getUserDocument(userId: string): Promise<User | null> {
     id: userSnap.id,
     email: data.email,
     name: data.name,
-    siteId: data.siteId || null, // Default to null if missing
+    siteId: data.siteId || null,
+    primarySlug: typeof data.primarySlug === "string" && data.primarySlug ? data.primarySlug : null,
     createdAt: timestampToDate(data.createdAt),
     updatedAt: data.updatedAt ? timestampToDate(data.updatedAt) : undefined,
   };

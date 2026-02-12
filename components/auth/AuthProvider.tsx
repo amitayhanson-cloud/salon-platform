@@ -13,6 +13,7 @@ import {
 } from "firebase/auth";
 import { getUserDocument, createUserDocument } from "@/lib/firestoreUsers";
 import { routeAfterAuth } from "@/lib/authRedirect";
+import { getDashboardUrl } from "@/lib/url";
 import { normalizeFirebaseError, logFirebaseError } from "@/lib/firebaseErrors";
 import type { User } from "@/types/user";
 
@@ -283,15 +284,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       
       setUser(userDoc);
-      
-      // Get redirect path using single source of truth: user.siteId
-      const redirectPath = await routeAfterAuth(userCredential.user.uid);
-      
+
+      const result = await routeAfterAuth(userCredential.user.uid);
+      const redirectPath = result.siteId
+        ? getDashboardUrl({ slug: result.slug, siteId: result.siteId })
+        : result.path;
+
       if (process.env.NODE_ENV === "development") {
-        const siteId = userDoc ? userDoc.siteId || "null" : "null";
-        console.log(`[AuthProvider.login] uid=${userCredential.user.uid}, siteId=${siteId} -> redirectPath=${redirectPath}`);
+        console.log(`[AuthProvider.login] uid=${userCredential.user.uid} -> redirectPath=${redirectPath}`);
       }
-      
+
       return { success: true, redirectPath };
     } catch (error: unknown) {
       // Log full error details for debugging
@@ -345,15 +347,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       
       setUser(userDoc);
-      
-      // Get redirect path using single source of truth: user.siteId
-      const redirectPath = await routeAfterAuth(userCredential.user.uid);
-      
+
+      const result = await routeAfterAuth(userCredential.user.uid);
+      const redirectPath = result.siteId
+        ? getDashboardUrl({ slug: result.slug, siteId: result.siteId })
+        : result.path;
+
       if (process.env.NODE_ENV === "development") {
-        const siteId = userDoc ? userDoc.siteId || "null" : "null";
-        console.log(`[AuthProvider.loginWithGoogle] uid=${userCredential.user.uid}, siteId=${siteId} -> redirectPath=${redirectPath}`);
+        console.log(`[AuthProvider.loginWithGoogle] uid=${userCredential.user.uid} -> redirectPath=${redirectPath}`);
       }
-      
+
       return { success: true, redirectPath };
     } catch (error: unknown) {
       // Log full error details for debugging

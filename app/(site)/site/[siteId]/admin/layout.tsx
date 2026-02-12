@@ -7,7 +7,7 @@ import { useParams, useRouter, usePathname } from "next/navigation";
 export const dynamic = "force-dynamic";
 import AdminHeader from "@/components/admin/AdminHeader";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { isOnTenantSubdomainClient, getAdminBasePath } from "@/lib/url";
+import { isOnTenantSubdomainClient, getAdminBasePath, getDashboardUrl } from "@/lib/url";
 
 export default function AdminLayout({
   children,
@@ -221,34 +221,39 @@ export default function AdminLayout({
             const userDoc = await getUserDocument(user.id);
             
             if (userDoc?.siteId) {
-              // User has their own site - redirect to their admin (path-only; keep same host)
-              const onSubdomain = isOnTenantSubdomainClient();
-              const targetPath = getAdminBasePath(userDoc.siteId, onSubdomain);
-              if (pathname === targetPath) {
-                // Already on target page, don't redirect
+              const dashboardUrl = getDashboardUrl({
+                slug: userDoc.primarySlug ?? null,
+                siteId: userDoc.siteId,
+              });
+              const isFullUrl = dashboardUrl.startsWith("http");
+              if (!isFullUrl && pathname === dashboardUrl) {
                 if (process.env.NODE_ENV === "development") {
-                  console.log(`[ADMIN GUARD] Already on ${targetPath}, skipping redirect`);
+                  console.log(`[ADMIN GUARD] Already on ${dashboardUrl}, skipping redirect`);
                 }
                 setChecking(false);
                 setAuthorized(false);
                 return;
               }
-              
               if (process.env.NODE_ENV === "development") {
                 console.log(`[ADMIN GUARD] Redirecting to user's own site admin`, {
                   currentPath: pathname,
-                  targetPath,
-                  onSubdomain,
+                  dashboardUrl,
                 });
               }
-              // On someone else's subdomain: full URL to root so they get their admin
-              if (onSubdomain && userDoc.siteId !== siteId) {
-                const rootUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://caleno.co";
-                const rootPath = getAdminBasePath(userDoc.siteId, false);
-                window.location.href = `${rootUrl.replace(/\/$/, "")}${rootPath}`;
+              if (isOnTenantSubdomainClient() && userDoc.siteId !== siteId) {
+                if (isFullUrl) {
+                  window.location.href = dashboardUrl;
+                } else {
+                  const rootUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://caleno.co";
+                  window.location.href = `${rootUrl.replace(/\/$/, "")}${dashboardUrl}`;
+                }
                 return;
               }
-              router.replace(targetPath);
+              if (isFullUrl) {
+                window.location.href = dashboardUrl;
+              } else {
+                router.replace(dashboardUrl);
+              }
             } else {
               // User has no site - show 403 error (NOT redirect to builder)
               // The admin guard should never redirect to /builder

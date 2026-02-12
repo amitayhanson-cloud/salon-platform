@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { getUserDocument } from "@/lib/firestoreUsers";
-import { getAdminBasePath, isOnTenantSubdomainClient } from "@/lib/url";
+import { getDashboardUrl } from "@/lib/url";
 
 export default function AdminLayout({
   children,
@@ -22,14 +22,20 @@ export default function AdminLayout({
       return;
     }
 
-    // Get user's siteId and redirect to /site/{siteId}/admin
     const redirectToAdmin = async () => {
       try {
         const userDoc = await getUserDocument(user.id);
         if (userDoc?.siteId) {
-          router.replace(getAdminBasePath(userDoc.siteId, isOnTenantSubdomainClient()));
+          const url = getDashboardUrl({
+            slug: userDoc.primarySlug ?? null,
+            siteId: userDoc.siteId,
+          });
+          if (url.startsWith("http")) {
+            window.location.href = url;
+          } else {
+            router.replace(url);
+          }
         } else {
-          // User has no site - redirect to builder
           router.replace("/builder");
         }
       } catch (error) {

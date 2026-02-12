@@ -13,7 +13,7 @@ import { defaultBookingState } from "@/types/booking";
 import { HAIR_HERO_IMAGES, HAIR_ABOUT_IMAGES } from "@/lib/hairImages";
 import { Timestamp } from "firebase/firestore";
 import { validateTenantSlug, getSitePublicUrl } from "@/lib/tenant";
-import { getAdminBasePath, isOnTenantSubdomainClient } from "@/lib/url";
+import { getDashboardUrl } from "@/lib/url";
 
 /*
  * Manual test steps (signup wizard + subdomain):
@@ -103,23 +103,27 @@ export default function BuilderPage() {
         const userDoc = await getUserDocument(user.id);
         
         if (userDoc?.siteId) {
-          const targetPath = getAdminBasePath(userDoc.siteId, isOnTenantSubdomainClient());
-          if (pathname === targetPath) {
-            // Already on target page, don't redirect
+          const url = getDashboardUrl({
+            slug: userDoc.primarySlug ?? null,
+            siteId: userDoc.siteId,
+          });
+          const isFullUrl = url.startsWith("http");
+          if (!isFullUrl && pathname === url) {
             if (process.env.NODE_ENV === "development") {
-              console.log(`[BUILDER GUARD] Already on ${targetPath}, skipping redirect`);
+              console.log(`[BUILDER GUARD] Already on ${url}, skipping redirect`);
             }
             return;
           }
-          
           if (!didRedirect.current) {
             didRedirect.current = true;
             if (process.env.NODE_ENV === "development") {
-              console.log(`[BUILDER GUARD] authReady=true, uid=${user.id}, siteId=${userDoc.siteId} -> redirect to ${targetPath}`, {
-                currentPath: pathname
-              });
+              console.log(`[BUILDER GUARD] authReady=true, uid=${user.id}, siteId=${userDoc.siteId} -> redirect to ${url}`);
             }
-            router.replace(targetPath);
+            if (isFullUrl) {
+              window.location.href = url;
+            } else {
+              router.replace(url);
+            }
           }
           return;
         }
@@ -267,7 +271,15 @@ export default function BuilderPage() {
       const userDoc = await getUserDocument(user.id);
 
       if (userDoc?.siteId) {
-        router.replace(`/site/${userDoc.siteId}/admin`);
+        const url = getDashboardUrl({
+          slug: userDoc.primarySlug ?? null,
+          siteId: userDoc.siteId,
+        });
+        if (url.startsWith("http")) {
+          window.location.href = url;
+        } else {
+          router.replace(url);
+        }
         return;
       }
 
