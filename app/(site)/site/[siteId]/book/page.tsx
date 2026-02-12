@@ -320,13 +320,21 @@ export default function BookingPage() {
   }
 
   // Filter 3: Get worker's working window for a date (in minutes)
+  // Default: workers work business hours for a day unless they have a different (or closed) config.
   function getWorkerWorkingWindow(
     worker: { availability?: OpeningHours[] },
     date: Date
   ): { startMin: number; endMin: number } | null {
+    const businessWindow = getBusinessWindow(date);
     const workerDayConfig = resolveWorkerDayConfig(worker, date);
-    if (!workerDayConfig || !workerDayConfig.open || !workerDayConfig.close) {
-      return null; // Worker day is closed or no config
+
+    // No config for this weekday (or no availability at all) → default to business hours
+    if (!workerDayConfig) {
+      return businessWindow;
+    }
+    // Explicitly closed (open/close null or missing) → not working
+    if (!workerDayConfig.open || !workerDayConfig.close) {
+      return null;
     }
 
     return {
@@ -1409,16 +1417,17 @@ export default function BookingPage() {
   };
 
   // ============================================================================
-  // STEP 2 → STEP 3: Filter dates by business hours + worker availability + available slots
+  // STEP 2 → STEP 3: Filter dates by business hours (+ worker when one is selected)
   // ============================================================================
-  // After selecting a worker, show ONLY dates where:
-  // - business is open that weekday (Rank 1)
-  // - worker is available that weekday (Rank 2)
-  // - there exists at least one available time slot on that date
+  // Date is available (clickable) when:
+  // - business is open that weekday per business open hours (Rank 1)
+  // - service duration fits in business window
+  // - If a worker is selected: that worker must also be available that day
+  // - If no worker selected: day is available whenever business is open (time step will show "no times" if no workers)
   const isDateAvailable = (date: Date): boolean => {
     if (selectedServices.length === 0) return false;
 
-    // Rank 1: Business must be open on this date
+    // Rank 1: Business must be open on this date (from admin business open hours)
     const businessDayConfig = resolveBusinessDayConfig(date);
     if (!businessDayConfig || !businessDayConfig.enabled) {
       if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
@@ -1435,8 +1444,16 @@ export default function BookingPage() {
     const serviceDurationMinutes = getChainTotalDuration(chainInput);
     const slotIntervalMinutes = 15;
 
-    // ללא העדפה: date available if business open and at least one eligible worker works this day (duration fits in business window)
-    // With preferred worker: that worker must work this date
+    // Duration must fit in business window for the date to be selectable
+    const canFitInBusiness = (businessWindow.endMin - businessWindow.startMin) >= Math.max(slotIntervalMinutes, serviceDurationMinutes);
+    if (!canFitInBusiness) {
+      if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+        console.log(`[Booking] Step 2→3: Date ${ymdLocal(date)} disabled - duration does not fit in business window`);
+      }
+      return false;
+    }
+
+    // With preferred worker: that worker must work this date and have overlapping window
     if (selectedWorker) {
       const worker = workers.find((w) => w.id === selectedWorker.id);
       if (!worker || !isWorkerWorkingOnDate(worker, date)) {
@@ -1454,23 +1471,8 @@ export default function BookingPage() {
         }
         return false;
       }
-    } else {
-      // No preference: at least one eligible worker must work this date and duration must fit in business window
-      const anyEligibleWorks = eligibleWorkers.some((w) => isWorkerWorkingOnDate(w, date));
-      if (!anyEligibleWorks) {
-        if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
-          console.log(`[Booking] Step 2→3: Date ${ymdLocal(date)} disabled - no eligible worker available this day`);
-        }
-        return false;
-      }
-      const canFitInBusiness = (businessWindow.endMin - businessWindow.startMin) >= Math.max(slotIntervalMinutes, serviceDurationMinutes);
-      if (!canFitInBusiness) {
-        if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
-          console.log(`[Booking] Step 2→3: Date ${ymdLocal(date)} disabled - duration does not fit in business window`);
-        }
-        return false;
-      }
     }
+    // No worker selected: date is available whenever business is open and duration fits (step 4 will show "no times" if no workers)
 
     if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
       console.log(`[Booking] Step 2→3: Date ${ymdLocal(date)} enabled`);
