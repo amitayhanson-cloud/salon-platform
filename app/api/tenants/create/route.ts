@@ -4,13 +4,14 @@ import {
   isValidTenantSlug,
   normalizeTenantSlug,
 } from "@/lib/tenant";
+import { getUserDocument } from "@/lib/firestoreUsers";
 
 const TENANTS_COLLECTION = "tenants";
 
 /**
  * POST /api/tenants/create
  * Create a tenant (subdomain) for the authenticated user.
- * Body: { slug: string }
+ * Body: { slug: string, siteId?: string } — siteId optional; if omitted, uses the user's siteId.
  * Auth: Firebase ID token in Authorization: Bearer <token>
  */
 export async function POST(request: NextRequest) {
@@ -55,6 +56,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    let siteId: string | null =
+      typeof body?.siteId === "string" && body.siteId.trim()
+        ? body.siteId.trim()
+        : null;
+    if (!siteId) {
+      const userDoc = await getUserDocument(uid);
+      siteId = userDoc?.siteId ?? null;
+    }
+    if (!siteId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "siteId is required. Create a site first or pass siteId in the request body.",
+        },
+        { status: 400 }
+      );
+    }
+
     const slug = normalizeTenantSlug(rawSlug);
     const db = getAdminDb();
     const docRef = db.collection(TENANTS_COLLECTION).doc(slug);
@@ -68,7 +87,7 @@ export async function POST(request: NextRequest) {
 
     const now = new Date();
     await docRef.set({
-      slug,
+      siteId,
       ownerUid: uid,
       createdAt: now,
       updatedAt: now,
@@ -77,6 +96,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       slug,
+      siteId,
       message: `Tenant ${slug}.caleno.co created.`,
     });
   } catch (err) {

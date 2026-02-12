@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getHostKind } from "@/lib/tenant";
 
 /** Path prefixes we never rewrite (Next.js internals, API, static) */
-const SKIP_PREFIXES = ["/_next", "/api", "/favicon.ico", "/favicon", "/static", "/images", "/brand"];
+const SKIP_PREFIXES = ["/_next", "/api", "/favicon.ico", "/favicon", "/static", "/images", "/brand", "/not-found-tenant"];
 
 function shouldSkipRewrite(pathname: string): boolean {
   return SKIP_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-export function middleware(request: NextRequest): NextResponse {
+export async function middleware(request: NextRequest): Promise<NextResponse> {
   const host = request.headers.get("host") ?? "";
   const pathname = request.nextUrl.pathname;
 
@@ -39,11 +39,31 @@ export function middleware(request: NextRequest): NextResponse {
     return NextResponse.next();
   }
 
-  // Rewrite to /t/<slug>/<path>
-  const base = `/t/${slug}`;
-  const rewritePath = pathname === "/" ? base : `${base}${pathname}`;
+  // Resolve slug -> siteId via API (same origin, /api excluded from matcher)
+  const origin = new URL(request.url).origin;
+  const resolveUrl = `${origin}/api/tenants/resolve?slug=${encodeURIComponent(slug)}`;
+  let siteId: string | null = null;
+  try {
+    const res = await fetch(resolveUrl);
+    if (res.ok) {
+      const data = (await res.json()) as { siteId?: string };
+      if (typeof data.siteId === "string" && data.siteId.trim()) {
+        siteId = data.siteId.trim();
+      }
+    }
+  } catch {
+    // fall through to tenant-not-found
+  }
+
+  if (!siteId) {
+    const notFoundUrl = new URL("/not-found-tenant", request.url);
+    return NextResponse.rewrite(notFoundUrl);
+  }
+
+  // Rewrite to /site/<siteId>/ or /site/<siteId><path>
+  const siteBase = `/site/${siteId}`;
+  const rewritePath = pathname === "/" ? `${siteBase}/` : `${siteBase}${pathname}`;
   const rewriteUrl = new URL(rewritePath, request.url);
-  // Preserve query params except tenant (avoid leaking into app)
   request.nextUrl.searchParams.forEach((value, key) => {
     if (key !== "tenant") rewriteUrl.searchParams.set(key, value);
   });
@@ -53,12 +73,6 @@ export function middleware(request: NextRequest): NextResponse {
 
 export const config = {
   matcher: [
-    /*
-     * Match all paths except:
-     * - _next (Next.js internals)
-     * - api
-     * - static files (common extensions)
-     */
     "/((?!_next/|_next/static|api/|favicon.ico|favicon|static/|images/|brand/).*)",
   ],
 };

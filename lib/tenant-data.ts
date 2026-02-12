@@ -2,14 +2,23 @@ import { getAdminDb } from "@/lib/firebaseAdmin";
 
 const TENANTS_COLLECTION = "tenants";
 
-/** Public tenant fields only (safe to expose on tenant pages). */
+/** Tenant doc shape: doc id = slug, fields include siteId. */
+export type TenantDoc = {
+  siteId: string;
+  ownerUid?: string;
+  createdAt: unknown;
+  updatedAt: unknown;
+};
+
+/** Public tenant fields only (safe to expose). */
 export type TenantPublic = {
   slug: string;
+  siteId: string;
 };
 
 /**
  * Fetch tenant by slug from Firestore (tenants collection, doc id = slug).
- * Returns only public fields. Returns null if not found or on error.
+ * Returns public fields { slug, siteId } or null if not found / missing siteId.
  */
 export async function getTenantBySlug(slug: string): Promise<TenantPublic | null> {
   if (!slug || typeof slug !== "string") {
@@ -25,12 +34,23 @@ export async function getTenantBySlug(slug: string): Promise<TenantPublic | null
     if (!snap.exists) {
       return null;
     }
-    const data = snap.data();
-    if (!data) return null;
+    const data = snap.data() as TenantDoc | undefined;
+    if (!data || typeof data.siteId !== "string" || !data.siteId.trim()) {
+      return null;
+    }
     return {
-      slug: (data.slug as string) ?? normalized,
+      slug: normalized,
+      siteId: data.siteId.trim(),
     };
   } catch {
     return null;
   }
+}
+
+/**
+ * Resolve slug to siteId only. For middleware/API use.
+ */
+export async function getTenantSiteId(slug: string): Promise<string | null> {
+  const tenant = await getTenantBySlug(slug);
+  return tenant?.siteId ?? null;
 }
