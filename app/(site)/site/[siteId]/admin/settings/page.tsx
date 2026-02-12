@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import DeleteAccountButton from "@/components/admin/DeleteAccountButton";
+import SubdomainSettingsCard from "@/components/admin/SubdomainSettingsCard";
 import type { SiteConfig } from "@/types/siteConfig";
 import type { SalonBookingState } from "@/types/booking";
 import { defaultBookingState } from "@/types/booking";
@@ -1376,6 +1377,9 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
+
+      {/* Subdomain section */}
+      <SubdomainSettingsCard firebaseUser={firebaseUser} />
 
       {/* Delete Account Section - Only button by default */}
       <DeleteAccountButton
