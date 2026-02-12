@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { getSiteUrl } from "@/lib/tenant";
 import type { SiteService } from "@/types/siteConfig";
 
 function formatPrice(price: number | string | undefined): string | null {
@@ -18,11 +19,13 @@ function formatDuration(minutes: number | undefined): string | null {
 export default function ServiceCard({
   service,
   siteId,
+  slug,
   bookingEnabled,
   libraryImage,
 }: {
   service: SiteService;
   siteId: string;
+  slug?: string | null;
   bookingEnabled: boolean;
   /** Fallback image from template library when service has no imageUrl */
   libraryImage?: string | null;
@@ -82,7 +85,7 @@ export default function ServiceCard({
   if (bookingEnabled) {
     return (
       <Link
-        href={`/site/${siteId}/book`}
+        href={getSiteUrl(slug, siteId, "/book")}
         className={cardClassName}
         style={cardStyle}
       >

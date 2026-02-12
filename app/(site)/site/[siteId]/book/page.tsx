@@ -46,6 +46,7 @@ import {
   type ChainServiceInput,
 } from "@/lib/multiServiceChain";
 import { saveMultiServiceBooking } from "@/lib/booking";
+import { getSiteUrl } from "@/lib/tenant";
 
 type TimestampLike = { toDate: () => Date };
 
@@ -1117,7 +1118,7 @@ export default function BookingPage() {
   // Check if booking is enabled
   useEffect(() => {
     if (config && !bookingEnabled(config)) {
-      router.replace(`/site/${siteId}`);
+      router.replace(getSiteUrl(config?.slug, siteId, ""));
     }
   }, [config, siteId, router]);
 
@@ -1159,7 +1160,7 @@ export default function BookingPage() {
               באתר הזה לא הופעלה אפשרות הזמנות אונליין.
             </p>
             <Link
-              href={`/site/${siteId}`}
+              href={getSiteUrl(config?.slug, siteId, "")}
               className="inline-block px-6 py-3 font-semibold rounded-lg transition-colors hover:opacity-90"
               style={{ backgroundColor: "var(--primary)", color: "var(--primaryText)" }}
             >
@@ -1262,7 +1263,7 @@ export default function BookingPage() {
             </div>
 
             <Link
-              href={`/site/${siteId}`}
+              href={getSiteUrl(config?.slug, siteId, "")}
               className="inline-block px-6 py-3 font-semibold rounded-lg transition-colors hover:opacity-90"
               style={{ backgroundColor: "var(--primary)", color: "var(--primaryText)" }}
             >
@@ -1599,7 +1600,7 @@ export default function BookingPage() {
               הזמנת תור
             </h1>
             <Link
-              href={`/site/${siteId}`}
+              href={getSiteUrl(config?.slug, siteId, "")}
               className="text-sm hover:opacity-80 transition-opacity"
               style={{ color: "var(--muted)" }}
             >

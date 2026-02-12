@@ -1,16 +1,43 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthProvider";
 
+type TenantMe = { slug: string | null; publicUrl: string | null; siteId: string | null };
+
 export default function AccountPage() {
   const router = useRouter();
   const { user, firebaseUser, logout, loading } = useAuth();
+  const [tenantMe, setTenantMe] = useState<TenantMe | null>(null);
+  const [tenantMeLoading, setTenantMeLoading] = useState(true);
   const [tenantSlug, setTenantSlug] = useState("");
-  const [tenantCreating, setTenantCreating] = useState(false);
+  const [tenantBusy, setTenantBusy] = useState(false);
   const [tenantMessage, setTenantMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+
+  const fetchTenantMe = useCallback(async () => {
+    if (!firebaseUser) {
+      setTenantMeLoading(false);
+      return;
+    }
+    try {
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch("/api/tenants/me", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = (await res.json()) as TenantMe;
+        setTenantMe(data);
+      } else {
+        setTenantMe({ slug: null, publicUrl: null, siteId: null });
+      }
+    } catch {
+      setTenantMe({ slug: null, publicUrl: null, siteId: null });
+    } finally {
+      setTenantMeLoading(false);
+    }
+  }, [firebaseUser]);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -18,12 +45,16 @@ export default function AccountPage() {
     }
   }, [user, loading, router]);
 
+  useEffect(() => {
+    if (firebaseUser && user) fetchTenantMe();
+  }, [firebaseUser, user, fetchTenantMe]);
+
   const handleLogout = () => {
     logout();
     router.push("/");
   };
 
-  const handleCreateTenant = async () => {
+  const handleCreateOrChangeTenant = async () => {
     setTenantMessage(null);
     const slug = tenantSlug.trim().toLowerCase();
     if (!slug) {
@@ -31,28 +62,35 @@ export default function AccountPage() {
       return;
     }
     if (!firebaseUser) {
-      setTenantMessage({ type: "err", text: "יש להתחבר כדי ליצור תת-דומיין." });
+      setTenantMessage({ type: "err", text: "יש להתחבר." });
       return;
     }
-    setTenantCreating(true);
+    setTenantBusy(true);
     try {
       const token = await firebaseUser.getIdToken();
-      const res = await fetch("/api/tenants/create", {
+      const isChange = tenantMe?.slug != null;
+      const url = isChange ? "/api/tenants/change" : "/api/tenants/create";
+      const body = isChange ? { newSlug: slug } : { slug };
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ slug }),
+        body: JSON.stringify(body),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as { success?: boolean; error?: string; publicUrl?: string } & TenantMe;
       if (res.ok && data.success) {
-        setTenantMessage({ type: "ok", text: `נוצר: ${data.slug}.caleno.co` });
+        setTenantMessage({
+          type: "ok",
+          text: data.publicUrl ? `כתובת האתר: ${data.publicUrl}` : (data.slug ? `${data.slug}.caleno.co` : "עודכן."),
+        });
         setTenantSlug("");
+        fetchTenantMe();
       } else {
-        setTenantMessage({ type: "err", text: (data.error as string) || "שגיאה ביצירת תת-דומיין." });
+        setTenantMessage({ type: "err", text: (data.error as string) || "שגיאה." });
       }
     } catch {
       setTenantMessage({ type: "err", text: "שגיאת רשת." });
     } finally {
-      setTenantCreating(false);
+      setTenantBusy(false);
     }
   };
 
@@ -99,25 +137,46 @@ export default function AccountPage() {
               <h3 className="text-lg font-semibold text-slate-900 mb-2">
                 תת-דומיין (Caleno)
               </h3>
+              {tenantMeLoading ? (
+                <p className="text-slate-500 text-sm">טוען...</p>
+              ) : tenantMe?.publicUrl ? (
+                <p className="text-slate-600 text-sm mb-3">
+                  הכתובת הנוכחית:{" "}
+                  <a
+                    href={tenantMe.publicUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sky-600 hover:underline"
+                    dir="ltr"
+                  >
+                    {tenantMe.publicUrl}
+                  </a>
+                </p>
+              ) : tenantMe?.siteId ? (
+                <p className="text-slate-600 text-sm mb-3">אין עדיין תת-דומיין. צרו אחד למטה.</p>
+              ) : null}
               <p className="text-slate-600 text-sm mb-3">
-                צרו תת-דומיין משלכם (למשל <code className="bg-slate-100 px-1 rounded">alice</code> → alice.caleno.co). 3–30 תווים, אותיות באנגלית, ספרות ומקף.
+                {tenantMe?.slug ? "החלפת תת-דומיין:" : "צרו תת-דומיין (למשל "}
+                {!tenantMe?.slug && <code className="bg-slate-100 px-1 rounded">alice</code>}
+                {!tenantMe?.slug && " → alice.caleno.co). "}
+                3–30 תווים, אותיות באנגלית, ספרות ומקף.
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <input
                   type="text"
                   value={tenantSlug}
                   onChange={(e) => setTenantSlug(e.target.value)}
-                  placeholder="alice"
+                  placeholder={tenantMe?.slug ?? "alice"}
                   className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-40"
                   dir="ltr"
                 />
                 <button
                   type="button"
-                  onClick={handleCreateTenant}
-                  disabled={tenantCreating}
+                  onClick={handleCreateOrChangeTenant}
+                  disabled={tenantBusy}
                   className="px-4 py-2 bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white rounded-lg font-medium text-sm"
                 >
-                  {tenantCreating ? "יוצר..." : "צור תת-דומיין"}
+                  {tenantBusy ? "..." : tenantMe?.slug ? "החלף תת-דומיין" : "צור תת-דומיין"}
                 </button>
               </div>
               {tenantMessage && (

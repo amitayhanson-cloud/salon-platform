@@ -48,9 +48,13 @@ export function subscribeSiteConfig(
         onData(null);
         return;
       }
-      const siteData = snap.data();
+      const siteData = snap.data() as { config?: SiteConfig; slug?: string } | undefined;
       const config = siteData?.config;
-      onData(config ? (config as SiteConfig) : null);
+      const slug = typeof siteData?.slug === "string" && siteData.slug.trim() ? siteData.slug.trim() : null;
+      const merged: SiteConfig | null = config
+        ? { ...(config as SiteConfig), slug: slug ?? config.slug ?? null }
+        : null;
+      onData(merged);
     },
     (err) => {
       console.error("[subscribeSiteConfig] error", err);

@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
-import {
-  isValidTenantSlug,
-  normalizeTenantSlug,
-} from "@/lib/tenant";
+import { validateTenantSlug, normalizeTenantSlug, getSitePublicUrl } from "@/lib/tenant";
 import { getUserDocument } from "@/lib/firestoreUsers";
 
 const TENANTS_COLLECTION = "tenants";
 
 /**
  * POST /api/tenants/create
- * Create a tenant (subdomain) for the authenticated user.
+ * Create a tenant (subdomain) for the authenticated user's site.
  * Body: { slug: string, siteId?: string } — siteId optional; if omitted, uses the user's siteId.
  * Auth: Firebase ID token in Authorization: Bearer <token>
  */
@@ -36,6 +33,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const userDoc = await getUserDocument(uid);
     const body = await request.json().catch(() => ({}));
     const rawSlug = typeof body?.slug === "string" ? body.slug : "";
     if (!rawSlug.trim()) {
@@ -45,25 +43,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!isValidTenantSlug(rawSlug)) {
+    const validation = validateTenantSlug(rawSlug);
+    if (!validation.ok) {
       return NextResponse.json(
-        {
-          success: false,
-          error:
-            "Invalid slug: 3–30 characters, lowercase letters, numbers, hyphens only, no leading/trailing hyphen.",
-        },
+        { success: false, error: validation.error },
         { status: 400 }
       );
     }
 
     let siteId: string | null =
-      typeof body?.siteId === "string" && body.siteId.trim()
-        ? body.siteId.trim()
-        : null;
-    if (!siteId) {
-      const userDoc = await getUserDocument(uid);
-      siteId = userDoc?.siteId ?? null;
-    }
+      typeof body?.siteId === "string" && (body.siteId as string).trim()
+        ? (body.siteId as string).trim()
+        : userDoc?.siteId ?? null;
     if (!siteId) {
       return NextResponse.json(
         {
@@ -73,11 +64,17 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+    if (userDoc?.siteId && userDoc.siteId !== siteId) {
+      return NextResponse.json(
+        { success: false, error: "You can only create a subdomain for your own site." },
+        { status: 403 }
+      );
+    }
 
     const slug = normalizeTenantSlug(rawSlug);
     const db = getAdminDb();
-    const docRef = db.collection(TENANTS_COLLECTION).doc(slug);
-    const existing = await docRef.get();
+    const tenantRef = db.collection(TENANTS_COLLECTION).doc(slug);
+    const existing = await tenantRef.get();
     if (existing.exists) {
       return NextResponse.json(
         { success: false, error: "This subdomain is already taken." },
@@ -86,17 +83,24 @@ export async function POST(request: NextRequest) {
     }
 
     const now = new Date();
-    await docRef.set({
+    const siteRef = db.collection("sites").doc(siteId);
+    const batch = db.batch();
+    batch.set(tenantRef, {
       siteId,
       ownerUid: uid,
       createdAt: now,
       updatedAt: now,
     });
+    batch.update(siteRef, { slug, updatedAt: now });
+    await batch.commit();
+
+    const publicUrl = getSitePublicUrl(slug);
 
     return NextResponse.json({
       success: true,
       slug,
       siteId,
+      publicUrl,
       message: `Tenant ${slug}.caleno.co created.`,
     });
   } catch (err) {

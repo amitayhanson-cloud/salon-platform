@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { getSiteUrl } from "@/lib/tenant";
 
 const NAV_LINKS = [
   { label: "אודות", id: "about-section" },
@@ -14,6 +15,7 @@ const LOGO_HEIGHT = 44; // prominent in header (h-16)
 export default function SalonHeader({
   salonName,
   siteId,
+  slug,
   bookingEnabled: isBookingEnabled,
   scrollToSection,
   logoUrl,
@@ -21,6 +23,7 @@ export default function SalonHeader({
 }: {
   salonName: string;
   siteId: string;
+  slug?: string | null;
   bookingEnabled: boolean;
   scrollToSection: (id: string) => void;
   logoUrl?: string | null;
@@ -71,7 +74,7 @@ export default function SalonHeader({
             ))}
             {isBookingEnabled ? (
               <Link
-                href={`/site/${siteId}/book`}
+                href={getSiteUrl(slug, siteId, "/book")}
                 className="rounded-full px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-transparent"
                 style={{
                   backgroundColor: "var(--primary)",
@@ -113,7 +116,7 @@ export default function SalonHeader({
         <div className="flex min-w-0 items-center justify-end">
           {logoUrl ? (
             <Link
-              href={`/site/${siteId}`}
+              href={getSiteUrl(slug, siteId, "")}
               className="flex shrink-0 items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent rounded"
               style={{ height: LOGO_HEIGHT }}
               aria-label={logoAlt || salonName || "דף הבית"}
@@ -139,7 +142,7 @@ export default function SalonHeader({
         >
           {logoUrl ? (
             <Link
-              href={`/site/${siteId}`}
+              href={getSiteUrl(slug, siteId, "")}
               onClick={() => setMobileMenuOpen(false)}
               className="flex justify-center py-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 rounded"
               style={{ height: LOGO_HEIGHT }}
@@ -166,7 +169,7 @@ export default function SalonHeader({
             ))}
             {isBookingEnabled ? (
               <Link
-                href={`/site/${siteId}/book`}
+                href={getSiteUrl(slug, siteId, "/book")}
                 onClick={() => setMobileMenuOpen(false)}
                 className="mt-2 rounded-full px-5 py-3 text-center text-sm font-semibold"
                 style={{

@@ -263,15 +263,16 @@ export async function backfillSiteOwnerUid(userId: string): Promise<void> {
 }
 
 /**
- * Get site config from sites/{siteId}.config
+ * Get site config from sites/{siteId}.config (with slug from top-level site doc merged in).
  */
 export async function getSiteConfig(siteId: string): Promise<SiteConfig | null> {
   const site = await getSite(siteId);
   if (!site) {
     return null;
   }
-  
-  return site.config as SiteConfig | null;
+  const config = site.config as SiteConfig | undefined;
+  const slug = (site as { slug?: string }).slug ?? config?.slug ?? null;
+  return config ? { ...config, slug } : null;
 }
 
 /**
@@ -308,14 +309,17 @@ export function subscribeSiteConfig(
   
   return onSnapshot(
     siteRef,
-    (snap: any) => {
+    (snap: { exists: () => boolean; data: () => Record<string, unknown> }) => {
       if (!snap.exists()) {
         onData(null);
         return;
       }
       const siteData = snap.data();
-      const config = siteData?.config;
-      onData(config ? (config as SiteConfig) : null);
+      const config = siteData?.config as SiteConfig | undefined;
+      const slug = typeof siteData?.slug === "string" && (siteData.slug as string).trim()
+        ? (siteData.slug as string).trim()
+        : config?.slug ?? null;
+      onData(config ? { ...config, slug } : null);
     },
     (err: unknown) => {
       console.error("[subscribeSiteConfig] error", err);

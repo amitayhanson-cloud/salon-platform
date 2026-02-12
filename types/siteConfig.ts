@@ -44,6 +44,8 @@ export type SiteService = {
 };
 
 export type SiteConfig = {
+  /** Tenant subdomain slug (e.g. "alice" → alice.caleno.co). Set when tenant is created. */
+  slug?: string | null;
   salonName: string;
   salonType: "hair" | "nails" | "barber" | "spa" | "mixed" | "other";
   city?: string; // Deprecated - kept for backward compatibility, use address instead

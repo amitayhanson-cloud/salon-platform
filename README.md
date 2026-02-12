@@ -83,14 +83,27 @@ Set `NEXT_PUBLIC_APP_URL=https://caleno.co` in production (see `env.local.exampl
 
 ### Multi-tenant subdomains
 
-Each tenant gets a subdomain: `https://<slug>.caleno.co` (e.g. `https://alice.caleno.co`). The root domain and `www` serve the main app; subdomains are rewritten internally to `/t/<slug>/...` and rendered by `app/t/[tenant]/`.
+Each tenant (subdomain) maps to a **site** via Firestore:
 
-**Local development (localhost):**
+- **Tenant mapping:** `tenants/<slug>` → doc fields `{ siteId, ownerUid?, createdAt, updatedAt }`. Middleware resolves the request host (e.g. `alice.caleno.co`) to a slug, calls `GET /api/tenants/resolve?slug=alice`, then rewrites to **`/site/<siteId>/...`** (so the same app routes as the root domain, with no `/t/` segment).
+- **Site document:** `sites/<siteId>` can include a top-level **`slug`** field; when set, the UI prefers the public URL `https://<slug>.caleno.co` over `/site/<siteId>` for links.
 
-- **Option A – Query param:** Use `?tenant=<slug>` to simulate a tenant. Example: [http://localhost:3000?tenant=alice](http://localhost:3000?tenant=alice) behaves like `alice.caleno.co`, and [http://localhost:3000/pricing?tenant=alice](http://localhost:3000/pricing?tenant=alice) like `alice.caleno.co/pricing`.
-- **Option B – Subdomain:** If your OS supports it, open [http://alice.localhost:3000](http://alice.localhost:3000) to get the same behavior without a query param.
+**Local development:**
 
-Create a tenant from the **Account** page (logged in): enter a slug (3–30 chars, a-z, 0-9, hyphens) and click "צור תת-דומיין". The tenant is stored in Firestore `tenants/<slug>` with `ownerUid` and timestamps.
+- **Query param:** On localhost, use `?tenant=<slug>` to simulate a tenant. Example: [http://localhost:3000?tenant=alice](http://localhost:3000?tenant=alice) behaves like `alice.caleno.co`.
+- **Subdomain:** If supported, [http://alice.localhost:3000](http://alice.localhost:3000) works without the query param.
+
+**Firestore documents involved:**
+
+- **`tenants/<slug>`** (doc id = slug): `siteId` (required), `ownerUid?`, `createdAt`, `updatedAt`. Server-only (Admin SDK); no client read/write in rules.
+- **`sites/<siteId>`**: include **`slug`** (string) when the site has a subdomain; used for resolving slug → siteId and for UI public URLs.
+- **`users/<uid>`**: `siteId` (primary site). Used when creating/linking tenants.
+
+**Creating / changing subdomain:**
+
+- **Account** page: shows current subdomain (if any), create or change via "צור תת-דומיין" / "החלף תת-דומיין". Slug rules: 3–30 chars, a-z, 0-9, hyphen, no leading/trailing hyphen; reserved slugs (e.g. `www`, `admin`, `api`, `login`) are rejected.
+- **Create site:** `POST /api/create-website` accepts optional **`slug`**; if provided it is validated and used for both the website subdomain and the tenant. Response includes **`publicUrl`** (e.g. `https://<slug>.caleno.co`).
+- **Rename subdomain:** `POST /api/tenants/change` with **`newSlug`** (auth required); updates `tenants`, `sites/<siteId>.slug`, and removes the old tenant doc.
 
 ## Deploy on Vercel
 

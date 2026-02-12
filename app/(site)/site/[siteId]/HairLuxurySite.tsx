@@ -22,6 +22,7 @@ import {
   serviceItem,
   servicesTitle,
 } from "@/lib/animations";
+import { getSiteUrl } from "@/lib/tenant";
 import WaveDivider from "./components/WaveDivider";
 import ContactIconsBar from "./components/ContactIconsBar";
 import SalonHeader from "./components/SalonHeader";
@@ -242,6 +243,7 @@ export default function HairLuxurySite({
       <SalonHeader
         salonName={config.salonName || "שם הסלון"}
         siteId={siteId}
+        slug={config.slug ?? null}
         bookingEnabled={bookingEnabled(config)}
         scrollToSection={scrollToSection}
         logoUrl={config.branding?.logoUrl ?? null}
@@ -334,7 +336,7 @@ export default function HairLuxurySite({
           >
             {bookingEnabled(config) && (
               <Link
-                href={`/site/${siteId}/book`}
+                href={getSiteUrl(config?.slug, siteId, "/book")}
                 className="px-8 py-3 rounded-full font-semibold shadow-lg transition hover:opacity-90"
                 style={{
                   backgroundColor: "var(--primary)",
@@ -476,6 +478,7 @@ export default function HairLuxurySite({
                 <ServiceCard
                   service={service}
                   siteId={siteId}
+                  slug={config.slug ?? null}
                   bookingEnabled={bookingEnabled(config)}
                   libraryImage={HAIR_WORK_IMAGES[idx % HAIR_WORK_IMAGES.length]}
                 />

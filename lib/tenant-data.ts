@@ -54,3 +54,19 @@ export async function getTenantSiteId(slug: string): Promise<string | null> {
   const tenant = await getTenantBySlug(slug);
   return tenant?.siteId ?? null;
 }
+
+/**
+ * Get slug for a site (from sites doc). Returns null if site has no slug.
+ */
+export async function getSlugBySiteId(siteId: string): Promise<string | null> {
+  if (!siteId || typeof siteId !== "string" || !siteId.trim()) return null;
+  try {
+    const db = getAdminDb();
+    const siteSnap = await db.collection("sites").doc(siteId.trim()).get();
+    if (!siteSnap.exists) return null;
+    const slug = (siteSnap.data() as { slug?: string } | undefined)?.slug;
+    return typeof slug === "string" && slug.trim() ? slug.trim() : null;
+  } catch {
+    return null;
+  }
+}
