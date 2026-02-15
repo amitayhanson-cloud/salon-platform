@@ -16,7 +16,7 @@ import {
 import { getBookingDisplayInfo } from "@/lib/bookingDisplay";
 import { isBookingCancelled } from "@/lib/normalizeBooking";
 import { getTextColorHex } from "@/lib/colorUtils";
-import { getBookingDisplayStatus } from "@/lib/bookingDisplayStatus";
+import { getDisplayStatus } from "@/lib/bookingRootStatus";
 import { bookingToBlock, type RenderBlock } from "./MultiWorkerScheduleView";
 
 const SLOT_MINUTES = 15;
@@ -283,7 +283,7 @@ export default function DayGrid({
                   </span>
                 )}
                 {booking && (() => {
-                  const { label, color } = getBookingDisplayStatus(booking);
+                  const { label, color } = getDisplayStatus(booking, bookings);
                   const colorClass =
                     color === "green"
                       ? "bg-emerald-100 text-emerald-800"

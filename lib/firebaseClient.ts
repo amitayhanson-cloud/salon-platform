@@ -1,71 +1,75 @@
 "use client";
 
+/**
+ * Firebase client config: ONLY from env vars (no hardcoded fallbacks).
+ * Required: NEXT_PUBLIC_FIREBASE_PROJECT_ID, AUTH_DOMAIN, STORAGE_BUCKET, API_KEY, APP_ID, MESSAGING_SENDER_ID.
+ * After changing .env.local, restart the dev server (npm run dev).
+ */
+
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import { getAuth as firebaseGetAuth, type Auth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
 import { getStorage as firebaseGetStorage, type FirebaseStorage } from "firebase/storage";
 
-// Helper to clean API key (remove any trailing ":1" or other suffixes)
 function cleanApiKey(apiKey: string | undefined): string | undefined {
   if (!apiKey) return undefined;
-  // Remove trailing ":1" or similar suffixes that might be accidentally added
-  return apiKey.trim().split(':')[0];
+  return apiKey.trim().split(":")[0];
 }
 
-// Single source of truth: exact bucket name from Firebase Console → Storage (e.g. xxxx.appspot.com)
-const CLIENT_STORAGE_BUCKET = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET?.trim() || undefined;
+/** Build config ONLY from env vars; no fallbacks. */
+function getFirebaseConfigFromEnv() {
+  return {
+    apiKey: cleanApiKey(process.env.NEXT_PUBLIC_FIREBASE_API_KEY),
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN?.trim(),
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.trim(),
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET?.trim(),
+    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID?.trim(),
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID?.trim(),
+  };
+}
 
-const firebaseConfig = {
-  apiKey: cleanApiKey(process.env.NEXT_PUBLIC_FIREBASE_API_KEY),
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: CLIENT_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+const CONFIG_KEY_TO_ENV: Record<string, string> = {
+  projectId: "NEXT_PUBLIC_FIREBASE_PROJECT_ID",
+  authDomain: "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN",
+  storageBucket: "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET",
+  apiKey: "NEXT_PUBLIC_FIREBASE_API_KEY",
+  appId: "NEXT_PUBLIC_FIREBASE_APP_ID",
+  messagingSenderId: "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID",
 };
 
-function missingKeys(cfg: Record<string, string | undefined>): string[] {
-  return Object.entries(cfg)
-    .filter(([_, v]) => !v || String(v).trim() === "")
-    .map(([k]) => k);
+function getMissingClientEnvKeys(cfg: ReturnType<typeof getFirebaseConfigFromEnv>): string[] {
+  const c = cfg as Record<string, string | undefined>;
+  return Object.entries(CONFIG_KEY_TO_ENV)
+    .filter(([configKey]) => !c[configKey] || String(c[configKey]).trim() === "")
+    .map(([, envKey]) => envKey);
 }
 
-// Validate API key format (should start with "AIza" for Firebase Web API key)
 function validateApiKey(apiKey: string | undefined): boolean {
   if (!apiKey) return false;
   const trimmed = apiKey.trim();
-  // Firebase Web API keys start with "AIza"
   return trimmed.startsWith("AIza") && trimmed.length > 20;
 }
 
-// Check if Firebase config is valid
 export function isFirebaseConfigValid(): boolean {
   if (typeof window === "undefined") return false;
-  
-  const missing = missingKeys(firebaseConfig as any);
-  if (missing.length > 0) {
-    return false;
-  }
-  
-  if (!validateApiKey(firebaseConfig.apiKey)) {
-    return false;
-  }
-  
+  const cfg = getFirebaseConfigFromEnv();
+  const missing = getMissingClientEnvKeys(cfg);
+  if (missing.length > 0) return false;
+  if (!validateApiKey(cfg.apiKey)) return false;
   return true;
 }
 
-// Get config status for debugging (doesn't expose sensitive data)
 export function getFirebaseConfigStatus() {
-  const missing = missingKeys(firebaseConfig as any);
-  const apiKeyValid = validateApiKey(firebaseConfig.apiKey);
-  
+  const cfg = getFirebaseConfigFromEnv();
+  const missing = getMissingClientEnvKeys(cfg);
+  const apiKeyValid = validateApiKey(cfg.apiKey);
   return {
     isValid: missing.length === 0 && apiKeyValid,
     missingKeys: missing,
     apiKeyValid,
-    projectId: firebaseConfig.projectId || "not set",
-    authDomain: firebaseConfig.authDomain || "not set",
-    apiKeyPrefix: firebaseConfig.apiKey ? `${firebaseConfig.apiKey.substring(0, 6)}...` : "not set",
+    projectId: cfg.projectId ?? "not set",
+    authDomain: cfg.authDomain ?? "not set",
+    apiKeyPrefix: cfg.apiKey ? `${cfg.apiKey.substring(0, 6)}...` : "not set",
   };
 }
 
@@ -77,95 +81,83 @@ let _storage: FirebaseStorage | null = null;
 let initializationError: string | null = null;
 let initialized = false;
 
-// Initialize Firebase (works on both client and server)
+// Initialize Firebase from env only; no hardcoded fallbacks.
 function initializeFirebase() {
-  if (initialized) return; // Already initialized
-  
-  const missing = missingKeys(firebaseConfig as any);
-  const apiKeyValid = validateApiKey(firebaseConfig.apiKey);
+  if (initialized) return;
 
-  // Log helpful error messages in development, but don't crash
+  const cfg = getFirebaseConfigFromEnv();
+  const missing = getMissingClientEnvKeys(cfg);
+  const apiKeyValid = validateApiKey(cfg.apiKey);
+  const isDev = process.env.NODE_ENV === "development";
+
   if (missing.length > 0) {
-    const errorMsg = `Firebase configuration incomplete. Missing env vars: ${missing.join(", ")}. Check your .env.local file.`;
-    if (typeof window !== "undefined") {
-      console.error("❌", errorMsg);
-      console.error("💡 Tip: After updating .env.local, restart your dev server (npm run dev)");
-    }
+    const errorMsg = `Firebase client: missing required env vars: ${missing.join(", ")}. Set them in .env.local (see .env.example), then restart the dev server (npm run dev).`;
+    console.error("❌", errorMsg);
     initializationError = errorMsg;
     initialized = true;
+    if (isDev) {
+      throw new Error(errorMsg);
+    }
     return;
   }
 
   if (!apiKeyValid) {
-    // Only log first 6 chars for debugging (not full key)
-    const currentKey = firebaseConfig.apiKey ? `${firebaseConfig.apiKey.substring(0, 6)}...` : "undefined";
-    const errorMsg = `Firebase API key format invalid. Expected: AIza... (Firebase Web API key). Current: ${currentKey}`;
-    if (typeof window !== "undefined") {
-      console.error("❌", errorMsg);
-      console.error("💡 Fix: Go to Firebase Console → Project Settings → General → Your apps (Web) → copy Web API key (starts with AIza...)");
-      console.error("💡 Then update NEXT_PUBLIC_FIREBASE_API_KEY in .env.local and restart dev server");
-    }
+    const errorMsg =
+      "Firebase client: NEXT_PUBLIC_FIREBASE_API_KEY must be a Firebase Web API key (starts with AIza..., ~40 chars). Check .env.local and restart the dev server.";
+    console.error("❌", errorMsg);
     initializationError = errorMsg;
     initialized = true;
+    if (isDev) {
+      throw new Error(errorMsg);
+    }
     return;
   }
 
-  // Config looks valid, try to initialize
   try {
-    // Debug log (safe - doesn't expose full API key, only first 6 chars)
     const isClient = typeof window !== "undefined";
-    if (isClient) {
-      console.log("🔧 Firebase config loaded:", {
-        projectId: firebaseConfig.projectId,
-        authDomain: firebaseConfig.authDomain,
-        apiKeyPrefix: firebaseConfig.apiKey ? `${firebaseConfig.apiKey.substring(0, 6)}...` : "not set",
+    if (isClient && isDev) {
+      console.log("🔧 Firebase config (client):", {
+        projectId: cfg.projectId,
+        authDomain: cfg.authDomain,
+        storageBucket: cfg.storageBucket ? `${cfg.storageBucket.slice(0, 24)}...` : "—",
+        apiKeyPrefix: cfg.apiKey ? `${cfg.apiKey.substring(0, 6)}...` : "—",
       });
+      if (
+        (cfg.projectId?.includes("salon-platform") ?? false) ||
+        (cfg.authDomain?.includes("salon-platform") ?? false)
+      ) {
+        console.warn(
+          "⚠️ Firebase client is still using salon-platform. Set NEXT_PUBLIC_FIREBASE_* to your Caleno project in .env.local and restart the dev server."
+        );
+      }
     }
 
-    // Initialize Firebase (only if not already initialized)
     if (getApps().length === 0) {
-      app = initializeApp(firebaseConfig as any);
+      app = initializeApp(cfg as any);
     } else {
       app = getApp();
     }
-    
-    // Auth only works on client side
+
     if (isClient) {
       _auth = firebaseGetAuth(app);
     }
-    
-    // Firestore works on both client and server
     _db = getFirestore(app);
 
-    // Storage only works on client side; require bucket and use explicit gs:// URL
-    if (isClient) {
-      if (!CLIENT_STORAGE_BUCKET) {
-        const err = "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET is required for Storage. Set it in .env.local to the exact bucket name from Firebase Console → Storage (e.g. your-project.appspot.com).";
-        console.error("❌", err);
-        throw new Error(err);
-      }
-      _storage = firebaseGetStorage(app, `gs://${CLIENT_STORAGE_BUCKET}`);
-      if (process.env.NODE_ENV === "development") {
-        console.log("🔍 Storage bucket (client):", CLIENT_STORAGE_BUCKET);
-      }
+    if (isClient && cfg.storageBucket) {
+      _storage = firebaseGetStorage(app, `gs://${cfg.storageBucket}`);
+      if (isDev) console.log("🔍 Storage bucket (client):", cfg.storageBucket);
     }
-    
-    // Debug logging
-    if (isClient) {
-      console.log("✅ Firebase initialized successfully");
-      console.log("🔍 Firestore db:", typeof _db, _db ? `initialized (app: ${_db.app.name})` : "null");
-    } else {
-      console.log("✅ Firebase initialized on server");
-      console.log("🔍 Firestore db:", typeof _db, _db ? `initialized (app: ${_db.app.name})` : "null");
+
+    if (isDev) {
+      console.log("✅ Firebase client initialized, projectId:", cfg.projectId);
     }
-    
     initialized = true;
   } catch (error: any) {
     const errorMsg = `Firebase initialization failed: ${error.message || String(error)}`;
     console.error("❌", errorMsg);
-    console.error("Full error:", error);
     initializationError = errorMsg;
     initialized = true;
+    if (isDev) throw new Error(errorMsg);
   }
 }
 
@@ -210,21 +202,10 @@ export function getClientAuth(): Auth {
 export function getDb(): Firestore {
   initializeFirebase();
   if (!_db) {
-    // Log env var presence (not values) for debugging
-    const envVars = {
-      hasApiKey: !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-      hasAuthDomain: !!process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-      hasProjectId: !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      hasStorageBucket: !!process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-      hasMessagingSenderId: !!process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-      hasAppId: !!process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-    };
-    
-    const errorMsg = `Firestore db not initialized. Check Firebase configuration. Env vars present: ${JSON.stringify(envVars)}`;
-    console.error("❌", errorMsg);
-    if (initializationError) {
-      console.error("❌ Initialization error:", initializationError);
-    }
+    const missing = getMissingClientEnvKeys(getFirebaseConfigFromEnv());
+    const errorMsg = missing.length
+      ? `Firestore not initialized. Missing env vars: ${missing.join(", ")}. Set in .env.local and restart dev server.`
+      : `Firestore not initialized. ${initializationError ?? "Check Firebase configuration."}`;
     throw new Error(errorMsg);
   }
   return _db;

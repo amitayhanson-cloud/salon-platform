@@ -39,9 +39,11 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
   const bookingSnap = await bookingRef.get();
 
   if (!bookingSnap.exists) {
+    console.log("[BOOK_CREATE] firestore_read_fail", { siteId, bookingId, bookingPath: `sites/${siteId}/bookings/${bookingId}` });
     throw new Error("Booking not found");
   }
 
+  console.log("[BOOK_CREATE] firestore_read_ok", { siteId, bookingId, bookingPath: `sites/${siteId}/bookings/${bookingId}` });
   const data = bookingSnap.data()!;
   const phoneResult = getBookingPhoneE164(data as Record<string, unknown>, "IL");
   if ("error" in phoneResult) {

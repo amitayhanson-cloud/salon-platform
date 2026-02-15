@@ -34,7 +34,7 @@ import WorkerFilter from "@/components/admin/WorkerFilter";
 import AdminBookingFormSimple from "@/components/admin/AdminBookingFormSimple";
 import AdminCreateBookingForm from "@/components/admin/AdminCreateBookingForm";
 import { getAdminBasePathFromSiteId } from "@/lib/url";
-import { deleteBooking } from "@/lib/booking";
+import { getDisplayStatus } from "@/lib/bookingRootStatus";
 import { useAuth } from "@/hooks/useAuth";
 import { X, Plus, Printer, Trash2 } from "lucide-react";
 import type { AdminBookingFormSimpleEditData } from "@/components/admin/AdminBookingFormSimple";
@@ -508,12 +508,22 @@ export default function DaySchedulePage() {
   };
 
   const onConfirmDelete = async () => {
-    if (!deleteTarget || !siteId) return;
+    if (!deleteTarget || !siteId || !firebaseUser) return;
     setDeleting(true);
     setDeleteError(null);
 
     try {
-      await deleteBooking(siteId, deleteTarget.id);
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch("/api/bookings/archive-cascade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ siteId, bookingId: deleteTarget.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDeleteError(data.error === "forbidden" ? "אין הרשאה" : data.error || "שגיאה במחיקה");
+        return;
+      }
       setDeleteTarget(null);
       // Bookings will update automatically via onSnapshot (cancelled bookings are filtered out)
     } catch (e) {
@@ -699,7 +709,7 @@ export default function DaySchedulePage() {
 
   // Handle cancel from modal
   const handleCancelFromModal = async () => {
-    if (!selectedBooking || !siteId) return;
+    if (!selectedBooking || !siteId || !firebaseUser) return;
     
     // Confirm cancellation
     if (!confirm("האם אתה בטוח שברצונך לבטל את התור הזה?")) {
@@ -711,7 +721,17 @@ export default function DaySchedulePage() {
     setDeleteSuccess(false);
 
     try {
-      await deleteBooking(siteId, selectedBooking.id);
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch("/api/bookings/archive-cascade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ siteId, bookingId: selectedBooking.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDeleteError(data.error === "forbidden" ? "אין הרשאה" : data.error || "שגיאה במחיקה");
+        return;
+      }
       setDeleteSuccess(true);
       // Close modal after a brief delay to show success
       setTimeout(() => {
@@ -1070,7 +1090,7 @@ export default function DaySchedulePage() {
                     סטטוס
                   </label>
                   <p className="text-sm text-slate-700">
-                    {selectedBooking.status === "confirmed" ? "מאושר" : "בוטל"}
+                    {getDisplayStatus(selectedBooking, filteredBookings).label}
                   </p>
                 </div>
 

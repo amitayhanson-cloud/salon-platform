@@ -9,6 +9,7 @@ import { sendWhatsApp, normalizeE164 } from "@/lib/whatsapp";
 import { getReminderWindow } from "@/lib/whatsapp/reminderWindow";
 import { buildReminderMessage } from "@/lib/whatsapp/messages";
 import { formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
+import { getRelatedBookingIds } from "@/lib/whatsapp/relatedBookings";
 
 export type ReminderDetail = {
   bookingRef: string;
@@ -61,6 +62,8 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
   const details: ReminderDetail[] = [];
   let sent = 0;
   let errors = 0;
+  /** One reminder per group; skip if we already sent for this visitGroupId/parent chain. */
+  const sentGroupKeys = new Set<string>();
 
   for (const doc of snapshot.docs) {
     const data = doc.data();
@@ -72,6 +75,17 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
 
     const rawPhone = data.customerPhoneE164 ?? data.customerPhone ?? data.phone ?? "";
     const customerPhoneE164 = rawPhone ? normalizeE164(String(rawPhone), "IL") : "";
+
+    const { groupKey } = await getRelatedBookingIds(siteId, doc.id);
+    if (groupKey && sentGroupKeys.has(groupKey)) {
+      details.push({
+        bookingRef,
+        startAt: startAtISO,
+        phone: customerPhoneE164 || "(no phone)",
+        result: "skipped: same group already sent reminder",
+      });
+      continue;
+    }
 
     if (data.reminder24hSentAt != null) {
       details.push({
@@ -130,11 +144,25 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
         bookingRef: `sites/${siteId}/bookings/${doc.id}`,
       });
 
-      await doc.ref.update({
-        whatsappStatus: "awaiting_confirmation",
+      const { bookingIds, groupKey: gk } = await getRelatedBookingIds(siteId, doc.id);
+      const payload = {
+        whatsappStatus: "awaiting_confirmation" as const,
         confirmationRequestedAt: Timestamp.now(),
         reminder24hSentAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
+      };
+      const batch = db.batch();
+      for (const id of bookingIds) {
+        batch.update(db.collection("sites").doc(siteId).collection("bookings").doc(id), payload);
+      }
+      await batch.commit();
+      if (gk) sentGroupKeys.add(gk);
+
+      console.log("[whatsapp-reminders] status_propagated", {
+        bookingId: doc.id,
+        groupKey: gk ?? undefined,
+        relatedCount: bookingIds.length,
+        status: "awaiting_confirmation",
       });
       sent++;
       details.push({ bookingRef, startAt: startAtISO, phone: customerPhoneE164, result: "sent" });

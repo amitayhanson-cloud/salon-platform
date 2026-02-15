@@ -1096,21 +1096,30 @@ export default function BookingPage() {
         setSubmitError(validation.errors[0] ?? "ההקצאה אינה תקינה. נא לנסות שוב.");
         return;
       }
-      const { firstBookingId } = await saveMultiServiceBooking(siteId, repaired, {
+      const { firstBookingId, visitGroupId } = await saveMultiServiceBooking(siteId, repaired, {
         name: clientName.trim(),
         phone: clientPhone.trim(),
         note: clientNote.trim() || undefined,
       }, { workers });
-      if (firstBookingId) {
-        try {
-          await fetch("/api/whatsapp/send-booking-confirmation", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ siteId, bookingId: firstBookingId }),
-          });
-        } catch (_) {
-          // Non-blocking: booking is saved; WhatsApp may be sent by reminder or retry
+      console.log("[BOOK_CREATE] client_write_ok", { siteId, firstBookingId, visitGroupId, bookingPath: `sites/${siteId}/bookings/${firstBookingId}` });
+      if (!firstBookingId) {
+        setSubmitError("שגיאה: לא התקבל מזהה תור. נא לנסות שוב.");
+        return;
+      }
+      const confirmRes = await fetch("/api/whatsapp/send-booking-confirmation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ siteId, bookingId: firstBookingId }),
+      });
+      const confirmData = await confirmRes.json().catch(() => ({}));
+      if (!confirmRes.ok || (confirmData && confirmData.ok === false)) {
+        const errMsg = (confirmData && typeof confirmData.error === "string") ? confirmData.error : "שליחת אישור נכשלה";
+        if (confirmRes.status === 404) {
+          setSubmitError("התור לא נמצא במערכת לאחר השמירה. ייתכן ששגיאה בהתחברות לשרת. נא לנסות שוב או ליצור קשר עם המספרה.");
+        } else {
+          setSubmitError(`שגיאה באישור התור: ${errMsg}. נא ליצור קשר עם המספרה לאימות.`);
         }
+        return;
       }
       setPhase2WorkerAssigned(null);
       setStep(6);

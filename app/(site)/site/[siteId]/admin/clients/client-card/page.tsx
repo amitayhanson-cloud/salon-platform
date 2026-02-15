@@ -10,6 +10,7 @@ import { ChemicalCard } from "./ChemicalCard";
 import PersonalPricingTab from "./PersonalPricingTab";
 import AdminTabs from "@/components/ui/AdminTabs";
 import { createClient, checkClientExists, type ClientData } from "@/lib/firestoreClients";
+import { getDisplayStatus } from "@/lib/bookingRootStatus";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { MoreVertical, Pencil, Trash2, CheckSquare, Square } from "lucide-react";
 
@@ -955,12 +956,14 @@ export default function ClientCardPage() {
                                     <span className="text-slate-600">סטטוס:</span>{" "}
                                     <span
                                       className={`font-medium ${
-                                        booking.status === "confirmed"
+                                        getDisplayStatus(booking, clientBookings).color === "green"
                                           ? "text-emerald-600"
-                                          : "text-red-600"
+                                          : getDisplayStatus(booking, clientBookings).color === "red"
+                                            ? "text-red-600"
+                                            : "text-amber-600"
                                       }`}
                                     >
-                                      {booking.status === "confirmed" ? "מאושר" : "בוטל"}
+                                      {getDisplayStatus(booking, clientBookings).label}
                                     </span>
                                   </div>
                                 </div>

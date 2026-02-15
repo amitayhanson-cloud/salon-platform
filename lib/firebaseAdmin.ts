@@ -75,36 +75,25 @@ function buildServiceAccountFromSplitEnv(): any | null {
 }
 
 /**
- * Load service account from local JSON file (DEVELOPMENT ONLY)
- * NEVER loads in production or on Vercel
+ * Load service account from path in FIREBASE_SERVICE_ACCOUNT_PATH (DEVELOPMENT ONLY).
+ * No hardcoded paths — must point to your project (e.g. Caleno), not old salon-platform.
  */
 function loadServiceAccountFromFile(): any | null {
-  // NEVER load local files in production or on Vercel
-  if (isProduction || isVercel) {
-    return null;
-  }
-
-  // Only try in development
-  const filename = "salon-platform-34cec-firebase-adminsdk-fbsvc-f73cb413cd.json";
-  const filePath = path.join(process.cwd(), filename);
-
-  if (!fs.existsSync(filePath)) {
-    return null;
-  }
-
+  if (isProduction || isVercel) return null;
+  const pathEnv = process.env.FIREBASE_SERVICE_ACCOUNT_PATH?.trim();
+  if (!pathEnv) return null;
+  const filePath = path.isAbsolute(pathEnv) ? pathEnv : path.join(process.cwd(), pathEnv);
+  if (!fs.existsSync(filePath)) return null;
   try {
     const raw = fs.readFileSync(filePath, "utf8");
     const obj = JSON.parse(raw);
-
-    // Fix private_key newlines
     if (obj?.private_key && typeof obj.private_key === "string") {
       obj.private_key = obj.private_key.replace(/\\n/g, "\n");
     }
-
-    console.log("[firebaseAdmin] Loaded credentials from local JSON file (development only)");
+    console.log("[firebaseAdmin] Loaded credentials from FIREBASE_SERVICE_ACCOUNT_PATH (development only), project_id:", obj?.project_id ?? "unknown");
     return obj;
-  } catch (error) {
-    console.warn("[firebaseAdmin] Found JSON file but failed to read/parse it");
+  } catch {
+    console.warn("[firebaseAdmin] FIREBASE_SERVICE_ACCOUNT_PATH file failed to read/parse");
     return null;
   }
 }
@@ -140,7 +129,19 @@ function getServiceAccount(): any {
 
 // Lazy initialization - only initialize when getAdmin() is first called
 let _admin: typeof admin | null = null;
+let _adminProjectId: string | null = null;
 let _initializationError: Error | null = null;
+
+/** Return the Firebase project ID the Admin SDK is connected to (for diagnostics). */
+export function getAdminProjectId(): string | null {
+  try {
+    getAdmin();
+    if (_adminProjectId) return _adminProjectId;
+    return process.env.FIREBASE_PROJECT_ID?.trim() ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export function getAdmin(): typeof admin {
   // Return cached instance if already initialized
@@ -156,6 +157,8 @@ export function getAdmin(): typeof admin {
   // Check if already initialized by another call
   if (admin.apps.length > 0) {
     _admin = admin;
+    const app = admin.app();
+    _adminProjectId = (app.options as { credential?: { projectId?: string } })?.credential?.projectId ?? null;
     return _admin;
   }
 
@@ -166,7 +169,7 @@ export function getAdmin(): typeof admin {
     const error = new Error(
       isProduction || isVercel
         ? "Missing FIREBASE_SERVICE_ACCOUNT_JSON environment variable. Required for production builds."
-        : "No Firebase credentials found. Set FIREBASE_SERVICE_ACCOUNT_JSON or use split env vars (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY), or put the JSON file in the project root (development only)."
+        : "No Firebase credentials found. Set FIREBASE_SERVICE_ACCOUNT_JSON or split env vars (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY), or FIREBASE_SERVICE_ACCOUNT_PATH to a Caleno/your-project JSON file (development only)."
     );
     _initializationError = error;
     throw error;
@@ -194,7 +197,10 @@ export function getAdmin(): typeof admin {
       }
     }
     admin.initializeApp(initOptions);
-
+    _adminProjectId = serviceAccount.project_id ?? null;
+    if (process.env.NODE_ENV === "development") {
+      console.log("[firebaseAdmin] projectId (server):", _adminProjectId ?? "unknown");
+    }
     _admin = admin;
     return _admin;
   } catch (error: any) {

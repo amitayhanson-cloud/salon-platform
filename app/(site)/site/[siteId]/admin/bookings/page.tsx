@@ -15,7 +15,7 @@ import {
   bookingsCollection,
 } from "@/lib/firestorePaths";
 import { ymdLocal } from "@/lib/dateLocal";
-import { deleteBooking } from "@/lib/booking";
+import { useAuth } from "@/hooks/useAuth";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
 import { bookingEnabled } from "@/lib/bookingEnabled";
 import type { SiteConfig } from "@/types/siteConfig";
@@ -241,19 +241,31 @@ export default function BookingsAdminPage() {
 
 
 
-  // Delete booking handlers
+  const { firebaseUser } = useAuth();
+
+  // Delete booking handlers (cascade: archive booking + all related in same multi-part set)
   const onRequestDelete = (booking: any) => {
     setDeleteError(null);
     setDeleteTarget(booking);
   };
 
   const onConfirmDelete = async () => {
-    if (!deleteTarget || !siteId) return;
+    if (!deleteTarget || !siteId || !firebaseUser) return;
     setDeleting(true);
     setDeleteError(null);
 
     try {
-      await deleteBooking(siteId, deleteTarget.id);
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch("/api/bookings/archive-cascade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ siteId, bookingId: deleteTarget.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDeleteError(data.error === "forbidden" ? "אין הרשאה" : data.error || "שגיאה במחיקה");
+        return;
+      }
       setDeleteTarget(null);
       // Bookings will update automatically via onSnapshot
     } catch (e) {

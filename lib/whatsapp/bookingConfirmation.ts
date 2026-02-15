@@ -8,6 +8,7 @@ import admin from "firebase-admin";
 import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { normalizeE164 } from "./e164";
+import { getRelatedBookingIds } from "./relatedBookings";
 
 const serverTimestamp = () => admin.firestore.FieldValue.serverTimestamp();
 
@@ -132,20 +133,31 @@ export async function findNextBookingByPhoneWithStatus(
 
 /**
  * Set booking to confirmed and set confirmationReceivedAt.
- * Booking is under sites/{siteId}/bookings/{bookingId}.
+ * Propagates to all related bookings (same visitGroupId/parentBookingId chain) for status consistency.
  */
 export async function markBookingConfirmed(siteId: string, bookingId: string): Promise<void> {
   const db = getAdminDb();
-  await db
-    .collection("sites")
-    .doc(siteId)
-    .collection("bookings")
-    .doc(bookingId)
-    .update({
-      whatsappStatus: "confirmed",
-      confirmationReceivedAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
+  const { bookingIds, groupKey, rootId } = await getRelatedBookingIds(siteId, bookingId);
+
+  const payload = {
+    whatsappStatus: "confirmed" as const,
+    confirmationReceivedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+
+  const batch = db.batch();
+  for (const id of bookingIds) {
+    batch.update(db.collection("sites").doc(siteId).collection("bookings").doc(id), payload);
+  }
+  await batch.commit();
+
+  console.log("[WA_CONFIRM] status_propagated", {
+    bookingId,
+    rootId,
+    groupKey: groupKey ?? undefined,
+    relatedCount: bookingIds.length,
+    status: "confirmed",
+  });
 }
 
 /**
@@ -177,25 +189,70 @@ export async function getBookingByRefIfAwaitingConfirmation(bookingRef: string):
   return { siteId, bookingId, salonName, startAt };
 }
 
+/** Cancel/archive payload applied to all group members (NO reply). Same as root cancel; no hard delete. */
+const CANCELLED_BY_WHATSAPP_PAYLOAD = {
+  whatsappStatus: "cancelled" as const,
+  status: "cancelled" as const,
+  cancelledAt: serverTimestamp(),
+  isArchived: true,
+  archivedAt: serverTimestamp(),
+  archivedReason: "customer_cancelled_via_whatsapp" as const,
+  updatedAt: serverTimestamp(),
+};
+
+/**
+ * Apply cancellation (status + archive) to a single booking. Idempotent.
+ * Same payload as cancelBookingGroupByWhatsApp (used for single-booking or fallback).
+ */
+export async function applyCancelledByWhatsAppToBooking(
+  siteId: string,
+  memberId: string
+): Promise<void> {
+  const db = getAdminDb();
+  const ref = db.collection("sites").doc(siteId).collection("bookings").doc(memberId);
+  await ref.update(CANCELLED_BY_WHATSAPP_PAYLOAD);
+}
+
+/**
+ * Cancel/archive the ENTIRE booking group (root + follow-ups) in a single batch.
+ * Resolves group FIRST (no writes), then one batch.commit() so root is not updated before follow-ups.
+ * Uses the SAME group resolver as YES (getRelatedBookingIds). Safe/atomic.
+ */
+export async function cancelBookingGroupByWhatsApp(siteId: string, bookingId: string): Promise<void> {
+  const db = getAdminDb();
+  // Resolve group BEFORE any write so follow-ups are included
+  const { bookingIds, rootId, groupKey } = await getRelatedBookingIds(siteId, bookingId);
+  const rootBookingRef = `sites/${siteId}/bookings/${rootId}`;
+  const bookingRefsInGroup = bookingIds.map((id) => `sites/${siteId}/bookings/${id}`);
+
+  console.log("[WA_WEBHOOK] group_resolved", {
+    action: "no",
+    rootBookingRef,
+    membersCount: bookingIds.length,
+    memberIds: bookingIds,
+    bookingRefsInGroup,
+  });
+
+  const batch = db.batch();
+  for (const id of bookingIds) {
+    const ref = db.collection("sites").doc(siteId).collection("bookings").doc(id);
+    batch.update(ref, CANCELLED_BY_WHATSAPP_PAYLOAD);
+  }
+  await batch.commit();
+
+  console.log("[WA_WEBHOOK] cancelled_group_done", {
+    action: "no",
+    membersCount: bookingIds.length,
+    cancelledCount: bookingIds.length,
+    bookingIdsUpdated: bookingIds,
+    groupKey: groupKey ?? undefined,
+  });
+}
+
 /**
  * Set booking to cancelled (WhatsApp flow) when user replies NO.
- * Does NOT delete: sets status + archive fields so booking is removed from calendar
- * but remains in client history as cancelled.
+ * Delegates to cancelBookingGroupByWhatsApp (batch) for group-wide cancel.
  */
 export async function markBookingCancelledByWhatsApp(siteId: string, bookingId: string): Promise<void> {
-  const db = getAdminDb();
-  await db
-    .collection("sites")
-    .doc(siteId)
-    .collection("bookings")
-    .doc(bookingId)
-    .update({
-      whatsappStatus: "cancelled",
-      status: "cancelled",
-      cancelledAt: serverTimestamp(),
-      isArchived: true,
-      archivedAt: serverTimestamp(),
-      archivedReason: "customer_cancelled_via_whatsapp",
-      updatedAt: serverTimestamp(),
-    });
+  await cancelBookingGroupByWhatsApp(siteId, bookingId);
 }

@@ -14,8 +14,12 @@ export {
   findNextBookingByPhoneWithStatus,
   markBookingConfirmed,
   markBookingCancelledByWhatsApp,
+  cancelBookingGroupByWhatsApp,
   getBookingByRefIfAwaitingConfirmation,
+  applyCancelledByWhatsAppToBooking,
 } from "./bookingConfirmation";
+export { resolveBookingGroup, getRelatedBookingIds } from "./relatedBookings";
+export type { ResolveBookingGroupResult } from "./relatedBookings";
 export {
   findBookingsAwaitingConfirmationByPhoneMulti,
   type BookingChoice,

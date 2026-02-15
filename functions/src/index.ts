@@ -14,6 +14,9 @@ const db = admin.firestore();
 const BATCH_SIZE = 400;
 const TZ = "Asia/Jerusalem";
 
+/** Max related bookings per group (same as lib/whatsapp/relatedBookings). Used only for expiry cleanup. */
+const MAX_RELATED_BOOKINGS = 20;
+
 type ExpiredAutoDelete = "off" | "daily" | "weekly" | "monthly" | "quarterly";
 
 type ArchiveRetention = {
@@ -100,6 +103,65 @@ function shouldRunToday(
 }
 
 /**
+ * Resolve all booking IDs in the same "booking action" (root + follow-ups).
+ * Read-only; uses existing fields only: visitGroupId, bookingGroupId, parentBookingId.
+ * Used so expiry cleanup can archive the whole group when any member expires.
+ */
+async function resolveBookingGroup(
+  siteId: string,
+  bookingId: string
+): Promise<{ rootId: string; memberIds: string[] }> {
+  const ref = db.collection("sites").doc(siteId).collection("bookings").doc(bookingId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    return { rootId: bookingId, memberIds: [bookingId] };
+  }
+  const data = snap.data()!;
+  const groupKey =
+    (data.visitGroupId as string)?.trim() || (data.bookingGroupId as string)?.trim() || null;
+
+  if (groupKey) {
+    const byVisit = await db
+      .collection("sites")
+      .doc(siteId)
+      .collection("bookings")
+      .where("visitGroupId", "==", groupKey)
+      .limit(MAX_RELATED_BOOKINGS + 1)
+      .get();
+    const byBooking = await db
+      .collection("sites")
+      .doc(siteId)
+      .collection("bookings")
+      .where("bookingGroupId", "==", groupKey)
+      .limit(MAX_RELATED_BOOKINGS + 1)
+      .get();
+    const idSet = new Set<string>();
+    for (const d of byVisit.docs) idSet.add(d.id);
+    for (const d of byBooking.docs) idSet.add(d.id);
+    const ids = Array.from(idSet);
+    if (ids.length === 0) ids.push(bookingId);
+    const memberIds = ids.slice(0, MAX_RELATED_BOOKINGS);
+    return { rootId: memberIds[0] ?? bookingId, memberIds };
+  }
+
+  const parentId = (data.parentBookingId as string)?.trim() || null;
+  const rootId = parentId || bookingId;
+  const out: string[] = [rootId];
+  const withParent = await db
+    .collection("sites")
+    .doc(siteId)
+    .collection("bookings")
+    .where("parentBookingId", "==", rootId)
+    .limit(MAX_RELATED_BOOKINGS)
+    .get();
+  for (const d of withParent.docs) {
+    if (d.id !== rootId && !out.includes(d.id)) out.push(d.id);
+  }
+  if (!out.includes(bookingId)) out.push(bookingId);
+  return { rootId, memberIds: out.slice(0, MAX_RELATED_BOOKINGS) };
+}
+
+/**
  * Scheduled job: runs daily at 03:00 Asia/Jerusalem. For each site with expiredAutoDelete != "off",
  * if today is a run day, deletes expired (past) bookings. Uses sites/{siteId}/settings/cleanup.
  */
@@ -131,6 +193,8 @@ export const expiredBookingsCleanup = functions.pubsub
       let deleted = 0;
       let minDate: string | null = null;
       let maxDate: string | null = null;
+      /** Track IDs already queued for archive in this run so we archive whole group once. */
+      const processedInRun = new Set<string>();
 
       let q = bookingsRef
         .where("date", "<=", todayYMD)
@@ -139,13 +203,35 @@ export const expiredBookingsCleanup = functions.pubsub
         .limit(BATCH_SIZE);
       let snapshot = await q.get();
 
+      const archivePayload = {
+        isArchived: true,
+        archivedAt: admin.firestore.FieldValue.serverTimestamp(),
+        archivedReason: "auto" as const,
+      };
+
+      const FIRESTORE_BATCH_LIMIT = 500;
       while (!snapshot.empty) {
-        const batch = db.batch();
+        let batch = db.batch();
         let batchCount = 0;
         for (const doc of snapshot.docs) {
           const d = doc.data();
           if (d.isArchived === true) continue; // already archived
+          if (processedInRun.has(doc.id)) continue; // already in this batch from a group
           if (!isBookingExpired(d, nowMillis, todayYMD)) continue;
+
+          // Only archive whole group when this booking was still "pending reminder" (no reply); else single doc only
+          const wasAwaitingConfirmation = (d.whatsappStatus as string) === "awaiting_confirmation";
+          const { memberIds } = wasAwaitingConfirmation
+            ? await resolveBookingGroup(siteId, doc.id)
+            : { memberIds: [doc.id] };
+          const otherIds = memberIds.filter((id) => id !== doc.id);
+          const writesForThisGroup = 1 + otherIds.length;
+          if (batchCount > 0 && batchCount + writesForThisGroup > FIRESTORE_BATCH_LIMIT) {
+            await batch.commit();
+            batch = db.batch();
+            batchCount = 0;
+          }
+
           const dateStr = (d.date as string) ?? (d.dateISO as string) ?? "";
           const minimal: Record<string, unknown> = {
             date: dateStr,
@@ -155,14 +241,25 @@ export const expiredBookingsCleanup = functions.pubsub
             workerName: (d.workerName as string) ?? null,
             customerPhone: (d.customerPhone as string) ?? (d.phone as string) ?? "",
             customerName: (d.customerName as string) ?? (d.name as string) ?? "",
-            isArchived: true,
-            archivedAt: admin.firestore.FieldValue.serverTimestamp(),
-            archivedReason: "auto",
+            ...archivePayload,
           };
           batch.set(doc.ref, minimal);
           batchCount++;
           deleted++;
-          const dateStr = (d.date as string) || "";
+          processedInRun.add(doc.id);
+
+          if (otherIds.length > 0) {
+            const refs = otherIds.map((id) => bookingsRef.doc(id));
+            const snaps = await db.getAll(...refs);
+            for (const s of snaps) {
+              if (!s.exists || (s.data() as { isArchived?: boolean })?.isArchived === true) continue;
+              batch.update(s.ref, archivePayload);
+              batchCount++;
+              deleted++;
+              processedInRun.add(s.id);
+            }
+          }
+
           if (dateStr) {
             if (minDate == null || dateStr < minDate) minDate = dateStr;
             if (maxDate == null || dateStr > maxDate) maxDate = dateStr;

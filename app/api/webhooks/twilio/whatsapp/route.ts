@@ -15,12 +15,14 @@ import {
   findBookingsAwaitingConfirmationByPhoneMulti,
   findNextBookingByPhoneWithStatus,
   markBookingConfirmed,
-  markBookingCancelledByWhatsApp,
   getBookingByRefIfAwaitingConfirmation,
   createWhatsAppSession,
   getWhatsAppSession,
   deleteWhatsAppSession,
+  getRelatedBookingIds,
+  applyCancelledByWhatsAppToBooking,
 } from "@/lib/whatsapp";
+import { getAdminProjectId } from "@/lib/firebaseAdmin";
 import {
   getInboundByMessageSid,
   isInboundProcessed,
@@ -34,6 +36,34 @@ import {
 import { formatIsraelTime, formatIsraelDateTime } from "@/lib/datetime/formatIsraelTime";
 
 const WEBHOOK_PATH = "/api/webhooks/twilio/whatsapp";
+
+/**
+ * NO path: cancel/archive ALL group members (same resolver as YES).
+ * Resolve members FIRST, then apply cancel to each with for..of await; log per member and final counts.
+ */
+async function cancelGroupByMatchedBooking(siteId: string, bookingId: string): Promise<void> {
+  const adminProjectId = getAdminProjectId();
+  console.log("[WA_WEBHOOK] firebase_project (server)", { projectId: adminProjectId ?? "unknown" });
+
+  const { bookingIds } = await getRelatedBookingIds(siteId, bookingId);
+  const membersCount = bookingIds.length;
+  console.log("[WA_WEBHOOK] group_resolved", { membersCount, memberIds: bookingIds });
+
+  let okCount = 0;
+  let failCount = 0;
+  for (const id of bookingIds) {
+    try {
+      await applyCancelledByWhatsAppToBooking(siteId, id);
+      okCount++;
+      console.log("[WA_WEBHOOK] delete_member", { id, ok: true });
+    } catch (e) {
+      failCount++;
+      const err = e instanceof Error ? e.message : String(e);
+      console.log("[WA_WEBHOOK] delete_member", { id, ok: false, err });
+    }
+  }
+  console.log("[WA_WEBHOOK] cancel_done", { membersCount, okCount, failCount });
+}
 
 function buildTwimlResponse(body: string): string {
   const twiml = new twilio.twiml.MessagingResponse();
@@ -276,7 +306,7 @@ export async function POST(request: NextRequest) {
         await deleteWhatsAppSession(fromE164);
         return recordAndReturnReply(reply, "matched_yes", chosen.bookingRef, "confirmed");
       }
-      await markBookingCancelledByWhatsApp(booking.siteId, booking.bookingId);
+      await cancelGroupByMatchedBooking(booking.siteId, booking.bookingId);
       console.log("[WA_WEBHOOK] firestore_updated", {
         bookingRef: chosen.bookingRef,
         action: "cancelled",
@@ -323,7 +353,7 @@ export async function POST(request: NextRequest) {
           const reply = `אושר ✅ נתראה ב-${timeStr} ב-${choice.siteName}.`;
           return recordAndReturnReply(reply, "matched_yes", bookingRef, "confirmed");
         }
-        await markBookingCancelledByWhatsApp(choice.siteId, choice.bookingId);
+        await cancelGroupByMatchedBooking(choice.siteId, choice.bookingId);
         console.log("[WA_WEBHOOK] firestore_updated", {
           messageSid: docId,
           bookingRef,
