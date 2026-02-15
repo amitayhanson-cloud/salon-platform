@@ -65,6 +65,44 @@ const defaultAvailability: OpeningHours[] = WEEKDAYS.map((w) => ({
   close: w.day === "sat" ? null : "18:00",
 }));
 
+/** Firestore does not accept undefined. Returns a copy with all undefined keys removed (recursive). */
+function deepRemoveUndefined<T>(obj: T): T {
+  if (obj === null || typeof obj !== "object") return obj;
+  if (Array.isArray(obj)) return obj.map((item) => deepRemoveUndefined(item)) as T;
+  return Object.fromEntries(
+    Object.entries(obj as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => [k, deepRemoveUndefined(v)])
+  ) as T;
+}
+
+/** Returns only valid break rows (start/end non-empty strings). Omit or [] for Firestore; no undefined. */
+function normalizeBreaksForFirestore(
+  breaks: Array<{ start?: string; end?: string }> | undefined
+): Array<{ start: string; end: string }> | undefined {
+  if (!breaks?.length) return undefined;
+  const valid = breaks.filter(
+    (b) => b != null && typeof b.start === "string" && typeof b.end === "string" && b.start.trim() !== "" && b.end.trim() !== ""
+  );
+  if (valid.length === 0) return undefined;
+  return valid.map((b) => ({ start: b.start!.trim(), end: b.end!.trim() }));
+}
+
+/** Build availability payload safe for Firestore: no undefined, only valid breaks. */
+function availabilityForFirestore(availability: OpeningHours[]): OpeningHours[] {
+  return availability.map((day) => {
+    const normalized = normalizeBreaksForFirestore(day.breaks);
+    const next: OpeningHours = {
+      day: day.day,
+      label: day.label,
+      open: day.open,
+      close: day.close,
+    };
+    if (normalized && normalized.length > 0) next.breaks = normalized;
+    return next;
+  });
+}
+
 export default function WorkersPage() {
   const params = useParams();
   const siteId = params?.siteId as string;
@@ -128,23 +166,24 @@ export default function WorkersPage() {
     }
   };
 
-  // Helper: Clamp worker availability to business hours
+  // Helper: Clamp worker availability to business hours (preserves breaks when day is open)
   const clampWorkerAvailability = (availability: OpeningHours[]): OpeningHours[] => {
     return availability.map((day) => {
       const businessDay = getBusinessDayConfig(day.day);
       
-      // If business is closed on this day, force worker to be closed
+      // If business is closed on this day, force worker to be closed and clear breaks
       if (!businessDay.enabled) {
         return {
           ...day,
           open: null,
           close: null,
+          breaks: undefined,
         };
       }
       
-      // If worker day is closed, keep it closed
+      // If worker day is closed, keep it closed and clear breaks
       if (!day.open || !day.close) {
-        return day;
+        return { ...day, breaks: undefined };
       }
       
       // Clamp worker hours within business hours
@@ -153,11 +192,11 @@ export default function WorkersPage() {
       
       // Ensure start < end
       if (clampedOpen >= clampedClose) {
-        // If clamped values are invalid, use business hours
         return {
           ...day,
           open: businessDay.start,
           close: businessDay.end,
+          breaks: undefined,
         };
       }
       
@@ -167,6 +206,59 @@ export default function WorkersPage() {
         close: clampedClose,
       };
     });
+  };
+
+  const getWorkerBreaksError = (dayIndex: number): string | null => {
+    const day = (formData.availability || defaultAvailability)[dayIndex];
+    if (!day?.open || !day?.close) return null;
+    const breaks = day.breaks ?? [];
+    const openMin = (parseInt(day.open.split(":")[0], 10) || 0) * 60 + (parseInt(day.open.split(":")[1], 10) || 0);
+    const closeMin = (parseInt(day.close.split(":")[0], 10) || 0) * 60 + (parseInt(day.close.split(":")[1], 10) || 0);
+    for (let i = 0; i < breaks.length; i++) {
+      const b = breaks[i]!;
+      const [sH, sM] = b.start.split(":").map(Number);
+      const [eH, eM] = b.end.split(":").map(Number);
+      const sMin = (sH ?? 0) * 60 + (sM ?? 0);
+      const eMin = (eH ?? 0) * 60 + (eM ?? 0);
+      if (sMin >= eMin) return `הפסקה ${i + 1}: שעת התחלה חייבת להיות לפני שעת סיום`;
+      if (sMin < openMin || eMin > closeMin) return `הפסקה ${i + 1}: חייבת להיות בתוך שעות העובד`;
+      for (let j = i + 1; j < breaks.length; j++) {
+        const o = breaks[j]!;
+        const oS = (parseInt(o.start.split(":")[0], 10) || 0) * 60 + (parseInt(o.start.split(":")[1], 10) || 0);
+        const oE = (parseInt(o.end.split(":")[0], 10) || 0) * 60 + (parseInt(o.end.split(":")[1], 10) || 0);
+        if (sMin < oE && eMin > oS) return "הפסקות לא יכולות לחפוף";
+      }
+    }
+    return null;
+  };
+
+  const updateDayBreaks = (dayIndex: number, breaks: { start: string; end: string }[]) => {
+    const availability = [...(formData.availability || defaultAvailability)];
+    const day = availability[dayIndex];
+    if (!day) return;
+    availability[dayIndex] = { ...day, breaks: breaks.length > 0 ? breaks : undefined };
+    setFormData({ ...formData, availability });
+  };
+
+  const addWorkerBreak = (dayIndex: number) => {
+    const day = (formData.availability || defaultAvailability)[dayIndex];
+    if (!day?.open || !day?.close) return;
+    const existing = day.breaks ?? [];
+    // Initialize with valid HH:mm so we never write undefined; user can edit.
+    const newBreak: { start: string; end: string } = { start: "12:00", end: "13:00" };
+    updateDayBreaks(dayIndex, [...existing, newBreak]);
+  };
+
+  const removeWorkerBreak = (dayIndex: number, breakIndex: number) => {
+    const existing = [...((formData.availability || defaultAvailability)[dayIndex]?.breaks ?? [])];
+    updateDayBreaks(dayIndex, existing.filter((_, i) => i !== breakIndex));
+  };
+
+  const updateWorkerBreak = (dayIndex: number, breakIndex: number, field: "start" | "end", value: string) => {
+    const existing = [...((formData.availability || defaultAvailability)[dayIndex]?.breaks ?? [])];
+    if (!existing[breakIndex]) return;
+    existing[breakIndex] = { ...existing[breakIndex]!, [field]: value };
+    updateDayBreaks(dayIndex, existing);
   };
 
   // Selected worker form state
@@ -269,6 +361,7 @@ export default function WorkersPage() {
               label: day.label || WEEKDAYS[idx]?.label || "",
               open: day.open || null,
               close: day.close || null,
+              breaks: day.breaks && Array.isArray(day.breaks) ? day.breaks.map((b: { start: string; end: string }) => ({ start: b.start, end: b.end })) : undefined,
             })) as OpeningHours[];
             // Ensure we have all 7 days
             if (availability.length !== 7) {
@@ -375,19 +468,20 @@ export default function WorkersPage() {
       
       // Clamp availability to business hours before saving
       const clampedAvailability = clampWorkerAvailability(formData.availability || defaultAvailability);
-      
+      const availabilityPayload = availabilityForFirestore(clampedAvailability);
+
       const commission = Math.min(100, Math.max(0, Number(formData.treatmentCommissionPercent) || 0));
-      const newWorker = {
+      const newWorker = deepRemoveUndefined({
         name: formData.name.trim(),
         role: formData.role?.trim() || null,
         phone: formData.phone?.trim() || null,
         email: formData.email?.trim() || null,
         services: normalizedServices,
-        availability: clampedAvailability,
+        availability: availabilityPayload,
         active: formData.active !== false,
         treatmentCommissionPercent: commission,
         createdAt: new Date().toISOString(),
-      };
+      });
       const docRef = await addDoc(workersCollection(siteId), newWorker);
       setSelectedWorkerId(docRef.id);
       if (process.env.NODE_ENV !== "production") {
@@ -416,18 +510,20 @@ export default function WorkersPage() {
       
       // Clamp availability to business hours before saving
       const clampedAvailability = clampWorkerAvailability(formData.availability || defaultAvailability);
-      
+      const availabilityPayload = availabilityForFirestore(clampedAvailability);
+
       const commission = Math.min(100, Math.max(0, Number(formData.treatmentCommissionPercent) || 0));
-      await updateDoc(workerDoc(siteId, selectedWorkerId), {
+      const updatePayload = deepRemoveUndefined({
         name: formData.name.trim(),
         role: formData.role?.trim() || null,
         phone: formData.phone?.trim() || null,
         email: formData.email?.trim() || null,
         services: normalizedServices,
-        availability: clampedAvailability,
+        availability: availabilityPayload,
         active: formData.active !== false,
         treatmentCommissionPercent: commission,
       });
+      await updateDoc(workerDoc(siteId, selectedWorkerId), updatePayload);
       if (process.env.NODE_ENV !== "production") {
         console.log("[Workers] Save worker success", { workerId: selectedWorkerId, treatmentCommissionPercent: commission });
       }
@@ -544,11 +640,12 @@ export default function WorkersPage() {
         close: businessDay.end,
       };
     } else {
-      // Disable
+      // Disable: clear breaks
       availability[dayIndex] = {
         ...day,
         open: null,
         close: null,
+        breaks: undefined,
       };
     }
     setFormData({ ...formData, availability });
@@ -775,56 +872,102 @@ export default function WorkersPage() {
                             return (
                               <div
                                 key={day.day}
-                                className={`flex items-center gap-3 p-3 border rounded-lg ${
+                                className={`p-3 border rounded-lg ${
                                   isBusinessClosed 
                                     ? "border-slate-200 bg-slate-50 opacity-60" 
                                     : "border-slate-200"
                                 }`}
                               >
-                                <div className={`w-20 text-sm font-medium ${isBusinessClosed ? "text-slate-400" : "text-slate-700"}`}>
-                                  {day.label}
-                                  {isBusinessClosed && (
-                                    <span className="block text-xs text-slate-400 mt-1">(סגור)</span>
+                                <div className="flex items-center gap-3 flex-wrap">
+                                  <div className={`w-20 text-sm font-medium ${isBusinessClosed ? "text-slate-400" : "text-slate-700"}`}>
+                                    {day.label}
+                                    {isBusinessClosed && (
+                                      <span className="block text-xs text-slate-400 mt-1">(סגור)</span>
+                                    )}
+                                  </div>
+                                  <label className="flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={!isClosed}
+                                      onChange={() => toggleDayAvailability(index)}
+                                      disabled={isBusinessClosed}
+                                      className="w-4 h-4 text-sky-500 rounded focus:ring-sky-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    />
+                                    <span className={`text-xs ${isBusinessClosed ? "text-slate-400" : "text-slate-600"}`}>פעיל</span>
+                                  </label>
+                                  {!isClosed && !isBusinessClosed && (
+                                    <>
+                                      <input
+                                        type="time"
+                                        value={day.open || ""}
+                                        onChange={(e) => updateAvailability(index, "open", e.target.value)}
+                                        min={businessDay.start}
+                                        max={businessDay.end}
+                                        className="px-2 py-1 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                      />
+                                      <span className="text-xs text-slate-600">עד</span>
+                                      <input
+                                        type="time"
+                                        value={day.close || ""}
+                                        onChange={(e) => updateAvailability(index, "close", e.target.value)}
+                                        min={businessDay.start}
+                                        max={businessDay.end}
+                                        className="px-2 py-1 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                      />
+                                      {businessDay.enabled && (
+                                        <span className="text-xs text-slate-400">
+                                          (עסק: {businessDay.start}-{businessDay.end})
+                                        </span>
+                                      )}
+                                    </>
+                                  )}
+                                  {!isClosed && isBusinessClosed && (
+                                    <span className="text-xs text-slate-400">העסק סגור ביום זה</span>
                                   )}
                                 </div>
-                                <label className="flex items-center gap-2">
-                                  <input
-                                    type="checkbox"
-                                    checked={!isClosed}
-                                    onChange={() => toggleDayAvailability(index)}
-                                    disabled={isBusinessClosed}
-                                    className="w-4 h-4 text-sky-500 rounded focus:ring-sky-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  />
-                                  <span className={`text-xs ${isBusinessClosed ? "text-slate-400" : "text-slate-600"}`}>פעיל</span>
-                                </label>
-                                {!isClosed && !isBusinessClosed && (
-                                  <>
-                                    <input
-                                      type="time"
-                                      value={day.open || ""}
-                                      onChange={(e) => updateAvailability(index, "open", e.target.value)}
-                                      min={businessDay.start}
-                                      max={businessDay.end}
-                                      className="px-2 py-1 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
-                                    />
-                                    <span className="text-xs text-slate-600">עד</span>
-                                    <input
-                                      type="time"
-                                      value={day.close || ""}
-                                      onChange={(e) => updateAvailability(index, "close", e.target.value)}
-                                      min={businessDay.start}
-                                      max={businessDay.end}
-                                      className="px-2 py-1 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
-                                    />
-                                    {businessDay.enabled && (
-                                      <span className="text-xs text-slate-400">
-                                        (עסק: {businessDay.start}-{businessDay.end})
-                                      </span>
+                                {!isClosed && !isBusinessClosed && day.open && day.close && (
+                                  <div className="mt-2 mr-0 pr-2 border-t border-slate-100 pt-2">
+                                    <p className="text-xs font-medium text-slate-600 mb-1">הפסקות</p>
+                                    {(day.breaks ?? []).map((b, bi) => (
+                                      <div key={bi} className="flex items-center gap-2 mb-1">
+                                        <input
+                                          type="time"
+                                          value={b.start}
+                                          onChange={(e) => updateWorkerBreak(index, bi, "start", e.target.value)}
+                                          min={day.open!}
+                                          max={day.close!}
+                                          className="px-2 py-1 border border-slate-300 rounded text-sm text-right w-24"
+                                        />
+                                        <span className="text-xs text-slate-500">עד</span>
+                                        <input
+                                          type="time"
+                                          value={b.end}
+                                          onChange={(e) => updateWorkerBreak(index, bi, "end", e.target.value)}
+                                          min={day.open!}
+                                          max={day.close!}
+                                          className="px-2 py-1 border border-slate-300 rounded text-sm text-right w-24"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => removeWorkerBreak(index, bi)}
+                                          className="p-1 text-slate-400 hover:text-red-600 rounded"
+                                          aria-label="הסר הפסקה"
+                                        >
+                                          ×
+                                        </button>
+                                      </div>
+                                    ))}
+                                    <button
+                                      type="button"
+                                      onClick={() => addWorkerBreak(index)}
+                                      className="text-xs text-sky-600 hover:text-sky-700 font-medium"
+                                    >
+                                      הוסף הפסקה
+                                    </button>
+                                    {getWorkerBreaksError(index) && (
+                                      <p className="text-red-600 text-xs mt-0.5">{getWorkerBreaksError(index)}</p>
                                     )}
-                                  </>
-                                )}
-                                {!isClosed && isBusinessClosed && (
-                                  <span className="text-xs text-slate-400">העסק סגור ביום זה</span>
+                                  </div>
                                 )}
                               </div>
                             );
@@ -909,7 +1052,7 @@ export default function WorkersPage() {
                   <div className="border-t border-slate-200 pt-4">
                     <button
                       onClick={handleSaveWorker}
-                      disabled={saving || !formData.name?.trim()}
+                      disabled={saving || !formData.name?.trim() || (formData.availability || defaultAvailability).some((_, idx) => getWorkerBreaksError(idx) != null)}
                       className="w-full px-4 py-2 bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 disabled:cursor-not-allowed text-white rounded-lg font-medium"
                     >
                       {saving ? "שומר..." : "שמור שינויים"}

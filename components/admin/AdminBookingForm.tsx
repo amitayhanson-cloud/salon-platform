@@ -15,6 +15,7 @@ import type { SiteService } from "@/types/siteConfig";
 import type { PricingItem } from "@/types/pricingItem";
 import type { BookingSettings } from "@/types/bookingSettings";
 import type { OpeningHours } from "@/types/booking";
+import MinutesNumberInput from "@/components/admin/MinutesNumberInput";
 
 /** Display label for a service type (pricing item): service name + optional type (e.g. "תספורת - חצי ראש"). */
 function getServiceTypeLabel(item: PricingItem, services: SiteService[]): string {
@@ -624,11 +625,10 @@ export default function AdminBookingForm({
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">משך (דקות) *</label>
-              <input
-                type="number"
-                min={1}
+              <MinutesNumberInput
                 value={phase1DurationMin}
-                onChange={(e) => setPhase1DurationMin(parseInt(e.target.value, 10) || 30)}
+                onChange={setPhase1DurationMin}
+                min={0}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
               />
               {errors.phase1Duration && <p className="text-xs text-red-600 mt-0.5">{errors.phase1Duration}</p>}
@@ -669,21 +669,19 @@ export default function AdminBookingForm({
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">המתנה אחרי שלב 1 (דקות)</label>
-                  <input
-                    type="number"
-                    min={0}
+                  <MinutesNumberInput
                     value={phase2WaitMin}
-                    onChange={(e) => setPhase2WaitMin(parseInt(e.target.value, 10) || 0)}
+                    onChange={setPhase2WaitMin}
+                    min={0}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">משך שלב 2 (דקות) *</label>
-                  <input
-                    type="number"
-                    min={1}
+                  <MinutesNumberInput
                     value={phase2DurationMin}
-                    onChange={(e) => setPhase2DurationMin(parseInt(e.target.value, 10) || 30)}
+                    onChange={setPhase2DurationMin}
+                    min={0}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
                   />
                   {errors.phase2Duration && <p className="text-xs text-red-600 mt-0.5">{errors.phase2Duration}</p>}

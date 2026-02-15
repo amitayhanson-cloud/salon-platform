@@ -21,6 +21,7 @@ import {
   subscribeBookingSettings,
   ensureBookingSettings,
 } from "@/lib/firestoreBookingSettings";
+import { isClosedDate } from "@/lib/closedDates";
 import type { BookingSettings } from "@/types/bookingSettings";
 import { defaultBookingSettings } from "@/types/bookingSettings";
 import { defaultThemeColors } from "@/types/siteConfig";
@@ -596,6 +597,7 @@ export default function BookingPage() {
               label: day.label || "",
               open: day.open || null,
               close: day.close || null,
+              breaks: day.breaks && Array.isArray(day.breaks) ? day.breaks.map((b: { start: string; end: string }) => ({ start: b.start, end: b.end })) : undefined,
             })) as OpeningHours[];
           }
           
@@ -1142,7 +1144,7 @@ export default function BookingPage() {
   // Get theme colors with defaults
   const theme = config?.themeColors || defaultThemeColors;
 
-  // Generate time slots based on business hours (must be before early returns to keep hook order stable)
+  // Generate time slots based on business hours. Break filtering is done in computeAvailableSlots (service segments only; wait gaps may cross breaks).
   const generateTimeSlotsForDate = (durationMin: number = 30): string[] => {
     if (!selectedDate) return [];
     const businessDayConfig = resolveBusinessDayConfig(selectedDate);
@@ -1159,12 +1161,14 @@ export default function BookingPage() {
       slots.push(minutesToTime(currentTime));
       currentTime += slotIntervalMinutes;
     }
+    // Do not filter by full-span breaks here: computeAvailableSlots checks only service segments (wait gaps allowed across breaks).
     return slots;
   };
 
   const availableTimeSlots = useMemo(() => {
     if (!selectedDate || selectedServices.length === 0) return [];
     const dateStr = ymdLocal(selectedDate);
+    if (isClosedDate(bookingSettings, dateStr)) return [];
     const workerWindowByWorkerId: Record<string, { startMin: number; endMin: number } | null> = {};
     for (const w of workers) {
       workerWindowByWorkerId[w.id] = getWorkerWorkingWindow(w, selectedDate);
@@ -1175,6 +1179,14 @@ export default function BookingPage() {
     const totalDuration = getChainTotalDuration(chain);
     const candidateTimes = generateTimeSlotsForDate(totalDuration);
     const preferredWorkerId = selectedWorker == null ? null : selectedWorker.id;
+    const dayKey = getBookingWeekdayKey(selectedDate);
+    const breaksForDay = (bookingSettings.days[dayKey] as { breaks?: { start: string; end: string }[] })?.breaks;
+    const weekdayKey = getWeekdayKey(getJsWeekday(selectedDate));
+    const workerBreaksByWorkerId: Record<string, { start: string; end: string }[] | undefined> = {};
+    for (const w of workers) {
+      const dayConfig = w.availability?.find((d) => d.day === weekdayKey);
+      if (dayConfig?.breaks?.length) workerBreaksByWorkerId[w.id] = dayConfig.breaks;
+    }
     const slots = computeAvailableSlots({
       date: selectedDate,
       dateStr,
@@ -1185,6 +1197,8 @@ export default function BookingPage() {
       workerWindowByWorkerId,
       businessWindow,
       candidateTimes,
+      breaks: breaksForDay,
+      workerBreaksByWorkerId,
     });
     return slots;
   }, [

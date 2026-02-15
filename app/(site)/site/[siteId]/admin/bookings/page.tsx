@@ -23,6 +23,7 @@ import { getDateRange, getTwoWeekStart, getSundayStart, toYYYYMMDD } from "@/lib
 import { normalizeBooking, isBookingCancelled, isBookingArchived } from "@/lib/normalizeBooking";
 import TwoWeekCalendar from "@/components/admin/TwoWeekCalendar";
 import TaskListPanel from "@/components/admin/TaskListPanel";
+import CancelBookingModal from "@/components/admin/CancelBookingModal";
 import { ChevronLeft, ChevronRight, Timer } from "lucide-react";
 import { useRouter } from "next/navigation";
 import AutoCleanupSettings from "@/components/admin/AutoCleanupSettings";
@@ -65,8 +66,8 @@ export default function BookingsAdminPage() {
     return getSundayStart(new Date());
   });
 
-  // Delete booking state
-  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  // Cancel booking: modal asks for reason, then archive-cascade
+  const [cancelModalBookingId, setCancelModalBookingId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -243,42 +244,38 @@ export default function BookingsAdminPage() {
 
   const { firebaseUser } = useAuth();
 
-  // Delete booking handlers (cascade: archive booking + all related in same multi-part set)
   const onRequestDelete = (booking: any) => {
     setDeleteError(null);
-    setDeleteTarget(booking);
+    setCancelModalBookingId(booking.id);
   };
 
-  const onConfirmDelete = async () => {
-    if (!deleteTarget || !siteId || !firebaseUser) return;
+  const handleCancelModalConfirm = async (reason: string) => {
+    if (!cancelModalBookingId || !siteId || !firebaseUser) return;
     setDeleting(true);
     setDeleteError(null);
-
     try {
       const token = await firebaseUser.getIdToken();
       const res = await fetch("/api/bookings/archive-cascade", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ siteId, bookingId: deleteTarget.id }),
+        body: JSON.stringify({
+          siteId,
+          bookingId: cancelModalBookingId,
+          cancellationReason: reason || undefined,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setDeleteError(data.error === "forbidden" ? "אין הרשאה" : data.error || "שגיאה במחיקה");
         return;
       }
-      setDeleteTarget(null);
-      // Bookings will update automatically via onSnapshot
+      setCancelModalBookingId(null);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setDeleteError(msg);
     } finally {
       setDeleting(false);
     }
-  };
-
-  const onCancelDelete = () => {
-    setDeleteTarget(null);
-    setDeleteError(null);
   };
 
   // Get 14-day date range
@@ -499,41 +496,20 @@ export default function BookingsAdminPage() {
 
       </div>
 
-      {/* Delete Confirmation Modal */}
-      {deleteTarget && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" dir="rtl">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-6 text-right">
-            <h3 className="text-lg font-bold text-slate-900">מחיקת תור</h3>
-            <p className="mt-2 text-sm text-slate-600">
-              למחוק את התור של {deleteTarget.customerName || "לקוח"} בתאריך {deleteTarget.date} בשעה {deleteTarget.time}?
-            </p>
+      <CancelBookingModal
+        open={!!cancelModalBookingId}
+        bookingId={cancelModalBookingId ?? ""}
+        onConfirm={handleCancelModalConfirm}
+        onClose={() => {
+          setCancelModalBookingId(null);
+          setDeleteError(null);
+        }}
+        submitting={deleting}
+      />
 
-            {deleteError && (
-              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-sm text-red-700">שגיאה: {deleteError}</p>
-              </div>
-            )}
-
-            <div className="mt-6 flex gap-3 justify-start">
-              <button
-                type="button"
-                onClick={onCancelDelete}
-                disabled={deleting}
-                className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                ביטול
-              </button>
-
-              <button
-                type="button"
-                onClick={onConfirmDelete}
-                disabled={deleting}
-                className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {deleting ? "מוחק..." : "מחק"}
-              </button>
-            </div>
-          </div>
+      {deleteError && cancelModalBookingId && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[56] px-4 py-2 rounded-lg shadow-lg text-sm font-medium bg-red-600 text-white" dir="rtl">
+          {deleteError}
         </div>
       )}
     </div>

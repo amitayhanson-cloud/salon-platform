@@ -1,10 +1,14 @@
 export type Weekday = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
 
+export type BreakRange = { start: string; end: string }; // "HH:mm"
+
 export interface OpeningHours {
   day: Weekday;
   label: string; // Hebrew day name for UI
   open: string | null; // "09:00" or null if closed
   close: string | null; // "18:00" or null if closed
+  /** Break ranges within the day. Omit or empty = no breaks. */
+  breaks?: BreakRange[];
 }
 
 export interface Worker {
@@ -30,6 +34,8 @@ export interface SalonBookingState {
   workers: Worker[];
   bookings: Booking[];
   defaultSlotMinutes: number;
+  /** Specific dates when the business is closed (holidays). Each item: { date: "YYYY-MM-DD", label?: string }. */
+  closedDates?: Array<{ date: string; label?: string }>;
 }
 
 export const defaultBookingState: SalonBookingState = {
@@ -48,5 +54,6 @@ export const defaultBookingState: SalonBookingState = {
     { id: "w2", name: "צבע ותסרוקות", role: "צבע" },
   ],
   bookings: [],
+  closedDates: [],
 };
 

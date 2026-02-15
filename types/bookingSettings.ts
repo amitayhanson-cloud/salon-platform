@@ -1,12 +1,24 @@
+export type BreakRange = { start: string; end: string }; // "HH:mm"
+
 export type DayHours = {
   enabled: boolean;
   start: string; // "09:00"
   end: string; // "18:00"
+  /** Break ranges within the day (no bookings during breaks). Omit or empty = no breaks. */
+  breaks?: BreakRange[];
+};
+
+/** A specific calendar date when the business is closed (e.g. holiday). Full day in site timezone. */
+export type ClosedDateEntry = {
+  date: string; // YYYY-MM-DD
+  label?: string;
 };
 
 export type BookingSettings = {
   slotMinutes: number; // 15/30/60
   days: Record<"0" | "1" | "2" | "3" | "4" | "5" | "6", DayHours>; // Sunday=0
+  /** Specific dates when the business is closed (holidays). No availability for any worker. */
+  closedDates?: ClosedDateEntry[];
 };
 
 export const defaultBookingSettings: BookingSettings = {

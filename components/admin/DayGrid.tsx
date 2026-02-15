@@ -12,11 +12,13 @@ import {
   minutesSinceStartOfDayLocal,
   durationMinutesLocal,
   toLocalDate,
+  getMinutesSinceStartOfDay,
 } from "@/lib/calendarUtils";
 import { getBookingDisplayInfo } from "@/lib/bookingDisplay";
 import { isBookingCancelled } from "@/lib/normalizeBooking";
 import { getTextColorHex } from "@/lib/colorUtils";
-import { getDisplayStatus } from "@/lib/bookingRootStatus";
+import { getDisplayStatus, getDisplayStatusKey } from "@/lib/bookingRootStatus";
+import StatusDot from "@/components/StatusDot";
 import { bookingToBlock, type RenderBlock } from "./MultiWorkerScheduleView";
 
 const SLOT_MINUTES = 15;
@@ -84,6 +86,8 @@ export interface DayGridProps {
   workers: Array<{ id: string; name: string }>;
   startHour?: number;
   endHour?: number;
+  /** Break ranges to show as greyed-out rows (business-level breaks). */
+  breaks?: Array<{ start: string; end: string }>;
   onBookingClick?: (booking: unknown) => void;
 }
 
@@ -93,6 +97,7 @@ export default function DayGrid({
   workers,
   startHour = 8,
   endHour = 20,
+  breaks,
   onBookingClick,
 }: DayGridProps) {
   const DAY_START_MINUTES = startHour * 60;
@@ -251,16 +256,46 @@ export default function DayGrid({
           </div>
         ))}
 
+        {/* Break blocks: full-width greyed rows (z-index 5, below bookings) */}
+        {breaks?.map((br, idx) => {
+          const breakStartMin = getMinutesSinceStartOfDay(br.start);
+          const breakEndMin = getMinutesSinceStartOfDay(br.end);
+          if (breakEndMin <= breakStartMin) return null;
+          const startClamped = Math.max(DAY_START_MINUTES, Math.min(DAY_END_MINUTES, breakStartMin));
+          const endClamped = Math.max(DAY_START_MINUTES, Math.min(DAY_END_MINUTES, breakEndMin));
+          if (endClamped <= startClamped) return null;
+          const minutesFromViewStart = startClamped - DAY_START_MINUTES;
+          const rowStart = Math.floor(minutesFromViewStart / SLOT_MINUTES) + 1;
+          const rowSpan = Math.ceil((endClamped - startClamped) / SLOT_MINUTES);
+          return (
+            <div
+              key={`break-${idx}`}
+              className="pointer-events-none opacity-60 col-span-full"
+              style={{
+                gridRow: `${rowStart} / span ${rowSpan}`,
+                gridColumn: "1 / -1",
+                background: "repeating-linear-gradient(-45deg, #e2e8f0, #e2e8f0 4px, #cbd5e1 4px, #cbd5e1 8px)",
+                zIndex: 5,
+              }}
+              title="הפסקה"
+              aria-hidden
+            />
+          );
+        })}
+
         {/* Booking blocks: grid-row placed, same coordinate system */}
         {blocksWithGrid.map((block) => {
           const booking = bookings.find((b) => b.id === block.bookingId);
           const backgroundColor = block.color ?? "#3B82F6";
           const textColor = getTextColorHex(backgroundColor);
           const displayLabel = `${block.clientName} — ${block.serviceName}`;
+          const statusKey = booking ? getDisplayStatusKey(booking, bookings) : null;
+          const statusLabel = booking ? getDisplayStatus(booking, bookings).label : null;
+          const hasNote = Boolean((block.notes ?? "").trim());
           return (
             <div
               key={block.id}
-              className="rounded-lg overflow-hidden cursor-pointer shadow-sm transition-shadow hover:shadow-md flex items-center justify-end px-2 min-h-0"
+              className="relative rounded-lg overflow-hidden cursor-pointer shadow-sm transition-shadow hover:shadow-md flex items-center justify-end px-2 min-h-0"
               style={{
                 gridRow: `${block.gridRowStart} / span ${block.gridRowSpan}`,
                 gridColumn: block.workerColumnIndex + 2,
@@ -276,33 +311,39 @@ export default function DayGrid({
                 if (booking) onBookingClick?.(booking);
               }}
             >
-              <div dir="rtl" className="min-w-0 w-full text-right whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1">
-                {block.isSecondary && (
-                  <span className="shrink-0 flex items-center justify-center w-4 h-4 rounded text-[9px] font-bold" style={{ backgroundColor: "rgba(255,255,255,0.3)", color: textColor }}>
-                    2
-                  </span>
-                )}
-                {booking && (() => {
-                  const { label, color } = getDisplayStatus(booking, bookings);
-                  const colorClass =
-                    color === "green"
-                      ? "bg-emerald-100 text-emerald-800"
-                      : color === "yellow"
-                        ? "bg-amber-100 text-amber-800"
-                        : color === "red"
-                          ? "bg-red-100 text-red-800"
-                          : "bg-slate-100 text-slate-700";
-                  return (
-                    <span
-                      className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] font-medium ${colorClass}`}
-                      title={label}
-                    >
-                      {label}
+              {hasNote && (
+                <span
+                  className="absolute rounded-full bg-red-500 pointer-events-none"
+                  style={{
+                    top: "clamp(2px, 10%, 6px)",
+                    left: "clamp(2px, 10%, 6px)",
+                    width: "clamp(8px, 18%, 12px)",
+                    height: "clamp(8px, 18%, 12px)",
+                    border: "2px solid #fff",
+                    boxShadow: "0 0 0 1px rgba(0,0,0,0.35)",
+                    zIndex: 11,
+                  }}
+                  aria-label="Has note"
+                  title="יש הערה"
+                />
+              )}
+              <div
+                dir="rtl"
+                className="min-w-0 w-full text-right overflow-hidden flex flex-col gap-0.5 py-0.5"
+                style={hasNote ? { paddingLeft: "clamp(14px, 24%, 18px)" } : undefined}
+              >
+                <div className="flex items-center gap-1 min-w-0">
+                  {block.isSecondary && (
+                    <span className="shrink-0 flex items-center justify-center w-4 h-4 rounded text-[9px] font-bold" style={{ backgroundColor: "rgba(255,255,255,0.3)", color: textColor }}>
+                      2
                     </span>
-                  );
-                })()}
-                <span className="font-semibold">{block.clientName}</span>
-                <span> — {block.serviceName}</span>
+                  )}
+                  {statusKey && (
+                    <StatusDot statusKey={statusKey} title={statusLabel ?? undefined} />
+                  )}
+                  <span className="font-semibold truncate">{block.clientName}</span>
+                  <span className="truncate"> — {block.serviceName}</span>
+                </div>
               </div>
             </div>
           );

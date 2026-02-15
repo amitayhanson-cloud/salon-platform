@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { createAdminMultiServiceVisit } from "@/lib/adminBookings";
+import MinutesNumberInput from "@/components/admin/MinutesNumberInput";
 
 const SLOT_MINUTES = 15;
 const DEFAULT_DURATION = 60;
@@ -296,12 +297,11 @@ export default function AdminMultiServiceBookingForm({
                   )}
                 </select>
                 <div className="flex gap-2">
-                  <input
-                    type="number"
-                    min={1}
-                    max={480}
+                  <MinutesNumberInput
                     value={slot.durationMin}
-                    onChange={(e) => updateSlot(idx, { durationMin: parseInt(e.target.value, 10) || 30 })}
+                    onChange={(n) => updateSlot(idx, { durationMin: n })}
+                    min={0}
+                    max={480}
                     className="w-20 px-2 py-1.5 border border-slate-300 rounded text-sm text-right"
                   />
                   <span className="text-sm text-slate-500 self-center">דק׳</span>

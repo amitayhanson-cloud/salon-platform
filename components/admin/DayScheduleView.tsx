@@ -5,11 +5,14 @@ import {
   getDayScheduleGeometry,
   computeBlockPosition,
   timeToTopPx,
+  getMinutesSinceStartOfDay,
 } from "@/lib/calendarUtils";
 import { useElementSize } from "@/hooks/useElementSize";
 import { getBookingDisplayInfo } from "@/lib/bookingDisplay";
+import { getDisplayStatus, getDisplayStatusKey } from "@/lib/bookingRootStatus";
 import { isBookingCancelled } from "@/lib/normalizeBooking";
 import { getTextColorHex } from "@/lib/colorUtils";
+import StatusDot from "@/components/StatusDot";
 import DayScheduleLayout from "./DayScheduleLayout";
 import { bookingToBlock, type RenderBlock } from "./MultiWorkerScheduleView";
 
@@ -56,12 +59,16 @@ interface Booking {
   waitMinutes?: number;
 }
 
+export type BreakRange = { start: string; end: string };
+
 interface DayScheduleViewProps {
   date: string; // YYYY-MM-DD
   bookings: Booking[];
   selectedWorkerId: string; // single worker filter: only events for this worker
   startHour?: number;
   endHour?: number;
+  /** Break ranges to show as greyed-out blocks (business-level breaks). */
+  breaks?: BreakRange[];
   onBookingClick?: (booking: Booking) => void;
 }
 
@@ -75,6 +82,7 @@ export default function DayScheduleView({
   selectedWorkerId,
   startHour = 8,
   endHour = 20,
+  breaks,
   onBookingClick,
 }: DayScheduleViewProps) {
   const [timelineRef, timelineSize] = useElementSize<HTMLDivElement>();
@@ -233,8 +241,11 @@ export default function DayScheduleView({
     const booking = bookings.find((b) => b.id === block.bookingId);
     const backgroundColor = block.color ?? "#3B82F6";
     const textColor = getTextColorHex(backgroundColor);
-    const phaseLabel = block.isSecondary ? " (שלב 2)" : "";
-    const displayLabel = `${block.clientName} — ${block.serviceName}${phaseLabel}`;
+    const phaseLabel = block.isSecondary ? " — שלב 2" : " — שלב 1";
+    const displayLabel = `${block.clientName} — ${block.serviceName}`;
+    const statusKey = booking ? getDisplayStatusKey(booking as Parameters<typeof getDisplayStatusKey>[0], bookings as Parameters<typeof getDisplayStatusKey>[1]) : null;
+    const statusLabel = booking ? getDisplayStatus(booking as Parameters<typeof getDisplayStatus>[0], bookings as Parameters<typeof getDisplayStatus>[1]).label : null;
+    const hasNote = Boolean((block.notes ?? "").trim());
 
     return (
       <div
@@ -255,15 +266,40 @@ export default function DayScheduleView({
           if (booking) onBookingClick?.(booking);
         }}
       >
-        <div className="absolute inset-0 z-10 flex items-center justify-end px-3" style={{ color: textColor }}>
-          <div dir="rtl" className="min-w-0 w-full text-right whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1">
-            {block.isSecondary && (
-              <span className="shrink-0 flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold" style={{ backgroundColor: "rgba(255,255,255,0.3)", color: textColor }}>
-                2
-              </span>
-            )}
-            <span className="font-semibold">{block.clientName}</span>
-            <span> — {block.serviceName}{phaseLabel}</span>
+        {hasNote && (
+          <span
+            className="absolute rounded-full bg-red-500 pointer-events-none"
+            style={{
+              top: "clamp(2px, 10%, 6px)",
+              left: "clamp(2px, 10%, 6px)",
+              width: "clamp(8px, 18%, 12px)",
+              height: "clamp(8px, 18%, 12px)",
+              border: "2px solid #fff",
+              boxShadow: "0 0 0 1px rgba(0,0,0,0.35)",
+              zIndex: 21,
+            }}
+            aria-label="Has note"
+            title="יש הערה"
+          />
+        )}
+        <div
+          className="absolute inset-0 z-10 flex items-center justify-end px-3 py-1"
+          style={{
+            color: textColor,
+            ...(hasNote ? { paddingLeft: "clamp(14px, 24%, 18px)" } : {}),
+          }}
+        >
+          <div dir="rtl" className="min-w-0 w-full text-right overflow-hidden flex flex-col gap-0.5">
+            <div className="flex items-center gap-1 min-w-0">
+              {block.isSecondary && (
+                <span className="shrink-0 flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold" style={{ backgroundColor: "rgba(255,255,255,0.3)", color: textColor }}>
+                  2
+                </span>
+              )}
+              {statusKey && <StatusDot statusKey={statusKey} title={statusLabel ?? undefined} />}
+              <span className="font-semibold truncate">{block.clientName}</span>
+              <span className="truncate"> — {block.serviceName}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -300,6 +336,32 @@ export default function DayScheduleView({
                 margin: 0,
                 zIndex: 0,
               }}
+            />
+          );
+        })}
+
+        {/* Break blocks: greyed-out, non-clickable (z-index: 5, below bookings) */}
+        {breaks?.map((br, idx) => {
+          const startMin = getMinutesSinceStartOfDay(br.start);
+          const endMin = getMinutesSinceStartOfDay(br.end);
+          if (endMin <= startMin) return null;
+          const topPx = (startMin - viewStartMinutes) * pxPerMin;
+          const heightPx = (endMin - startMin) * pxPerMin;
+          const topClamped = Math.max(0, topPx);
+          const heightClamped = Math.min(heightPx, totalHeight - topClamped);
+          if (heightClamped <= 0) return null;
+          return (
+            <div
+              key={idx}
+              className="absolute left-0 right-0 pointer-events-none opacity-60"
+              style={{
+                top: `${topClamped}px`,
+                height: `${heightClamped}px`,
+                background: "repeating-linear-gradient(-45deg, #e2e8f0, #e2e8f0 4px, #cbd5e1 4px, #cbd5e1 8px)",
+                zIndex: 5,
+              }}
+              title="הפסקה"
+              aria-hidden
             />
           );
         })}

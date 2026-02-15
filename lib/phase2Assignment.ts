@@ -10,6 +10,7 @@
 
 import { canWorkerPerformService } from "./workerServiceCompatibility";
 import { getWorkerBusyIntervals, overlaps } from "./bookingPhases";
+import { slotOverlapsBreaks } from "./breaks";
 import type { BookingLike } from "./bookingPhases";
 
 export interface WorkerForPhase2 {
@@ -33,6 +34,8 @@ export interface GetEligiblePhase2WorkersParams {
   bookingsForDate: Array<BookingLike & { status?: string }>;
   workerWindowByWorkerId?: Record<string, { startMin: number; endMin: number } | null>;
   businessWindow?: { startMin: number; endMin: number } | null;
+  /** Worker-specific breaks for this day; phase 2 segment must not overlap worker's break. */
+  workerBreaksByWorkerId?: Record<string, { start: string; end: string }[] | undefined>;
 }
 
 /**
@@ -52,6 +55,7 @@ export function getEligiblePhase2Workers(params: GetEligiblePhase2WorkersParams)
     bookingsForDate,
     workerWindowByWorkerId,
     businessWindow,
+    workerBreaksByWorkerId,
   } = params;
 
   const phase2StartMin = phase1StartMinutes + phase1DurationMin + waitMin;
@@ -82,6 +86,7 @@ export function getEligiblePhase2Workers(params: GetEligiblePhase2WorkersParams)
           if (phase2StartMin < effectiveStart || phase2EndMin > effectiveEnd) continue;
         }
       }
+      if (workerBreaksByWorkerId?.[worker.id]?.length && slotOverlapsBreaks(phase2StartMin, phase2EndMin, workerBreaksByWorkerId[worker.id])) continue;
       out.push(worker);
     }
     return out;
@@ -143,6 +148,7 @@ export interface ResolvePhase2WorkerParams {
   bookingsForDate: Array<BookingLike & { status?: string }>;
   workerWindowByWorkerId?: Record<string, { startMin: number; endMin: number } | null>;
   businessWindow?: { startMin: number; endMin: number } | null;
+  workerBreaksByWorkerId?: Record<string, { start: string; end: string }[] | undefined>;
 }
 
 /**
@@ -166,6 +172,7 @@ export function resolvePhase2Worker(params: ResolvePhase2WorkerParams): { id: st
     bookingsForDate,
     workerWindowByWorkerId,
     businessWindow,
+    workerBreaksByWorkerId,
   } = params;
 
   const eligible = getEligiblePhase2Workers({
@@ -180,6 +187,7 @@ export function resolvePhase2Worker(params: ResolvePhase2WorkerParams): { id: st
     bookingsForDate,
     workerWindowByWorkerId,
     businessWindow,
+    workerBreaksByWorkerId,
   });
 
   if (preferredWorkerId && eligible.some((w) => w.id === preferredWorkerId)) {

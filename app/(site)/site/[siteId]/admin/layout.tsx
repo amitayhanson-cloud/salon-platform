@@ -327,6 +327,22 @@ export default function AdminLayout({
     return null;
   }
 
+  // Print route: no header, no nav, no chrome – only the printable calendar
+  const isPrintRoute = typeof pathname === "string" && pathname.includes("/bookings/print");
+  if (isPrintRoute) {
+    return (
+      <div className="print-route-root" style={{ overflow: "visible", height: "auto", minHeight: 0, background: "#fff" }}>
+        <style dangerouslySetInnerHTML={{ __html: `
+          .print-route-root { background: #fff; overflow: visible !important; height: auto !important; min-height: 0 !important; }
+          @media print {
+            .print-route-root * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          }
+        ` }} />
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       <AdminHeader />

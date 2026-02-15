@@ -19,8 +19,12 @@ import {
 import { normalizeBooking, isBookingCancelled, isBookingArchived } from "@/lib/normalizeBooking";
 import { parseDateParamToDayKey } from "@/lib/dateLocal";
 import { fromYYYYMMDD, getMinutesSinceStartOfDay } from "@/lib/calendarUtils";
+import type { BreakRange } from "@/types/bookingSettings";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
+import { subscribeBookingSettings } from "@/lib/firestoreBookingSettings";
+import { isBusinessClosedAllDay } from "@/lib/closedDates";
 import { bookingEnabled } from "@/lib/bookingEnabled";
+import type { BookingSettings } from "@/types/bookingSettings";
 import type { SiteConfig } from "@/types/siteConfig";
 import type { SiteService } from "@/types/siteConfig";
 import type { OpeningHours, Weekday } from "@/types/booking";
@@ -33,8 +37,10 @@ import MultiWorkerScheduleView from "@/components/admin/MultiWorkerScheduleView"
 import WorkerFilter from "@/components/admin/WorkerFilter";
 import AdminBookingFormSimple from "@/components/admin/AdminBookingFormSimple";
 import AdminCreateBookingForm from "@/components/admin/AdminCreateBookingForm";
+import CancelBookingModal from "@/components/admin/CancelBookingModal";
 import { getAdminBasePathFromSiteId } from "@/lib/url";
-import { getDisplayStatus } from "@/lib/bookingRootStatus";
+import { getDisplayStatus, getDisplayStatusKey } from "@/lib/bookingRootStatus";
+import StatusDot from "@/components/StatusDot";
 import { useAuth } from "@/hooks/useAuth";
 import { X, Plus, Printer, Trash2 } from "lucide-react";
 import type { AdminBookingFormSimpleEditData } from "@/components/admin/AdminBookingFormSimple";
@@ -145,6 +151,7 @@ export default function DaySchedulePage() {
   const [existingClients, setExistingClients] = useState<Array<{ id: string; name: string; phone: string }>>([]);
   const [bookingsLoading, setBookingsLoading] = useState(true);
   const [workersLoading, setWorkersLoading] = useState(true);
+  const [bookingSettings, setBookingSettings] = useState<BookingSettings | null>(null);
 
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -155,8 +162,8 @@ export default function DaySchedulePage() {
   // Selected booking for details modal
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   
-  // Delete booking state
-  const [deleteTarget, setDeleteTarget] = useState<Booking | null>(null);
+  // Cancel booking: modal asks for reason, then archive-cascade
+  const [cancelModalBookingId, setCancelModalBookingId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteSuccess, setDeleteSuccess] = useState(false);
@@ -168,7 +175,7 @@ export default function DaySchedulePage() {
   const [toastError, setToastError] = useState(false);
   const { firebaseUser } = useAuth();
 
-  // Map workers to WorkerWithServices (add label to availability for AdminBookingForm)
+  // Map workers to WorkerWithServices (add label + breaks so AdminCreateBookingForm can enforce worker breaks)
   const workersForForm = useMemo(() => {
     return workers.map((w) => ({
       id: w.id,
@@ -180,10 +187,45 @@ export default function DaySchedulePage() {
           label: getDayLabel(a.day),
           open: a.open ?? null,
           close: a.close ?? null,
+          breaks: "breaks" in a && Array.isArray(a.breaks) && a.breaks.length > 0 ? a.breaks : undefined,
         })
       ),
     }));
   }, [workers]);
+
+  // Breaks for the current day (for calendar break blocks)
+  const dayBreaks = useMemo((): BreakRange[] | undefined => {
+    if (!dateKey || !bookingSettings) return undefined;
+    const d = fromYYYYMMDD(dateKey);
+    const dayKey = String(d.getDay()) as keyof BookingSettings["days"];
+    return bookingSettings.days[dayKey]?.breaks;
+  }, [dateKey, bookingSettings]);
+
+  // When viewing a single worker: merge business breaks + that worker's breaks for the day (calendar + consistency)
+  const breaksForCalendar = useMemo((): BreakRange[] | undefined => {
+    const business = dayBreaks ?? [];
+    if (!dateKey || selectedWorkerId === ALL_WORKERS || !selectedWorkerId) {
+      return business.length > 0 ? business : undefined;
+    }
+    const d = fromYYYYMMDD(dateKey);
+    const weekdayKey = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][d.getDay()] as string;
+    const w = workers.find((x) => x.id === selectedWorkerId);
+    const dayConfig = w?.availability?.find((a) => a.day === weekdayKey) as { breaks?: BreakRange[] } | undefined;
+    const workerBreaks = dayConfig?.breaks && Array.isArray(dayConfig.breaks) ? dayConfig.breaks : [];
+    const merged = [...business, ...workerBreaks];
+    return merged.length > 0 ? merged : undefined;
+  }, [dateKey, dayBreaks, selectedWorkerId, workers]);
+
+  // Load booking settings (for break blocks on calendar)
+  useEffect(() => {
+    if (!siteId) return;
+    const unsubscribe = subscribeBookingSettings(
+      siteId,
+      (s) => setBookingSettings(s),
+      (e) => console.error("[DaySchedule] Failed to load booking settings", e)
+    );
+    return () => unsubscribe();
+  }, [siteId]);
 
   // Load site config
   useEffect(() => {
@@ -284,7 +326,7 @@ export default function DaySchedulePage() {
             id: d.id,
             name: data.name || "",
             services: (data.services as string[] | undefined) || [],
-            availability: (data.availability as { day: string; open: string | null; close: string | null }[] | undefined) || [],
+            availability: (data.availability as { day: string; open: string | null; close: string | null; breaks?: { start: string; end: string }[] }[] | undefined) || [],
             active: data.active !== false,
             allServicesAllowed: data.allServicesAllowed === true,
           };
@@ -504,39 +546,40 @@ export default function DaySchedulePage() {
   // Delete booking handlers
   const onRequestDelete = (booking: Booking) => {
     setDeleteError(null);
-    setDeleteTarget(booking);
+    setCancelModalBookingId(booking.id);
   };
 
-  const onConfirmDelete = async () => {
-    if (!deleteTarget || !siteId || !firebaseUser) return;
+  const handleCancelModalConfirm = async (reason: string) => {
+    if (!cancelModalBookingId || !siteId || !firebaseUser) return;
     setDeleting(true);
     setDeleteError(null);
-
+    setDeleteSuccess(false);
     try {
       const token = await firebaseUser.getIdToken();
       const res = await fetch("/api/bookings/archive-cascade", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ siteId, bookingId: deleteTarget.id }),
+        body: JSON.stringify({
+          siteId,
+          bookingId: cancelModalBookingId,
+          cancellationReason: reason || undefined,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setDeleteError(data.error === "forbidden" ? "אין הרשאה" : data.error || "שגיאה במחיקה");
         return;
       }
-      setDeleteTarget(null);
-      // Bookings will update automatically via onSnapshot (cancelled bookings are filtered out)
+      setCancelModalBookingId(null);
+      setSelectedBooking(null);
+      setDeleteSuccess(true);
+      setTimeout(() => setDeleteSuccess(false), 500);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setDeleteError(msg);
     } finally {
       setDeleting(false);
     }
-  };
-
-  const onCancelDelete = () => {
-    setDeleteTarget(null);
-    setDeleteError(null);
   };
 
   const onRequestDeleteAllClient = () => {
@@ -631,6 +674,7 @@ export default function DaySchedulePage() {
       customerName: b1.customerName ?? "",
       customerPhone: b1.customerPhone ?? b1.phone ?? "",
       note: b1.note ?? null,
+      notes: (b1 as { notes?: string }).notes ?? b1.note ?? null,
       status: b1.status ?? "confirmed",
       price: (b1 as { price?: number }).price ?? null,
       phase1: {
@@ -672,10 +716,23 @@ export default function DaySchedulePage() {
     setSelectedBooking(null);
   };
 
-  const handleBookingFormSuccess = () => {
+  const handleBookingFormSuccess = (meta?: {
+    createdRecurring?: number;
+    failedRecurring?: number;
+    failedDetails?: Array<{ date: string; error: string }>;
+  }) => {
     setShowBookingForm(false);
     setEditInitialData(null);
     setSelectedBooking(null);
+    if (meta?.createdRecurring != null) {
+      const msg =
+        meta.failedRecurring && meta.failedRecurring > 0
+          ? `נוצרו ${meta.createdRecurring} תורים, ${meta.failedRecurring} נכשלו`
+          : `נוצרו ${meta.createdRecurring} תורים`;
+      setToastMessage(msg);
+      setToastError(meta.failedRecurring ? meta.failedRecurring > 0 : false);
+      setTimeout(() => setToastMessage(null), 4000);
+    }
   };
 
   const handleBookingFormCancel = () => {
@@ -707,43 +764,11 @@ export default function DaySchedulePage() {
     setDeleteSuccess(false);
   };
 
-  // Handle cancel from modal
-  const handleCancelFromModal = async () => {
-    if (!selectedBooking || !siteId || !firebaseUser) return;
-    
-    // Confirm cancellation
-    if (!confirm("האם אתה בטוח שברצונך לבטל את התור הזה?")) {
-      return;
-    }
-
-    setDeleting(true);
-    setDeleteError(null);
-    setDeleteSuccess(false);
-
-    try {
-      const token = await firebaseUser.getIdToken();
-      const res = await fetch("/api/bookings/archive-cascade", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ siteId, bookingId: selectedBooking.id }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setDeleteError(data.error === "forbidden" ? "אין הרשאה" : data.error || "שגיאה במחיקה");
-        return;
-      }
-      setDeleteSuccess(true);
-      // Close modal after a brief delay to show success
-      setTimeout(() => {
-        setSelectedBooking(null);
-        setDeleteSuccess(false);
-        // Bookings will update automatically via onSnapshot (cancelled bookings are filtered out)
-      }, 500);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setDeleteError(msg);
-    } finally {
-      setDeleting(false);
+  // Open cancel modal (reason then archive-cascade)
+  const handleOpenCancelModal = () => {
+    if (selectedBooking) {
+      setDeleteError(null);
+      setCancelModalBookingId(selectedBooking.id);
     }
   };
 
@@ -914,6 +939,13 @@ export default function DaySchedulePage() {
               <p className="text-sm text-red-700">{error}</p>
             </div>
           )}
+
+          {/* Closed date (holiday) banner */}
+          {bookingSettings && dateKey && isBusinessClosedAllDay({ bookingSettings, date: dateKey }) && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-right">
+              <p className="text-sm font-medium text-amber-800">העסק סגור בתאריך זה</p>
+            </div>
+          )}
         </div>
 
         {/* Timeline Schedule - Takes remaining height; z-0 so toolbar (z-40) stays on top and clickable. */}
@@ -922,24 +954,26 @@ export default function DaySchedulePage() {
             <p className="text-sm text-slate-500">טוען עובדים...</p>
           </div>
         ) : selectedWorkerId === ALL_WORKERS ? (
-          <div className="flex-1 min-h-0 relative z-0 bg-white rounded-lg shadow-sm border border-slate-200 p-6 overflow-hidden">
+          <div className={`flex-1 min-h-0 relative z-0 bg-white rounded-lg shadow-sm border border-slate-200 p-6 overflow-hidden ${bookingSettings && dateKey && isBusinessClosedAllDay({ bookingSettings, date: dateKey }) ? "opacity-75" : ""}`}>
             <MultiWorkerScheduleView
               date={dateKey}
               bookings={filteredBookings}
               workers={workers}
               startHour={startHour}
               endHour={endHour}
+              breaks={dayBreaks}
               onBookingClick={handleBookingClick}
             />
           </div>
         ) : (
-          <div className="flex-1 min-h-0 relative z-0 bg-white rounded-lg shadow-sm border border-slate-200 p-6 overflow-hidden">
+          <div className={`flex-1 min-h-0 relative z-0 bg-white rounded-lg shadow-sm border border-slate-200 p-6 overflow-hidden ${bookingSettings && dateKey && isBusinessClosedAllDay({ bookingSettings, date: dateKey }) ? "opacity-75" : ""}`}>
             <DayScheduleView
               date={dateKey}
               bookings={filteredBookings}
               selectedWorkerId={selectedWorkerId}
               startHour={startHour}
               endHour={endHour}
+              breaks={breaksForCalendar}
               onBookingClick={handleBookingClick}
             />
           </div>
@@ -1089,18 +1123,28 @@ export default function DaySchedulePage() {
                   <label className="block text-xs font-medium text-slate-500 mb-1">
                     סטטוס
                   </label>
-                  <p className="text-sm text-slate-700">
-                    {getDisplayStatus(selectedBooking, filteredBookings).label}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <StatusDot
+                      statusKey={getDisplayStatusKey(selectedBooking, filteredBookings)}
+                      size={10}
+                    />
+                    <span className="font-medium text-sm text-gray-800">
+                      {(() => {
+                        const label = getDisplayStatus(selectedBooking, filteredBookings).label;
+                        const textOnly = label.replace(/^[\p{Emoji}\s]+/u, "").trim();
+                        return textOnly || label;
+                      })()}
+                    </span>
+                  </div>
                 </div>
 
-                {selectedBooking.note && (
+                {((selectedBooking as { notes?: string }).notes || selectedBooking.note) && (
                   <div className="md:col-span-2">
                     <label className="block text-xs font-medium text-slate-500 mb-1">
-                      הערות / סיבת ביטול
+                      הערות
                     </label>
                     <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                      {selectedBooking.note}
+                      {(selectedBooking as { notes?: string }).notes || selectedBooking.note}
                     </p>
                   </div>
                 )}
@@ -1125,11 +1169,11 @@ export default function DaySchedulePage() {
               </button>
               <button
                 type="button"
-                onClick={handleCancelFromModal}
+                onClick={handleOpenCancelModal}
                 disabled={deleting || deleteSuccess}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
               >
-                {deleting ? "מבטל..." : "בטל תור"}
+                בטל תור
               </button>
               <button
                 type="button"
@@ -1237,43 +1281,24 @@ export default function DaySchedulePage() {
         </div>
       )}
 
-      {/* Remove from calendar (archive) – booking stays in client history */}
-      {deleteTarget && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" dir="rtl">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-6 text-right">
-            <h3 className="text-lg font-bold text-slate-900">הסרת תור מיומן</h3>
-            <p className="mt-2 text-sm text-slate-600">
-              להסיר את התור של {deleteTarget.customerName || "לקוח"} מתאריך {deleteTarget.date} בשעה {deleteTarget.time}? התור יוסר מהיומן אך יישמר בהיסטוריית הלקוח.
-            </p>
+      {/* Cancel booking modal: reason then archive-cascade */}
+      <CancelBookingModal
+        open={!!cancelModalBookingId}
+        bookingId={cancelModalBookingId ?? ""}
+        onConfirm={handleCancelModalConfirm}
+        onClose={() => {
+          setCancelModalBookingId(null);
+          setDeleteError(null);
+        }}
+        submitting={deleting}
+      />
 
-            {deleteError && (
-              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-sm text-red-700">שגיאה: {deleteError}</p>
-              </div>
-            )}
-
-            <div className="mt-6 flex gap-3 justify-start">
-              <button
-                type="button"
-                onClick={onCancelDelete}
-                disabled={deleting}
-                className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                ביטול
-              </button>
-
-              <button
-                type="button"
-                onClick={onConfirmDelete}
-                disabled={deleting}
-                className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {deleting ? "מסיר..." : "הסר"}
-              </button>
-            </div>
-          </div>
+      {deleteError && cancelModalBookingId && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[56] px-4 py-2 rounded-lg shadow-lg text-sm font-medium bg-red-600 text-white" dir="rtl">
+          {deleteError}
         </div>
       )}
+
     </div>
   );
 }

@@ -27,6 +27,8 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const siteId = body?.siteId as string | undefined;
     const bookingId = body?.bookingId as string | undefined;
+    const cancellationReason =
+      typeof body?.cancellationReason === "string" ? body.cancellationReason.trim() || null : null;
 
     if (!siteId || typeof siteId !== "string") {
       return NextResponse.json({ error: "missing siteId" }, { status: 400 });
@@ -46,8 +48,19 @@ export async function POST(request: Request) {
     }
 
     const ids = await resolveRelatedBookingIdsToCascadeCancel(siteId, bookingId);
-    const { successCount, failCount } = await cancelBookingsCascade(siteId, ids, "manual");
+    const groupSize = ids.length;
+    const adminOptions = {
+      cancellationReason: cancellationReason ?? undefined,
+      cancelledBy: uid,
+    };
+    const { successCount, failCount } = await cancelBookingsCascade(
+      siteId,
+      ids,
+      "manual",
+      adminOptions
+    );
 
+    console.log("[ADMIN_CANCEL]", { bookingId, groupSize, reason: cancellationReason ?? "(none)" });
     console.log("[archive-cascade]", { siteId, bookingId, resolvedCount: ids.length, successCount, failCount });
     return NextResponse.json({ archived: successCount, failed: failCount, ids });
   } catch (e) {

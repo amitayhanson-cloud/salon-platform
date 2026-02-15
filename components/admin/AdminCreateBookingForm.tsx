@@ -3,6 +3,12 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { X, GripVertical, Trash2, Plus } from "lucide-react";
 import { createAdminBooking } from "@/lib/adminBookings";
+import {
+  computeWeeklyOccurrenceDates,
+  createRecurringBookings,
+  MAX_RECURRING_OCCURRENCES,
+  type RecurrenceRule,
+} from "@/lib/recurringBookings";
 import { saveMultiServiceBooking } from "@/lib/booking";
 import {
   resolveChainWorkers,
@@ -22,6 +28,7 @@ import {
 } from "@/lib/workerServiceCompatibility";
 import { minutesToTime } from "@/lib/calendarUtils";
 import { subscribeBookingSettings } from "@/lib/firestoreBookingSettings";
+import { isClosedDate } from "@/lib/closedDates";
 import { defaultBookingSettings } from "@/types/bookingSettings";
 import type { SiteService } from "@/types/siteConfig";
 import type { PricingItem } from "@/types/pricingItem";
@@ -49,6 +56,15 @@ function getWeekdayKey(dayIndex: number): Weekday {
   return mapping[dayIndex] ?? "sun";
 }
 
+const HEBREW_WEEKDAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+
+function addMonths(ymd: string, months: number): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const date = new Date(y, (m ?? 1) - 1, d ?? 1);
+  date.setMonth(date.getMonth() + months);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 export interface ServiceSlot {
   id: string;
   service: SiteService;
@@ -62,7 +78,7 @@ export interface AdminCreateBookingFormProps {
     id: string;
     name: string;
     services?: string[];
-    availability?: { day: string; open: string | null; close: string | null }[];
+    availability?: { day: string; open: string | null; close: string | null; breaks?: { start: string; end: string }[] }[];
   }>;
   services: SiteService[];
   pricingItems: PricingItem[];
@@ -85,7 +101,11 @@ export interface AdminCreateBookingFormProps {
     secondaryDurationMin?: number;
     secondaryWorkerId?: string | null;
   }>;
-  onSuccess: () => void;
+  onSuccess: (meta?: {
+    createdRecurring?: number;
+    failedRecurring?: number;
+    failedDetails?: Array<{ date: string; error: string }>;
+  }) => void;
   onCancel: () => void;
 }
 
@@ -140,6 +160,7 @@ export default function AdminCreateBookingForm({
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [selectedClientId, setSelectedClientId] = useState("");
+  const [notes, setNotes] = useState("");
   const [workerId, setWorkerId] = useState<string>(""); // empty = auto-assign
   const [timeUpdatedByWorkerMessage, setTimeUpdatedByWorkerMessage] = useState(false);
   const slotIdRef = useRef(0);
@@ -161,6 +182,14 @@ export default function AdminCreateBookingForm({
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Recurring (single-slot only)
+  const [recurringEnabled, setRecurringEnabled] = useState(false);
+  const [recurringMode, setRecurringMode] = useState<"endDate" | "count">("count");
+  const defaultRecurringEndDate = useMemo(() => addMonths(date, 3), [date]);
+  const [recurringEndDate, setRecurringEndDate] = useState(defaultRecurringEndDate);
+  const [recurringCount, setRecurringCount] = useState(10);
+  const [recurringProgress, setRecurringProgress] = useState<{ current: number; total: number } | null>(null);
 
   useEffect(() => {
     if (!siteId) return;
@@ -274,6 +303,32 @@ export default function AdminCreateBookingForm({
     [slots, services, pricingItems]
   );
 
+  const occurrences = useMemo(() => {
+    if (!recurringEnabled || chain.length !== 1) return [];
+    return computeWeeklyOccurrenceDates(date, time, {
+      endDate: recurringMode === "endDate" ? recurringEndDate : undefined,
+      count: recurringMode === "count" ? recurringCount : undefined,
+      maxOccurrences: MAX_RECURRING_OCCURRENCES,
+    });
+  }, [recurringEnabled, chain.length, date, time, recurringMode, recurringEndDate, recurringCount]);
+  const recurringValidationError = useMemo(() => {
+    if (!recurringEnabled) return null;
+    if (recurringMode === "endDate" && recurringEndDate < date)
+      return "תאריך סיום חייב להיות אחרי תאריך ההתחלה";
+    if (recurringMode === "count" && (recurringCount < 1 || !Number.isInteger(recurringCount)))
+      return "מספר חזרות חייב להיות 1 ומעלה";
+    if (recurringMode === "count" && recurringCount > MAX_RECURRING_OCCURRENCES)
+      return `מקסימום ${MAX_RECURRING_OCCURRENCES} חזרות`;
+    if (occurrences.length > MAX_RECURRING_OCCURRENCES)
+      return `מקסימום ${MAX_RECURRING_OCCURRENCES} תורים`;
+    return null;
+  }, [recurringEnabled, recurringMode, date, recurringEndDate, recurringCount, occurrences.length]);
+  const weekdayLabel = useMemo(() => {
+    const [y, m, d] = date.split("-").map(Number);
+    const day = new Date(y, (m ?? 1) - 1, d ?? 1).getDay();
+    return HEBREW_WEEKDAYS[day] ?? "";
+  }, [date]);
+
   // Workers eligible for the first (phase 1) service only — used for dropdown and slot validity (no availability here)
   const eligibleWorkersForMainService = useMemo(() => {
     if (chain.length === 0) return workers;
@@ -335,6 +390,7 @@ export default function AdminCreateBookingForm({
 
   const availableTimeSlots = useMemo(() => {
     if (chain.length === 0 || !businessWindow) return [];
+    if (isClosedDate(bookingSettings, date)) return [];
 
     // If a worker is selected, they must be eligible for the first service
     if (workerId && chain.length >= 1) {
@@ -356,6 +412,9 @@ export default function AdminCreateBookingForm({
     for (let m = openMin; m <= lastStartMin; m += SLOT_INTERVAL) {
       generated.push(minutesToTime(m));
     }
+    // Break filtering is done in computeAvailableSlots (service segments only; wait gaps may cross breaks).
+    const candidateTimes = generated;
+    const breaks = dayConfig?.breaks;
 
     const dateStr = date;
 
@@ -381,6 +440,12 @@ export default function AdminCreateBookingForm({
     };
 
     const preferredWorkerId = !workerId || workerId.trim() === "" ? null : workerId;
+    const weekdayKey = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][selectedDate.getDay()] as string;
+    const workerBreaksByWorkerId: Record<string, { start: string; end: string }[] | undefined> = {};
+    for (const w of workers) {
+      const dayConfig = w.availability?.find((a) => a.day === weekdayKey);
+      if (dayConfig && "breaks" in dayConfig && dayConfig.breaks?.length) workerBreaksByWorkerId[w.id] = dayConfig.breaks;
+    }
     const slots = computeAvailableSlots({
       date: selectedDate,
       dateStr,
@@ -390,7 +455,9 @@ export default function AdminCreateBookingForm({
       bookingsForDate,
       workerWindowByWorkerId,
       businessWindow,
-      candidateTimes: generated,
+      candidateTimes,
+      breaks,
+      workerBreaksByWorkerId,
     });
 
     if (process.env.NODE_ENV === "development") {
@@ -479,9 +546,12 @@ export default function AdminCreateBookingForm({
     if (previewSlots === null && chain.length > 0) {
       next.worker = "אין זמינות להשלמת התור. נא לשנות מטפל או שעה.";
     }
+    if (recurringEnabled && recurringValidationError) {
+      next.recurring = recurringValidationError;
+    }
     setErrors(next);
     return Object.keys(next).length === 0;
-  }, [date, time, customerName, customerPhone, slots, chain.length, workerId, previewSlots]);
+  }, [date, time, customerName, customerPhone, slots, chain.length, workerId, previewSlots, recurringEnabled, recurringValidationError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -540,7 +610,7 @@ export default function AdminCreateBookingForm({
           };
         }
 
-        await createAdminBooking(siteId, {
+        const payload = {
           customerName: customerName.trim(),
           customerPhone: customerPhone.trim(),
           date,
@@ -557,9 +627,34 @@ export default function AdminCreateBookingForm({
           },
           phase2: phase2Payload,
           note: null,
-          status: "confirmed",
+          notes: notes.trim() || null,
+          status: "confirmed" as const,
           price: null,
-        });
+        };
+        if (recurringEnabled && occurrences.length > 0) {
+          setRecurringProgress(null);
+          const rule: RecurrenceRule = {
+            startDate: date,
+            time,
+            mode: recurringMode,
+            endDate: recurringMode === "endDate" ? recurringEndDate : undefined,
+            count: recurringMode === "count" ? recurringCount : undefined,
+          };
+          const { createdIds, failedDates } = await createRecurringBookings(
+            siteId,
+            payload,
+            rule,
+            (current, total) => setRecurringProgress({ current, total })
+          );
+          setRecurringProgress(null);
+          onSuccess({
+            createdRecurring: createdIds.length,
+            failedRecurring: failedDates.length,
+            failedDetails: failedDates.length > 0 ? failedDates.map((f) => ({ date: f.date, error: f.error })) : undefined,
+          });
+          return;
+        }
+        await createAdminBooking(siteId, payload);
       } else if (chain.length === 1 && !workerId) {
         // "ללא העדפה": resolve at selected time, then save multi-service (never store preferredWorkerId in DB)
         const resolved = resolveChainWorkers({
@@ -627,12 +722,12 @@ export default function AdminCreateBookingForm({
       dir="rtl"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center">
-        <h3 id="admin-create-booking-title" className="text-lg font-bold text-slate-900">הוסף תור</h3>
+      <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center gap-2">
+        <h3 id="admin-create-booking-title" className="text-lg font-bold text-slate-900 truncate">הוסף תור</h3>
         <button
           type="button"
           onClick={onCancel}
-          className="p-1 hover:bg-slate-100 rounded"
+          className="p-1 hover:bg-slate-100 rounded shrink-0"
           aria-label="סגור"
         >
           <X className="w-5 h-5 text-slate-600" />
@@ -698,6 +793,20 @@ export default function AdminCreateBookingForm({
               <p className="text-xs text-red-600 mt-0.5">{errors.customerPhone}</p>
             )}
           </div>
+        </div>
+
+        {/* Notes */}
+        <div className="space-y-1">
+          <label className="block text-sm font-medium text-slate-700">הערות</label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            maxLength={1000}
+            rows={3}
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right resize-y"
+            placeholder="הוסף/י הערות להזמנה..."
+          />
+          <p className="text-xs text-slate-500">{1000 - notes.length} תווים נותרו</p>
         </div>
 
         {/* Services */}
@@ -881,6 +990,7 @@ export default function AdminCreateBookingForm({
             />
             {errors.date && <p className="text-xs text-red-600 mt-0.5">{errors.date}</p>}
           </div>
+
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">שעת התחלה *</label>
             <select
@@ -914,6 +1024,79 @@ export default function AdminCreateBookingForm({
             {errors.time && <p className="text-xs text-red-600 mt-0.5">{errors.time}</p>}
           </div>
         </div>
+
+        {chain.length === 1 && (
+          <label className="flex items-center gap-2 cursor-pointer py-1">
+            <input
+              type="checkbox"
+              checked={recurringEnabled}
+              onChange={(e) => setRecurringEnabled(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-300 text-sky-500 shrink-0"
+            />
+            <span className="text-sm font-medium text-slate-700">רצף</span>
+          </label>
+        )}
+
+        {chain.length === 1 && recurringEnabled && (
+          <div className="border border-slate-200 rounded-lg p-4 bg-slate-50/50 space-y-3">
+            <p className="text-xs text-slate-500">כל שבוע, יום {weekdayLabel} בשעה {time}</p>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="radio"
+                  name="recurringMode"
+                  checked={recurringMode === "count"}
+                  onChange={() => setRecurringMode("count")}
+                  className="text-sky-500"
+                />
+                <span className="text-sm">מספר חזרות</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="radio"
+                  name="recurringMode"
+                  checked={recurringMode === "endDate"}
+                  onChange={() => setRecurringMode("endDate")}
+                  className="text-sky-500"
+                />
+                <span className="text-sm">תאריך סיום</span>
+              </label>
+            </div>
+            {recurringMode === "count" ? (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">מספר חזרות</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={MAX_RECURRING_OCCURRENCES}
+                  value={recurringCount}
+                  onChange={(e) => setRecurringCount(Math.max(1, Math.min(MAX_RECURRING_OCCURRENCES, parseInt(e.target.value, 10) || 1)))}
+                  className="w-24 px-2 py-1.5 border border-slate-300 rounded-lg text-right"
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">תאריך סיום</label>
+                <input
+                  type="date"
+                  value={recurringEndDate}
+                  onChange={(e) => setRecurringEndDate(e.target.value)}
+                  min={date}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
+                />
+              </div>
+            )}
+            {occurrences.length > 0 && (
+              <div className="text-sm text-slate-700 pt-1 border-t border-slate-200">
+                <p className="font-medium">ייווצרו {occurrences.length} תורים</p>
+                <p className="text-xs text-slate-500">
+                  מ־{date} עד {recurringMode === "endDate" ? recurringEndDate : occurrences[occurrences.length - 1]?.date ?? date}, כל יום {weekdayLabel} בשעה {time}
+                </p>
+              </div>
+            )}
+            {errors.recurring && <p className="text-xs text-red-600">{errors.recurring}</p>}
+          </div>
+        )}
 
         {/* Preview */}
         {previewSlots && previewSlots.length > 0 && (
@@ -952,7 +1135,11 @@ export default function AdminCreateBookingForm({
             disabled={saving || (previewSlots === null && chain.length > 0)}
             className="px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 disabled:opacity-50"
           >
-            {saving ? "שומר…" : "צור תור"}
+            {recurringProgress
+              ? `יוצר ${recurringProgress.current}/${recurringProgress.total}…`
+              : saving
+                ? "שומר…"
+                : "צור תור"}
           </button>
         </div>
       </form>

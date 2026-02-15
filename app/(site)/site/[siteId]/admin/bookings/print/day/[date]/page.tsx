@@ -9,9 +9,16 @@ import { query, where, orderBy, onSnapshot } from "firebase/firestore";
 import { bookingsCollection, workerDoc, workersCollection } from "@/lib/firestorePaths";
 import { clientDocRef } from "@/lib/firestoreClientRefs";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
+import { subscribeBookingSettings } from "@/lib/firestoreBookingSettings";
+import { isBusinessClosedAllDay } from "@/lib/closedDates";
+import type { BookingSettings } from "@/types/bookingSettings";
 import { normalizeBooking, isBookingCancelled, isBookingArchived, type NormalizedBooking } from "@/lib/normalizeBooking";
-import WorkerDayPrintView, { type PrintBookingRow } from "@/components/admin/WorkerDayPrintView";
+import PrintDayGridView from "@/components/admin/PrintDayGridView";
+import { type PrintBookingRow } from "@/components/admin/WorkerDayPrintView";
 import type { ChemicalCardPrintData } from "@/components/admin/WorkerDayPrintView";
+
+/** Set to true to close the print tab after user finishes/cancels print (tab was opened with window.open). */
+const ENABLE_CLOSE_TAB_AFTER_PRINT = false;
 
 function normalizePhone(phone: string): string {
   return phone.replace(/\s|-|\(|\)/g, "");
@@ -31,6 +38,7 @@ export default function PrintDayPage() {
   const dateKey = params?.date as string;
   const workerId = searchParams?.get("workerId");
   const printedRef = useRef(false);
+  const printRootRef = useRef<HTMLDivElement | null>(null);
 
   const [config, setConfig] = useState<{ salonName: string } | null>(null);
   const [worker, setWorker] = useState<{ id: string; name: string } | null>(null);
@@ -39,6 +47,7 @@ export default function PrintDayPage() {
   const [chemicalCardsMap, setChemicalCardsMap] = useState<Record<string, ChemicalCardPrintData | null>>({});
   const [chemicalCardsReady, setChemicalCardsReady] = useState(false);
   const [workersLoaded, setWorkersLoaded] = useState(false);
+  const [bookingSettings, setBookingSettings] = useState<BookingSettings | null>(null);
 
   const validSingleWorker = workerId && workerId !== "all";
   const validAllWorkers = !workerId || workerId === "all";
@@ -50,6 +59,16 @@ export default function PrintDayPage() {
       siteId,
       (cfg) => setConfig(cfg ? { salonName: cfg.salonName } : null),
       (e) => console.error("[PrintDay] config error", e)
+    );
+  }, [siteId]);
+
+  // Subscribe to booking settings (for closed-date banner)
+  useEffect(() => {
+    if (!siteId) return;
+    return subscribeBookingSettings(
+      siteId,
+      (s) => setBookingSettings(s),
+      (e) => console.error("[PrintDay] booking settings error", e)
     );
   }, [siteId]);
 
@@ -228,41 +247,146 @@ export default function PrintDayPage() {
     chemicalCardsReady &&
     (validSingleWorker ? worker != null : validAllWorkers && workersLoaded);
 
-  // Auto-print when data is ready (once)
+  // Print route: no scroll – force html/body and app shell to non-scrolling
   useEffect(() => {
-    if (!ready || printedRef.current) return;
-    printedRef.current = true;
-    const timeoutId = setTimeout(() => window.print(), 400);
-    return () => clearTimeout(timeoutId);
-  }, [ready]);
+    if (typeof document === "undefined") return;
+    const html = document.documentElement;
+    const body = document.body;
+    html.classList.add("print-route-active");
+    body.classList.add("print-route-active");
+    const prevHtml = { overflow: html.style.overflow, height: html.style.height, minHeight: html.style.minHeight };
+    const prevBody = { overflow: body.style.overflow, height: body.style.height, minHeight: body.style.minHeight };
+    html.style.overflow = "visible";
+    html.style.height = "auto";
+    html.style.minHeight = "0";
+    body.style.overflow = "visible";
+    body.style.height = "auto";
+    body.style.minHeight = "0";
+    const appRoot = document.getElementById("__next");
+    const prevRoot = appRoot ? { overflow: appRoot.style.overflow, height: appRoot.style.height, minHeight: appRoot.style.minHeight } : null;
+    if (appRoot) {
+      appRoot.classList.add("print-route-active");
+      appRoot.style.overflow = "visible";
+      appRoot.style.height = "auto";
+      appRoot.style.minHeight = "0";
+    }
+    return () => {
+      html.classList.remove("print-route-active");
+      body.classList.remove("print-route-active");
+      if (appRoot) appRoot.classList.remove("print-route-active");
+      html.style.overflow = prevHtml.overflow;
+      html.style.height = prevHtml.height;
+      html.style.minHeight = prevHtml.minHeight;
+      body.style.overflow = prevBody.overflow;
+      body.style.height = prevBody.height;
+      body.style.minHeight = prevBody.minHeight;
+      if (appRoot && prevRoot) {
+        appRoot.style.overflow = prevRoot.overflow;
+        appRoot.style.height = prevRoot.height;
+        appRoot.style.minHeight = prevRoot.minHeight;
+      }
+    };
+  }, []);
 
-  // All workers: render one section per worker (all-workers-print so print CSS flows all sections)
+  // Content ready = calendar is rendered (not loading/empty)
+  const contentReady =
+    ready &&
+    ((validAllWorkers && workersLoaded && workers.length > 0) || (validSingleWorker && worker != null));
+
+  // After layout is stable: measure, set scale to fit one A4 page, then open print dialog
+  useEffect(() => {
+    if (typeof window === "undefined" || !contentReady || printedRef.current) return;
+
+    const timeoutId = setTimeout(() => {
+      const root = printRootRef.current;
+      if (!root || printedRef.current) return;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (printedRef.current) return;
+          const contentHeight = root.scrollHeight;
+          // A4 portrait: 297mm; 10mm top + 10mm bottom margin → 277mm printable height. At 96dpi: ~1046px.
+          const printableHeightPx = 1040;
+          const scale = contentHeight <= 0 ? 1 : Math.min(1, printableHeightPx / contentHeight);
+          root.style.setProperty("--print-scale", String(scale));
+          printedRef.current = true;
+          requestAnimationFrame(() => {
+            window.print();
+          });
+        });
+      });
+    }, 350);
+
+    return () => clearTimeout(timeoutId);
+  }, [contentReady]);
+
+  // Optional: close print tab after user finishes/cancels print
+  useEffect(() => {
+    if (!ENABLE_CLOSE_TAB_AFTER_PRINT || typeof window === "undefined") return;
+    const onAfterPrint = () => {
+      window.close();
+    };
+    window.addEventListener("afterprint", onAfterPrint);
+    return () => window.removeEventListener("afterprint", onAfterPrint);
+  }, []);
+
+  const printAndScreenStyles = `
+    html.print-route-active, body.print-route-active {
+      height: auto !important; min-height: 0 !important; overflow: visible !important;
+    }
+    #__next.print-route-active { height: auto !important; min-height: 0 !important; overflow: visible !important; }
+    .printRoot, .print-route-root { overflow: visible !important; height: auto !important; min-height: 0 !important; }
+    .print-page-root { overflow: visible; height: auto; min-height: 0; background: #fff; }
+    .print-day-grid-root { width: 100%; max-width: 190mm; }
+    .print-day-grid-root, .print-day-grid-root * { box-sizing: border-box; }
+    @media print {
+      @page { size: A4 portrait; margin: 10mm; }
+      html.print-route-active, body.print-route-active { height: auto !important; min-height: 0 !important; overflow: visible !important; }
+      body * { visibility: hidden; }
+      .print-route-root, .print-route-root *,
+      .print-page-root, .print-page-root * { visibility: visible; }
+      .print-route-root, .print-page-root {
+        position: absolute !important; left: 0; top: 0; width: 100% !important;
+        padding: 0; margin: 0 !important; background: white !important;
+        overflow: visible !important; height: auto !important; min-height: 0 !important;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+      }
+      .printRoot {
+        transform: scale(var(--print-scale, 1));
+        transform-origin: top center;
+      }
+      .print-day-grid-root, .print-day-grid-root * { break-inside: avoid; page-break-inside: avoid; }
+      .print-day-grid-root .print-grid-section { break-inside: avoid; page-break-inside: avoid; }
+      header, nav, .admin-header, [role="banner"], button:not(.print-keep) { display: none !important; visibility: hidden !important; }
+    }
+  `;
+
+  const closedBanner =
+    dateKey && bookingSettings && isBusinessClosedAllDay({ bookingSettings, date: dateKey }) ? (
+      <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-right print:mb-2">
+        <p className="text-sm font-medium text-amber-800">העסק סגור בתאריך זה</p>
+      </div>
+    ) : null;
+
+  // All workers: single grid with all worker columns
   if (validAllWorkers) {
     return (
-      <div className="worker-day-print-root all-workers-print" dir="rtl" style={{ paddingBottom: "2rem" }}>
-        <style dangerouslySetInnerHTML={{ __html: `
-          @media print {
-            .worker-day-print-root .print-section { break-inside: avoid; page-break-inside: avoid; }
-          }
-        ` }} />
+      <div ref={printRootRef} className="printRoot print-page-root" dir="rtl" style={{ paddingBottom: "2rem" }} data-print-route>
+        <style dangerouslySetInnerHTML={{ __html: printAndScreenStyles }} />
+        {closedBanner}
         {!workersLoaded ? (
-          <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+          <div className="min-h-screen flex items-center justify-center bg-white p-6">
             <p className="text-slate-700 font-medium">טוען...</p>
           </div>
-        ) : bookingsPerWorker.length === 0 ? (
-          <div className="p-8 text-center text-slate-600">אין עובדים או תורים ליום זה.</div>
+        ) : workers.length === 0 ? (
+          <div className="p-8 text-center text-slate-600 bg-white">אין עובדים.</div>
         ) : (
-          bookingsPerWorker.map(({ worker: w, rows }) => (
-            <div key={w.id} className="print-section">
-              <WorkerDayPrintView
-                siteName={config?.salonName ?? "לוח זמנים"}
-                dayISO={dateKey}
-                worker={w}
-                bookingsForWorkerDay={rows}
-                chemicalCardsMap={chemicalCardsMap}
-              />
-            </div>
-          ))
+          <PrintDayGridView
+            siteName={config?.salonName ?? "לוח זמנים"}
+            dayISO={dateKey}
+            workers={workers}
+            bookings={bookings}
+            chemicalCardsMap={chemicalCardsMap}
+          />
         )}
       </div>
     );
@@ -270,7 +394,7 @@ export default function PrintDayPage() {
 
   if (!validSingleWorker) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6" dir="rtl">
+      <div className="min-h-screen flex items-center justify-center bg-white p-6" dir="rtl">
         <div className="bg-white rounded-xl shadow border border-slate-200 p-8 max-w-md text-center">
           <p className="text-slate-700 font-medium">בחר מטפל להדפסה</p>
           <p className="text-sm text-slate-500 mt-2">
@@ -283,7 +407,7 @@ export default function PrintDayPage() {
 
   if (!worker) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6" dir="rtl">
+      <div className="min-h-screen flex items-center justify-center bg-white p-6" dir="rtl">
         <div className="bg-white rounded-xl shadow border border-slate-200 p-8 max-w-md text-center">
           <p className="text-slate-700 font-medium">טוען...</p>
         </div>
@@ -291,13 +415,22 @@ export default function PrintDayPage() {
     );
   }
 
+  const bookingsForGrid = useMemo(
+    () => bookings.filter((b) => b.workerId === workerId),
+    [bookings, workerId]
+  );
+
   return (
-    <WorkerDayPrintView
-      siteName={config?.salonName ?? "לוח זמנים"}
-      dayISO={dateKey}
-      worker={worker}
-      bookingsForWorkerDay={bookingsForWorker}
-      chemicalCardsMap={chemicalCardsMap}
-    />
+    <div ref={printRootRef} className="printRoot print-page-root" dir="rtl" data-print-route>
+      <style dangerouslySetInnerHTML={{ __html: printAndScreenStyles }} />
+      {closedBanner}
+      <PrintDayGridView
+        siteName={config?.salonName ?? "לוח זמנים"}
+        dayISO={dateKey}
+        workers={[worker]}
+        bookings={bookingsForGrid}
+        chemicalCardsMap={chemicalCardsMap}
+      />
+    </div>
   );
 }

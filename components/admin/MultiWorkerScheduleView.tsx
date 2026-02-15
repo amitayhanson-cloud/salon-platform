@@ -63,6 +63,8 @@ export type RenderBlock = {
   endAt: Date;
   clientName: string;
   serviceName: string;
+  /** Booking notes (הערות) for calendar card display only */
+  notes?: string | null;
   color?: string;
   status: string;
   isSecondary: boolean;
@@ -131,10 +133,7 @@ export function bookingToBlock(
   const serviceName = booking.serviceName ?? (booking as { serviceId?: string }).serviceId ?? "—";
   const serviceType = booking.serviceType ?? "";
   const displayName = serviceType ? `${serviceName} / ${serviceType}` : serviceName;
-  const phase1Label = " (שלב 1 (ראשוני))";
-  const phase2Label = " (שלב 2 (המשך))";
-  const phaseLabel = phase === 2 ? phase2Label : phase1Label;
-  const serviceNameWithPhase = displayName + phaseLabel;
+  const notes = (booking as { notes?: string }).notes ?? booking.note ?? null;
 
   if (phase === 1) {
     endAt = new Date(startAt.getTime() + durationMin * 60 * 1000);
@@ -152,7 +151,8 @@ export function bookingToBlock(
     startAt,
     endAt,
     clientName,
-    serviceName: serviceNameWithPhase,
+    serviceName: displayName,
+    notes: notes && String(notes).trim() ? String(notes).trim() : null,
     color: booking.serviceColor ?? undefined,
     status: booking.status ?? "confirmed",
     isSecondary: phase === 2,
@@ -166,12 +166,16 @@ interface Worker {
   name: string;
 }
 
+export type BreakRange = { start: string; end: string };
+
 interface MultiWorkerScheduleViewProps {
   date: string; // YYYY-MM-DD
   bookings: Booking[];
   workers: Worker[]; // All workers to render columns for
   startHour?: number; // Default 8
   endHour?: number; // Default 20
+  /** Break ranges to show as greyed-out blocks (business-level breaks). */
+  breaks?: BreakRange[];
   onBookingClick?: (booking: Booking) => void; // Callback when booking block is clicked
 }
 
@@ -186,6 +190,7 @@ export default function MultiWorkerScheduleView({
   workers,
   startHour = 8,
   endHour = 20,
+  breaks,
   onBookingClick,
 }: MultiWorkerScheduleViewProps) {
   const confirmedBookings = useMemo(() => bookings.filter((b) => !isBookingCancelled(b)), [bookings]);
@@ -239,6 +244,7 @@ export default function MultiWorkerScheduleView({
             workers={workersToRender}
             startHour={startHour}
             endHour={endHour}
+            breaks={breaks}
             onBookingClick={
               onBookingClick
                 ? (b: unknown): void => {

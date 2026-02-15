@@ -6,6 +6,7 @@
 import { canWorkerPerformService, workersWhoCanPerformService, workerCanDoService } from "./workerServiceCompatibility";
 import { getWorkerBusyIntervals, getConflictingBusyInterval, overlaps } from "./bookingPhases";
 import { resolvePhase2Worker } from "./phase2Assignment";
+import { anyServiceSegmentOverlapsBreaks, slotOverlapsBreaks, type BreakRange } from "./breaks";
 import type { SiteService } from "@/types/siteConfig";
 import type { PricingItem } from "@/types/pricingItem";
 
@@ -91,6 +92,8 @@ export interface ResolveChainWorkersParams {
   preferredWorkerId?: string | null;
   workerWindowByWorkerId: Record<string, { startMin: number; endMin: number } | null>;
   businessWindow: { startMin: number; endMin: number } | null;
+  /** Worker-specific breaks for this day (key = workerId). Same segment-based logic as business breaks. */
+  workerBreaksByWorkerId?: Record<string, BreakRange[] | undefined>;
 }
 
 /**
@@ -366,6 +369,10 @@ export interface SlotValidNoPreferenceParams {
   bookingsForDate: ResolveChainWorkersParams["bookingsForDate"];
   workerWindowByWorkerId: Record<string, { startMin: number; endMin: number } | null>;
   businessWindow: { startMin: number; endMin: number } | null;
+  /** Break ranges: only service segments are checked; wait gaps are ignored. */
+  breaks?: BreakRange[] | undefined;
+  /** Worker-specific breaks for this day (key = workerId). Same segment-based logic. */
+  workerBreaksByWorkerId?: Record<string, BreakRange[] | undefined>;
 }
 
 export interface SlotValidNoPreferenceResult {
@@ -395,6 +402,8 @@ export function slotIsValidForNoPreference(params: SlotValidNoPreferenceParams):
     bookingsForDate,
     workerWindowByWorkerId,
     businessWindow,
+    breaks,
+    workerBreaksByWorkerId,
   } = params;
 
   const slots = computeChainSlots(chain, startAt);
@@ -424,6 +433,21 @@ export function slotIsValidForNoPreference(params: SlotValidNoPreferenceParams):
     }
   }
 
+  // Breaks: only service segments are checked; wait gaps are ignored.
+  if (breaks?.length) {
+    const segments = items.map((it) => ({ startMin: it.startMin, endMin: it.endMin }));
+    if (anyServiceSegmentOverlapsBreaks(segments, breaks)) {
+      const itemIndex = items.findIndex((it) => slotOverlapsBreaks(it.startMin, it.endMin, breaks));
+      const rejectIndex = itemIndex >= 0 ? itemIndex : 0;
+      return {
+        valid: false,
+        rejectItemIndex: rejectIndex,
+        rejectReason: "break",
+        rejectServiceName: items[rejectIndex]?.serviceName ?? items[rejectIndex]?.serviceId ?? undefined,
+      };
+    }
+  }
+
   for (let i = 0; i < items.length; i++) {
     const item = items[i]!;
     let eligible = workersWhoCanPerformService(workers, item.serviceName);
@@ -438,7 +462,7 @@ export function slotIsValidForNoPreference(params: SlotValidNoPreferenceParams):
         rejectServiceName: item.serviceName || item.serviceId || undefined,
       };
     }
-    const availableEligible = eligible.filter((w) =>
+    let availableEligible = eligible.filter((w) =>
       isWorkerAvailableInSlot(
         w.id,
         item.startMin,
@@ -449,6 +473,12 @@ export function slotIsValidForNoPreference(params: SlotValidNoPreferenceParams):
         businessWindow
       )
     );
+    // Worker breaks: exclude workers whose break overlaps this service segment (same logic as business breaks).
+    if (workerBreaksByWorkerId && availableEligible.length > 0) {
+      availableEligible = availableEligible.filter(
+        (w) => !slotOverlapsBreaks(item.startMin, item.endMin, workerBreaksByWorkerId[w.id])
+      );
+    }
     if (availableEligible.length === 0) {
       let rejectOverlappingBooking: { bookingId?: string; workerId: string; startMin: number; endMin: number } | undefined;
       const firstEligible = eligible[0];
@@ -482,6 +512,10 @@ export interface ComputeAvailableSlotsParams {
   businessWindow: { startMin: number; endMin: number } | null;
   /** Candidate time strings "HH:mm" to filter (e.g. from business hours + slot interval) */
   candidateTimes: string[];
+  /** Break ranges: only service segments are checked; wait gaps are ignored. */
+  breaks?: BreakRange[] | undefined;
+  /** Worker-specific breaks for this day (key = workerId). Same segment-based logic. */
+  workerBreaksByWorkerId?: Record<string, BreakRange[] | undefined>;
 }
 
 /**
@@ -501,6 +535,8 @@ export function computeAvailableSlots(params: ComputeAvailableSlotsParams): stri
     workerWindowByWorkerId,
     businessWindow,
     candidateTimes,
+    breaks,
+    workerBreaksByWorkerId,
   } = params;
 
   const debug = process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true";
@@ -523,6 +559,8 @@ export function computeAvailableSlots(params: ComputeAvailableSlotsParams): stri
         bookingsForDate,
         workerWindowByWorkerId,
         businessWindow,
+        breaks,
+        workerBreaksByWorkerId,
       });
       if (result.valid) {
         kept.push(time);
@@ -556,6 +594,8 @@ export function computeAvailableSlots(params: ComputeAvailableSlotsParams): stri
   }
 
   const preferredId = preferredWorkerId!.trim();
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dayStart = new Date(y, m - 1, d, 0, 0, 0, 0);
   const filtered = candidateTimes.filter((time) => {
     const [hh, mm] = time.split(":").map(Number);
     const startAt = new Date(date);
@@ -569,8 +609,36 @@ export function computeAvailableSlots(params: ComputeAvailableSlotsParams): stri
       preferredWorkerId: preferredId,
       workerWindowByWorkerId,
       businessWindow,
+      workerBreaksByWorkerId,
     });
-    const kept = resolved !== null;
+    if (resolved === null) return false;
+    // Business breaks: only service segments are checked; wait gaps are ignored.
+    if (breaks?.length) {
+      const segments: { startMin: number; endMin: number }[] = [];
+      for (const slot of resolved) {
+        const startMin = Math.round((slot.startAt.getTime() - dayStart.getTime()) / (60 * 1000));
+        segments.push({ startMin, endMin: startMin + slot.durationMin });
+        if (slot.followUp?.serviceName) {
+          const fuStartMin = Math.round((slot.followUp.startAt.getTime() - dayStart.getTime()) / (60 * 1000));
+          segments.push({ startMin: fuStartMin, endMin: fuStartMin + slot.followUp.durationMin });
+        }
+      }
+      if (anyServiceSegmentOverlapsBreaks(segments, breaks)) return false;
+    }
+    // Worker breaks: each segment checked against the assigned worker's breaks (same logic).
+    if (workerBreaksByWorkerId) {
+      for (const slot of resolved) {
+        const startMin = Math.round((slot.startAt.getTime() - dayStart.getTime()) / (60 * 1000));
+        const endMin = startMin + slot.durationMin;
+        if (slot.workerId && slotOverlapsBreaks(startMin, endMin, workerBreaksByWorkerId[slot.workerId])) return false;
+        if (slot.followUp?.serviceName && slot.followUp.workerId) {
+          const fuStartMin = Math.round((slot.followUp.startAt.getTime() - dayStart.getTime()) / (60 * 1000));
+          const fuEndMin = fuStartMin + slot.followUp.durationMin;
+          if (slotOverlapsBreaks(fuStartMin, fuEndMin, workerBreaksByWorkerId[slot.followUp.workerId])) return false;
+        }
+      }
+    }
+    const kept = true;
     if (debug && kept && resolved) {
       const workerIds = [...new Set(resolved.map((s) => s.workerId).filter(Boolean))] as string[];
       const fuWorkers = resolved.map((s) => s.followUp?.workerId).filter(Boolean) as string[];
@@ -612,6 +680,7 @@ export function resolveChainWorkers(params: ResolveChainWorkersParams): ChainSlo
     preferredWorkerId,
     workerWindowByWorkerId,
     businessWindow,
+    workerBreaksByWorkerId,
   } = params;
 
   const slots = computeChainSlots(chain, startAt);
@@ -665,7 +734,7 @@ export function resolveChainWorkers(params: ResolveChainWorkersParams): ChainSlo
 
     const preferredEligible = preferredWorker && (canWorkerPerformService(preferredWorker, serviceNameTrim) || (!!serviceIdRaw && canWorkerPerformService(preferredWorker, serviceIdRaw)));
     if (preferredWorkerId && preferredEligible) {
-      const available = isWorkerAvailableInSlot(
+      let available = isWorkerAvailableInSlot(
         preferredWorkerId,
         slotStartMinutes,
         slotEndMinutes,
@@ -674,6 +743,9 @@ export function resolveChainWorkers(params: ResolveChainWorkersParams): ChainSlo
         workerWindowByWorkerId,
         businessWindow
       );
+      if (available && workerBreaksByWorkerId?.[preferredWorkerId]?.length) {
+        available = !slotOverlapsBreaks(slotStartMinutes, slotEndMinutes, workerBreaksByWorkerId[preferredWorkerId]);
+      }
       if (available) {
         workerId = preferredWorkerId;
         workerName = preferredWorker!.name ?? null;
@@ -705,7 +777,7 @@ export function resolveChainWorkers(params: ResolveChainWorkersParams): ChainSlo
         return null;
       }
       for (const w of eligible) {
-        const available = isWorkerAvailableInSlot(
+        let available = isWorkerAvailableInSlot(
           w.id,
           slotStartMinutes,
           slotEndMinutes,
@@ -714,6 +786,9 @@ export function resolveChainWorkers(params: ResolveChainWorkersParams): ChainSlo
           workerWindowByWorkerId,
           businessWindow
         );
+        if (available && workerBreaksByWorkerId?.[w.id]?.length) {
+          available = !slotOverlapsBreaks(slotStartMinutes, slotEndMinutes, workerBreaksByWorkerId[w.id]);
+        }
         if (available) {
           workerId = w.id;
           workerName = w.name;
@@ -768,6 +843,7 @@ export function resolveChainWorkers(params: ResolveChainWorkersParams): ChainSlo
         bookingsForDate,
         workerWindowByWorkerId,
         businessWindow: businessWindow ?? undefined,
+        workerBreaksByWorkerId,
       });
       if (!phase2Worker) {
         if (debug) {

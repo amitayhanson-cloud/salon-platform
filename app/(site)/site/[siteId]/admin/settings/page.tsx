@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import DeleteAccountButton from "@/components/admin/DeleteAccountButton";
@@ -594,12 +594,12 @@ function AdminBookingTab({
     const day = { ...updated.openingHours[dayIndex] };
     const isClosed = !day.open && !day.close;
     if (isClosed) {
-      // set default open-close if currently closed
       day.open = "09:00";
       day.close = "18:00";
     } else {
       day.open = null;
       day.close = null;
+      day.breaks = undefined;
     }
     updated.openingHours = [
       ...updated.openingHours.slice(0, dayIndex),
@@ -607,6 +607,65 @@ function AdminBookingTab({
       ...updated.openingHours.slice(dayIndex + 1),
     ];
     onChange(updated);
+  };
+
+  const updateDayBreaks = (dayIndex: number, breaks: { start: string; end: string }[]) => {
+    const updated = { ...state };
+    const day = { ...updated.openingHours[dayIndex], breaks: breaks.length > 0 ? breaks : undefined };
+    updated.openingHours = [
+      ...updated.openingHours.slice(0, dayIndex),
+      day,
+      ...updated.openingHours.slice(dayIndex + 1),
+    ];
+    onChange(updated);
+  };
+
+  const addBreak = (dayIndex: number) => {
+    const day = state.openingHours[dayIndex];
+    const open = day?.open ?? "09:00";
+    const close = day?.close ?? "18:00";
+    const existing = day?.breaks ?? [];
+    const [oh, om] = open.split(":").map(Number);
+    const defaultStart = `${String(oh + 1).padStart(2, "0")}:00`;
+    const [ch, cm] = close.split(":").map(Number);
+    const defaultEnd = `${String(ch - 1).padStart(2, "0")}:${String(cm || 0).padStart(2, "0")}`;
+    updateDayBreaks(dayIndex, [...existing, { start: defaultStart, end: defaultEnd }]);
+  };
+
+  const removeBreak = (dayIndex: number, breakIndex: number) => {
+    const existing = state.openingHours[dayIndex]?.breaks ?? [];
+    updateDayBreaks(dayIndex, existing.filter((_, i) => i !== breakIndex));
+  };
+
+  const updateBreak = (dayIndex: number, breakIndex: number, field: "start" | "end", value: string) => {
+    const existing = [...(state.openingHours[dayIndex]?.breaks ?? [])];
+    if (!existing[breakIndex]) return;
+    existing[breakIndex] = { ...existing[breakIndex]!, [field]: value };
+    updateDayBreaks(dayIndex, existing);
+  };
+
+  const getBreaksError = (dayIndex: number): string | null => {
+    const day = state.openingHours[dayIndex];
+    if (!day?.open || !day?.close) return null;
+    const breaks = day.breaks ?? [];
+    const openMin = day.open.split(":").reduce((a, b, i) => a + (i === 0 ? parseInt(b, 10) * 60 : parseInt(b, 10)), 0);
+    const closeMin = day.close.split(":").reduce((a, b, i) => a + (i === 0 ? parseInt(b, 10) * 60 : parseInt(b, 10)), 0);
+    for (let i = 0; i < breaks.length; i++) {
+      const b = breaks[i]!;
+      const [sH, sM] = b.start.split(":").map(Number);
+      const [eH, eM] = b.end.split(":").map(Number);
+      const sMin = (sH ?? 0) * 60 + (sM ?? 0);
+      const eMin = (eH ?? 0) * 60 + (eM ?? 0);
+      if (sMin >= eMin) return `הפסקה ${i + 1}: שעת התחלה חייבת להיות לפני שעת סיום`;
+      if (sMin < openMin || eMin > closeMin) return `הפסקה ${i + 1}: חייבת להיות בתוך שעות הפתיחה`;
+      for (let j = i + 1; j < breaks.length; j++) {
+        const o = breaks[j]!;
+        const oS = (parseInt(o.start.split(":")[0], 10) || 0) * 60 + (parseInt(o.start.split(":")[1], 10) || 0);
+        const oE = (parseInt(o.end.split(":")[0], 10) || 0) * 60 + (parseInt(o.end.split(":")[1], 10) || 0);
+        if (sMin < oE && eMin > oS) return "הפסקות לא יכולות לחפוף";
+      }
+    }
+    return null;
   };
 
   return (
@@ -638,51 +697,110 @@ function AdminBookingTab({
           <tbody>
             {state.openingHours.map((day, index) => {
               const closed = !day.open && !day.close;
+              const breaks = day.breaks ?? [];
+              const breaksError = getBreaksError(index);
               return (
-                <tr key={day.day} className="border-t border-slate-100">
-                  <td className="py-2 px-3 text-slate-800 whitespace-nowrap">
-                    {day.label}
-                  </td>
-                  <td className="py-2 px-3">
-                    <input
-                      type="time"
-                      value={day.open ?? ""}
-                      disabled={closed}
-                      onChange={(e) =>
-                        updateHours(index, "open", e.target.value)
-                      }
-                      className="w-24 rounded border border-slate-300 px-2 py-1 text-xs text-right disabled:bg-slate-50 disabled:text-slate-400"
-                    />
-                  </td>
-                  <td className="py-2 px-3">
-                    <input
-                      type="time"
-                      value={day.close ?? ""}
-                      disabled={closed}
-                      onChange={(e) =>
-                        updateHours(index, "close", e.target.value)
-                      }
-                      className="w-24 rounded border border-slate-300 px-2 py-1 text-xs text-right disabled:bg-slate-50 disabled:text-slate-400"
-                    />
-                  </td>
-                  <td className="py-2 px-3">
-                    <button
-                      type="button"
-                      onClick={() => toggleClosed(index)}
-                      className={`px-3 py-1 rounded-full text-[11px] border ${
-                        closed
-                          ? "bg-slate-50 text-slate-600 border-slate-200"
-                          : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                      }`}
-                    >
-                      {closed ? "סגור" : "פתוח"}
-                    </button>
-                  </td>
-                </tr>
+                <Fragment key={day.day}>
+                  <tr className="border-t border-slate-100">
+                    <td className="py-2 px-3 text-slate-800 whitespace-nowrap">
+                      {day.label}
+                    </td>
+                    <td className="py-2 px-3">
+                      <input
+                        type="time"
+                        value={day.open ?? ""}
+                        disabled={closed}
+                        onChange={(e) =>
+                          updateHours(index, "open", e.target.value)
+                        }
+                        className="w-24 rounded border border-slate-300 px-2 py-1 text-xs text-right disabled:bg-slate-50 disabled:text-slate-400"
+                      />
+                    </td>
+                    <td className="py-2 px-3">
+                      <input
+                        type="time"
+                        value={day.close ?? ""}
+                        disabled={closed}
+                        onChange={(e) =>
+                          updateHours(index, "close", e.target.value)
+                        }
+                        className="w-24 rounded border border-slate-300 px-2 py-1 text-xs text-right disabled:bg-slate-50 disabled:text-slate-400"
+                      />
+                    </td>
+                    <td className="py-2 px-3">
+                      <button
+                        type="button"
+                        onClick={() => toggleClosed(index)}
+                        className={`px-3 py-1 rounded-full text-[11px] border ${
+                          closed
+                            ? "bg-slate-50 text-slate-600 border-slate-200"
+                            : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        }`}
+                      >
+                        {closed ? "סגור" : "פתוח"}
+                      </button>
+                    </td>
+                  </tr>
+                  {!closed && (
+                    <tr className="border-t border-slate-100 bg-slate-50/50">
+                      <td colSpan={4} className="py-2 px-3">
+                        <div className="text-xs">
+                          <span className="font-medium text-slate-600">הפסקות</span>
+                          {breaks.map((b, bi) => (
+                            <div key={bi} className="flex flex-wrap items-center gap-2 mt-1">
+                              <input
+                                type="time"
+                                value={b.start}
+                                onChange={(e) => updateBreak(index, bi, "start", e.target.value)}
+                                className="w-20 rounded border border-slate-300 px-1.5 py-0.5 text-right"
+                              />
+                              <span className="text-slate-400">–</span>
+                              <input
+                                type="time"
+                                value={b.end}
+                                onChange={(e) => updateBreak(index, bi, "end", e.target.value)}
+                                className="w-20 rounded border border-slate-300 px-1.5 py-0.5 text-right"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeBreak(index, bi)}
+                                className="text-red-600 hover:underline"
+                              >
+                                הסר
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => addBreak(index)}
+                            className="mt-1 text-sky-600 hover:underline"
+                          >
+                            הוסף הפסקה
+                          </button>
+                          {breaksError && (
+                            <p className="text-red-600 mt-0.5">{breaksError}</p>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               );
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* Closed dates (holidays) */}
+      <div className="border-t border-slate-200 pt-6">
+        <h3 className="text-sm font-semibold text-slate-800 mb-2">תאריכים סגורים (חגים)</h3>
+        <p className="text-xs text-slate-500 mb-3">
+          בימים אלו העסק סגור. לא יוצגו שעות זמינות לאף עובד.
+        </p>
+        <ClosedDatesEditor
+          closedDates={state.closedDates ?? []}
+          onChange={(closedDates) => onChange({ ...state, closedDates })}
+        />
       </div>
 
       <div className="pt-2 text-xs text-slate-500">
@@ -692,6 +810,99 @@ function AdminBookingTab({
         </span>{" "}
         (ניתן לשנות זאת בהמשך בהגדרות מתקדמות).
       </div>
+    </div>
+  );
+}
+
+
+function ClosedDatesEditor({
+  closedDates,
+  onChange,
+}: {
+  closedDates: Array<{ date: string; label?: string }>;
+  onChange: (closedDates: Array<{ date: string; label?: string }>) => void;
+}) {
+  const [newDate, setNewDate] = useState("");
+  const [newLabel, setNewLabel] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const addDate = () => {
+    setError(null);
+    const raw = newDate.trim();
+    if (!raw) {
+      setError("נא לבחור תאריך");
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      setError("תאריך לא תקין (נדרש YYYY-MM-DD)");
+      return;
+    }
+    const existing = closedDates.map((e) => e.date);
+    if (existing.includes(raw)) {
+      setError("התאריך כבר ברשימה");
+      return;
+    }
+    const next = [...closedDates, { date: raw, label: newLabel.trim() || undefined }].sort(
+      (a, b) => a.date.localeCompare(b.date)
+    );
+    onChange(next);
+    setNewDate("");
+    setNewLabel("");
+  };
+
+  const removeDate = (date: string) => {
+    onChange(closedDates.filter((e) => e.date !== date));
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <div>
+          <label className="block text-xs text-slate-600 mb-0.5">תאריך</label>
+          <input
+            type="date"
+            value={newDate}
+            onChange={(e) => setNewDate(e.target.value)}
+            className="rounded border border-slate-300 px-2 py-1.5 text-xs text-right"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-slate-600 mb-0.5">תיאור (אופציונלי)</label>
+          <input
+            type="text"
+            value={newLabel}
+            onChange={(e) => setNewLabel(e.target.value)}
+            placeholder="למשל: ערב פסח"
+            className="rounded border border-slate-300 px-2 py-1.5 text-xs text-right w-32"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={addDate}
+          className="px-3 py-1.5 rounded-lg bg-sky-600 text-white text-xs hover:bg-sky-700"
+        >
+          הוסף תאריך
+        </button>
+      </div>
+      {error && <p className="text-red-600 text-xs">{error}</p>}
+      {closedDates.length > 0 && (
+        <ul className="space-y-1">
+          {closedDates.map((e) => (
+            <li key={e.date} className="flex items-center gap-2 text-xs">
+              <span className="text-slate-700">{e.date}</span>
+              {e.label && <span className="text-slate-500">— {e.label}</span>}
+              <button
+                type="button"
+                onClick={() => removeDate(e.date)}
+                className="text-red-600 hover:underline"
+                aria-label="הסר"
+              >
+                הסר
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -1134,7 +1345,8 @@ export default function SettingsPage() {
   const { siteConfig, isSaving, saveMessage, handleConfigChange, handleSaveConfig } = useSiteConfig(siteId);
   const { user, firebaseUser, logout } = useAuth();
   const [bookingState, setBookingState] = useState<SalonBookingState | null>(null);
-  
+  const [bookingSaveError, setBookingSaveError] = useState<string | null>(null);
+
   // Tab state for settings sections - MUST be declared before any early returns
   const [activeTab, setActiveTab] = useState<SettingsTabType>("basic");
   
@@ -1152,19 +1364,27 @@ export default function SettingsPage() {
       siteId,
       (firestoreSettings) => {
         // Convert Firestore BookingSettings to SalonBookingState for admin UI
+        const dayLabels = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"] as const;
+        const dayKeys = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
+        const openingHours = (["0", "1", "2", "3", "4", "5", "6"] as const).map((key, i) => {
+          const d = firestoreSettings.days[key];
+          const enabled = d?.enabled ?? false;
+          const breaks = (d as { breaks?: { start: string; end: string }[] })?.breaks;
+          return {
+            day: dayKeys[i],
+            label: dayLabels[i],
+            open: enabled ? (d?.start ?? null) : null,
+            close: enabled ? (d?.end ?? null) : null,
+            breaks: breaks && breaks.length > 0 ? breaks : undefined,
+          };
+        });
+        const closedDates = (firestoreSettings as { closedDates?: Array<{ date: string; label?: string }> }).closedDates;
         const convertedState: SalonBookingState = {
           defaultSlotMinutes: firestoreSettings.slotMinutes,
-          openingHours: [
-            { day: "sun", label: "ראשון", open: firestoreSettings.days["0"].enabled ? firestoreSettings.days["0"].start : null, close: firestoreSettings.days["0"].enabled ? firestoreSettings.days["0"].end : null },
-            { day: "mon", label: "שני", open: firestoreSettings.days["1"].enabled ? firestoreSettings.days["1"].start : null, close: firestoreSettings.days["1"].enabled ? firestoreSettings.days["1"].end : null },
-            { day: "tue", label: "שלישי", open: firestoreSettings.days["2"].enabled ? firestoreSettings.days["2"].start : null, close: firestoreSettings.days["2"].enabled ? firestoreSettings.days["2"].end : null },
-            { day: "wed", label: "רביעי", open: firestoreSettings.days["3"].enabled ? firestoreSettings.days["3"].start : null, close: firestoreSettings.days["3"].enabled ? firestoreSettings.days["3"].end : null },
-            { day: "thu", label: "חמישי", open: firestoreSettings.days["4"].enabled ? firestoreSettings.days["4"].start : null, close: firestoreSettings.days["4"].enabled ? firestoreSettings.days["4"].end : null },
-            { day: "fri", label: "שישי", open: firestoreSettings.days["5"].enabled ? firestoreSettings.days["5"].start : null, close: firestoreSettings.days["5"].enabled ? firestoreSettings.days["5"].end : null },
-            { day: "sat", label: "שבת", open: firestoreSettings.days["6"].enabled ? firestoreSettings.days["6"].start : null, close: firestoreSettings.days["6"].enabled ? firestoreSettings.days["6"].end : null },
-          ],
+          openingHours,
           workers: [],
           bookings: [],
+          closedDates: Array.isArray(closedDates) && closedDates.length > 0 ? closedDates : [],
         };
         
         setBookingState(convertedState);
@@ -1200,23 +1420,50 @@ export default function SettingsPage() {
     };
   }, [siteId]);
 
+  const validateBreaks = (s: SalonBookingState): string | null => {
+    for (let i = 0; i < s.openingHours.length; i++) {
+      const day = s.openingHours[i];
+      if (!day?.open || !day?.close) continue;
+      const breaks = day.breaks ?? [];
+      const openMin = day.open.split(":").reduce((a, b, idx) => a + (idx === 0 ? parseInt(b, 10) * 60 : parseInt(b, 10)), 0);
+      const closeMin = day.close.split(":").reduce((a, b, idx) => a + (idx === 0 ? parseInt(b, 10) * 60 : parseInt(b, 10)), 0);
+      for (let bi = 0; bi < breaks.length; bi++) {
+        const b = breaks[bi]!;
+        const [sH, sM] = b.start.split(":").map(Number);
+        const [eH, eM] = b.end.split(":").map(Number);
+        const sMin = (sH ?? 0) * 60 + (sM ?? 0);
+        const eMin = (eH ?? 0) * 60 + (eM ?? 0);
+        if (sMin >= eMin) return `${day.label}: הפסקה ${bi + 1} – שעת התחלה חייבת להיות לפני שעת סיום`;
+        if (sMin < openMin || eMin > closeMin) return `${day.label}: הפסקה ${bi + 1} – חייבת להיות בתוך שעות הפתיחה`;
+        for (let j = bi + 1; j < breaks.length; j++) {
+          const o = breaks[j]!;
+          const oS = (parseInt(o.start.split(":")[0], 10) || 0) * 60 + (parseInt(o.start.split(":")[1], 10) || 0);
+          const oE = (parseInt(o.end.split(":")[0], 10) || 0) * 60 + (parseInt(o.end.split(":")[1], 10) || 0);
+          if (sMin < oE && eMin > oS) return `${day.label}: הפסקות לא יכולות לחפוף`;
+        }
+      }
+    }
+    return null;
+  };
+
   const saveBookingState = async (next: SalonBookingState) => {
     setBookingState(next);
+    const err = validateBreaks(next);
+    if (err) {
+      setBookingSaveError(err);
+      return;
+    }
+    setBookingSaveError(null);
     if (typeof window !== "undefined" && siteId) {
-      // Save to localStorage for immediate UI update
       window.localStorage.setItem(`bookingState:${siteId}`, JSON.stringify(next));
-      
-      // Save to Firestore so booking page can read it
       try {
         const bookingSettings = convertSalonBookingStateToBookingSettings(next);
         await saveBookingSettings(siteId, bookingSettings);
-        
         if (process.env.NODE_ENV !== "production") {
-          console.log(`[Admin] Saved booking settings to Firestore for site ${siteId}:`, bookingSettings);
+          console.log("[Admin] Saved booking settings to Firestore for site", siteId, bookingSettings);
         }
       } catch (error) {
         console.error("[Admin] Failed to save booking settings to Firestore:", error);
-        // Don't block UI - localStorage save already succeeded
       }
     }
   };
@@ -1370,10 +1617,17 @@ export default function SettingsPage() {
             />
           )}
           {activeTab === "hours" && (
-            <AdminBookingTab
-              state={bookingState}
-              onChange={saveBookingState}
-            />
+            <>
+              {bookingSaveError && (
+                <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 text-right">
+                  {bookingSaveError}
+                </div>
+              )}
+              <AdminBookingTab
+                state={bookingState}
+                onChange={saveBookingState}
+              />
+            </>
           )}
         </div>
       </div>

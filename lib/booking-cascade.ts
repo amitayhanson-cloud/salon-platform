@@ -86,22 +86,29 @@ export async function resolveRelatedBookingIdsToCascadeCancel(
   return ids;
 }
 
+/** Optional fields when admin cancels (manual); applied to all group members. */
+export type AdminCancelOptions = {
+  cancellationReason?: string | null;
+  cancelledBy?: string | null;
+};
+
 /**
  * Apply cancel/archive to all given booking IDs in one batch.
  * Idempotent: skips docs that are already archived. No hard-delete.
- * Returns { successCount, failCount }.
+ * For reason "manual", pass options to set cancellationReason and cancelledBy on all members.
  */
 export async function cancelBookingsCascade(
   siteId: string,
   bookingIds: string[],
-  reason: CascadeCancelReason
+  reason: CascadeCancelReason,
+  adminOptions?: AdminCancelOptions
 ): Promise<{ successCount: number; failCount: number }> {
   if (bookingIds.length === 0) {
     return { successCount: 0, failCount: 0 };
   }
   const db = getAdminDb();
   const isWhatsApp = reason === "customer_cancelled_via_whatsapp";
-  const payload: Record<string, unknown> = isWhatsApp
+  const base: Record<string, unknown> = isWhatsApp
     ? {
         whatsappStatus: "cancelled" as const,
         status: "cancelled" as const,
@@ -118,6 +125,16 @@ export async function cancelBookingsCascade(
         archivedReason: reason,
         updatedAt: serverTimestamp(),
       };
+  const payload: Record<string, unknown> = { ...base };
+  if (reason === "manual" && adminOptions) {
+    if (adminOptions.cancellationReason != null && adminOptions.cancellationReason !== "") {
+      payload.cancellationReason = adminOptions.cancellationReason;
+    }
+    if (adminOptions.cancelledBy != null && adminOptions.cancelledBy !== "") {
+      payload.cancelledBy = adminOptions.cancelledBy;
+    }
+    payload.cancelledAt = serverTimestamp();
+  }
 
   const toUpdate: admin.firestore.DocumentReference[] = [];
   for (const id of bookingIds) {

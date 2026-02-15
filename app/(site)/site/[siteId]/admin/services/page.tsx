@@ -20,6 +20,7 @@ import {
   migrateServicesFromSubcollection,
 } from "@/lib/firestoreSiteServices";
 import { AccordionItem } from "@/components/admin/Accordion";
+import MinutesNumberInput from "@/components/admin/MinutesNumberInput";
 import { parseNumberOrRange, formatNumberOrRange } from "@/lib/parseNumberOrRange";
 import { formatPriceDisplay } from "@/lib/formatPrice";
 
@@ -884,23 +885,10 @@ export default function ServicesPage() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">
                     משך (דקות)
                   </label>
-                  <input
-                    type="number"
-                    min={1}
-                    step={5}
-                    value={editingService.duration ?? ""}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      const n = v === "" ? undefined : parseInt(v, 10);
-                      const validDuration =
-                        typeof n === "number" && Number.isFinite(n) && n >= 1
-                          ? n
-                          : undefined;
-                      const duration =
-                        v === "" ? undefined : (validDuration ?? editingService.duration);
-                      setEditingService({ ...editingService, duration });
-                    }}
-                    placeholder="—"
+                  <MinutesNumberInput
+                    value={editingService.duration ?? 15}
+                    onChange={(n) => setEditingService({ ...editingService, duration: n })}
+                    min={0}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
                   />
                 </div>
@@ -1257,22 +1245,18 @@ export default function ServicesPage() {
                       <label className="block text-sm font-medium text-slate-700 mb-1">
                         משך שלב 2 (דקות) *
                       </label>
-                      <input
-                        type="number"
-                        min={1}
-                        value={editingItem.followUp?.durationMinutes ?? followUpDurationInputValue}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setFollowUpDurationInputValue(v);
-                          const num = parseInt(v, 10);
-                          if (!Number.isNaN(num) && num >= 1)
-                            setEditingItem({
-                              ...editingItem,
-                              followUp: editingItem.followUp
-                                ? { ...editingItem.followUp, durationMinutes: num }
-                                : { name: followUpNameInputValue || "—", durationMinutes: num, waitMinutes: 0 },
-                            });
+                      <MinutesNumberInput
+                        value={editingItem.followUp?.durationMinutes ?? 15}
+                        onChange={(n) => {
+                          setFollowUpDurationInputValue(String(n));
+                          setEditingItem({
+                            ...editingItem,
+                            followUp: editingItem.followUp
+                              ? { ...editingItem.followUp, durationMinutes: n }
+                              : { name: followUpNameInputValue || "—", durationMinutes: n, waitMinutes: 0 },
+                          });
                         }}
+                        min={0}
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
                       />
                     </div>
@@ -1280,22 +1264,18 @@ export default function ServicesPage() {
                       <label className="block text-sm font-medium text-slate-700 mb-1">
                         המתנה אחרי שלב 1 (דקות)
                       </label>
-                      <input
-                        type="number"
-                        min={0}
-                        value={editingItem.followUp?.waitMinutes ?? followUpWaitInputValue}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setFollowUpWaitInputValue(v);
-                          const num = parseInt(v, 10);
-                          if (!Number.isNaN(num) && num >= 0)
-                            setEditingItem({
-                              ...editingItem,
-                              followUp: editingItem.followUp
-                                ? { ...editingItem.followUp, waitMinutes: num }
-                                : { name: followUpNameInputValue || "—", durationMinutes: parseInt(followUpDurationInputValue, 10) || 15, waitMinutes: num },
-                            });
+                      <MinutesNumberInput
+                        value={editingItem.followUp?.waitMinutes ?? 0}
+                        onChange={(n) => {
+                          setFollowUpWaitInputValue(String(n));
+                          setEditingItem({
+                            ...editingItem,
+                            followUp: editingItem.followUp
+                              ? { ...editingItem.followUp, waitMinutes: n }
+                              : { name: followUpNameInputValue || "—", durationMinutes: 15, waitMinutes: n },
+                          });
                         }}
+                        min={0}
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
                       />
                     </div>

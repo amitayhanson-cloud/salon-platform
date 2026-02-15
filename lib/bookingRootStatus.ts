@@ -4,6 +4,8 @@
  * Read-only: uses existing parentBookingId only. No changes to creation or scheduling.
  */
 
+import type { BookingStatusKey } from "./bookingStatusUi";
+import { normalizeBookingStatus } from "./bookingStatusUi";
 import { getBookingDisplayStatus, type BookingDisplayStatus } from "./bookingDisplayStatus";
 
 const MAX_PARENT_DEPTH = 10;
@@ -51,4 +53,21 @@ export function getDisplayStatus(
   const root = byId.get(rootId);
   const source = root ?? booking;
   return getBookingDisplayStatus(source);
+}
+
+/**
+ * Returns normalized status key for UI (dot/badge colors).
+ * Uses root booking when applicable (same as getDisplayStatus).
+ */
+export function getDisplayStatusKey(
+  booking: BookingLikeForRoot,
+  allBookings: BookingLikeForRoot[]
+): BookingStatusKey {
+  const byId = new Map<string, BookingLikeForRoot>();
+  for (const b of allBookings) byId.set(b.id, b);
+  const rootId = resolveRootBookingId(booking, byId);
+  const root = byId.get(rootId);
+  const source = root ?? booking;
+  const raw = source.whatsappStatus ?? source.status ?? null;
+  return normalizeBookingStatus(raw, source);
 }

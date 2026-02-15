@@ -61,6 +61,8 @@ export interface AdminBookingPayload {
   };
   phase2?: AdminPhase2Payload | null;
   note?: string | null;
+  /** הערות – booking notes (saved on booking doc as `notes`). */
+  notes?: string | null;
   status?: "confirmed" | "cancelled" | "active";
   price?: number | null;
 }
@@ -159,6 +161,7 @@ export async function createAdminBooking(
     status,
     phase: 1,
     note: payload.note ?? null,
+    notes: payload.notes ?? null,
     serviceColor: payload.phase1.serviceColor ?? null,
     price: payload.price ?? null,
     priceSource: null,
@@ -216,6 +219,7 @@ export async function createAdminBooking(
       phase: 2,
       parentBookingId: phase1Id,
       note: payload.note ?? null,
+      notes: payload.notes ?? null,
       serviceColor: payload.phase2.serviceColor ?? null,
       price: null,
       priceSource: null,
@@ -235,6 +239,8 @@ export async function createAdminBooking(
 /**
  * Update phase 1 and optionally phase 2. If phase 2 is removed, soft-cancel the phase 2 doc.
  * Uses writeBatch for atomicity.
+ * NOTE: This recomputes and rewrites phase 2 from phase 1 times (cascade). For single-slot edits
+ * (admin edits one block only), use updatePhase1Only or updatePhase2Only so related bookings are not changed.
  */
 export async function updateAdminBooking(
   siteId: string,
@@ -333,6 +339,7 @@ export async function updateAdminBooking(
     time: timeStr,
     status,
     note: payload.note ?? null,
+    notes: payload.notes ?? null,
     serviceColor: payload.phase1.serviceColor ?? null,
     price: payload.price ?? null,
     updatedAt: serverTimestamp(),
@@ -377,6 +384,7 @@ export async function updateAdminBooking(
         time: phase2TimeStr,
         status,
         note: payload.note ?? null,
+        notes: payload.notes ?? null,
         serviceColor: payload.phase2.serviceColor ?? null,
         updatedAt: serverTimestamp(),
       }) as Record<string, unknown>);
@@ -430,6 +438,7 @@ export async function updateAdminBooking(
       phase: 2,
       parentBookingId: phase1Id,
       note: payload.note ?? null,
+      notes: payload.notes ?? null,
       serviceColor: payload.phase2.serviceColor ?? null,
       price: null,
       priceSource: null,
@@ -441,8 +450,81 @@ export async function updateAdminBooking(
 }
 
 /**
+ * Update only the phase 1 (main) booking. Phase 2 and any other related bookings are unchanged.
+ * Used when admin edits the phase 1 block (date/time/worker/duration) so that follow-ups are not shifted.
+ * Writes updateMeta: { source: "admin", scope: "single" } so backend triggers can skip cascade.
+ */
+export async function updatePhase1Only(
+  siteId: string,
+  phase1Id: string,
+  payload: AdminBookingPayload
+): Promise<void> {
+  if (!db) throw new Error("Firestore not initialized");
+
+  const clientId = await getOrCreateClient(siteId, {
+    name: payload.customerName.trim(),
+    phone: payload.customerPhone.trim(),
+    email: undefined,
+    notes: payload.note ?? undefined,
+  });
+
+  const [y, m, d] = payload.date.split("-").map(Number);
+  const [hh, mm] = payload.time.split(":").map(Number);
+  const phase1StartAt = new Date(y, m - 1, d, hh || 0, mm || 0, 0, 0);
+  const durationMin = payload.phase1.durationMin ?? 30;
+  const phase1EndAt = new Date(
+    phase1StartAt.getTime() + Math.max(1, durationMin) * 60 * 1000
+  );
+
+  const dateStr = payload.date;
+  const timeStr = payload.time;
+  const status = payload.status ?? "confirmed";
+
+  const phase1Conflict = await checkWorkerConflicts({
+    siteId,
+    workerId: payload.phase1.workerId,
+    dayISO: dateStr,
+    startAt: phase1StartAt,
+    endAt: phase1EndAt,
+    excludeBookingIds: [phase1Id],
+  });
+  if (phase1Conflict.hasConflict && phase1Conflict.conflictingBooking) {
+    throw new Error(`Worker is already booked from ${phase1Conflict.conflictingBooking.timeRange}`);
+  }
+
+  const phase1Ref = bookingDoc(siteId, phase1Id);
+  const phase1Update: Record<string, unknown> = {
+    clientId,
+    customerName: payload.customerName.trim(),
+    customerPhone: payload.customerPhone.trim(),
+    workerId: payload.phase1.workerId,
+    workerName: payload.phase1.workerName,
+    serviceTypeId: payload.phase1.serviceTypeId ?? null,
+    serviceName: payload.phase1.serviceName,
+    serviceType: payload.phase1.serviceType ?? null,
+    serviceId: payload.phase1.serviceId ?? null,
+    durationMin,
+    startAt: Timestamp.fromDate(phase1StartAt),
+    endAt: Timestamp.fromDate(phase1EndAt),
+    dateISO: dateStr,
+    timeHHmm: timeStr,
+    date: dateStr,
+    time: timeStr,
+    status,
+    note: payload.note ?? null,
+    notes: payload.notes ?? null,
+    serviceColor: payload.phase1.serviceColor ?? null,
+    price: payload.price ?? null,
+    updatedAt: serverTimestamp(),
+    updateMeta: { source: "admin", scope: "single", ts: Date.now() },
+  };
+  await updateDoc(phase1Ref, cleanUndefined(phase1Update) as Record<string, unknown>);
+}
+
+/**
  * Update only the phase 2 (follow-up) booking. Phase 1 is unchanged.
  * Used when user clicks the phase 2 block and edits its time/worker/duration.
+ * Writes updateMeta: { source: "admin", scope: "single" } so backend triggers can skip cascade.
  */
 export async function updatePhase2Only(
   siteId: string,
@@ -501,6 +583,7 @@ export async function updatePhase2Only(
     date: dateStr,
     time: timeStr,
     updatedAt: serverTimestamp(),
+    updateMeta: { source: "admin", scope: "single", ts: Date.now() },
   };
   await updateDoc(phase2Ref, cleanUndefined(phase2Update) as Record<string, unknown>);
 }
