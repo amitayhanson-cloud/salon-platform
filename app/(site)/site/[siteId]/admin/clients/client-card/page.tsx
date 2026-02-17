@@ -10,6 +10,10 @@ import { ChemicalCard } from "./ChemicalCard";
 import PersonalPricingTab from "./PersonalPricingTab";
 import AdminTabs from "@/components/ui/AdminTabs";
 import { createClient, checkClientExists, type ClientData } from "@/lib/firestoreClients";
+import { subscribeClientTypes } from "@/lib/firestoreClientSettings";
+import { DEFAULT_CLIENT_TYPE_ENTRIES, REGULAR_CLIENT_TYPE_ID } from "@/types/bookingSettings";
+import type { ClientTypeEntry } from "@/types/bookingSettings";
+import { getLastConfirmedPastAppointment } from "@/lib/lastConfirmedAppointment";
 import { getDisplayStatus } from "@/lib/bookingRootStatus";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { MoreVertical, Pencil, Trash2, CheckSquare, Square } from "lucide-react";
@@ -20,6 +24,11 @@ interface Client {
   phone: string;
   email?: string;
   notes?: string;
+  /** Legacy label; prefer clientTypeId. */
+  clientType: string;
+  /** Client type id (e.g. "regular"). Default when missing is regular. */
+  clientTypeId?: string;
+  clientNotes?: string;
   lastVisit?: string; // ISO date string
   createdAt?: string; // ISO date string
   totalBookings: number;
@@ -34,6 +43,7 @@ interface Booking {
   workerName?: string | null;
   date: string; // YYYY-MM-DD
   time: string; // HH:mm
+  durationMin?: number;
   status: string;
   createdAt?: any; // Timestamp or ISO string
   note?: string;
@@ -77,7 +87,7 @@ export default function ClientCardPage() {
 
   // Edit modal
   const [editClient, setEditClient] = useState<Client | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", email: "", notes: "" });
+  const [editForm, setEditForm] = useState({ name: "", email: "", clientTypeId: "", clientNotes: "" });
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -105,12 +115,16 @@ export default function ClientCardPage() {
     name: "",
     phone: "",
     email: "",
-    notes: "",
+    clientTypeId: "",
+    clientNotes: "",
   });
   const [isSubmittingClient, setIsSubmittingClient] = useState(false);
   const [clientFormError, setClientFormError] = useState<string | null>(null);
   const [clientFormSuccess, setClientFormSuccess] = useState(false);
   const [existingClientData, setExistingClientData] = useState<ClientData | null>(null);
+
+  /** Site client types for dropdown (from settings). */
+  const [clientTypes, setClientTypes] = useState<ClientTypeEntry[]>(() => DEFAULT_CLIENT_TYPE_ENTRIES);
 
   // Extract clientId from URL as a primitive (stable dependency)
   const clientIdFromUrl = searchParams.get("clientId");
@@ -148,12 +162,17 @@ export default function ClientCardPage() {
           const data = docSnap.data();
           if (data.archived === true) return null;
           const phone = (data.phone || docSnap.id || "").replace(/\s|-|\(|\)/g, "") || docSnap.id;
+          const clientTypeRaw = (data.clientType != null && typeof data.clientType === "string") ? data.clientType.trim() : "";
+          const typeId = (data.clientTypeId != null && typeof data.clientTypeId === "string") ? data.clientTypeId.trim() : undefined;
           return {
             id: docSnap.id,
             name: data.name || "",
             phone,
             email: data.email || undefined,
             notes: data.notes || undefined,
+            clientType: clientTypeRaw || "רגיל",
+            clientTypeId: typeId || REGULAR_CLIENT_TYPE_ID,
+            clientNotes: data.clientNotes != null ? String(data.clientNotes).trim() || undefined : undefined,
             lastVisit: undefined,
             createdAt: data.createdAt?.toDate?.()?.toISOString?.() ?? (typeof data.createdAt === "string" ? data.createdAt : undefined),
             totalBookings: 0,
@@ -173,6 +192,19 @@ export default function ClientCardPage() {
 
     return () => unsubscribe();
   }, [siteId]);
+
+  // Subscribe to client types (sites/{siteId}/settings/clients only)
+  useEffect(() => {
+    if (!siteId) return;
+    const unsub = subscribeClientTypes(siteId, (list) => setClientTypes(list));
+    return () => unsub();
+  }, [siteId]);
+
+  const getTypeLabel = useCallback((client: Client): string => {
+    const id = client.clientTypeId || REGULAR_CLIENT_TYPE_ID;
+    const entry = clientTypes.find((t) => t.id === id);
+    return entry ? entry.labelHe : "רגיל";
+  }, [clientTypes]);
 
   // Load bookings for selected client
   useEffect(() => {
@@ -232,6 +264,7 @@ export default function ClientCardPage() {
               workerName: data.workerName || null,
               date: data.date || data.dateISO || "",
               time: data.time || data.timeHHmm || "",
+              durationMin: typeof data.durationMin === "number" ? data.durationMin : undefined,
               status: data.status || "confirmed",
               createdAt: data.createdAt,
               note: data.note || undefined,
@@ -289,6 +322,23 @@ export default function ClientCardPage() {
     return clients.find((c) => c.id === selectedClientId) || null;
   }, [selectedClientId, clients]);
 
+  // Last confirmed past appointment (derived from client bookings)
+  const lastAppointment = useMemo(() => {
+    if (!selectedClientId || clientBookings.length === 0) return { lastConfirmedAt: null as Date | null, daysSince: null as number | null };
+    return getLastConfirmedPastAppointment(
+      clientBookings.map((b) => ({
+        date: b.date,
+        time: b.time,
+        durationMin: b.durationMin,
+        status: b.status,
+        whatsappStatus: b.whatsappStatus,
+        isArchived: b.isArchived,
+        archivedAt: b.archivedAt,
+      })),
+      new Date()
+    );
+  }, [selectedClientId, clientBookings]);
+
   // Filter clients by search query
   const filteredClients = useMemo(() => {
     if (!searchQuery.trim()) return clients;
@@ -320,7 +370,8 @@ export default function ClientCardPage() {
   // Handle Add Client Modal
   const handleOpenAddClientModal = () => {
     setIsAddClientModalOpen(true);
-    setNewClientForm({ name: "", phone: "", email: "", notes: "" });
+    const defaultId = clientTypes.some((t) => t.id === REGULAR_CLIENT_TYPE_ID) ? REGULAR_CLIENT_TYPE_ID : (clientTypes[0]?.id ?? REGULAR_CLIENT_TYPE_ID);
+    setNewClientForm({ name: "", phone: "", email: "", clientTypeId: defaultId, clientNotes: "" });
     setClientFormError(null);
     setClientFormSuccess(false);
     setExistingClientData(null);
@@ -328,7 +379,7 @@ export default function ClientCardPage() {
 
   const handleCloseAddClientModal = () => {
     setIsAddClientModalOpen(false);
-    setNewClientForm({ name: "", phone: "", email: "", notes: "" });
+    setNewClientForm({ name: "", phone: "", email: "", clientTypeId: "", clientNotes: "" });
     setClientFormError(null);
     setClientFormSuccess(false);
     setExistingClientData(null);
@@ -392,12 +443,13 @@ export default function ClientCardPage() {
         return;
       }
 
-      // Create new client
+      const typeIdToSave = clientTypes.some((t) => t.id === newClientForm.clientTypeId) ? newClientForm.clientTypeId : REGULAR_CLIENT_TYPE_ID;
       await createClient(siteId, {
         name: newClientForm.name.trim(),
         phone: normalizedPhone,
         email: newClientForm.email.trim() || undefined,
-        notes: newClientForm.notes.trim() || undefined,
+        clientTypeId: typeIdToSave,
+        clientNotes: newClientForm.clientNotes.trim() || undefined,
       });
 
       setClientFormSuccess(true);
@@ -449,13 +501,15 @@ export default function ClientCardPage() {
   const openEditModal = useCallback((client: Client) => {
     closeActionsMenu();
     setEditClient(client);
+    const resolvedId = client.clientTypeId || REGULAR_CLIENT_TYPE_ID;
     setEditForm({
       name: client.name,
       email: client.email ?? "",
-      notes: client.notes ?? "",
+      clientTypeId: clientTypes.some((t) => t.id === resolvedId) ? resolvedId : REGULAR_CLIENT_TYPE_ID,
+      clientNotes: client.clientNotes ?? "",
     });
     setEditError(null);
-  }, [closeActionsMenu]);
+  }, [closeActionsMenu, clientTypes]);
 
   const closeEditModal = useCallback(() => {
     setEditClient(null);
@@ -472,6 +526,7 @@ export default function ClientCardPage() {
     setEditError(null);
     try {
       const token = await firebaseUser.getIdToken();
+      const typeIdToSave = clientTypes.some((t) => t.id === editForm.clientTypeId) ? editForm.clientTypeId : REGULAR_CLIENT_TYPE_ID;
       const res = await fetch("/api/clients/update", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -481,7 +536,8 @@ export default function ClientCardPage() {
           updates: {
             name: editForm.name.trim(),
             email: editForm.email.trim() || undefined,
-            notes: editForm.notes.trim() || undefined,
+            clientTypeId: typeIdToSave,
+            clientNotes: editForm.clientNotes.trim() || undefined,
           },
         }),
       });
@@ -498,7 +554,7 @@ export default function ClientCardPage() {
     } finally {
       setEditSaving(false);
     }
-  }, [firebaseUser, siteId, editClient, editForm, closeEditModal, showToast]);
+  }, [firebaseUser, siteId, editClient, editForm, clientTypes, closeEditModal, showToast]);
 
   const openDeleteModal = useCallback(async (client: Client) => {
     closeActionsMenu();
@@ -808,6 +864,14 @@ export default function ClientCardPage() {
                       <label className="block text-sm font-medium text-slate-700 mb-1">טלפון</label>
                       <p className="text-base text-slate-900">{selectedClient.phone}</p>
                     </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">סוג לקוח</label>
+                      <p className="text-base text-slate-900">
+                        <span className="inline-block px-2 py-0.5 rounded text-sm font-medium bg-slate-100 text-slate-800">
+                          {clientTypes.some((t) => t.id === (selectedClient.clientTypeId || REGULAR_CLIENT_TYPE_ID)) ? getTypeLabel(selectedClient) : "רגיל"}
+                        </span>
+                      </p>
+                    </div>
                     {selectedClient.email && (
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">אימייל</label>
@@ -822,6 +886,32 @@ export default function ClientCardPage() {
                         </p>
                       </div>
                     )}
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">תור אחרון</label>
+                      <p className="text-base text-slate-900">
+                        {lastAppointment.lastConfirmedAt
+                          ? lastAppointment.lastConfirmedAt.toLocaleDateString("he-IL", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : clientBookings.length > 0
+                            ? "אין תור עבר מאושר"
+                            : "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">ימים מאז תור אחרון</label>
+                      <p className="text-base text-slate-900">
+                        {lastAppointment.daysSince !== null
+                          ? String(lastAppointment.daysSince)
+                          : lastAppointment.lastConfirmedAt == null
+                            ? "—"
+                            : "0"}
+                      </p>
+                    </div>
                     {selectedClient.createdAt && (
                       <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">לקוח מאז</label>
@@ -834,6 +924,12 @@ export default function ClientCardPage() {
                       <label className="block text-sm font-medium text-slate-700 mb-1">סה"כ תורים</label>
                       <p className="text-base text-slate-900">{selectedClient.totalBookings}</p>
                     </div>
+                  </div>
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">הערות לקוח</label>
+                    <p className="text-base text-slate-900 whitespace-pre-wrap">
+                      {selectedClient.clientNotes?.trim() ? selectedClient.clientNotes.trim() : "—"}
+                    </p>
                   </div>
                 </div>
 
@@ -1091,17 +1187,34 @@ export default function ClientCardPage() {
                 </div>
 
                 <div>
-                  <label htmlFor="notes" className="block text-sm font-medium text-slate-700 mb-1">
-                    הערות
+                  <label htmlFor="clientType" className="block text-sm font-medium text-slate-700 mb-1">
+                    סוג לקוח
+                  </label>
+                  <select
+                    id="clientType"
+                    name="clientTypeId"
+                    value={newClientForm.clientTypeId || REGULAR_CLIENT_TYPE_ID}
+                    onChange={(e) => setNewClientForm((p) => ({ ...p, clientTypeId: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm"
+                  >
+                    {clientTypes.map((t) => (
+                      <option key={t.id} value={t.id}>{t.labelHe}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label htmlFor="clientNotes" className="block text-sm font-medium text-slate-700 mb-1">
+                    הערות לקוח
                   </label>
                   <textarea
-                    id="notes"
-                    name="notes"
-                    value={newClientForm.notes}
+                    id="clientNotes"
+                    name="clientNotes"
+                    value={newClientForm.clientNotes}
                     onChange={handleClientFormChange}
                     rows={3}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-sky-500 text-sm resize-none"
-                    placeholder="הערות נוספות על הלקוח..."
+                    placeholder="הערות פנימיות (אופציונלי)"
                   />
                 </div>
 
@@ -1218,11 +1331,24 @@ export default function ClientCardPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">הערות</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">סוג לקוח</label>
+                  <select
+                    value={editForm.clientTypeId || REGULAR_CLIENT_TYPE_ID}
+                    onChange={(e) => setEditForm((p) => ({ ...p, clientTypeId: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
+                  >
+                    {clientTypes.map((t) => (
+                      <option key={t.id} value={t.id}>{t.labelHe}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">הערות לקוח</label>
                   <textarea
-                    value={editForm.notes}
-                    onChange={(e) => setEditForm((p) => ({ ...p, notes: e.target.value }))}
+                    value={editForm.clientNotes}
+                    onChange={(e) => setEditForm((p) => ({ ...p, clientNotes: e.target.value }))}
                     rows={3}
+                    placeholder="הערות פנימיות על הלקוח (אופציונלי)"
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right resize-none"
                   />
                 </div>

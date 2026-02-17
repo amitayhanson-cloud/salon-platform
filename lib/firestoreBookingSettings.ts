@@ -3,32 +3,7 @@ import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
 import type { BookingSettings } from "@/types/bookingSettings";
 import { defaultBookingSettings } from "@/types/bookingSettings";
 import type { SalonBookingState } from "@/types/booking";
-
-/**
- * Recursively removes keys with value `undefined` so Firestore never receives undefined.
- * For arrays: filters out undefined elements and sanitizes objects inside.
- * Leaves null and other primitives intact. Preserves Date and Firestore Timestamp-like objects.
- */
-export function stripUndefinedDeep<T>(value: T): T {
-  if (value === undefined) return value;
-  if (value === null || typeof value !== "object") return value;
-  if (value instanceof Date) return value;
-  if (
-    typeof (value as { toMillis?: unknown }).toMillis === "function" ||
-    typeof (value as { toDate?: unknown }).toDate === "function"
-  )
-    return value;
-  if (Array.isArray(value)) {
-    const sanitized = value.map((item) => stripUndefinedDeep(item)).filter((v) => v !== undefined);
-    return sanitized as T;
-  }
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    if (v === undefined) continue;
-    out[k] = stripUndefinedDeep(v);
-  }
-  return out as T;
-}
+import { sanitizeForFirestore } from "@/lib/sanitizeForFirestore";
 
 export function bookingSettingsDoc(siteId: string) {
   if (!db) throw new Error("Firestore db not initialized");
@@ -40,7 +15,8 @@ export async function ensureBookingSettings(siteId: string) {
   const ref = bookingSettingsDoc(siteId);
   const snap = await getDoc(ref);
   if (!snap.exists()) {
-    await setDoc(ref, defaultBookingSettings);
+    const sanitized = sanitizeForFirestore(defaultBookingSettings) as BookingSettings;
+    await setDoc(ref, sanitized);
   }
 }
 
@@ -54,7 +30,10 @@ export function subscribeBookingSettings(
     bookingSettingsDoc(siteId),
     (snap) => {
       const data = snap.exists() ? (snap.data() as BookingSettings) : defaultBookingSettings;
-      onData({ ...defaultBookingSettings, ...data });
+      const merged = { ...defaultBookingSettings, ...data };
+      // Client types live in settings/clients only; do not expose from booking doc
+      delete (merged as Record<string, unknown>).clientTypes;
+      onData(merged);
     },
     (err) => onError?.(err)
   );
@@ -62,7 +41,7 @@ export function subscribeBookingSettings(
 
 export async function saveBookingSettings(siteId: string, settings: BookingSettings) {
   if (!db) throw new Error("Firestore db not initialized");
-  const sanitized = stripUndefinedDeep(settings) as BookingSettings;
+  const sanitized = sanitizeForFirestore(settings) as BookingSettings;
   if (process.env.NODE_ENV !== "production") {
     console.log("[Admin] saveBookingSettings raw payload:", JSON.stringify(settings, null, 2));
     console.log("[Admin] saveBookingSettings sanitized payload:", JSON.stringify(sanitized, null, 2));

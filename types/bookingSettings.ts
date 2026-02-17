@@ -14,13 +14,37 @@ export type ClosedDateEntry = {
   label?: string;
 };
 
+/** Single client type in site settings. Regular has isSystem: true and cannot be deleted. */
+export type ClientTypeEntry = {
+  id: string;
+  labelHe: string;
+  isSystem?: boolean;
+  sortOrder: number;
+  createdAt?: import("firebase/firestore").Timestamp;
+};
+
+/** Stable id for the required default type. Must always exist. */
+export const REGULAR_CLIENT_TYPE_ID = "regular";
+
+/** Default client types. Regular is first and required (isSystem: true). */
+export const DEFAULT_CLIENT_TYPE_ENTRIES: ClientTypeEntry[] = [
+  { id: REGULAR_CLIENT_TYPE_ID, labelHe: "רגיל", isSystem: true, sortOrder: 0 },
+  { id: "new", labelHe: "חדש", isSystem: false, sortOrder: 1 },
+  { id: "vip", labelHe: "VIP", isSystem: false, sortOrder: 2 },
+  { id: "active", labelHe: "פעיל", isSystem: false, sortOrder: 3 },
+  { id: "inactive", labelHe: "לא פעיל", isSystem: false, sortOrder: 4 },
+];
+
 export type BookingSettings = {
   slotMinutes: number; // 15/30/60
   days: Record<"0" | "1" | "2" | "3" | "4" | "5" | "6", DayHours>; // Sunday=0
   /** Specific dates when the business is closed (holidays). No availability for any worker. */
   closedDates?: ClosedDateEntry[];
+  /** Client types per site. Must include one with id === REGULAR_CLIENT_TYPE_ID. */
+  clientTypes?: ClientTypeEntry[] | string[];
 };
 
+/** Default for booking doc only. Client types live in settings/clients, not here. */
 export const defaultBookingSettings: BookingSettings = {
   slotMinutes: 30,
   days: {
