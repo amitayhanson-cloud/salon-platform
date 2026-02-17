@@ -14,12 +14,23 @@ import {
 import { db } from "./firebaseClient";
 import { clientsCollection, bookingsCollection } from "./firestorePaths";
 import { clientDocRef } from "./firestoreClientRefs";
+import { REGULAR_CLIENT_TYPE_ID } from "@/types/bookingSettings";
+import { sanitizeForFirestore } from "./sanitizeForFirestore";
+
+/** @deprecated Prefer clientTypeId. Kept for legacy. */
+export type ClientType = "new" | "vip" | "active" | "inactive" | "regular";
 
 export interface ClientData {
   name: string;
   phone: string; // Phone number IS the document ID
   email?: string;
   notes?: string;
+  /** @deprecated Prefer clientTypeId. */
+  clientType?: string;
+  /** Client type id (e.g. "regular"). Default when missing is regular. */
+  clientTypeId?: string;
+  /** הערות לקוח – free-text, optional, multi-line. */
+  clientNotes?: string;
   chemicalCard?: any;
   personalPricing?: Record<string, number>;
   createdAt?: string | Timestamp;
@@ -42,14 +53,19 @@ export async function checkClientExists(
 
     if (snapshot.exists()) {
       const data = snapshot.data();
+      const raw = data.clientType != null && typeof data.clientType === "string" ? data.clientType.trim() : "";
+      const typeId = data.clientTypeId != null && typeof data.clientTypeId === "string" ? data.clientTypeId.trim() : undefined;
       return {
         exists: true,
         clientId: phone,
         clientData: {
           name: data.name || "",
-          phone: data.phone || phone, // Use phone from data or fallback to param
+          phone: data.phone || phone,
           email: data.email || undefined,
           notes: data.notes || undefined,
+          clientType: raw || "רגיל",
+          clientTypeId: typeId || REGULAR_CLIENT_TYPE_ID,
+          clientNotes: data.clientNotes != null ? String(data.clientNotes).trim() || undefined : undefined,
           chemicalCard: data.chemicalCard,
           personalPricing: data.personalPricing,
           createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || undefined,
@@ -73,7 +89,15 @@ export async function checkClientExists(
  */
 export async function getOrCreateClient(
   siteId: string,
-  clientData: { name: string; phone: string; email?: string; notes?: string }
+  clientData: {
+    name: string;
+    phone: string;
+    email?: string;
+    notes?: string;
+    clientType?: string;
+    clientTypeId?: string;
+    clientNotes?: string;
+  }
 ): Promise<string> {
   try {
     // Normalize phone (remove spaces, dashes, etc.)
@@ -85,23 +109,26 @@ export async function getOrCreateClient(
     const existing = await checkClientExists(siteId, normalizedPhone);
     if (existing.exists && existing.clientData) {
       // Client exists - update name/email if provided and different
-      const needsUpdate = 
+      const needsUpdate =
         (clientData.name.trim() && existing.clientData.name !== clientData.name.trim()) ||
-        (clientData.email && existing.clientData.email !== clientData.email) ||
-        (clientData.notes && existing.clientData.notes !== clientData.notes);
+        (clientData.email !== undefined && existing.clientData.email !== clientData.email) ||
+        (clientData.notes !== undefined && existing.clientData.notes !== clientData.notes?.trim()) ||
+        (clientData.clientType !== undefined && existing.clientData.clientType !== clientData.clientType) ||
+        (clientData.clientTypeId !== undefined && existing.clientData.clientTypeId !== clientData.clientTypeId) ||
+        (clientData.clientNotes !== undefined && existing.clientData.clientNotes !== (clientData.clientNotes?.trim() || undefined));
 
       if (needsUpdate) {
-        await setDoc(
-          docRef,
-          {
-            name: clientData.name.trim() || existing.clientData.name,
-            phone: normalizedPhone,
-            email: clientData.email?.trim() || null,
-            notes: clientData.notes?.trim() || null,
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
+        const payload: Record<string, unknown> = {
+          name: clientData.name.trim() || existing.clientData.name,
+          phone: normalizedPhone,
+          email: clientData.email?.trim() || null,
+          notes: clientData.notes?.trim() || null,
+          updatedAt: serverTimestamp(),
+        };
+        if (clientData.clientType !== undefined) payload.clientType = (typeof clientData.clientType === "string" && clientData.clientType.trim()) ? clientData.clientType.trim() : null;
+        if (clientData.clientTypeId !== undefined) payload.clientTypeId = (typeof clientData.clientTypeId === "string" && clientData.clientTypeId.trim()) ? clientData.clientTypeId.trim() : REGULAR_CLIENT_TYPE_ID;
+        if (clientData.clientNotes !== undefined) payload.clientNotes = clientData.clientNotes?.trim() || null;
+        await setDoc(docRef, sanitizeForFirestore(payload), { merge: true });
       }
       
       console.log("[getOrCreateClient] Found existing client", {
@@ -112,19 +139,18 @@ export async function getOrCreateClient(
       return normalizedPhone;
     }
 
-    // Client doesn't exist - create new one with phone as ID
-    await setDoc(
-      docRef,
-      {
-        name: clientData.name.trim(),
-        phone: normalizedPhone,
-        email: clientData.email?.trim() || null,
-        notes: clientData.notes?.trim() || null,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
+    const createPayload: Record<string, unknown> = {
+      name: clientData.name.trim(),
+      phone: normalizedPhone,
+      email: clientData.email?.trim() || null,
+      notes: clientData.notes?.trim() || null,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+    if (clientData.clientType !== undefined) createPayload.clientType = (typeof clientData.clientType === "string" && clientData.clientType.trim()) ? clientData.clientType.trim() : null;
+    if (clientData.clientTypeId !== undefined) createPayload.clientTypeId = (typeof clientData.clientTypeId === "string" && clientData.clientTypeId.trim()) ? clientData.clientTypeId.trim() : REGULAR_CLIENT_TYPE_ID;
+    if (clientData.clientNotes !== undefined) createPayload.clientNotes = clientData.clientNotes?.trim() || null;
+    await setDoc(docRef, sanitizeForFirestore(createPayload), { merge: true });
 
     console.log("[getOrCreateClient] Created new client", {
       siteId,
@@ -157,18 +183,18 @@ export async function createClient(
     }
 
     const docRef = clientDocRef(siteId, normalizedPhone);
-    await setDoc(
-      docRef,
-      {
-        name: client.name.trim(),
-        phone: normalizedPhone,
-        email: client.email?.trim() || null,
-        notes: client.notes?.trim() || null,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
+    const payload: Record<string, unknown> = {
+      name: client.name.trim(),
+      phone: normalizedPhone,
+      email: client.email?.trim() || null,
+      notes: client.notes?.trim() || null,
+      clientTypeId: (typeof client.clientTypeId === "string" && client.clientTypeId.trim()) ? client.clientTypeId.trim() : REGULAR_CLIENT_TYPE_ID,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+    if (client.clientType !== undefined) payload.clientType = (typeof client.clientType === "string" && client.clientType.trim()) ? client.clientType.trim() : null;
+    if (client.clientNotes !== undefined) payload.clientNotes = client.clientNotes?.trim() || null;
+    await setDoc(docRef, sanitizeForFirestore(payload), { merge: true });
 
     console.log("[createClient] Created client", {
       siteId,
@@ -214,8 +240,19 @@ export async function updateClient(
     if (updates.notes !== undefined) {
       updateData.notes = updates.notes?.trim() || null;
     }
+    if (updates.clientType !== undefined) {
+      const t = typeof updates.clientType === "string" ? updates.clientType.trim() : "";
+      updateData.clientType = t ? t : null;
+    }
+    if (updates.clientTypeId !== undefined) {
+      const t = typeof updates.clientTypeId === "string" ? updates.clientTypeId.trim() : "";
+      updateData.clientTypeId = t ? t : REGULAR_CLIENT_TYPE_ID;
+    }
+    if (updates.clientNotes !== undefined) {
+      updateData.clientNotes = updates.clientNotes?.trim() || null;
+    }
 
-    await setDoc(docRef, updateData, { merge: true });
+    await setDoc(docRef, sanitizeForFirestore(updateData), { merge: true });
 
     console.log("[updateClient] Updated client", {
       siteId,
@@ -244,11 +281,16 @@ export async function getClient(
     }
 
     const data = snapshot.data();
+    const raw = data.clientType != null && typeof data.clientType === "string" ? data.clientType.trim() : "";
+    const typeId = data.clientTypeId != null && typeof data.clientTypeId === "string" ? data.clientTypeId.trim() : undefined;
     return {
       name: data.name || "",
-      phone: data.phone || phone, // Use phone from data or fallback to param
+      phone: data.phone || phone,
       email: data.email || undefined,
       notes: data.notes || undefined,
+      clientType: raw || "רגיל",
+      clientTypeId: typeId || REGULAR_CLIENT_TYPE_ID,
+      clientNotes: data.clientNotes != null ? String(data.clientNotes).trim() || undefined : undefined,
       chemicalCard: data.chemicalCard,
       personalPricing: data.personalPricing,
       createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || undefined,
@@ -349,11 +391,16 @@ export async function getAllClients(siteId: string): Promise<ClientData[]> {
     const clients: ClientData[] = [];
     snapshot.docs.forEach((doc) => {
       const data = doc.data();
+      const raw = data.clientType != null && typeof data.clientType === "string" ? data.clientType.trim() : "";
+      const typeId = data.clientTypeId != null && typeof data.clientTypeId === "string" ? data.clientTypeId.trim() : undefined;
       clients.push({
         name: data.name || "",
-        phone: data.phone || doc.id, // Use phone from data or fallback to doc.id (which is phone)
+        phone: data.phone || doc.id,
         email: data.email || undefined,
         notes: data.notes || undefined,
+        clientType: raw || "רגיל",
+        clientTypeId: typeId || REGULAR_CLIENT_TYPE_ID,
+        clientNotes: data.clientNotes != null ? String(data.clientNotes).trim() || undefined : undefined,
         chemicalCard: data.chemicalCard,
         personalPricing: data.personalPricing,
         createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || undefined,
