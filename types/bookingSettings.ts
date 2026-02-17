@@ -14,11 +14,14 @@ export type ClosedDateEntry = {
   label?: string;
 };
 
-/** Single client type in site settings. Regular has isSystem: true and cannot be deleted. */
+/** Single client type in site settings. System defaults have isSystemDefault: true and cannot be deleted or renamed. */
 export type ClientTypeEntry = {
   id: string;
   labelHe: string;
+  /** @deprecated Use isSystemDefault. Kept for backward compat. */
   isSystem?: boolean;
+  /** True for the 5 fixed default types: cannot be deleted or renamed. */
+  isSystemDefault?: boolean;
   sortOrder: number;
   createdAt?: import("firebase/firestore").Timestamp;
 };
@@ -26,13 +29,24 @@ export type ClientTypeEntry = {
 /** Stable id for the required default type. Must always exist. */
 export const REGULAR_CLIENT_TYPE_ID = "regular";
 
-/** Default client types. Regular is first and required (isSystem: true). */
+/** The five system default client type ids. Always present for every site; cannot be deleted or renamed. */
+export const SYSTEM_DEFAULT_CLIENT_TYPE_IDS = [
+  REGULAR_CLIENT_TYPE_ID,
+  "vip",
+  "active",
+  "new",
+  "inactive",
+] as const;
+
+export type SystemDefaultClientTypeId = (typeof SYSTEM_DEFAULT_CLIENT_TYPE_IDS)[number];
+
+/** Default client types. All five are system defaults (isSystemDefault: true). */
 export const DEFAULT_CLIENT_TYPE_ENTRIES: ClientTypeEntry[] = [
-  { id: REGULAR_CLIENT_TYPE_ID, labelHe: "רגיל", isSystem: true, sortOrder: 0 },
-  { id: "new", labelHe: "חדש", isSystem: false, sortOrder: 1 },
-  { id: "vip", labelHe: "VIP", isSystem: false, sortOrder: 2 },
-  { id: "active", labelHe: "פעיל", isSystem: false, sortOrder: 3 },
-  { id: "inactive", labelHe: "לא פעיל", isSystem: false, sortOrder: 4 },
+  { id: REGULAR_CLIENT_TYPE_ID, labelHe: "רגיל", isSystem: true, isSystemDefault: true, sortOrder: 0 },
+  { id: "vip", labelHe: "VIP", isSystem: true, isSystemDefault: true, sortOrder: 1 },
+  { id: "active", labelHe: "פעיל", isSystem: true, isSystemDefault: true, sortOrder: 2 },
+  { id: "new", labelHe: "חדש", isSystem: true, isSystemDefault: true, sortOrder: 3 },
+  { id: "inactive", labelHe: "רדום", isSystem: true, isSystemDefault: true, sortOrder: 4 },
 ];
 
 export type BookingSettings = {

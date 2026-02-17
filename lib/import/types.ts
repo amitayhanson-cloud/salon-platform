@@ -45,8 +45,10 @@ export type RawRow = Record<string, string>;
 export interface MappedClient {
   phone: string;
   name: string;
-  email?: string;
   notes?: string;
+  clientType?: string;
+  /** @deprecated Import no longer uses email; kept for backward compat. */
+  email?: string;
   chemicalCard?: unknown;
 }
 
@@ -79,10 +81,17 @@ export interface RowError {
 
 /** Preview row shown in final confirmation (normalized). */
 export interface PreviewRow {
-  fullName: string;
+  name: string;
   phone: string;
-  email?: string;
   notes?: string;
+  clientType?: string;
+  /** Row status for preview: ok | warning | error */
+  status?: "ok" | "warning" | "error";
+  /** Human-readable status reason (e.g. unknown clientType -> Regular) */
+  statusReason?: string;
+  /** @deprecated Use name. */
+  fullName?: string;
+  email?: string;
 }
 
 /** Dry-run result (no writes). */
@@ -103,8 +112,18 @@ export interface DryRunResult {
 export interface ExecuteResult {
   clientsCreated: number;
   clientsUpdated: number;
+  clientsSkipped?: number;
+  clientsFailed?: number;
   bookingsCreated: number;
   bookingsSkipped: number;
   bookingsFailed: number;
   errors: RowError[];
+}
+
+/** Summary for strict client import (created / updated / skipped / failed). */
+export interface ImportSummary {
+  created: number;
+  updated: number;
+  skipped: number;
+  failed: number;
 }

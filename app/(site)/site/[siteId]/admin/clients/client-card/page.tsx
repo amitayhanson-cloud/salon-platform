@@ -34,6 +34,9 @@ interface Client {
   totalBookings: number;
 }
 
+/** Status values for client booking history display (from live status or statusAtArchive). */
+type HistoryBookingStatus = "booked" | "pending" | "confirmed" | "canceled" | "cancelled";
+
 interface Booking {
   id: string;
   customerName: string;
@@ -44,15 +47,27 @@ interface Booking {
   date: string; // YYYY-MM-DD
   time: string; // HH:mm
   durationMin?: number;
+  /** Live or stored status from Firestore */
   status: string;
-  createdAt?: any; // Timestamp or ISO string
+  /** Explicit display value: statusAtArchive ?? status ?? "booked" (one source of truth per item) */
+  displayedStatus: string;
+  createdAt?: unknown;
   note?: string;
-  price?: number; // If available
-  /** Soft-deleted from calendar; still shown in client history */
+  price?: number;
   isArchived?: boolean;
-  archivedAt?: any; // Timestamp or ISO string
-  archivedReason?: "manual" | "auto" | "customer_cancelled_via_whatsapp";
+  archivedAt?: unknown;
+  archivedReason?: string;
+  statusAtArchive?: string;
   whatsappStatus?: string;
+}
+
+/** Hebrew label for booking history status (archived and live). */
+function historyStatusLabel(status: string | undefined): string {
+  const s = (status ?? "booked").trim().toLowerCase();
+  if (s === "confirmed" || s === "אושר") return "מאושר";
+  if (s === "pending" || s === "awaiting_confirmation") return "ממתין לאישור";
+  if (s === "cancelled" || s === "canceled") return "בוטל";
+  return "נקבע";
 }
 
 export default function ClientCardPage() {
@@ -172,7 +187,7 @@ export default function ClientCardPage() {
             notes: data.notes || undefined,
             clientType: clientTypeRaw || "רגיל",
             clientTypeId: typeId || REGULAR_CLIENT_TYPE_ID,
-            clientNotes: data.clientNotes != null ? String(data.clientNotes).trim() || undefined : undefined,
+            clientNotes: data.clientNotes != null ? String(data.clientNotes).trim() || undefined : (data.notes != null ? String(data.notes).trim() || undefined : undefined),
             lastVisit: undefined,
             createdAt: data.createdAt?.toDate?.()?.toISOString?.() ?? (typeof data.createdAt === "string" ? data.createdAt : undefined),
             totalBookings: 0,
@@ -247,42 +262,50 @@ export default function ClientCardPage() {
         if (cancelled) return; // Don't update if cancelled
         
         try {
-          const bookings: Booking[] = [];
-          
-          snapshot.docs.forEach((doc) => {
-            const data = doc.data();
-            
-            // If we couldn't use where clause, filter client-side
-            if (data.customerPhone !== selectedClientId) return;
-            
-            bookings.push({
-              id: doc.id,
-              customerName: data.customerName || "",
-              customerPhone: data.customerPhone || "",
-              serviceName: data.serviceName || "",
-              serviceType: data.serviceType || null,
-              workerName: data.workerName || null,
-              date: data.date || data.dateISO || "",
-              time: data.time || data.timeHHmm || "",
-              durationMin: typeof data.durationMin === "number" ? data.durationMin : undefined,
-              status: data.status || "confirmed",
-              createdAt: data.createdAt,
-              note: data.note || undefined,
-              price: data.price || undefined,
-              isArchived: data.isArchived === true,
-              archivedAt: data.archivedAt,
-              archivedReason: data.archivedReason ?? undefined,
-              whatsappStatus: data.whatsappStatus ?? undefined,
+          const rawItems = snapshot.docs
+            .filter((doc) => (doc.data() as Record<string, unknown>).customerPhone === selectedClientId)
+            .map((doc): Booking => {
+              const data = doc.data() as Record<string, unknown>;
+              const id = doc.id;
+              const rawStatusAtArchive = data["statusAtArchive"] ?? data.statusAtArchive;
+              const rawStatus = data["status"] ?? data.status;
+              const statusAtArchiveStr =
+                rawStatusAtArchive != null && String(rawStatusAtArchive).trim() !== ""
+                  ? String(rawStatusAtArchive).trim()
+                  : undefined;
+              const statusStr =
+                rawStatus != null && String(rawStatus).trim() !== "" ? String(rawStatus).trim() : undefined;
+              const displayedStatus = statusAtArchiveStr ?? statusStr ?? "booked";
+
+              return {
+                id,
+                customerName: (data.customerName as string) || "",
+                customerPhone: (data.customerPhone as string) || "",
+                serviceName: (data.serviceName as string) || "",
+                serviceType: (data.serviceType as string) ?? null,
+                workerName: (data.workerName as string) ?? null,
+                date: (data.date as string) || (data.dateISO as string) || "",
+                time: (data.time as string) || (data.timeHHmm as string) || "",
+                durationMin: typeof data.durationMin === "number" ? data.durationMin : undefined,
+                status: statusStr ?? "booked",
+                displayedStatus,
+                createdAt: data.createdAt,
+                note: (data.note as string) ?? undefined,
+                price: typeof data.price === "number" ? data.price : undefined,
+                isArchived: data.isArchived === true,
+                archivedAt: data.archivedAt,
+                archivedReason: (data.archivedReason as string) ?? undefined,
+                statusAtArchive: statusAtArchiveStr,
+                whatsappStatus: (data.whatsappStatus as string) ?? undefined,
+              };
             });
-          });
-          
-          // Sort by date (newest first), then by time
-          bookings.sort((a, b) => {
+
+          const bookings = [...rawItems].sort((a, b) => {
             const dateCompare = (b.date || "").localeCompare(a.date || "");
             if (dateCompare !== 0) return dateCompare;
             return (b.time || "").localeCompare(a.time || "");
           });
-          
+
           if (!cancelled) {
             setClientBookings(bookings);
             setBookingsLoading(false);
@@ -506,7 +529,7 @@ export default function ClientCardPage() {
       name: client.name,
       email: client.email ?? "",
       clientTypeId: clientTypes.some((t) => t.id === resolvedId) ? resolvedId : REGULAR_CLIENT_TYPE_ID,
-      clientNotes: client.clientNotes ?? "",
+      clientNotes: client.clientNotes ?? client.notes ?? "",
     });
     setEditError(null);
   }, [closeActionsMenu, clientTypes]);
@@ -927,8 +950,8 @@ export default function ClientCardPage() {
                   </div>
                   <div className="mt-4">
                     <label className="block text-sm font-medium text-slate-700 mb-1">הערות לקוח</label>
-                    <p className="text-base text-slate-900 whitespace-pre-wrap">
-                      {selectedClient.clientNotes?.trim() ? selectedClient.clientNotes.trim() : "—"}
+                    <p className="text-base text-slate-900 whitespace-pre-wrap" dir="rtl">
+                      {(selectedClient.notes ?? selectedClient.clientNotes)?.trim() ? (selectedClient.notes ?? selectedClient.clientNotes)!.trim() : "—"}
                     </p>
                   </div>
                 </div>
@@ -976,7 +999,21 @@ export default function ClientCardPage() {
                         <p className="text-sm text-slate-500 text-center py-8">אין תורים רשומים</p>
                       ) : (
                         <div className="space-y-3">
-                          {clientBookings.map((booking) => (
+                          {clientBookings.map((booking) => {
+                            const displayedStatus =
+                              booking.displayedStatus ??
+                              booking.statusAtArchive ??
+                              booking.status ??
+                              "booked";
+                            if (process.env.NODE_ENV !== "production") {
+                              console.log("HISTORY ITEM", {
+                                id: booking.id,
+                                statusAtArchive: booking.statusAtArchive,
+                                status: booking.status,
+                                displayedStatus,
+                              });
+                            }
+                            return (
                             <div
                               key={booking.id}
                               className="p-4 border border-slate-200 rounded-lg hover:shadow-md transition-shadow"
@@ -1004,9 +1041,14 @@ export default function ClientCardPage() {
                                       <span className="font-medium">{booking.workerName}</span>
                                     </div>
                                   )}
-                                  <div className="md:col-span-4 flex items-center gap-2">
+                                  <div className="md:col-span-4 flex items-center gap-2 flex-wrap">
+                                    <span className="text-xs text-slate-600 font-medium">
+                                      סטטוס: {historyStatusLabel(displayedStatus)}
+                                    </span>
                                     <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-                                      {booking.whatsappStatus === "cancelled" || booking.status === "cancelled"
+                                      {booking.whatsappStatus === "cancelled" ||
+                                      displayedStatus === "cancelled" ||
+                                      displayedStatus === "canceled"
                                         ? "בוטל"
                                         : "הוסר מיומן"}
                                       {booking.archivedAt != null &&
@@ -1065,7 +1107,8 @@ export default function ClientCardPage() {
                                 </div>
                               )}
                             </div>
-                          ))}
+                          );
+                          })}
                         </div>
                       )}
                     </div>

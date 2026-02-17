@@ -176,6 +176,8 @@ interface MultiWorkerScheduleViewProps {
   endHour?: number; // Default 20
   /** Break ranges to show as greyed-out blocks (business-level breaks). */
   breaks?: BreakRange[];
+  /** Per-worker break ranges for the current day (All Workers view: overlay per column). */
+  workerBreaksByWorkerId?: Record<string, BreakRange[]>;
   onBookingClick?: (booking: Booking) => void; // Callback when booking block is clicked
 }
 
@@ -191,6 +193,7 @@ export default function MultiWorkerScheduleView({
   startHour = 8,
   endHour = 20,
   breaks,
+  workerBreaksByWorkerId,
   onBookingClick,
 }: MultiWorkerScheduleViewProps) {
   const confirmedBookings = useMemo(() => bookings.filter((b) => !isBookingCancelled(b)), [bookings]);
@@ -245,6 +248,7 @@ export default function MultiWorkerScheduleView({
             startHour={startHour}
             endHour={endHour}
             breaks={breaks}
+            workerBreaksByWorkerId={workerBreaksByWorkerId}
             onBookingClick={
               onBookingClick
                 ? (b: unknown): void => {

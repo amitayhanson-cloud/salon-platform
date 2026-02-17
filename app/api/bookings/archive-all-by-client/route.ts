@@ -70,6 +70,23 @@ export async function POST(request: Request) {
       const batch = db.batch();
       const chunk = entries.slice(i, i + BATCH_SIZE);
       for (const { ref, data: d } of chunk) {
+        const existingStatusAtArchive =
+          d.statusAtArchive != null && String(d.statusAtArchive).trim() !== ""
+            ? String(d.statusAtArchive).trim()
+            : undefined;
+        const liveStatus =
+          d.status != null && String(d.status).trim() !== "" ? String(d.status).trim() : undefined;
+        const statusAtArchive = existingStatusAtArchive ?? liveStatus ?? "booked";
+        if (process.env.NODE_ENV !== "production") {
+          console.log("ARCHIVE WRITE", {
+            path: ref.path,
+            op: "setDoc",
+            payloadKeys: ["date", "serviceName", "serviceType", "workerId", "workerName", "customerPhone", "customerName", "isArchived", "archivedAt", "archivedReason", "statusAtArchive"],
+            isAlreadyArchived: d.isArchived === true,
+            existingStatusAtArchive: existingStatusAtArchive ?? "(none)",
+            statusAtArchive,
+          });
+        }
         const dateStr = (d.date as string) ?? (d.dateISO as string) ?? "";
         const phone = (d.customerPhone as string) ?? (d.phone as string) ?? "";
         const minimal: Record<string, unknown> = {
@@ -83,6 +100,7 @@ export async function POST(request: Request) {
           isArchived: true,
           archivedAt: admin.firestore.FieldValue.serverTimestamp(),
           archivedReason: "admin_bulk_client_delete",
+          statusAtArchive,
         };
         batch.set(ref, minimal, { merge: false });
         archived++;

@@ -9,7 +9,7 @@
 import { NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
 import { Timestamp, type DocumentSnapshot } from "firebase-admin/firestore";
-import { REGULAR_CLIENT_TYPE_ID, DEFAULT_CLIENT_TYPE_ENTRIES } from "@/types/bookingSettings";
+import { REGULAR_CLIENT_TYPE_ID, DEFAULT_CLIENT_TYPE_ENTRIES, SYSTEM_DEFAULT_CLIENT_TYPE_IDS } from "@/types/bookingSettings";
 import type { ClientTypeEntry } from "@/types/bookingSettings";
 import { sanitizeForFirestore } from "@/lib/sanitizeForFirestore";
 
@@ -109,9 +109,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, message: "missing typeId" }, { status: 400 });
     }
 
-    if (typeId.trim() === REGULAR_CLIENT_TYPE_ID) {
+    const trimmedTypeId = typeId.trim();
+    if (SYSTEM_DEFAULT_CLIENT_TYPE_IDS.includes(trimmedTypeId as (typeof SYSTEM_DEFAULT_CLIENT_TYPE_IDS)[number])) {
       return NextResponse.json(
-        { ok: false, message: "אי אפשר למחוק את סוג הלקוח 'רגיל' כי הוא ברירת המחדל." },
+        { ok: false, message: "סוג לקוח ברירת מחדל לא ניתן למחיקה" },
         { status: 400 }
       );
     }

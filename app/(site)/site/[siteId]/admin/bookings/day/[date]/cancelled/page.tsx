@@ -56,6 +56,8 @@ interface ArchiveBooking {
   note?: string;
   cancellationReason?: string | null;
   status: string;
+  /** Status at moment of archive; missing on old records. */
+  statusAtArchive?: string | null;
   createdAt: string;
 }
 
@@ -200,6 +202,7 @@ export default function CancelledBookingsPage() {
         id: d.id,
         ...data,
         status,
+        statusAtArchive: (data.statusAtArchive as string | undefined) ?? undefined,
         workerName,
         cancellationReason: (data.cancellationReason ?? data.cancelReason) as string | null,
         endTime: endTimeStr,

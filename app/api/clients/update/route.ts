@@ -1,13 +1,15 @@
 /**
  * POST /api/clients/update
- * Update client fields (name, email, notes). Phone is read-only (clientId).
- * Body: { siteId, clientId, updates: { name?, email?, notes? } }
+ * Update client fields (name, email, clientTypeId, clientNotes). Phone is read-only (clientId).
+ * clientTypeId defaults to "regular" when missing or invalid; we always persist a value.
+ * Body: { siteId, clientId, updates: { name?, email?, clientTypeId?, clientNotes? } }
  * Requires Firebase ID token. Site owner only.
  */
 
 import { NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
+import { REGULAR_CLIENT_TYPE_ID } from "@/types/bookingSettings";
 
 function requireSiteOwner(
   token: string | null,
@@ -65,7 +67,8 @@ export async function POST(request: Request) {
 
     const name = updates.name;
     const email = updates.email;
-    const notes = updates.notes;
+    const clientTypeId = updates.clientTypeId;
+    const clientNotes = updates.clientNotes;
 
     if (name !== undefined && (typeof name !== "string" || !name.trim())) {
       return NextResponse.json({ ok: false, message: "name is required and must be non-empty" }, { status: 400 });
@@ -81,7 +84,11 @@ export async function POST(request: Request) {
     const data: Record<string, unknown> = { updatedAt: Timestamp.now() };
     if (name !== undefined) data.name = name.trim();
     if (email !== undefined) data.email = email == null || String(email).trim() === "" ? null : String(email).trim();
-    if (notes !== undefined) data.notes = notes == null || String(notes).trim() === "" ? null : String(notes).trim();
+    // Always store clientTypeId; default to regular when missing or invalid
+    const typeId =
+      typeof clientTypeId === "string" && clientTypeId.trim() ? clientTypeId.trim() : REGULAR_CLIENT_TYPE_ID;
+    data.clientTypeId = typeId;
+    if (clientNotes !== undefined) data.clientNotes = clientNotes == null || String(clientNotes).trim() === "" ? null : String(clientNotes).trim();
 
     await clientRef.set(data, { merge: true });
 

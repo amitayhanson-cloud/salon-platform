@@ -7,6 +7,7 @@ import { getPersonalPricing } from "./firestorePersonalPricing";
 import { resolveServicePrice } from "./pricingUtils";
 import { validateChainAssignments, type WorkersForValidation } from "./multiServiceChain";
 import { workerCanDoService } from "./workerServiceCompatibility";
+import type { MultiBookingSelectionPayload } from "@/types/multiBookingCombo";
 
 /** Removes keys with value undefined so Firestore never receives undefined. Preserves Timestamp and FieldValue. */
 function cleanUndefined<T>(value: T): T {
@@ -385,12 +386,18 @@ export async function saveMultiServiceBooking(
   siteId: string,
   chainSlots: ChainSlotForSave[],
   client: { name: string; phone: string; note?: string },
-  options?: { workers?: WorkersForValidation }
+  options?: { workers?: WorkersForValidation; multiPayload?: MultiBookingSelectionPayload }
 ): Promise<{ visitGroupId: string; firstBookingId: string }> {
   if (!db) throw new Error("Firestore db not initialized");
   if (chainSlots.length === 0) throw new Error("Chain must have at least one service");
 
   const workers = options?.workers ?? [];
+  const multiPayload = options?.multiPayload;
+  if (multiPayload) {
+    if (multiPayload.multiBookingComboId == null || String(multiPayload.multiBookingComboId).trim() === "") {
+      throw new Error("Multi-booking requires a valid combo match.");
+    }
+  }
   if (workers.length > 0) {
     const validation = validateChainAssignments(chainSlots, workers);
     if (!validation.valid) {
@@ -462,8 +469,10 @@ export async function saveMultiServiceBooking(
   const bookingsRef = bookingsCollection(siteId);
   let firstBookingId = "";
   let lastPhase1DocId: string | null = null;
+  const orderedTypeCount = multiPayload?.orderedServiceTypeIds?.length ?? 0;
 
-  for (const item of serviceItems) {
+  for (let stepIndex = 0; stepIndex < serviceItems.length; stepIndex++) {
+    const item = serviceItems[stepIndex]!;
     const dateStr =
       item.startAt.getFullYear() +
       "-" +
@@ -507,6 +516,27 @@ export async function saveMultiServiceBooking(
     };
     if (item.phase === 2 && lastPhase1DocId) {
       payload.parentBookingId = lastPhase1DocId;
+    }
+    if (multiPayload) {
+      payload.isMultiBooking = true;
+      payload.selectedServiceTypeIds = multiPayload.selectedServiceTypeIds;
+      payload.orderedServiceTypeIds = multiPayload.orderedServiceTypeIds;
+      payload.orderedServiceTypeIdsUsed = multiPayload.orderedServiceTypeIds;
+      payload.multiBookingComboId = multiPayload.multiBookingComboId;
+      payload.stepIndex = stepIndex;
+      if (stepIndex >= orderedTypeCount) {
+        payload.stepKind = "auto";
+        const autoStep = multiPayload.appliedAutoSteps?.[stepIndex - orderedTypeCount];
+        if (autoStep) {
+          payload.durationMinutesOverride = autoStep.durationMinutesOverride;
+        }
+      }
+      if (multiPayload.computedOffsetsMinutes?.length) {
+        payload.computedOffsetsMinutes = multiPayload.computedOffsetsMinutes;
+      }
+      if (multiPayload.appliedAutoSteps?.length) {
+        payload.appliedAutoSteps = multiPayload.appliedAutoSteps;
+      }
     }
     const ref = await addDoc(bookingsRef, cleanUndefined(payload) as Record<string, unknown>);
     if (!firstBookingId) firstBookingId = ref.id;
@@ -608,6 +638,10 @@ export async function archiveBooking(
       throw new Error("Booking not found");
     }
     const d = snap.data();
+    const statusAtArchive = (d.status != null && String(d.status).trim()) ? String(d.status).trim() : "booked";
+    if (process.env.NODE_ENV !== "production") {
+      console.log("ARCHIVE PAYLOAD", { bookingId, status: d.status, statusAtArchive });
+    }
     const dateStr = (d.date as string) ?? (d.dateISO as string) ?? "";
     const customerPhone = (d.customerPhone as string) ?? (d.phone as string) ?? "";
     const minimal: Record<string, unknown> = {
@@ -624,6 +658,7 @@ export async function archiveBooking(
       isArchived: true,
       archivedAt: serverTimestamp(),
       archivedReason: reason,
+      statusAtArchive,
     };
     await setDoc(ref, cleanUndefined(minimal));
     console.log("[archiveBooking] archived and trimmed booking", { siteId, bookingId, reason });

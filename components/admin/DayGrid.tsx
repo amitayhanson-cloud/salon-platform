@@ -88,6 +88,8 @@ export interface DayGridProps {
   endHour?: number;
   /** Break ranges to show as greyed-out rows (business-level breaks). */
   breaks?: Array<{ start: string; end: string }>;
+  /** Per-worker break ranges for the current day (rendered in that worker's column only). */
+  workerBreaksByWorkerId?: Record<string, Array<{ start: string; end: string }>>;
   onBookingClick?: (booking: unknown) => void;
 }
 
@@ -98,6 +100,7 @@ export default function DayGrid({
   startHour = 8,
   endHour = 20,
   breaks,
+  workerBreaksByWorkerId,
   onBookingClick,
 }: DayGridProps) {
   const DAY_START_MINUTES = startHour * 60;
@@ -282,6 +285,38 @@ export default function DayGrid({
             />
           );
         })}
+
+        {/* Worker break blocks: same style, one per worker column (z-index 5) */}
+        {workerBreaksByWorkerId &&
+          workers.flatMap((worker, colIndex) => {
+            const workerBreaks = workerBreaksByWorkerId[worker.id];
+            if (!workerBreaks?.length) return [];
+            return workerBreaks.map((br, idx) => {
+              const breakStartMin = getMinutesSinceStartOfDay(br.start);
+              const breakEndMin = getMinutesSinceStartOfDay(br.end);
+              if (breakEndMin <= breakStartMin) return null;
+              const startClamped = Math.max(DAY_START_MINUTES, Math.min(DAY_END_MINUTES, breakStartMin));
+              const endClamped = Math.max(DAY_START_MINUTES, Math.min(DAY_END_MINUTES, breakEndMin));
+              if (endClamped <= startClamped) return null;
+              const minutesFromViewStart = startClamped - DAY_START_MINUTES;
+              const rowStart = Math.floor(minutesFromViewStart / SLOT_MINUTES) + 1;
+              const rowSpan = Math.ceil((endClamped - startClamped) / SLOT_MINUTES);
+              return (
+                <div
+                  key={`worker-break-${worker.id}-${idx}`}
+                  className="pointer-events-none opacity-60"
+                  style={{
+                    gridRow: `${rowStart} / span ${rowSpan}`,
+                    gridColumn: colIndex + 2,
+                    background: "repeating-linear-gradient(-45deg, #e2e8f0, #e2e8f0 4px, #cbd5e1 4px, #cbd5e1 8px)",
+                    zIndex: 5,
+                  }}
+                  title="הפסקת עובד"
+                  aria-hidden
+                />
+              );
+            });
+          })}
 
         {/* Booking blocks: grid-row placed, same coordinate system */}
         {blocksWithGrid.map((block) => {

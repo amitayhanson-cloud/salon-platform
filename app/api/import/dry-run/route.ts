@@ -1,13 +1,12 @@
 /**
  * POST /api/import/dry-run
- * Validates import data and returns summary (no writes).
+ * Validates import data and returns summary (no writes). Loads site client types for clientType resolution.
  * Body: { siteId, rows: RawRow[], mapping: ColumnMapping }
- * Requires Firebase ID token. Only site owner can call.
  */
 
 import { NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
-import { runDryRun } from "@/lib/import/server";
+import { runDryRun, loadClientTypesMap } from "@/lib/import/server";
 import type { RawRow, ColumnMapping } from "@/lib/import/types";
 
 export async function POST(request: Request) {
@@ -45,7 +44,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
 
-    const result = await runDryRun(siteId, rows, mapping);
+    const clientTypesMap = await loadClientTypesMap(siteId);
+    const result = await runDryRun(siteId, rows, mapping, { clientTypesMap });
     return NextResponse.json(result);
   } catch (e) {
     console.error("[import/dry-run]", e);

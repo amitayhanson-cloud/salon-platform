@@ -48,6 +48,8 @@ import {
 } from "@/lib/multiServiceChain";
 import { saveMultiServiceBooking } from "@/lib/booking";
 import { getSiteUrl } from "@/lib/tenant";
+import type { MultiBookingSelectionPayload } from "@/types/multiBookingCombo";
+import { subscribeMultiBookingCombos, findMatchingCombo } from "@/lib/firestoreMultiBookingCombos";
 
 type TimestampLike = { toDate: () => Date };
 
@@ -111,6 +113,34 @@ function normalizePhases(value: unknown): PhaseForDate[] | undefined {
 
 type BookingStep = 1 | 2 | 3 | 4 | 5 | 6; // 6 = success
 
+/** Today YYYY-MM-DD in the given IANA timezone. */
+function getTodayInTimeZone(timeZone: string): string {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = formatter.formatToParts(new Date());
+  const y = parts.find((p) => p.type === "year")!.value;
+  const m = parts.find((p) => p.type === "month")!.value;
+  const d = parts.find((p) => p.type === "day")!.value;
+  return `${y}-${m}-${d}`;
+}
+
+/** Current hour (0–23) and minute (0–59) in the given IANA timezone. */
+function getNowInTimeZone(timeZone: string): { hours: number; minutes: number } {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const str = formatter.format(new Date());
+  const [hours, minutes] = str.split(":").map(Number);
+  return { hours, minutes };
+}
+
 export default function BookingPage() {
   const params = useParams();
   const router = useRouter();
@@ -157,6 +187,16 @@ export default function BookingPage() {
   // Booking form state: list of { service, pricingItem } for multi-service support
   const [selectedServices, setSelectedServices] = useState<Array<{ service: SiteService; pricingItem: PricingItem }>>([]);
   const [expandingServiceId, setExpandingServiceId] = useState<string | null>(null);
+  /** Multi-booking mode: when true, user can add multiple services; when false, single-service only (unchanged from original flow). */
+  const [isMultiBooking, setIsMultiBooking] = useState(false);
+  /** Rule-based combos (service types + optional auto steps). */
+  const [multiBookingCombos, setMultiBookingCombos] = useState<Array<{
+    id: string;
+    triggerServiceTypeIds: string[];
+    orderedServiceTypeIds: string[];
+    isActive: boolean;
+    autoSteps?: Array<{ serviceId: string; durationMinutesOverride: number; position: "end" | number }>;
+  }>>([]);
   // Derived for single-service path (backward compat)
   const selectedService = selectedServices[0]?.service ?? null;
   const selectedPricingItem = selectedServices[0]?.pricingItem ?? null;
@@ -527,6 +567,21 @@ export default function BookingPage() {
     return () => {
       unsubscribePricing();
     };
+  }, [siteId]);
+
+  // Load multi-booking combos (for combo matching when isMultiBooking)
+  useEffect(() => {
+    if (!siteId) return;
+    const unsub = subscribeMultiBookingCombos(siteId, (list) => {
+      setMultiBookingCombos(list.map((c) => ({
+        id: c.id,
+        triggerServiceTypeIds: c.triggerServiceTypeIds,
+        orderedServiceTypeIds: c.orderedServiceTypeIds,
+        isActive: c.isActive,
+        ...(c.autoSteps?.length && { autoSteps: c.autoSteps }),
+      })));
+    });
+    return () => unsub();
   }, [siteId]);
 
   // Load booking settings and workers (only if booking is enabled)
@@ -1011,10 +1066,22 @@ export default function BookingPage() {
     }
   }, [selectedDate, selectedService, workers, eligibleWorkers]);
 
+  const selectedTypeIdsForCombo = useMemo(() => {
+    if (!isMultiBooking || selectedServices.length <= 1) return [];
+    return selectedServices.map((s) => s.pricingItem.id).filter((id): id is string => id != null && id !== "");
+  }, [isMultiBooking, selectedServices]);
+
+  const hasValidMultiBookingCombo = useMemo(() => {
+    if (!isMultiBooking || selectedServices.length <= 1) return true;
+    return findMatchingCombo(multiBookingCombos, selectedTypeIdsForCombo) != null;
+  }, [isMultiBooking, selectedServices.length, multiBookingCombos, selectedTypeIdsForCombo]);
+
   const isStepValid = (): boolean => {
     switch (step) {
       case 1:
-        return selectedServices.length >= 1;
+        if (selectedServices.length < 1) return false;
+        if (isMultiBooking && selectedServices.length > 1 && !hasValidMultiBookingCombo) return false;
+        return true;
       case 2:
         // Worker selection is optional, but we need at least one eligible worker available
         // If no eligible workers, disable next step
@@ -1066,9 +1133,96 @@ export default function BookingPage() {
       }
       const businessWindow = getBusinessWindow(selectedDate);
 
-      // Single and multi-service: same path. When needsFinish, one finishing service (e.g. פן) appended at end; no phase2 from first service.
-      const baseChain: ChainServiceInput[] = selectedServices.map((s) => ({ service: s.service, pricingItem: s.pricingItem }));
-      const chain = buildChainWithFinishingService(baseChain, services, pricingItems);
+      // Multi-booking only: combo is the ONLY source of truth. Require match; no fallback to user order.
+      let baseChain: ChainServiceInput[];
+      let multiPayload: MultiBookingSelectionPayload | undefined;
+      let matchedCombo: typeof multiBookingCombos[0] | null = null;
+      if (isMultiBooking && selectedServices.length > 1) {
+        const selectedTypeIds = selectedServices.map((s) => s.pricingItem.id).filter((id): id is string => id != null && id !== "");
+        const match = findMatchingCombo(multiBookingCombos, selectedTypeIds);
+        if (!match) {
+          setSubmitError("לא קיימת קומבינציה עבור השירותים שנבחרו. אנא צרו קשר עם העסק להמשך בירור.");
+          setIsSubmitting(false);
+          return;
+        }
+        matchedCombo = match;
+        const orderedTypeIds = Array.isArray(match.orderedServiceTypeIds) && match.orderedServiceTypeIds.length > 0
+          ? match.orderedServiceTypeIds
+          : selectedTypeIds;
+        {
+          const chainInputs: ChainServiceInput[] = [];
+          for (let i = 0; i < orderedTypeIds.length; i++) {
+            const typeId = orderedTypeIds[i]!;
+            const prevTypeId = i > 0 ? orderedTypeIds[i - 1]! : null;
+            const prevItem = prevTypeId ? pricingItems.find((p) => p.id === prevTypeId) : null;
+            const waitBefore = i > 0 && prevItem
+              ? Math.max(0, (prevItem.hasFollowUp && prevItem.followUp) ? (prevItem.followUp.waitMinutes ?? 0) : 0)
+              : 0;
+            const pricingItem = pricingItems.find((p) => p.id === typeId);
+            const service = pricingItem
+              ? services.find((s) => s.id === pricingItem.serviceId || s.name === (pricingItem.serviceId || pricingItem.service))
+              : null;
+            if (pricingItem && service) {
+              chainInputs.push({
+                service,
+                pricingItem,
+                ...(i > 0 && { finishGapBefore: waitBefore }),
+              });
+            } else {
+              const fallback = selectedServices.find((s) => s.pricingItem.id === typeId);
+              if (fallback) {
+                chainInputs.push({
+                  service: fallback.service,
+                  pricingItem: fallback.pricingItem,
+                  ...(i > 0 && { finishGapBefore: waitBefore }),
+                });
+              }
+            }
+          }
+          if (match.autoSteps?.length) {
+          const lastTypeId = orderedTypeIds[orderedTypeIds.length - 1];
+          const lastItem = lastTypeId ? pricingItems.find((p) => p.id === lastTypeId) : null;
+          let gapBeforeFirstAuto = lastItem && (lastItem.hasFollowUp && lastItem.followUp)
+            ? Math.max(0, lastItem.followUp.waitMinutes ?? 0)
+            : 0;
+          for (const step of match.autoSteps) {
+            if (step.position !== "end") continue;
+            const service = services.find((s) => s.id === step.serviceId);
+            if (!service) continue;
+            const syntheticPricing: PricingItem = {
+              ...getDefaultPricingItem(service),
+              id: `auto-${step.serviceId}-${step.durationMinutesOverride}`,
+              durationMinMinutes: step.durationMinutesOverride,
+              durationMaxMinutes: step.durationMinutesOverride,
+            };
+            chainInputs.push({
+              service,
+              pricingItem: syntheticPricing,
+              finishGapBefore: gapBeforeFirstAuto,
+            });
+            gapBeforeFirstAuto = 0;
+          }
+        }
+          baseChain = chainInputs;
+        }
+        multiPayload = {
+          isMultiBooking: true,
+          selectedServiceTypeIds: selectedTypeIds,
+          orderedServiceTypeIds: orderedTypeIds,
+          multiBookingComboId: match.id,
+          ...(match.autoSteps?.length && {
+            appliedAutoSteps: match.autoSteps
+              .filter((s) => s.position === "end")
+              .map((s) => ({ serviceId: s.serviceId, durationMinutesOverride: s.durationMinutesOverride })),
+          }),
+        };
+        } else {
+        baseChain = selectedServices.map((s) => ({ service: s.service, pricingItem: s.pricingItem }));
+      }
+      // When combo matched, use chain as-is (no finishing-service append) so combo order + gaps + auto-step are preserved.
+      const chain = (isMultiBooking && selectedServices.length > 1 && matchedCombo)
+        ? baseChain
+        : buildChainWithFinishingService(baseChain, services, pricingItems);
       const resolved = resolveChainWorkers({
         chain,
         startAt,
@@ -1098,11 +1252,36 @@ export default function BookingPage() {
         setSubmitError(validation.errors[0] ?? "ההקצאה אינה תקינה. נא לנסות שוב.");
         return;
       }
+      if (multiPayload && repaired.length > 0) {
+        const firstStart = repaired[0]!.startAt.getTime();
+        multiPayload.computedOffsetsMinutes = repaired.map((slot) =>
+          Math.round((slot.startAt.getTime() - firstStart) / (60 * 1000))
+        );
+      }
+      if (process.env.NODE_ENV !== "production" && multiPayload && matchedCombo && repaired.length > 0) {
+        const firstStart = repaired[0]!.startAt.getTime();
+        console.log("MULTI COMBO APPLIED", {
+          comboId: matchedCombo.id,
+          trigger: matchedCombo.triggerServiceTypeIds,
+          ordered: matchedCombo.orderedServiceTypeIds,
+          autoSteps: matchedCombo.autoSteps,
+          computedSteps: repaired.map((s, idx) => ({
+            index: idx,
+            kind: idx >= (matchedCombo!.orderedServiceTypeIds?.length ?? 0) ? "auto" : "type",
+            serviceTypeId: undefined,
+            serviceId: s.serviceId,
+            serviceName: s.serviceName,
+            start: s.startAt.toISOString(),
+            end: s.endAt.toISOString(),
+            durationMin: s.durationMin,
+          })),
+        });
+      }
       const { firstBookingId, visitGroupId } = await saveMultiServiceBooking(siteId, repaired, {
         name: clientName.trim(),
         phone: clientPhone.trim(),
         note: clientNote.trim() || undefined,
-      }, { workers });
+      }, { workers, multiPayload });
       console.log("[BOOK_CREATE] client_write_ok", { siteId, firstBookingId, visitGroupId, bookingPath: `sites/${siteId}/bookings/${firstBookingId}` });
       if (!firstBookingId) {
         setSubmitError("שגיאה: לא התקבל מזהה תור. נא לנסות שוב.");
@@ -1200,8 +1379,21 @@ export default function BookingPage() {
       breaks: breaksForDay,
       workerBreaksByWorkerId,
     });
+
+    // When selected date is today (tenant timezone), hide past time slots.
+    const tenantTz = config?.archiveRetention?.timezone;
+    const todayStrInTz = tenantTz ? getTodayInTimeZone(tenantTz) : ymdLocal(new Date());
+    if (dateStr === todayStrInTz) {
+      const now =
+        tenantTz ? getNowInTimeZone(tenantTz) : { hours: new Date().getHours(), minutes: new Date().getMinutes() };
+      return slots.filter((timeStr) => {
+        const [h, m] = timeStr.split(":").map(Number);
+        return h > now.hours || (h === now.hours && m > now.minutes);
+      });
+    }
     return slots;
   }, [
+    config,
     selectedDate,
     selectedServices,
     selectedWorker,
@@ -1611,19 +1803,53 @@ export default function BookingPage() {
 
         {/* Step content */}
         <div className="rounded-3xl shadow-lg p-6 sm:p-8" style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)", borderWidth: "1px" }}>
-          {/* Step 1: Service and pricing selection (multi-service: add to list) */}
+          {/* Step 1: Service and pricing selection (multi-service only when isMultiBooking) */}
           {step === 1 && (
             <div className="space-y-4">
               <h2 className="text-xl font-bold mb-4 text-right" style={{ color: "var(--text)" }}>
                 בחרו שירותים
               </h2>
-              <p className="text-sm text-right mb-3" style={{ color: "var(--muted)" }}>
-                ניתן להוסיף מספר שירותים לאותו ביקור
-              </p>
+              <div className="flex items-center justify-end gap-3 mb-3">
+                <span className="text-sm" style={{ color: "var(--muted)" }}>הזמנה כפולה (מספר שירותים)</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={isMultiBooking}
+                  onClick={() => setIsMultiBooking((prev) => !prev)}
+                  className="relative w-11 h-6 rounded-full transition-colors"
+                  style={{
+                    backgroundColor: isMultiBooking ? "var(--primary)" : "var(--border)",
+                  }}
+                >
+                  <span
+                    className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform"
+                    style={{ transform: isMultiBooking ? "translateX(1.25rem)" : "translateX(0)" }}
+                  />
+                </button>
+              </div>
+              {!isMultiBooking && (
+                <p className="text-sm text-right mb-3" style={{ color: "var(--muted)" }}>
+                  בחרו שירות אחד
+                </p>
+              )}
+              {isMultiBooking && (
+                <p className="text-sm text-right mb-3" style={{ color: "var(--muted)" }}>
+                  ניתן להוסיף מספר שירותים לאותו ביקור (הראשון שנבחר הוא הראשי)
+                </p>
+              )}
 
+              {isMultiBooking && selectedServices.length > 1 && !hasValidMultiBookingCombo && (
+                <div className="mb-4 p-3 border rounded-xl text-right" style={{ backgroundColor: "#fef2f2", borderColor: "#fecaca" }}>
+                  <p className="text-sm" style={{ color: "#991b1b" }}>
+                    לא קיימת קומבינציה עבור השירותים שנבחרו. אנא צרו קשר עם העסק להמשך בירור.
+                  </p>
+                </div>
+              )}
               {selectedServices.length > 0 && (
                 <div className="mb-4 p-4 rounded-xl border" style={{ borderColor: "var(--border)", backgroundColor: "var(--bg)" }}>
-                  <p className="text-xs font-medium mb-2 text-right" style={{ color: "var(--muted)" }}>השירותים שנבחרו</p>
+                  <p className="text-xs font-medium mb-2 text-right" style={{ color: "var(--muted)" }}>
+                    {isMultiBooking ? "השירותים שנבחרו" : "השירות שנבחר"}
+                  </p>
                   <ul className="space-y-2">
                     {selectedServices.map((s, idx) => {
                       const dur = s.pricingItem.durationMaxMinutes ?? s.pricingItem.durationMinMinutes ?? 30;
@@ -1638,38 +1864,42 @@ export default function BookingPage() {
                             {idx + 1}. {disp} ({dur} דק׳)
                           </span>
                           <div className="flex gap-1">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (idx > 0) {
-                                  const next = [...selectedServices];
-                                  [next[idx - 1], next[idx]] = [next[idx]!, next[idx - 1]!];
-                                  setSelectedServices(next);
-                                }
-                              }}
-                              disabled={idx === 0}
-                              className="p-1 rounded text-xs disabled:opacity-40"
-                              style={{ color: "var(--muted)" }}
-                              aria-label="למעלה"
-                            >
-                              ↑
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (idx < selectedServices.length - 1) {
-                                  const next = [...selectedServices];
-                                  [next[idx], next[idx + 1]] = [next[idx + 1]!, next[idx]!];
-                                  setSelectedServices(next);
-                                }
-                              }}
-                              disabled={idx === selectedServices.length - 1}
-                              className="p-1 rounded text-xs disabled:opacity-40"
-                              style={{ color: "var(--muted)" }}
-                              aria-label="למטה"
-                            >
-                              ↓
-                            </button>
+                            {isMultiBooking && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (idx > 0) {
+                                      const next = [...selectedServices];
+                                      [next[idx - 1], next[idx]] = [next[idx]!, next[idx - 1]!];
+                                      setSelectedServices(next);
+                                    }
+                                  }}
+                                  disabled={idx === 0}
+                                  className="p-1 rounded text-xs disabled:opacity-40"
+                                  style={{ color: "var(--muted)" }}
+                                  aria-label="למעלה"
+                                >
+                                  ↑
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (idx < selectedServices.length - 1) {
+                                      const next = [...selectedServices];
+                                      [next[idx], next[idx + 1]] = [next[idx + 1]!, next[idx]!];
+                                      setSelectedServices(next);
+                                    }
+                                  }}
+                                  disabled={idx === selectedServices.length - 1}
+                                  className="p-1 rounded text-xs disabled:opacity-40"
+                                  style={{ color: "var(--muted)" }}
+                                  aria-label="למטה"
+                                >
+                                  ↓
+                                </button>
+                              </>
+                            )}
                             <button
                               type="button"
                               onClick={() => setSelectedServices((prev) => prev.filter((_, i) => i !== idx))}
@@ -1764,7 +1994,11 @@ export default function BookingPage() {
                                   key={item.id}
                                   type="button"
                                   onClick={() => {
-                                    setSelectedServices((prev) => [...prev, { service, pricingItem: item }]);
+                                    if (!isMultiBooking) {
+                                      setSelectedServices([{ service, pricingItem: item }]);
+                                    } else {
+                                      setSelectedServices((prev) => [...prev, { service, pricingItem: item }]);
+                                    }
                                     setExpandingServiceId(null);
                                   }}
                                   className="w-full text-right p-3 rounded-xl border transition-all hover:opacity-90"
@@ -2045,9 +2279,17 @@ export default function BookingPage() {
               )}
               {availableTimeSlots.length === 0 ? (
                 <p className="text-sm text-right" style={{ color: "var(--muted)" }}>
-                  {selectedWorker != null
-                    ? "אין שעות זמינות לעובד שנבחר"
-                    : "אין שעות זמינות לתאריך זה"}
+                  {selectedDate
+                    ? (() => {
+                        const tz = config?.archiveRetention?.timezone;
+                        const todayStr = tz ? getTodayInTimeZone(tz) : ymdLocal(new Date());
+                        return ymdLocal(selectedDate) === todayStr
+                          ? "אין שעות פנויות להיום"
+                          : selectedWorker != null
+                            ? "אין שעות זמינות לעובד שנבחר"
+                            : "אין שעות זמינות לתאריך זה";
+                      })()
+                    : (selectedWorker != null ? "אין שעות זמינות לעובד שנבחר" : "אין שעות זמינות לתאריך זה")}
                 </p>
               ) : (
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">

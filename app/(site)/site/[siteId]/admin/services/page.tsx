@@ -23,6 +23,14 @@ import { AccordionItem } from "@/components/admin/Accordion";
 import MinutesNumberInput from "@/components/admin/MinutesNumberInput";
 import { parseNumberOrRange, formatNumberOrRange } from "@/lib/parseNumberOrRange";
 import { formatPriceDisplay } from "@/lib/formatPrice";
+import type { MultiBookingCombo, MultiBookingComboInput, MultiBookingAutoStep } from "@/types/multiBookingCombo";
+import { validateMultiBookingComboInput } from "@/types/multiBookingCombo";
+import {
+  subscribeMultiBookingCombos,
+  createMultiBookingCombo,
+  updateMultiBookingCombo,
+  deleteMultiBookingCombo,
+} from "@/lib/firestoreMultiBookingCombos";
 
 
 export default function ServicesPage() {
@@ -45,6 +53,18 @@ export default function ServicesPage() {
   const [followUpNameInputValue, setFollowUpNameInputValue] = useState<string>("");
   const [followUpDurationInputValue, setFollowUpDurationInputValue] = useState<string>("");
   const [followUpWaitInputValue, setFollowUpWaitInputValue] = useState<string>("0");
+
+  // Multi-booking combos (rule-based: trigger set → ordered sequence)
+  const [combos, setCombos] = useState<MultiBookingCombo[]>([]);
+  const [comboModal, setComboModal] = useState<{ type: "create" } | { type: "edit"; combo: MultiBookingCombo } | null>(null);
+  const [comboForm, setComboForm] = useState<{
+    name: string;
+    triggerServiceTypeIds: string[];
+    orderedServiceTypeIds: string[];
+    autoSteps: MultiBookingAutoStep[];
+    isActive: boolean;
+  }>({ name: "", triggerServiceTypeIds: [], orderedServiceTypeIds: [], autoSteps: [], isActive: true });
+  const [openCombos, setOpenCombos] = useState(false);
 
   // Track first load to set loading state only once
   const didFirstLoad = useRef(false);
@@ -160,9 +180,12 @@ export default function ServicesPage() {
       handlePricingItemsError
     );
 
+    const unsubscribeCombos = subscribeMultiBookingCombos(siteId, (list) => setCombos(list));
+
     return () => {
       unsubscribeServices();
       unsubscribeItems();
+      unsubscribeCombos();
     };
   }, [siteId]);
 
@@ -459,6 +482,129 @@ export default function ServicesPage() {
       setError("שגיאה במחיקת שירות");
     }
   };
+
+  // Multi-booking combo handlers (service TYPES = pricing item ids)
+  const getServiceTypeLabel = (item: PricingItem) => {
+    const svcName = services.find((s) => s.id === item.serviceId || s.name === (item.serviceId || item.service))?.name ?? (item.serviceId || item.service || "");
+    return item.type?.trim() ? `${svcName} – ${item.type}` : svcName;
+  };
+  const getPricingItemById = (id: string) => pricingItems.find((p) => p.id === id);
+  const openComboCreate = () => {
+    setComboForm({ name: "", triggerServiceTypeIds: [], orderedServiceTypeIds: [], autoSteps: [], isActive: true });
+    setComboModal({ type: "create" });
+  };
+  const openComboEdit = (combo: MultiBookingCombo) => {
+    setComboForm({
+      name: combo.name,
+      triggerServiceTypeIds: [...combo.triggerServiceTypeIds],
+      orderedServiceTypeIds: [...combo.orderedServiceTypeIds],
+      autoSteps: combo.autoSteps ? [...combo.autoSteps] : [],
+      isActive: combo.isActive,
+    });
+    setComboModal({ type: "edit", combo });
+  };
+  const closeComboModal = () => setComboModal(null);
+  const addTriggerServiceType = (typeId: string) => {
+    if (comboForm.triggerServiceTypeIds.includes(typeId)) return;
+    setComboForm((prev) => ({
+      ...prev,
+      triggerServiceTypeIds: [...prev.triggerServiceTypeIds, typeId],
+      orderedServiceTypeIds: prev.orderedServiceTypeIds.includes(typeId)
+        ? prev.orderedServiceTypeIds
+        : [...prev.orderedServiceTypeIds, typeId],
+    }));
+  };
+  const removeTriggerServiceType = (typeId: string) => {
+    setComboForm((prev) => ({
+      ...prev,
+      triggerServiceTypeIds: prev.triggerServiceTypeIds.filter((id) => id !== typeId),
+    }));
+  };
+  const addOrderedServiceType = (typeId: string) => {
+    if (comboForm.orderedServiceTypeIds.includes(typeId)) return;
+    setComboForm((prev) => ({ ...prev, orderedServiceTypeIds: [...prev.orderedServiceTypeIds, typeId] }));
+  };
+  const removeOrderedServiceTypeAt = (index: number) => {
+    setComboForm((prev) => ({
+      ...prev,
+      orderedServiceTypeIds: prev.orderedServiceTypeIds.filter((_, i) => i !== index),
+    }));
+  };
+  const moveOrderedServiceType = (index: number, direction: "up" | "down") => {
+    setComboForm((prev) => {
+      const arr = [...prev.orderedServiceTypeIds];
+      const j = direction === "up" ? index - 1 : index + 1;
+      if (j < 0 || j >= arr.length) return prev;
+      [arr[index], arr[j]] = [arr[j]!, arr[index]!];
+      return { ...prev, orderedServiceTypeIds: arr };
+    });
+  };
+  const addAutoStep = (serviceId: string, durationMinutesOverride: number = 30) => {
+    setComboForm((prev) => ({
+      ...prev,
+      autoSteps: [...prev.autoSteps, { serviceId, durationMinutesOverride, position: "end" }],
+    }));
+  };
+  const removeAutoStepAt = (index: number) => {
+    setComboForm((prev) => ({
+      ...prev,
+      autoSteps: prev.autoSteps.filter((_, i) => i !== index),
+    }));
+  };
+  const updateAutoStepDuration = (index: number, durationMinutesOverride: number) => {
+    setComboForm((prev) => ({
+      ...prev,
+      autoSteps: prev.autoSteps.map((step, i) =>
+        i === index ? { ...step, durationMinutesOverride: Math.max(1, durationMinutesOverride) } : step
+      ),
+    }));
+  };
+  const saveCombo = async () => {
+    if (!siteId || !comboForm.name.trim()) {
+      setError("שם הקומבו חובה");
+      return;
+    }
+    const input: MultiBookingComboInput = {
+      name: comboForm.name.trim(),
+      triggerServiceTypeIds: comboForm.triggerServiceTypeIds,
+      orderedServiceTypeIds: comboForm.orderedServiceTypeIds,
+      ...(comboForm.autoSteps.length > 0 && { autoSteps: comboForm.autoSteps }),
+      isActive: comboForm.isActive,
+    };
+    const validation = validateMultiBookingComboInput(input);
+    if (!validation.valid) {
+      setError(validation.error ?? "תצורת קומבו לא תקינה");
+      return;
+    }
+    try {
+      setError(null);
+      if (comboModal?.type === "create") {
+        await createMultiBookingCombo(siteId, input);
+      } else if (comboModal?.type === "edit" && comboModal.combo) {
+        await updateMultiBookingCombo(siteId, comboModal.combo.id, input);
+      }
+      closeComboModal();
+    } catch (err) {
+      console.error("Failed to save combo", err);
+      setError("שגיאה בשמירת הקומבו");
+    }
+  };
+  const deleteCombo = async (combo: MultiBookingCombo) => {
+    if (!siteId || !confirm(`למחוק את הקומבו "${combo.name}"?`)) return;
+    try {
+      await deleteMultiBookingCombo(siteId, combo.id);
+    } catch (err) {
+      console.error("Failed to delete combo", err);
+      setError("שגיאה במחיקת הקומבו");
+    }
+  };
+
+  const getServiceNameById = (id: string) => services.find((s) => s.id === id)?.name ?? id;
+
+  const validPricingItemsForCombo = pricingItems.filter((item) => {
+    const sid = item.serviceId || item.service;
+    return !!sid && services.some((s) => s.id === sid || s.name === sid);
+  });
 
   if (loading) {
     return (
@@ -779,7 +925,258 @@ export default function ServicesPage() {
             </div>
           )}
         </div>
+
+        {/* Multi-Booking Combos */}
+        <div className="mt-6 bg-white rounded-lg shadow-sm border border-slate-200 p-6">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">כללי Multi-Booking (קומבו)</h2>
+              <p className="text-sm text-slate-500 mt-1">
+                אם הלקוח בוחר סוגי שירותים (מחירון) → מתזמן לפי הסדר + משך והמתנה כמו ב follow-up
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOpenCombos((v) => !v)}
+              className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-sm"
+            >
+              {openCombos ? "הסתר" : "הצג"}
+            </button>
+          </div>
+          {openCombos && (
+            <>
+              <div className="flex justify-end mb-4">
+                <button
+                  type="button"
+                  onClick={openComboCreate}
+                  className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  הוסף קומבו
+                </button>
+              </div>
+              {combos.length === 0 ? (
+                <p className="text-sm text-slate-500 text-center py-6">אין קומבו. לחץ על &quot;הוסף קומבו&quot; כדי ליצור.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200">
+                        <th className="px-3 py-2 text-right font-semibold text-slate-700">שם</th>
+                        <th className="px-3 py-2 text-right font-semibold text-slate-700">אם בוחרים</th>
+                        <th className="px-3 py-2 text-right font-semibold text-slate-700">מתזמן בסדר</th>
+                        <th className="px-3 py-2 text-right font-semibold text-slate-700">פעיל</th>
+                        <th className="px-3 py-2 text-right font-semibold text-slate-700">פעולות</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {combos.map((combo) => (
+                        <tr key={combo.id} className="border-b border-slate-100 hover:bg-slate-50">
+                          <td className="px-3 py-2 font-medium text-slate-900">{combo.name}</td>
+                          <td className="px-3 py-2 text-slate-600">
+                            {combo.triggerServiceTypeIds.map((typeId) => {
+                            const p = getPricingItemById(typeId);
+                            return p ? getServiceTypeLabel(p) : typeId;
+                          }).join(", ")}
+                          </td>
+                          <td className="px-3 py-2 text-slate-600">
+                            {combo.orderedServiceTypeIds.map((typeId) => {
+                              const p = getPricingItemById(typeId);
+                              return p ? getServiceTypeLabel(p) : typeId;
+                            }).join(" → ")}
+                          </td>
+                          <td className="px-3 py-2">{combo.isActive ? "כן" : "לא"}</td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-2 justify-end">
+                              <button
+                                type="button"
+                                onClick={() => openComboEdit(combo)}
+                                className="p-1.5 hover:bg-sky-50 rounded text-sky-600"
+                                title="ערוך"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => deleteCombo(combo)}
+                                className="p-1.5 hover:bg-red-50 rounded text-red-600"
+                                title="מחק"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
+
+      {/* Combo Create/Edit Modal — rule builder: trigger set + ordered sequence */}
+      {comboModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" dir="rtl">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-lg max-h-[90vh] flex flex-col">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center">
+              <h3 className="text-lg font-bold text-slate-900">
+                {comboModal.type === "create" ? "הוסף כלל Multi-Booking" : "ערוך כלל"}
+              </h3>
+              <button type="button" onClick={closeComboModal} className="p-1 hover:bg-slate-100 rounded">
+                <X className="w-5 h-5 text-slate-600" />
+              </button>
+            </div>
+            <div className="p-6 space-y-5 overflow-y-auto">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">שם הכלל *</label>
+                <input
+                  type="text"
+                  value={comboForm.name}
+                  onChange={(e) => setComboForm((prev) => ({ ...prev, name: e.target.value }))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">אם הלקוח בוחר את סוגי השירותים האלה (הסדר לא משנה)</label>
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v) addTriggerServiceType(v);
+                  }}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500 mb-2"
+                >
+                  <option value="">הוסף סוג שירות לתנאי...</option>
+                  {validPricingItemsForCombo.filter((p) => !comboForm.triggerServiceTypeIds.includes(p.id)).map((p) => (
+                    <option key={p.id} value={p.id}>{getServiceTypeLabel(p)}</option>
+                  ))}
+                </select>
+                <ul className="flex flex-wrap gap-2">
+                  {comboForm.triggerServiceTypeIds.map((typeId) => {
+                    const item = getPricingItemById(typeId);
+                    return (
+                      <li key={typeId}>
+                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-100 text-slate-700 text-sm">
+                          {item ? getServiceTypeLabel(item) : typeId}
+                          <button type="button" onClick={() => removeTriggerServiceType(typeId)} className="p-0.5 hover:bg-slate-200 rounded" aria-label="הסר">×</button>
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">תזמן בסדר הזה (משך + המתנה לפי סוג השירות)</label>
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v) addOrderedServiceType(v);
+                  }}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500 mb-2"
+                >
+                  <option value="">הוסף סוג שירות לרצף...</option>
+                  {validPricingItemsForCombo.map((p) => (
+                    <option key={p.id} value={p.id} disabled={comboForm.orderedServiceTypeIds.includes(p.id)}>
+                      {getServiceTypeLabel(p)}
+                    </option>
+                  ))}
+                </select>
+                <ul className="space-y-1">
+                  {comboForm.orderedServiceTypeIds.map((typeId, i) => {
+                    const item = getPricingItemById(typeId);
+                    const isAutoAdded = !comboForm.triggerServiceTypeIds.includes(typeId);
+                    const durationMin = item?.durationMinMinutes ?? item?.durationMaxMinutes ?? 0;
+                    const waitMin = (item?.hasFollowUp && item?.followUp) ? Math.max(0, item.followUp.waitMinutes ?? 0) : 0;
+                    return (
+                      <li key={`${typeId}-${i}`} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-50">
+                        <span className="text-sm font-medium text-slate-800">
+                          {i + 1}. {item ? getServiceTypeLabel(item) : typeId}
+                          {isAutoAdded && (
+                            <span className="mr-2 text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">נוסף אוטומטית</span>
+                          )}
+                          <span className="mr-2 text-xs text-slate-500">({durationMin} דק׳ {waitMin > 0 ? `+ המתנה ${waitMin} דק׳` : ""})</span>
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <button type="button" onClick={() => moveOrderedServiceType(i, "up")} disabled={i === 0} className="p-1 rounded text-slate-500 disabled:opacity-40" aria-label="למעלה">↑</button>
+                          <button type="button" onClick={() => moveOrderedServiceType(i, "down")} disabled={i === comboForm.orderedServiceTypeIds.length - 1} className="p-1 rounded text-slate-500 disabled:opacity-40" aria-label="למטה">↓</button>
+                          <button type="button" onClick={() => removeOrderedServiceTypeAt(i)} className="p-1 hover:bg-red-50 rounded text-red-600" aria-label="הסר"><Trash2 className="w-4 h-4" /></button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">שלב אוטומטי בסוף (לפי שירות + משך ידני)</label>
+                <p className="text-xs text-slate-500 mb-2">בחר שירות מהרשימה והזן משך בדקות (כמו follow-up ב single booking)</p>
+                <div className="flex gap-2 mb-2">
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v) addAutoStep(v, 30);
+                    }}
+                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  >
+                    <option value="">הוסף שירות אוטומטי...</option>
+                    {services.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <ul className="space-y-1">
+                  {comboForm.autoSteps.map((step, i) => {
+                    const service = services.find((s) => s.id === step.serviceId);
+                    return (
+                      <li key={`auto-${step.serviceId}-${i}`} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-amber-50 border border-amber-100">
+                        <span className="text-sm font-medium text-slate-800 flex items-center gap-2 flex-wrap">
+                          <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-xs">נוסף אוטומטית</span>
+                          {service ? service.name : step.serviceId}
+                          <span className="text-slate-500">(override</span>
+                          <input
+                            type="number"
+                            min={1}
+                            value={step.durationMinutesOverride}
+                            onChange={(e) => updateAutoStepDuration(i, parseInt(e.target.value, 10) || 1)}
+                            className="w-14 px-1 py-0.5 border border-slate-300 rounded text-right text-sm"
+                          />
+                          <span className="text-slate-500">דק׳)</span>
+                        </span>
+                        <button type="button" onClick={() => removeAutoStepAt(i)} className="p-1 hover:bg-red-50 rounded text-red-600" aria-label="הסר"><Trash2 className="w-4 h-4" /></button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="combo-active"
+                  checked={comboForm.isActive}
+                  onChange={(e) => setComboForm((prev) => ({ ...prev, isActive: e.target.checked }))}
+                  className="rounded border-slate-300"
+                />
+                <label htmlFor="combo-active" className="text-sm text-slate-700">כלל פעיל</label>
+              </div>
+              <div className="flex gap-2 justify-end pt-2">
+                <button type="button" onClick={closeComboModal} className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm font-medium">ביטול</button>
+                <button
+                  type="button"
+                  onClick={saveCombo}
+                  disabled={!comboForm.name.trim() || comboForm.triggerServiceTypeIds.length === 0 || comboForm.orderedServiceTypeIds.length === 0}
+                  className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  שמור
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit Service Modal */}
       {editingService && (

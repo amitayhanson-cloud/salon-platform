@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import DeleteAccountButton from "@/components/admin/DeleteAccountButton";
 import SubdomainSettingsCard from "@/components/admin/SubdomainSettingsCard";
+import CustomDomainSettingsCard from "@/components/admin/CustomDomainSettingsCard";
 import type { SiteConfig } from "@/types/siteConfig";
 import type { SalonBookingState } from "@/types/booking";
 import { defaultBookingState } from "@/types/booking";
@@ -445,8 +446,13 @@ function AdminClientsTab({ siteId }: { siteId: string }) {
   };
 
   const handleStartEdit = (index: number) => {
+    const entry = clientTypes[index];
+    if (entry?.isSystemDefault) {
+      setToast({ message: "לא ניתן לשנות שם של סוג לקוח ברירת מחדל", error: true });
+      return;
+    }
     setEditingIndex(index);
-    setEditValue(clientTypes[index]?.labelHe ?? "");
+    setEditValue(entry?.labelHe ?? "");
   };
 
   const handleSaveEdit = async () => {
@@ -482,8 +488,8 @@ function AdminClientsTab({ siteId }: { siteId: string }) {
   const handleDelete = async (index: number) => {
     const entry = clientTypes[index];
     if (!entry) return;
-    if (entry.id === REGULAR_CLIENT_TYPE_ID) {
-      setToast({ message: "אי אפשר למחוק את סוג הלקוח 'רגיל' כי הוא ברירת המחדל.", error: true });
+    if (entry.isSystemDefault) {
+      setToast({ message: "סוג לקוח ברירת מחדל לא ניתן למחיקה", error: true });
       return;
     }
     setSaveError(null);
@@ -527,7 +533,7 @@ function AdminClientsTab({ siteId }: { siteId: string }) {
     <div className="bg-white rounded-2xl border border-slate-200 p-6 text-right space-y-6">
       <h2 className="text-xl font-bold text-slate-900">סוגי לקוחות</h2>
       <p className="text-xs text-slate-500">
-        הוסף, ערוך או מחק סוגי לקוחות. יופיעו בתפריט &quot;סוג לקוח&quot; בכרטיס הלקוח. סוג &quot;רגיל&quot; הוא ברירת המחדל ולא ניתן למחוק אותו. מחיקת סוג מעבירה את הלקוחות שהיו משויכים אליו לרגיל.
+        הוסף, ערוך או מחק סוגי לקוחות. יופיעו בתפריט &quot;סוג לקוח&quot; בכרטיס הלקוח. סוגי ברירת מחדל (רגיל, VIP, פעיל, חדש, רדום) לא ניתנים למחיקה או לשינוי שם. מחיקת סוג מותאם מעבירה את הלקוחות שהיו משויכים אליו לרגיל.
       </p>
       {saveError && (
         <p className="text-sm text-red-600" role="alert">{saveError}</p>
@@ -587,13 +593,13 @@ function AdminClientsTab({ siteId }: { siteId: string }) {
               <>
                 <span className="flex-1 text-slate-800">
                   {entry.labelHe}
-                  {entry.isSystem && <span className="text-slate-500 text-xs mr-1">(ברירת מחדל)</span>}
+                  {entry.isSystemDefault && <span className="text-slate-500 text-xs mr-1">(ברירת מחדל)</span>}
                 </span>
-                <button type="button" onClick={() => handleStartEdit(index)} className="p-1.5 text-slate-500 hover:text-sky-600 hover:bg-sky-50 rounded" aria-label="ערוך">✎</button>
+                <button type="button" onClick={() => handleStartEdit(index)} disabled={!!entry.isSystemDefault} className="p-1.5 text-slate-500 hover:text-sky-600 hover:bg-sky-50 rounded disabled:opacity-50 disabled:cursor-not-allowed" aria-label="ערוך">✎</button>
                 <button
                   type="button"
                   onClick={() => handleDelete(index)}
-                  disabled={entry.id === REGULAR_CLIENT_TYPE_ID}
+                  disabled={!!entry.isSystemDefault}
                   className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                   aria-label="מחק"
                   title={entry.id === REGULAR_CLIENT_TYPE_ID ? "לא ניתן למחוק" : undefined}
@@ -1866,6 +1872,11 @@ export default function SettingsPage() {
 
       {/* Subdomain section */}
       <SubdomainSettingsCard firebaseUser={firebaseUser} />
+
+      {/* Custom Domain section */}
+      <div className="mt-6">
+        <CustomDomainSettingsCard siteId={siteId} firebaseUser={firebaseUser} />
+      </div>
 
       {/* Delete Account Section - Only button by default */}
       <DeleteAccountButton

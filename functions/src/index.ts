@@ -232,6 +232,8 @@ export const expiredBookingsCleanup = functions.pubsub
             batchCount = 0;
           }
 
+          const statusAtArchive = (d.status != null && String(d.status).trim()) ? String(d.status).trim() : "booked";
+          console.log("ARCHIVE PAYLOAD", { bookingId: doc.id, status: d.status, statusAtArchive });
           const dateStr = (d.date as string) ?? (d.dateISO as string) ?? "";
           const minimal: Record<string, unknown> = {
             date: dateStr,
@@ -242,6 +244,7 @@ export const expiredBookingsCleanup = functions.pubsub
             customerPhone: (d.customerPhone as string) ?? (d.phone as string) ?? "",
             customerName: (d.customerName as string) ?? (d.name as string) ?? "",
             ...archivePayload,
+            statusAtArchive,
           };
           batch.set(doc.ref, minimal);
           batchCount++;
@@ -253,7 +256,10 @@ export const expiredBookingsCleanup = functions.pubsub
             const snaps = await db.getAll(...refs);
             for (const s of snaps) {
               if (!s.exists || (s.data() as { isArchived?: boolean })?.isArchived === true) continue;
-              batch.update(s.ref, archivePayload);
+              const sd = s.data() as { status?: string };
+              const memberStatusAtArchive = (sd?.status != null && String(sd.status).trim()) ? String(sd.status).trim() : "booked";
+              console.log("ARCHIVE PAYLOAD", { bookingId: s.id, status: sd?.status, statusAtArchive: memberStatusAtArchive });
+              batch.update(s.ref, { ...archivePayload, statusAtArchive: memberStatusAtArchive });
               batchCount++;
               deleted++;
               processedInRun.add(s.id);

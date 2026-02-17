@@ -73,6 +73,17 @@ export function personalPricingDoc(siteId: string, clientId: string, serviceType
   return doc(db, "sites", siteId, "clients", clientId, "personalPricing", serviceTypeId);
 }
 
+/** sites/{siteId}/multiBookingCombos — multi-booking combos (packages) per site */
+export function multiBookingCombosCollection(siteId: string) {
+  if (!db) throw new Error("Firestore db not initialized");
+  return collection(db, "sites", siteId, "multiBookingCombos");
+}
+
+export function multiBookingComboDoc(siteId: string, comboId: string) {
+  if (!db) throw new Error("Firestore db not initialized");
+  return doc(db, "sites", siteId, "multiBookingCombos", comboId);
+}
+
 /** platform/landing — main platform landing page content (CMS) */
 export function platformLandingDoc() {
   if (!db) throw new Error("Firestore db not initialized");

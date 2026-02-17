@@ -136,20 +136,26 @@ export async function cancelBookingsCascade(
     payload.cancelledAt = serverTimestamp();
   }
 
-  const toUpdate: admin.firestore.DocumentReference[] = [];
+  const toUpdate: { ref: admin.firestore.DocumentReference; statusAtArchive: string }[] = [];
   for (const id of bookingIds) {
     const ref = db.collection("sites").doc(siteId).collection("bookings").doc(id);
     const snap = await ref.get();
     if (!snap.exists) continue;
     if ((snap.data() as { isArchived?: boolean })?.isArchived === true) continue;
-    toUpdate.push(ref);
+    const d = snap.data() as { status?: string };
+    const statusAtArchive = (d?.status != null && String(d.status).trim()) ? String(d.status).trim() : "booked";
+    toUpdate.push({ ref, statusAtArchive });
   }
   if (toUpdate.length === 0) {
     return { successCount: 0, failCount: 0 };
   }
   const batch = db.batch();
-  for (const ref of toUpdate) {
-    batch.update(ref, payload);
+  for (const { ref, statusAtArchive } of toUpdate) {
+    const finalPayload = { ...payload, statusAtArchive };
+    if (process.env.NODE_ENV !== "production") {
+      console.log("ARCHIVE PAYLOAD", { bookingId: ref.id, statusAtArchive, payloadKeys: Object.keys(finalPayload) });
+    }
+    batch.update(ref, finalPayload);
   }
   try {
     await batch.commit();

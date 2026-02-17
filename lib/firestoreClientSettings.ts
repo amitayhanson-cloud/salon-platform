@@ -9,6 +9,7 @@ import type { ClientTypeEntry } from "@/types/bookingSettings";
 import {
   DEFAULT_CLIENT_TYPE_ENTRIES,
   REGULAR_CLIENT_TYPE_ID,
+  SYSTEM_DEFAULT_CLIENT_TYPE_IDS,
 } from "@/types/bookingSettings";
 import { sanitizeForFirestore } from "@/lib/sanitizeForFirestore";
 
@@ -23,27 +24,40 @@ export type ClientSettingsData = {
 };
 
 /**
- * Normalize raw clientTypes to ClientTypeEntry[]. Ensures "regular" always exists.
+ * Normalize raw clientTypes to ClientTypeEntry[]. Ensures all 5 system default types exist;
+ * adds any missing from DEFAULT_CLIENT_TYPE_ENTRIES. System defaults are marked isSystemDefault: true.
  */
 function normalizeClientTypesList(raw: ClientTypeEntry[] | undefined): ClientTypeEntry[] {
+  const defaults = [...DEFAULT_CLIENT_TYPE_ENTRIES];
   if (!raw || !Array.isArray(raw) || raw.length === 0) {
-    return [...DEFAULT_CLIENT_TYPE_ENTRIES];
+    return defaults.map((e, i) => ({ ...e, sortOrder: i }));
   }
   const entries = raw
     .filter((e) => e && typeof e.id === "string" && typeof e.labelHe === "string" && e.labelHe.trim())
     .map((e, i) => ({
       id: e.id.trim(),
       labelHe: e.labelHe.trim(),
-      isSystem: e.id === REGULAR_CLIENT_TYPE_ID,
+      isSystem: SYSTEM_DEFAULT_CLIENT_TYPE_IDS.includes(e.id.trim() as (typeof SYSTEM_DEFAULT_CLIENT_TYPE_IDS)[number]),
+      isSystemDefault: SYSTEM_DEFAULT_CLIENT_TYPE_IDS.includes(e.id.trim() as (typeof SYSTEM_DEFAULT_CLIENT_TYPE_IDS)[number]),
       sortOrder: typeof e.sortOrder === "number" ? e.sortOrder : i,
       createdAt: e.createdAt,
     }));
-  const hasRegular = entries.some((e) => e.id === REGULAR_CLIENT_TYPE_ID);
-  if (!hasRegular) {
-    const regular = DEFAULT_CLIENT_TYPE_ENTRIES.find((e) => e.id === REGULAR_CLIENT_TYPE_ID)!;
-    return [regular, ...entries].map((e, i) => ({ ...e, sortOrder: i }));
+  const existingIds = new Set(entries.map((e) => e.id));
+  for (const d of defaults) {
+    if (!existingIds.has(d.id)) {
+      entries.push({
+        ...d,
+        sortOrder: entries.length,
+      });
+      existingIds.add(d.id);
+    }
   }
-  return entries.sort((a, b) => a.sortOrder - b.sortOrder);
+  return entries.sort((a, b) => {
+    const aDefault = a.isSystemDefault ? 0 : 1;
+    const bDefault = b.isSystemDefault ? 0 : 1;
+    if (aDefault !== bDefault) return aDefault - bDefault;
+    return a.sortOrder - b.sortOrder;
+  });
 }
 
 /**
@@ -69,29 +83,45 @@ export function subscribeClientTypes(
 
 /**
  * Save client types to sites/{siteId}/settings/clients only.
- * Never writes to settings/booking.
+ * System default types cannot be removed or renamed; missing defaults are merged in.
  */
 export async function saveClientTypes(siteId: string, clientTypes: ClientTypeEntry[]): Promise<void> {
   if (!db) throw new Error("Firestore db not initialized");
   const cleaned = clientTypes
     .filter((e) => e && typeof e.id === "string" && typeof e.labelHe === "string" && e.labelHe.trim())
-    .map((e, i) => ({
-      id: e.id.trim(),
-      labelHe: e.labelHe.trim(),
-      isSystem: e.id === REGULAR_CLIENT_TYPE_ID,
-      sortOrder: typeof e.sortOrder === "number" ? e.sortOrder : i,
-      createdAt: e.createdAt,
-    }));
+    .map((e, i) => {
+      const isDefault = SYSTEM_DEFAULT_CLIENT_TYPE_IDS.includes(e.id.trim() as (typeof SYSTEM_DEFAULT_CLIENT_TYPE_IDS)[number]);
+      return {
+        id: e.id.trim(),
+        labelHe: e.labelHe.trim(),
+        isSystem: isDefault,
+        isSystemDefault: isDefault,
+        sortOrder: typeof e.sortOrder === "number" ? e.sortOrder : i,
+        createdAt: e.createdAt,
+      };
+    });
+  const existingIds = new Set(cleaned.map((e) => e.id));
+  for (const d of DEFAULT_CLIENT_TYPE_ENTRIES) {
+    if (!existingIds.has(d.id)) {
+      cleaned.push({ ...d, sortOrder: cleaned.length });
+      existingIds.add(d.id);
+    } else {
+      const idx = cleaned.findIndex((e) => e.id === d.id);
+      if (idx !== -1) {
+        cleaned[idx] = { ...cleaned[idx], isSystem: true, isSystemDefault: true };
+      }
+    }
+  }
   const hasRegular = cleaned.some((e) => e.id === REGULAR_CLIENT_TYPE_ID);
   if (!hasRegular) throw new Error("REGULAR_TYPE_REQUIRED");
-  if (cleaned.length === 0) return;
-  const payload = { clientTypes: cleaned };
+  const payload = { clientTypes: cleaned.sort((a, b) => a.sortOrder - b.sortOrder) };
   const sanitized = sanitizeForFirestore(payload) as ClientSettingsData;
   await setDoc(clientSettingsDoc(siteId), sanitized, { merge: true });
 }
 
 /**
- * Seed default client types when site has none. Writes to settings/clients only.
+ * Seed default client types: ensure all 5 system default types exist for the site.
+ * Called on settings load. If any default is missing, merges them in and writes back.
  */
 export async function seedDefaultClientTypes(siteId: string): Promise<void> {
   if (!db) throw new Error("Firestore db not initialized");
@@ -99,8 +129,11 @@ export async function seedDefaultClientTypes(siteId: string): Promise<void> {
   const snap = await getDoc(ref);
   const data = snap.exists() ? (snap.data() as ClientSettingsData) : null;
   const raw = data?.clientTypes;
-  if (Array.isArray(raw) && raw.length > 0) return;
-  const payload = { clientTypes: DEFAULT_CLIENT_TYPE_ENTRIES };
-  const sanitized = sanitizeForFirestore(payload) as ClientSettingsData;
-  await setDoc(ref, sanitized, { merge: true });
+  const normalized = normalizeClientTypesList(raw);
+  const rawLength = Array.isArray(raw) ? raw.length : 0;
+  if (normalized.length > rawLength || rawLength === 0) {
+    const payload = { clientTypes: normalized };
+    const sanitized = sanitizeForFirestore(payload) as ClientSettingsData;
+    await setDoc(ref, sanitized, { merge: true });
+  }
 }

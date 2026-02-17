@@ -7,6 +7,9 @@ import { computePhases } from "./bookingPhasesTiming";
 
 const DEBUG_GAP = false;
 
+/** Canonical status values for live bookings; also used for statusAtArchive on archived docs. */
+export type ArchivedBookingStatus = "booked" | "pending" | "confirmed" | "canceled" | "cancelled";
+
 /** Phase as returned from Firestore (phase 1|2 only; startAt/endAt may be Timestamp) */
 export interface NormalizedPhase {
   phase?: 1 | 2;
@@ -49,6 +52,8 @@ export interface NormalizedBooking {
   isArchived?: boolean;
   archivedAt?: Date | { toDate: () => Date } | null;
   archivedReason?: "manual" | "auto" | null;
+  /** Status at moment of archive (for archived bookings); missing on old records. */
+  statusAtArchive?: ArchivedBookingStatus | null;
   primaryDurationMin?: number;
   waitMin?: number;
   secondaryDurationMin?: number;
@@ -221,6 +226,7 @@ export function normalizeBooking(doc: FirestoreDoc): NormalizedBooking {
     isArchived: d.isArchived === true,
     archivedAt: (d.archivedAt as Date | { toDate: () => Date } | undefined) ?? undefined,
     archivedReason: (d.archivedReason as "manual" | "auto" | undefined) ?? undefined,
+    statusAtArchive: (d.statusAtArchive as string | undefined) ?? undefined,
     whatsappStatus: (d.whatsappStatus as string) ?? "booked",
   } as NormalizedBooking;
 }

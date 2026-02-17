@@ -1,9 +1,9 @@
 /**
  * Import template generation for download.
- * Headers: fullName, phone, email, notes (Row 1 only).
+ * Spec: name, phone (required); notes, clientType (optional). clientType default "Regular".
  */
 
-const TEMPLATE_HEADERS = "fullName,phone,email,notes";
+export const TEMPLATE_HEADERS = "name,phone,notes,clientType";
 const TEMPLATE_HEADERS_UTF8 = "\uFEFF" + TEMPLATE_HEADERS;
 
 export function downloadCSVTemplate(): void {
@@ -28,10 +28,10 @@ export function downloadExcelTemplate(): void {
 
 export function downloadExampleFile(): void {
   const rows = [
-    ["fullName", "phone", "email", "notes"],
-    ["דנה לוי", "0541234567", "dana@example.com", ""],
-    ["אבי כהן", "0529876543", "", "לקוח VIP"],
-    ["שרה ישראלי", "0501112233", "sara@test.co.il", ""],
+    ["name", "phone", "notes", "clientType"],
+    ["דנה לוי", "0541234567", "", "Regular"],
+    ["אבי כהן", "0529876543", "לקוח VIP", "VIP"],
+    ["שרה ישראלי", "0501112233", "", ""],
   ];
   const csv = "\uFEFF" + rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });

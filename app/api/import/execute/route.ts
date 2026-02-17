@@ -1,19 +1,21 @@
 /**
  * POST /api/import/execute
- * Runs import (creates/updates clients and bookings).
- * Body: { siteId, rows: RawRow[], mapping: ColumnMapping, skipRowsWithErrors?: boolean }
+ * Strict client import: creates/updates clients from template-parsed rows.
+ * Body: { siteId, rows: ParsedClientRow[] } (name, phone, notes?, client_type?)
  * Requires Firebase ID token. Only site owner can call.
  */
 
 import { NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
-import { runExecute } from "@/lib/import/server";
-import type { RawRow, ColumnMapping } from "@/lib/import/types";
+import { runExecuteStrict } from "@/lib/import/server";
+import type { ParsedClientRow } from "@/lib/import/parse";
 
 export async function POST(request: Request) {
   const start = Date.now();
   try {
-    console.log("[import/execute] start request");
+    if (process.env.NODE_ENV === "development") {
+      console.log("[import/execute] start request");
+    }
     const authHeader = request.headers.get("authorization");
     const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
     if (!token) {
@@ -25,23 +27,16 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => ({}));
     const siteId = body?.siteId;
-    const rows = body?.rows as RawRow[] | undefined;
-    const mapping = body?.mapping as ColumnMapping | undefined;
-    const skipRowsWithErrors = body?.skipRowsWithErrors === true;
+    const rows = body?.rows as ParsedClientRow[] | undefined;
 
-    console.log("[import/execute] siteId=", siteId, "rows.length=", rows?.length ?? "n/a");
     if (!siteId || typeof siteId !== "string") {
       return NextResponse.json({ error: "missing siteId" }, { status: 400 });
     }
     if (!Array.isArray(rows)) {
       return NextResponse.json({ error: "missing rows array" }, { status: 400 });
     }
-    if (!mapping || typeof mapping !== "object") {
-      return NextResponse.json({ error: "missing mapping object" }, { status: 400 });
-    }
 
     const db = getAdminDb();
-    console.log("[import/execute] loading context");
     const siteDoc = await db.collection("sites").doc(siteId).get();
     if (!siteDoc.exists) {
       return NextResponse.json({ error: "site not found" }, { status: 404 });
@@ -51,9 +46,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
 
-    console.log("[import/execute] before runExecute, rows=", rows.length);
-    const result = await runExecute(siteId, rows, mapping, { skipRowsWithErrors });
-    console.log("[import/execute] done in", Date.now() - start, "ms, created=", result.clientsCreated, "updated=", result.clientsUpdated);
+    const result = await runExecuteStrict(siteId, rows);
+    if (process.env.NODE_ENV === "development") {
+      console.log("[import/execute] done in", Date.now() - start, "ms", result);
+    }
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
     const err = e instanceof Error ? e : new Error(String(e));

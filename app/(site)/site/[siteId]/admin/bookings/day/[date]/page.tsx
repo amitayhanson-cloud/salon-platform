@@ -18,7 +18,7 @@ import {
 } from "@/lib/firestorePaths";
 import { normalizeBooking, isBookingCancelled, isBookingArchived } from "@/lib/normalizeBooking";
 import { parseDateParamToDayKey } from "@/lib/dateLocal";
-import { fromYYYYMMDD, getMinutesSinceStartOfDay } from "@/lib/calendarUtils";
+import { fromYYYYMMDD, toYYYYMMDD, getMinutesSinceStartOfDay } from "@/lib/calendarUtils";
 import type { BreakRange } from "@/types/bookingSettings";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
 import { subscribeBookingSettings } from "@/lib/firestoreBookingSettings";
@@ -42,7 +42,7 @@ import { getAdminBasePathFromSiteId } from "@/lib/url";
 import { getDisplayStatus, getDisplayStatusKey } from "@/lib/bookingRootStatus";
 import StatusDot from "@/components/StatusDot";
 import { useAuth } from "@/hooks/useAuth";
-import { X, Plus, Printer, Trash2 } from "lucide-react";
+import { X, Plus, Printer, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import type { AdminBookingFormSimpleEditData } from "@/components/admin/AdminBookingFormSimple";
 
 const DAY_LABELS: Record<string, string> = {
@@ -75,6 +75,13 @@ function toWeekday(day: string): Weekday {
   const n = parseInt(day, 10);
   if (Number.isInteger(n) && n >= 0 && n < 7) return WEEKDAYS_ORDER[n];
   return (WEEKDAY_LABELS[day] !== undefined ? day : "sun") as Weekday;
+}
+
+/** Add delta days to a YYYY-MM-DD string; returns YYYY-MM-DD. */
+function adjacentDateKey(dateKey: string, delta: number): string {
+  const d = fromYYYYMMDD(dateKey);
+  d.setDate(d.getDate() + delta);
+  return toYYYYMMDD(d);
 }
 
 interface Booking {
@@ -215,6 +222,20 @@ export default function DaySchedulePage() {
     const merged = [...business, ...workerBreaks];
     return merged.length > 0 ? merged : undefined;
   }, [dateKey, dayBreaks, selectedWorkerId, workers]);
+
+  // Per-worker breaks for the current day (for All Workers view: render break overlays per column)
+  const workerBreaksByWorkerId = useMemo((): Record<string, BreakRange[]> => {
+    if (!dateKey || workers.length === 0) return {};
+    const d = fromYYYYMMDD(dateKey);
+    const weekdayKey = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][d.getDay()] as string;
+    const out: Record<string, BreakRange[]> = {};
+    for (const w of workers) {
+      const dayConfig = w?.availability?.find((a) => a.day === weekdayKey) as { breaks?: BreakRange[] } | undefined;
+      const breaks = dayConfig?.breaks && Array.isArray(dayConfig.breaks) ? dayConfig.breaks : [];
+      if (breaks.length > 0) out[w.id] = breaks;
+    }
+    return out;
+  }, [dateKey, workers]);
 
   // Load booking settings (for break blocks on calendar)
   useEffect(() => {
@@ -867,21 +888,49 @@ export default function DaySchedulePage() {
               <h1 className="text-2xl font-bold text-slate-900">
                 לוח זמנים —
               </h1>
-              <input
-                type="date"
-                value={dateKey}
-                onChange={(e) => {
-                  const newKey = e.target.value;
-                  if (newKey && siteId) {
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  title="היום הבא"
+                  onClick={() => {
+                    if (!dateKey || !siteId) return;
                     const query = selectedWorkerId && selectedWorkerId !== ALL_WORKERS ? `?workerId=${encodeURIComponent(selectedWorkerId)}` : "";
-                    router.push(`${adminBasePath}/bookings/day/${newKey}${query}`);
-                  }
-                }}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-base font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500"
-              />
-              <span className="text-xl font-semibold text-slate-700">
-                {formatDayLabel(selectedDate)}
-              </span>
+                    router.push(`${adminBasePath}/bookings/day/${adjacentDateKey(dateKey, 1)}${query}`);
+                  }}
+                  className="p-2 rounded-lg text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-colors"
+                  aria-label="היום הבא"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+                <input
+                  type="date"
+                  value={dateKey}
+                  onChange={(e) => {
+                    const newKey = e.target.value;
+                    if (newKey && siteId) {
+                      const query = selectedWorkerId && selectedWorkerId !== ALL_WORKERS ? `?workerId=${encodeURIComponent(selectedWorkerId)}` : "";
+                      router.push(`${adminBasePath}/bookings/day/${newKey}${query}`);
+                    }
+                  }}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-base font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                />
+                <span className="text-xl font-semibold text-slate-700 min-w-[8rem]">
+                  {formatDayLabel(selectedDate)}
+                </span>
+                <button
+                  type="button"
+                  title="היום הקודם"
+                  onClick={() => {
+                    if (!dateKey || !siteId) return;
+                    const query = selectedWorkerId && selectedWorkerId !== ALL_WORKERS ? `?workerId=${encodeURIComponent(selectedWorkerId)}` : "";
+                    router.push(`${adminBasePath}/bookings/day/${adjacentDateKey(dateKey, -1)}${query}`);
+                  }}
+                  className="p-2 rounded-lg text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-colors"
+                  aria-label="היום הקודם"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+              </div>
             </div>
             <div className="flex items-center gap-3">
               <button
@@ -962,6 +1011,7 @@ export default function DaySchedulePage() {
               startHour={startHour}
               endHour={endHour}
               breaks={dayBreaks}
+              workerBreaksByWorkerId={workerBreaksByWorkerId}
               onBookingClick={handleBookingClick}
             />
           </div>

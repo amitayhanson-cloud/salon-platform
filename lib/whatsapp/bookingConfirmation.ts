@@ -197,6 +197,7 @@ const CANCELLED_BY_WHATSAPP_PAYLOAD = {
   isArchived: true,
   archivedAt: serverTimestamp(),
   archivedReason: "customer_cancelled_via_whatsapp" as const,
+  statusAtArchive: "cancelled" as const,
   updatedAt: serverTimestamp(),
 };
 
@@ -210,6 +211,9 @@ export async function applyCancelledByWhatsAppToBooking(
 ): Promise<void> {
   const db = getAdminDb();
   const ref = db.collection("sites").doc(siteId).collection("bookings").doc(memberId);
+  if (process.env.NODE_ENV !== "production") {
+    console.log("ARCHIVE PAYLOAD", { bookingId: memberId, statusAtArchive: "cancelled" });
+  }
   await ref.update(CANCELLED_BY_WHATSAPP_PAYLOAD);
 }
 
@@ -236,6 +240,9 @@ export async function cancelBookingGroupByWhatsApp(siteId: string, bookingId: st
   const batch = db.batch();
   for (const id of bookingIds) {
     const ref = db.collection("sites").doc(siteId).collection("bookings").doc(id);
+    if (process.env.NODE_ENV !== "production") {
+      console.log("ARCHIVE PAYLOAD", { bookingId: id, statusAtArchive: "cancelled" });
+    }
     batch.update(ref, CANCELLED_BY_WHATSAPP_PAYLOAD);
   }
   await batch.commit();
