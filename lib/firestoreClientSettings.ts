@@ -46,8 +46,12 @@ function normalizeClientTypesList(raw: ClientTypeEntry[] | undefined): ClientTyp
   for (const d of defaults) {
     if (!existingIds.has(d.id)) {
       entries.push({
-        ...d,
+        id: d.id,
+        labelHe: d.labelHe,
+        isSystem: true,
+        isSystemDefault: true,
         sortOrder: entries.length,
+        createdAt: d.createdAt,
       });
       existingIds.add(d.id);
     }
@@ -103,7 +107,14 @@ export async function saveClientTypes(siteId: string, clientTypes: ClientTypeEnt
   const existingIds = new Set(cleaned.map((e) => e.id));
   for (const d of DEFAULT_CLIENT_TYPE_ENTRIES) {
     if (!existingIds.has(d.id)) {
-      cleaned.push({ ...d, sortOrder: cleaned.length });
+      cleaned.push({
+        id: d.id,
+        labelHe: d.labelHe,
+        isSystem: true,
+        isSystemDefault: true,
+        sortOrder: cleaned.length,
+        createdAt: d.createdAt,
+      });
       existingIds.add(d.id);
     } else {
       const idx = cleaned.findIndex((e) => e.id === d.id);

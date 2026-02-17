@@ -14,7 +14,7 @@ function getConfig(): { token: string; projectId: string } | null {
 
 async function vercelFetch(
   path: string,
-  options: RequestInit & { method?: string; body?: object } = {}
+  options: { method?: string; headers?: HeadersInit; body?: object | BodyInit | null; signal?: AbortSignal } = {}
 ): Promise<Response> {
   const config = getConfig();
   if (!config) {
@@ -32,13 +32,15 @@ async function vercelFetch(
   if (options.body && typeof options.body === "object" && !(options.body instanceof FormData)) {
     headers["Content-Type"] = "application/json";
   }
+  const bodyPayload =
+    options.body != null && typeof options.body === "object" && !(options.body instanceof FormData)
+      ? JSON.stringify(options.body)
+      : (options.body as BodyInit | undefined);
   const res = await fetch(url, {
-    ...options,
+    method: options.method,
     headers,
-    body:
-      options.body && typeof options.body === "object" && !(options.body instanceof FormData)
-        ? JSON.stringify(options.body)
-        : (options.body as BodyInit | undefined),
+    body: bodyPayload,
+    ...(options.signal && { signal: options.signal }),
   });
   return res;
 }

@@ -48,7 +48,7 @@ import {
 } from "@/lib/multiServiceChain";
 import { saveMultiServiceBooking } from "@/lib/booking";
 import { getSiteUrl } from "@/lib/tenant";
-import type { MultiBookingSelectionPayload } from "@/types/multiBookingCombo";
+import type { MultiBookingCombo, MultiBookingSelectionPayload } from "@/types/multiBookingCombo";
 import { subscribeMultiBookingCombos, findMatchingCombo } from "@/lib/firestoreMultiBookingCombos";
 
 type TimestampLike = { toDate: () => Date };
@@ -190,13 +190,7 @@ export default function BookingPage() {
   /** Multi-booking mode: when true, user can add multiple services; when false, single-service only (unchanged from original flow). */
   const [isMultiBooking, setIsMultiBooking] = useState(false);
   /** Rule-based combos (service types + optional auto steps). */
-  const [multiBookingCombos, setMultiBookingCombos] = useState<Array<{
-    id: string;
-    triggerServiceTypeIds: string[];
-    orderedServiceTypeIds: string[];
-    isActive: boolean;
-    autoSteps?: Array<{ serviceId: string; durationMinutesOverride: number; position: "end" | number }>;
-  }>>([]);
+  const [multiBookingCombos, setMultiBookingCombos] = useState<MultiBookingCombo[]>([]);
   // Derived for single-service path (backward compat)
   const selectedService = selectedServices[0]?.service ?? null;
   const selectedPricingItem = selectedServices[0]?.pricingItem ?? null;
@@ -573,13 +567,7 @@ export default function BookingPage() {
   useEffect(() => {
     if (!siteId) return;
     const unsub = subscribeMultiBookingCombos(siteId, (list) => {
-      setMultiBookingCombos(list.map((c) => ({
-        id: c.id,
-        triggerServiceTypeIds: c.triggerServiceTypeIds,
-        orderedServiceTypeIds: c.orderedServiceTypeIds,
-        isActive: c.isActive,
-        ...(c.autoSteps?.length && { autoSteps: c.autoSteps }),
-      })));
+      setMultiBookingCombos(list);
     });
     return () => unsub();
   }, [siteId]);
