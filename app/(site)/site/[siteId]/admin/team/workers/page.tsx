@@ -655,8 +655,8 @@ export default function WorkersPage() {
   // Services are already filtered to enabled only (enabled !== false)
 
   return (
-    <div dir="rtl" className="min-h-screen bg-slate-50">
-      <div className="max-w-7xl mx-auto px-4 py-6">
+    <div dir="rtl" className="min-h-screen w-full">
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 min-w-0">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-slate-900">עובדים</h1>
           <p className="text-sm text-slate-500 mt-1">
@@ -676,15 +676,15 @@ export default function WorkersPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full min-w-0">
           {/* Workers List */}
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1 min-w-0">
             <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-bold text-slate-900">רשימת עובדים</h2>
                 <button
                   onClick={() => setSelectedWorkerId(null)}
-                  className="px-3 py-1.5 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium transition-colors"
+                  className="px-3 py-1.5 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium transition-colors"
                 >
                   + הוסף עובד
                 </button>
@@ -702,7 +702,7 @@ export default function WorkersPage() {
                       onClick={() => setSelectedWorkerId(worker.id)}
                       className={`w-full text-right p-3 rounded-lg border transition-colors ${
                         selectedWorkerId === worker.id
-                          ? "border-sky-500 bg-sky-50"
+                          ? "border-caleno-500 bg-caleno-50"
                           : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
                       }`}
                     >
@@ -725,7 +725,7 @@ export default function WorkersPage() {
           </div>
 
           {/* Worker Details Card */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 min-w-0">
             <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
               {!selectedWorkerId ? (
                 <div>
@@ -739,7 +739,7 @@ export default function WorkersPage() {
                         type="text"
                         value={formData.name || ""}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                         placeholder="הזן שם עובד"
                       />
                     </div>
@@ -751,7 +751,7 @@ export default function WorkersPage() {
                         type="text"
                         value={formData.role || ""}
                         onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                         placeholder="למשל: מעצב ראשי"
                       />
                     </div>
@@ -759,7 +759,7 @@ export default function WorkersPage() {
                       <button
                         onClick={handleAddWorker}
                         disabled={saving || !formData.name?.trim()}
-                        className="px-4 py-2 bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
+                        className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 disabled:bg-caleno-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
                       >
                         {saving ? "שומר..." : "שמור עובד"}
                       </button>
@@ -807,7 +807,7 @@ export default function WorkersPage() {
                         type="text"
                         value={formData.name || ""}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                       />
                     </div>
                     <div>
@@ -818,7 +818,7 @@ export default function WorkersPage() {
                         type="text"
                         value={formData.role || ""}
                         onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                       />
                     </div>
                     <div>
@@ -829,7 +829,7 @@ export default function WorkersPage() {
                         type="tel"
                         value={formData.phone || ""}
                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                         placeholder="050-1234567"
                       />
                     </div>
@@ -841,7 +841,7 @@ export default function WorkersPage() {
                         type="email"
                         value={formData.email || ""}
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                         placeholder="worker@example.com"
                       />
                     </div>
@@ -850,7 +850,7 @@ export default function WorkersPage() {
                         type="checkbox"
                         checked={formData.active !== false}
                         onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
-                        className="w-4 h-4 text-sky-500 rounded focus:ring-sky-500"
+                        className="w-4 h-4 text-caleno-500 rounded focus:ring-caleno-500"
                       />
                       <label className="text-sm font-medium text-slate-700">פעיל</label>
                     </div>
@@ -891,7 +891,7 @@ export default function WorkersPage() {
                                       checked={!isClosed}
                                       onChange={() => toggleDayAvailability(index)}
                                       disabled={isBusinessClosed}
-                                      className="w-4 h-4 text-sky-500 rounded focus:ring-sky-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                      className="w-4 h-4 text-caleno-500 rounded focus:ring-caleno-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                     />
                                     <span className={`text-xs ${isBusinessClosed ? "text-slate-400" : "text-slate-600"}`}>פעיל</span>
                                   </label>
@@ -903,7 +903,7 @@ export default function WorkersPage() {
                                         onChange={(e) => updateAvailability(index, "open", e.target.value)}
                                         min={businessDay.start}
                                         max={businessDay.end}
-                                        className="px-2 py-1 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                        className="px-2 py-1 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                                       />
                                       <span className="text-xs text-slate-600">עד</span>
                                       <input
@@ -912,7 +912,7 @@ export default function WorkersPage() {
                                         onChange={(e) => updateAvailability(index, "close", e.target.value)}
                                         min={businessDay.start}
                                         max={businessDay.end}
-                                        className="px-2 py-1 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                        className="px-2 py-1 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                                       />
                                       {businessDay.enabled && (
                                         <span className="text-xs text-slate-400">
@@ -960,7 +960,7 @@ export default function WorkersPage() {
                                     <button
                                       type="button"
                                       onClick={() => addWorkerBreak(index)}
-                                      className="text-xs text-sky-600 hover:text-sky-700 font-medium"
+                                      className="text-xs text-caleno-600 hover:text-caleno-700 font-medium"
                                     >
                                       הוסף הפסקה
                                     </button>
@@ -1010,7 +1010,7 @@ export default function WorkersPage() {
                               }
                             }}
                             placeholder="0"
-                            className="w-full max-w-[120px] rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                            className="w-full max-w-[120px] rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                           />
                         </div>
                         {services.length === 0 ? (
@@ -1036,7 +1036,7 @@ export default function WorkersPage() {
                                     type="checkbox"
                                     checked={isChecked}
                                     onChange={() => toggleService(serviceId)}
-                                    className="w-4 h-4 text-sky-500 rounded focus:ring-sky-500"
+                                    className="w-4 h-4 text-caleno-500 rounded focus:ring-caleno-500"
                                   />
                                   <span className="text-sm text-slate-700">{service.name}</span>
                                 </label>
@@ -1053,7 +1053,7 @@ export default function WorkersPage() {
                     <button
                       onClick={handleSaveWorker}
                       disabled={saving || !formData.name?.trim() || (formData.availability || defaultAvailability).some((_, idx) => getWorkerBreaksError(idx) != null)}
-                      className="w-full px-4 py-2 bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 disabled:cursor-not-allowed text-white rounded-lg font-medium"
+                      className="w-full px-4 py-2 bg-caleno-500 hover:bg-caleno-600 disabled:bg-caleno-300 disabled:cursor-not-allowed text-white rounded-lg font-medium"
                     >
                       {saving ? "שומר..." : "שמור שינויים"}
                     </button>

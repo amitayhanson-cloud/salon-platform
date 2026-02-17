@@ -320,7 +320,7 @@ export default function BookingsAdminPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50" dir="rtl">
+      <div className="min-h-screen flex items-center justify-center" dir="rtl">
         <div className="text-center">
           <p className="text-slate-600 text-sm mb-2">טוען…</p>
           <p className="text-xs text-slate-400">siteId: {siteId || "לא זמין"}</p>
@@ -331,7 +331,7 @@ export default function BookingsAdminPage() {
 
   if (!siteId) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50" dir="rtl">
+      <div className="min-h-screen flex items-center justify-center" dir="rtl">
         <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-right">
           <p className="text-red-700 font-semibold mb-2">שגיאה</p>
           <p className="text-sm text-red-600">siteId חסר. אנא רענן את הדף.</p>
@@ -343,7 +343,7 @@ export default function BookingsAdminPage() {
   // Check if booking is enabled
   if (config && !bookingEnabled(config)) {
     return (
-      <div className="min-h-screen bg-slate-50 py-8" dir="rtl">
+      <div className="min-h-screen py-8" dir="rtl">
         <div className="max-w-2xl mx-auto px-4">
           <div className="bg-white rounded-3xl shadow-lg border border-slate-200 p-6 sm:p-8 text-right">
             <h1 className="text-xl font-bold text-slate-900 mb-2">
@@ -354,7 +354,7 @@ export default function BookingsAdminPage() {
             </p>
             <Link
               href={getAdminBasePathFromSiteId(siteId)}
-              className="inline-block px-6 py-3 bg-sky-500 hover:bg-sky-600 text-white font-semibold rounded-lg transition-colors"
+              className="inline-block px-6 py-3 bg-caleno-500 hover:bg-caleno-600 text-white font-semibold rounded-lg transition-colors"
             >
               חזרה לפאנל
             </Link>
@@ -365,7 +365,7 @@ export default function BookingsAdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50" dir="rtl">
+    <div className="min-h-screen" dir="rtl">
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Header */}
         <div className="mb-6">
@@ -410,7 +410,7 @@ export default function BookingsAdminPage() {
               </div>
               <Link
                 href={getAdminBasePathFromSiteId(siteId)}
-                className="text-sm text-sky-700 hover:text-sky-800"
+                className="text-sm text-caleno-700 hover:text-caleno-800"
               >
                 ← חזרה לפאנל ניהול
               </Link>

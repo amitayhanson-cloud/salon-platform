@@ -152,7 +152,7 @@ function AdminColorsTab({
             type="button"
             onClick={onSave}
             disabled={isSaving || hasErrors}
-            className="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+            className="px-4 py-2 rounded-lg bg-caleno-500 hover:bg-caleno-600 disabled:bg-caleno-300 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
           >
             {isSaving ? "שומר…" : "שמור שינויים"}
           </button>
@@ -194,7 +194,7 @@ function AdminColorsTab({
                   className={`flex-1 rounded-lg border px-3 py-2 text-right text-sm font-mono focus:outline-none focus:ring-2 ${
                     hasError
                       ? "border-red-300 focus:ring-red-500 focus:border-red-500"
-                      : "border-slate-300 focus:ring-sky-500 focus:border-sky-500"
+                      : "border-slate-300 focus:ring-caleno-500 focus:border-caleno-500"
                   }`}
                   placeholder="#RRGGBB"
                 />
@@ -271,7 +271,7 @@ export default function ColoursPage() {
 
   if (!siteConfig) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="min-h-screen flex items-center justify-center">
         <p className="text-slate-600 text-sm">טוען את נתוני הסלון…</p>
       </div>
     );

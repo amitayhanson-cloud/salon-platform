@@ -6,6 +6,7 @@ import { useParams, useRouter, usePathname } from "next/navigation";
 // Admin routes are dynamic - they require authentication and load user data
 export const dynamic = "force-dynamic";
 import AdminHeader from "@/components/admin/AdminHeader";
+import { HeroBackground } from "@/components/ui/HeroBackground";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { isOnTenantSubdomainClient, getAdminBasePath, getDashboardUrl } from "@/lib/url";
 
@@ -285,7 +286,7 @@ export default function AdminLayout({
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-500 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-caleno-500 mx-auto mb-4"></div>
           <p className="text-slate-600">
             {initializing ? "מאתחל את האתר שלך..." : "בודק הרשאות..."}
           </p>
@@ -306,7 +307,7 @@ export default function AdminLayout({
           <div className="flex gap-3 flex-wrap">
             <button
               onClick={() => router.push("/dashboard")}
-              className="px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-colors"
+              className="px-4 py-2 bg-caleno-500 text-white rounded-lg hover:bg-caleno-600 transition-colors"
             >
               לדשבורד שלי
             </button>
@@ -344,11 +345,15 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <AdminHeader />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {children}
-      </main>
+    <div className="min-h-screen relative w-full">
+      <HeroBackground />
+      <div className="relative z-10 w-full">
+        <AdminHeader />
+        {/* Full-width content area: max-w-7xl (1280px) on desktop, stacked on mobile */}
+        <main className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

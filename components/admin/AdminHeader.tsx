@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useParams, useRouter } from "next/navigation";
 import { ChevronDown, Menu, X, ExternalLink } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { isOnTenantSubdomainClient, getAdminBasePath } from "@/lib/url";
+import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
 
 type MenuItem = {
   label: string;
@@ -59,6 +61,25 @@ export default function AdminHeader() {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
+
+  // Per-site branding (name + logo) from Firestore
+  const [siteName, setSiteName] = useState("");
+  const [siteLogoUrl, setSiteLogoUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!siteId || siteId === "me") {
+      setSiteName("");
+      setSiteLogoUrl(null);
+      return;
+    }
+    const unsub = subscribeSiteConfig(
+      siteId,
+      (config) => {
+        setSiteName(config?.salonName ?? "");
+        setSiteLogoUrl(config?.branding?.logoUrl ?? null);
+      }
+    );
+    return unsub;
+  }, [siteId]);
 
   // Get public site URL: on tenant subdomain use /; on root use path without /admin
   const getPublicPath = (): string => {
@@ -133,96 +154,129 @@ export default function AdminHeader() {
       className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo/Brand */}
-          <div className="flex-shrink-0">
+        {/* dir=ltr so left/right zones stay fixed: left = Caleno, right = tenant+nav */}
+        <div className="flex items-center justify-between h-16 w-full" dir="ltr">
+          {/* LEFT: Caleno logo */}
+          <div className="flex items-center shrink-0">
             <Link
               href={adminBasePath}
-              className="text-xl font-bold text-slate-900 hover:text-sky-600 transition-colors"
+              className="flex items-center h-10 md:h-12 text-[#2EC4C6] hover:text-[#22A6A8] transition-colors"
+              aria-label="Caleno – פאנל ניהול"
             >
-              פאנל ניהול
+              <Image
+                src="/brand/caleno logo/Untitled design.svg"
+                alt="Caleno"
+                width={160}
+                height={48}
+                className="h-10 md:h-12 w-auto object-contain"
+                priority
+              />
             </Link>
           </div>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-1 space-x-reverse">
-            {/* View Website Button */}
-            {canViewSite && (
-              <button
-                onClick={handleViewWebsite}
-                className="px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400 flex items-center gap-2"
-                title="צפייה באתר הציבורי"
-              >
-                <span>צפייה באתר</span>
-                <ExternalLink className="w-4 h-4" />
-              </button>
-            )}
-            {menuItems.map((item) => (
-              <div key={item.label} className="relative">
-                {item.href ? (
-                  <Link
-                    href={item.href}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      isActive(item.href)
-                        ? "bg-sky-100 text-sky-700"
-                        : "text-slate-700 hover:bg-slate-100"
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => toggleDropdown(item.label)}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1 ${
-                        isParentActive(item)
-                          ? "bg-sky-100 text-sky-700"
+          {/* RIGHT: tenant branding + navbar (one cluster) */}
+          <div className="flex items-center gap-4 md:gap-6 shrink-0">
+            {/* Navbar */}
+            <nav className="hidden md:flex items-center gap-4 whitespace-nowrap">
+              {canViewSite && (
+                <button
+                  onClick={handleViewWebsite}
+                  className="px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400 flex items-center gap-2"
+                  title="צפייה באתר הציבורי"
+                >
+                  <span>צפייה באתר</span>
+                  <ExternalLink className="w-4 h-4" />
+                </button>
+              )}
+              {menuItems.map((item) => (
+                <div key={item.label} className="relative">
+                  {item.href ? (
+                    <Link
+                      href={item.href}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        isActive(item.href)
+                          ? "bg-caleno-100 text-caleno-700"
                           : "text-slate-700 hover:bg-slate-100"
                       }`}
                     >
                       {item.label}
-                      <ChevronDown
-                        className={`w-4 h-4 transition-transform ${
-                          openDropdown === item.label ? "rotate-180" : ""
+                    </Link>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => toggleDropdown(item.label)}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1 ${
+                          isParentActive(item)
+                            ? "bg-caleno-100 text-caleno-700"
+                            : "text-slate-700 hover:bg-slate-100"
                         }`}
-                      />
-                    </button>
-                    {openDropdown === item.label && item.items && (
-                      <div className="absolute top-full right-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden animate-[dropdown_0.2s_ease-out_forwards]">
-                        {item.items.map((subItem) => (
-                          <Link
-                            key={subItem.href}
-                            href={subItem.href}
-                            onClick={() => setOpenDropdown(null)}
-                            className={`block px-4 py-2 text-sm transition-colors ${
-                              isActive(subItem.href)
-                                ? "bg-sky-50 text-sky-700 font-medium"
-                                : "text-slate-700 hover:bg-slate-50"
-                            }`}
-                          >
-                            {subItem.label}
-                          </Link>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            ))}
-          </nav>
+                      >
+                        {item.label}
+                        <ChevronDown
+                          className={`w-4 h-4 transition-transform ${
+                            openDropdown === item.label ? "rotate-180" : ""
+                          }`}
+                        />
+                      </button>
+                      {openDropdown === item.label && item.items && (
+                        <div className="absolute top-full right-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden animate-[dropdown_0.2s_ease-out_forwards]">
+                          {item.items.map((subItem) => (
+                            <Link
+                              key={subItem.href}
+                              href={subItem.href}
+                              onClick={() => setOpenDropdown(null)}
+                              className={`block px-4 py-2 text-sm transition-colors ${
+                                isActive(subItem.href)
+                                  ? "bg-caleno-50 text-caleno-700 font-medium"
+                                  : "text-slate-700 hover:bg-slate-50"
+                              }`}
+                            >
+                              {subItem.label}
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              ))}
+            </nav>
 
-          {/* Mobile Menu Button */}
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2 rounded-lg text-slate-700 hover:bg-slate-100 transition-colors"
-            aria-label="תפריט"
-          >
-            {mobileMenuOpen ? (
-              <X className="w-6 h-6" />
-            ) : (
-              <Menu className="w-6 h-6" />
-            )}
-          </button>
+            {/* Tenant logo or name (far right) */}
+            <div className="flex items-center gap-2 min-w-0">
+              <Link
+                href={adminBasePath}
+                className="flex items-center h-9 text-slate-900 hover:text-slate-700 transition-colors"
+                aria-label={siteName || "פאנל ניהול"}
+              >
+                {siteLogoUrl ? (
+                  <img
+                    src={siteLogoUrl}
+                    alt={siteName || "לוגו"}
+                    className="h-9 w-auto object-contain max-w-[140px] sm:max-w-[180px]"
+                    width={180}
+                    height={36}
+                  />
+                ) : (
+                  <div className="max-w-[220px] truncate text-base font-semibold">
+                    {siteName || "פאנל ניהול"}
+                  </div>
+                )}
+              </Link>
+            </div>
+
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden p-2 rounded-lg text-slate-700 hover:bg-slate-100 transition-colors shrink-0"
+              aria-label="תפריט"
+            >
+              {mobileMenuOpen ? (
+                <X className="w-6 h-6" />
+              ) : (
+                <Menu className="w-6 h-6" />
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Mobile Navigation */}
@@ -250,7 +304,7 @@ export default function AdminHeader() {
                     href={item.href}
                     className={`block px-4 py-3 text-sm font-medium transition-colors ${
                       isActive(item.href)
-                        ? "bg-sky-50 text-sky-700"
+                        ? "bg-caleno-50 text-caleno-700"
                         : "text-slate-700 hover:bg-slate-50"
                     }`}
                   >
@@ -262,7 +316,7 @@ export default function AdminHeader() {
                       onClick={() => toggleDropdown(item.label)}
                       className={`w-full flex items-center justify-between px-4 py-3 text-sm font-medium transition-colors ${
                         isParentActive(item)
-                          ? "bg-sky-50 text-sky-700"
+                          ? "bg-caleno-50 text-caleno-700"
                           : "text-slate-700 hover:bg-slate-50"
                       }`}
                     >
@@ -281,7 +335,7 @@ export default function AdminHeader() {
                             href={subItem.href}
                             className={`block px-8 py-2 text-sm transition-colors ${
                               isActive(subItem.href)
-                                ? "bg-sky-100 text-sky-700 font-medium"
+                                ? "bg-caleno-100 text-caleno-700 font-medium"
                                 : "text-slate-600 hover:bg-slate-100"
                             }`}
                           >

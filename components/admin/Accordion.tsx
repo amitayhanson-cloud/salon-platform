@@ -13,7 +13,7 @@ interface AccordionItemProps {
 export function AccordionItem({ title, children, isOpen, onToggle }: AccordionItemProps) {
   return (
     <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
-      <div className="flex items-center justify-between px-6 py-4 text-right hover:bg-slate-50 transition-colors">
+      <div className="flex items-center justify-between min-h-[44px] px-4 sm:px-6 py-4 text-right hover:bg-slate-50 transition-colors">
         <div 
           className="flex-1 text-right cursor-pointer"
           onClick={onToggle}
@@ -35,7 +35,7 @@ export function AccordionItem({ title, children, isOpen, onToggle }: AccordionIt
         </div>
         <button
           onClick={onToggle}
-          className="p-1 hover:bg-slate-100 rounded transition-colors flex-shrink-0"
+          className="min-h-[44px] min-w-[44px] p-2 flex items-center justify-center hover:bg-slate-100 rounded transition-colors flex-shrink-0"
           aria-label={isOpen ? "סגור" : "פתח"}
         >
           <ChevronDown

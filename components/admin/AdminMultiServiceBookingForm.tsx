@@ -239,7 +239,7 @@ export default function AdminMultiServiceBookingForm({
             <button
               type="button"
               onClick={addSlot}
-              className="text-sm text-sky-600 hover:text-sky-700 font-medium"
+              className="text-sm text-caleno-600 hover:text-caleno-700 font-medium"
             >
               + הוסף שירות
             </button>
@@ -333,7 +333,7 @@ export default function AdminMultiServiceBookingForm({
           <button
             type="submit"
             disabled={saving}
-            className="px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 disabled:opacity-50"
+            className="px-4 py-2 bg-caleno-500 text-white rounded-lg hover:bg-caleno-600 disabled:opacity-50"
           >
             {saving ? "שומר…" : "שמור"}
           </button>

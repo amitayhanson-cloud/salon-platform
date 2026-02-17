@@ -645,7 +645,7 @@ export default function AdminBookingForm({
               type="checkbox"
               checked={phase2Enabled}
               onChange={(e) => setPhase2Enabled(e.target.checked)}
-              className="w-4 h-4 text-sky-500 rounded"
+              className="w-4 h-4 text-caleno-500 rounded"
             />
             <span className="text-sm font-medium text-slate-700">המשך טיפול (שלב 2)</span>
           </label>
@@ -762,7 +762,7 @@ export default function AdminBookingForm({
           <button
             type="submit"
             disabled={saving || hasWorkerConflict}
-            className="px-4 py-2 bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium"
+            className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium"
           >
             {saving ? "שומר..." : mode === "create" ? "הוסף תור" : "שמור שינויים"}
           </button>

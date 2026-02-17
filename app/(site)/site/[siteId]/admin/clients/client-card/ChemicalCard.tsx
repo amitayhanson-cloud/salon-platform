@@ -441,7 +441,7 @@ export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
           {!showAddColor && !editingColorId && (
             <button
               onClick={() => setShowAddColor(true)}
-              className="flex items-center gap-1 px-3 py-1.5 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium transition-colors"
             >
               <Plus className="w-4 h-4" />
               הוסף צבע
@@ -461,7 +461,7 @@ export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
                   type="text"
                   value={colorForm.colorNumber}
                   onChange={(e) => setColorForm({ ...colorForm, colorNumber: e.target.value })}
-                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                   placeholder="למשל: 7, 8.1"
                 />
               </div>
@@ -473,7 +473,7 @@ export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
                   type="text"
                   value={colorForm.amount}
                   onChange={(e) => setColorForm({ ...colorForm, amount: e.target.value })}
-                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                   placeholder="למשל: 1/2, 30g"
                 />
               </div>
@@ -485,7 +485,7 @@ export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
                   type="text"
                   value={colorForm.notes}
                   onChange={(e) => setColorForm({ ...colorForm, notes: e.target.value })}
-                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                   placeholder="הערות (אופציונלי)"
                 />
               </div>
@@ -504,7 +504,7 @@ export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
                   handleAddColor();
                 }}
                 disabled={!canSave || saving}
-                className="px-3 py-1.5 bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 text-white rounded text-sm font-medium"
+                className="px-3 py-1.5 bg-caleno-500 hover:bg-caleno-600 disabled:bg-caleno-300 text-white rounded text-sm font-medium"
               >
                 שמור
               </button>
@@ -544,7 +544,7 @@ export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
                           type="text"
                           value={colorForm.colorNumber}
                           onChange={(e) => setColorForm({ ...colorForm, colorNumber: e.target.value })}
-                          className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                          className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                         />
                       </div>
                       <div>
@@ -555,7 +555,7 @@ export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
                           type="text"
                           value={colorForm.amount}
                           onChange={(e) => setColorForm({ ...colorForm, amount: e.target.value })}
-                          className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                          className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                         />
                       </div>
                       <div>
@@ -566,7 +566,7 @@ export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
                           type="text"
                           value={colorForm.notes}
                           onChange={(e) => setColorForm({ ...colorForm, notes: e.target.value })}
-                          className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                          className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                         />
                       </div>
                       <div className="md:col-span-3 flex gap-2 justify-start">
@@ -584,7 +584,7 @@ export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
                             handleSaveColor();
                           }}
                           disabled={!canSave || saving}
-                          className="px-3 py-1.5 bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 text-white rounded text-sm font-medium"
+                          className="px-3 py-1.5 bg-caleno-500 hover:bg-caleno-600 disabled:bg-caleno-300 text-white rounded text-sm font-medium"
                         >
                           שמור
                         </button>
@@ -620,7 +620,7 @@ export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleEditColor(color)}
-                          className="p-1.5 text-slate-600 hover:text-sky-600 hover:bg-sky-50 rounded transition-colors"
+                          className="p-1.5 text-slate-600 hover:text-caleno-600 hover:bg-caleno-50 rounded transition-colors"
                           title="ערוך"
                         >
                           <Pencil className="w-4 h-4" />
@@ -649,7 +649,7 @@ export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
           {!showAddOxygen && !editingOxygenId && (
             <button
               onClick={() => setShowAddOxygen(true)}
-              className="flex items-center gap-1 px-3 py-1.5 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium transition-colors"
+              className="flex items-center gap-1 px-3 py-1.5 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium transition-colors"
             >
               <Plus className="w-4 h-4" />
               הוסף חמצן
@@ -669,7 +669,7 @@ export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
                   type="text"
                   value={oxygenForm.percentage}
                   onChange={(e) => setOxygenForm({ ...oxygenForm, percentage: e.target.value })}
-                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                   placeholder="למשל: 3%, 6%, 9%"
                 />
               </div>
@@ -681,7 +681,7 @@ export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
                   type="text"
                   value={oxygenForm.amount}
                   onChange={(e) => setOxygenForm({ ...oxygenForm, amount: e.target.value })}
-                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                   placeholder="כמות"
                 />
               </div>
@@ -693,7 +693,7 @@ export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
                   type="text"
                   value={oxygenForm.notes}
                   onChange={(e) => setOxygenForm({ ...oxygenForm, notes: e.target.value })}
-                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                   placeholder="הערות (אופציונלי)"
                 />
               </div>
@@ -712,7 +712,7 @@ export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
                   handleAddOxygen();
                 }}
                 disabled={!canSave || saving}
-                className="px-3 py-1.5 bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 text-white rounded text-sm font-medium"
+                className="px-3 py-1.5 bg-caleno-500 hover:bg-caleno-600 disabled:bg-caleno-300 text-white rounded text-sm font-medium"
               >
                 שמור
               </button>
@@ -752,7 +752,7 @@ export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
                           type="text"
                           value={oxygenForm.percentage}
                           onChange={(e) => setOxygenForm({ ...oxygenForm, percentage: e.target.value })}
-                          className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                          className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                         />
                       </div>
                       <div>
@@ -763,7 +763,7 @@ export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
                           type="text"
                           value={oxygenForm.amount}
                           onChange={(e) => setOxygenForm({ ...oxygenForm, amount: e.target.value })}
-                          className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                          className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                         />
                       </div>
                       <div>
@@ -774,7 +774,7 @@ export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
                           type="text"
                           value={oxygenForm.notes}
                           onChange={(e) => setOxygenForm({ ...oxygenForm, notes: e.target.value })}
-                          className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                          className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                         />
                       </div>
                       <div className="md:col-span-3 flex gap-2 justify-start">
@@ -792,7 +792,7 @@ export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
                             handleSaveOxygen();
                           }}
                           disabled={!canSave || saving}
-                          className="px-3 py-1.5 bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 text-white rounded text-sm font-medium"
+                          className="px-3 py-1.5 bg-caleno-500 hover:bg-caleno-600 disabled:bg-caleno-300 text-white rounded text-sm font-medium"
                         >
                           שמור
                         </button>
@@ -828,7 +828,7 @@ export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleEditOxygen(oxygen)}
-                          className="p-1.5 text-slate-600 hover:text-sky-600 hover:bg-sky-50 rounded transition-colors"
+                          className="p-1.5 text-slate-600 hover:text-caleno-600 hover:bg-caleno-50 rounded transition-colors"
                           title="ערוך"
                         >
                           <Pencil className="w-4 h-4" />

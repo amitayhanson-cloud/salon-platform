@@ -70,13 +70,13 @@ export default function NoteIndicatorDemoPage() {
   const adminBasePath = getAdminBasePathFromSiteId(siteId);
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6" dir="rtl">
+    <div className="min-h-screen p-6" dir="rtl">
       <div className="max-w-md mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-slate-900">דמו: אינדיקטור הערות</h1>
           <Link
             href={`${adminBasePath}/bookings`}
-            className="text-sm text-sky-600 hover:underline"
+            className="text-sm text-caleno-600 hover:underline"
           >
             ← חזרה ליומן
           </Link>

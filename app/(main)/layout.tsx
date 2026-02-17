@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Header } from "@/components/Header";
-import { LandingBackground } from "@/components/hero/LandingBackground";
+import { HeroBackground } from "@/components/ui/HeroBackground";
 
 export default function MainLayout({
   children,
@@ -11,12 +11,12 @@ export default function MainLayout({
 
   return (
     <>
-      <LandingBackground />
+      <HeroBackground />
       <Header />
-      <main className="relative z-10">{children}</main>
+      <main className="relative z-10 overflow-x-hidden">{children}</main>
       {/* Main website footer */}
       <footer className="bg-white border-t border-[#E2EEF2] py-8">
-        <div className="container mx-auto px-4">
+        <div className="max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-right">
             <p className="text-[#475569]">
               © {currentYear} Caleno

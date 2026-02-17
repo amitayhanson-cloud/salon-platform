@@ -470,7 +470,7 @@ export default function PersonalPricingTab({
                                 value={editingPrice}
                                 onChange={(e) => handlePriceChange(item.id, e.target.value)}
                                 placeholder={hasOverride ? personalPrice.toString() : "—"}
-                                className="w-24 px-2 py-1.5 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                className="w-24 px-2 py-1.5 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                                 dir="ltr"
                               />
                               <span className="text-xs text-slate-500">₪</span>
@@ -492,7 +492,7 @@ export default function PersonalPricingTab({
                                   handleSave(item.id, serviceId);
                                 }}
                                 disabled={savingServiceTypeId === item.id || resettingServiceTypeId === item.id}
-                                className="px-3 py-1.5 bg-sky-500 hover:bg-sky-600 text-white rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                className="px-3 py-1.5 bg-caleno-500 hover:bg-caleno-600 text-white rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                               >
                                 {savingServiceTypeId === item.id ? (
                                   <>

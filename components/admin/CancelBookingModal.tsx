@@ -54,7 +54,7 @@ export default function CancelBookingModal({
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="הזן סיבת ביטול..."
-          className="mt-3 w-full min-h-[80px] px-3 py-2 border border-slate-200 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+          className="mt-3 w-full min-h-[80px] px-3 py-2 border border-slate-200 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-transparent"
           dir="rtl"
           disabled={submitting}
         />

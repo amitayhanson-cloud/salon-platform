@@ -70,7 +70,7 @@ export default function TwoWeekCalendar({
             onClick={() => handleDayClick(day)}
             className={`border rounded-lg p-2 cursor-pointer transition-colors min-h-[120px] ${
               isSelected
-                ? "border-sky-500 bg-sky-50"
+                ? "border-caleno-500 bg-caleno-50"
                 : "border-slate-200 hover:border-slate-300"
             } ${isToday ? "bg-blue-50" : ""}`}
           >
@@ -84,7 +84,7 @@ export default function TwoWeekCalendar({
               {dayBookings.slice(0, 3).map((booking: BookingSummary) => (
                 <div
                   key={booking.id}
-                  className="text-xs bg-sky-100 text-sky-700 rounded px-1 py-0.5 truncate"
+                  className="text-xs bg-caleno-100 text-caleno-700 rounded px-1 py-0.5 truncate"
                   title={`${booking.time} ${booking.serviceName} ${booking.workerName ? `(${booking.workerName})` : ""}`}
                 >
                   {booking.time} {booking.serviceName}

@@ -484,7 +484,7 @@ export default function CancelledBookingsPage() {
 
   if (loading || bookingsLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50" dir="rtl">
+      <div className="min-h-screen flex items-center justify-center" dir="rtl">
         <div className="text-center">
           <p className="text-slate-600 text-sm mb-2">טוען…</p>
         </div>
@@ -494,7 +494,7 @@ export default function CancelledBookingsPage() {
 
   if (!siteId) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50" dir="rtl">
+      <div className="min-h-screen flex items-center justify-center" dir="rtl">
         <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-right">
           <p className="text-red-700 font-semibold mb-2">שגיאה</p>
           <p className="text-sm text-red-600">siteId חסר. אנא רענן את הדף.</p>
@@ -505,7 +505,7 @@ export default function CancelledBookingsPage() {
 
   if (config && !bookingEnabled(config)) {
     return (
-      <div className="min-h-screen bg-slate-50 py-8" dir="rtl">
+      <div className="min-h-screen py-8" dir="rtl">
         <div className="max-w-2xl mx-auto px-4">
           <div className="bg-white rounded-3xl shadow-lg border border-slate-200 p-6 sm:p-8 text-right">
             <h1 className="text-xl font-bold text-slate-900 mb-2">
@@ -516,7 +516,7 @@ export default function CancelledBookingsPage() {
             </p>
             <Link
               href={adminBasePath}
-              className="inline-block px-6 py-3 bg-sky-500 hover:bg-sky-600 text-white font-semibold rounded-lg transition-colors"
+              className="inline-block px-6 py-3 bg-caleno-500 hover:bg-caleno-600 text-white font-semibold rounded-lg transition-colors"
             >
               חזרה לפאנל
             </Link>
@@ -527,7 +527,7 @@ export default function CancelledBookingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50" dir="rtl">
+    <div className="min-h-screen" dir="rtl">
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Header */}
         <div className="mb-6">
@@ -547,7 +547,7 @@ export default function CancelledBookingsPage() {
                         router.push(`${adminBasePath}/bookings/day/${newKey}/cancelled?scope=day`);
                       }
                     }}
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-base font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-base font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-caleno-500"
                   />
                   <span className="text-xl font-semibold text-slate-700">
                     {formatDayLabel(selectedDate)}
@@ -562,7 +562,7 @@ export default function CancelledBookingsPage() {
                   type="button"
                   onClick={() => setScope("day")}
                   className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                    scope === "day" ? "bg-sky-600 text-white shadow" : "text-slate-600 hover:bg-slate-50"
+                    scope === "day" ? "bg-caleno-600 text-white shadow" : "text-slate-600 hover:bg-slate-50"
                   }`}
                 >
                   לפי יום
@@ -571,7 +571,7 @@ export default function CancelledBookingsPage() {
                   type="button"
                   onClick={() => setScope("all")}
                   className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                    scope === "all" ? "bg-sky-600 text-white shadow" : "text-slate-600 hover:bg-slate-50"
+                    scope === "all" ? "bg-caleno-600 text-white shadow" : "text-slate-600 hover:bg-slate-50"
                   }`}
                 >
                   הכל
@@ -587,7 +587,7 @@ export default function CancelledBookingsPage() {
               </button>
               <Link
                 href={`${adminBasePath}/bookings/day/${dateKey}`}
-                className="text-sm text-sky-700 hover:text-sky-800"
+                className="text-sm text-caleno-700 hover:text-caleno-700"
               >
                 ← חזרה ללוח זמנים
               </Link>
@@ -680,7 +680,7 @@ export default function CancelledBookingsPage() {
                           </span>
                           <button
                             onClick={() => handleEditReason(booking)}
-                            className="p-1.5 hover:bg-sky-50 rounded text-sky-600 flex-shrink-0"
+                            className="p-1.5 hover:bg-caleno-50 rounded text-caleno-600 flex-shrink-0"
                             title={booking.cancellationReason ? "ערוך סיבה" : "הוסף סיבה"}
                           >
                             <Pencil className="w-4 h-4" />
@@ -749,7 +749,7 @@ export default function CancelledBookingsPage() {
                   }}
                   placeholder="הזן סיבת ביטול (אופציונלי)"
                   rows={4}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 resize-none"
                 />
                 <p className="text-xs text-slate-500 mt-1">
                   השאר ריק אם אין סיבה ספציפית
@@ -768,7 +768,7 @@ export default function CancelledBookingsPage() {
               <button
                 onClick={handleSaveReason}
                 disabled={savingReason}
-                className="px-4 py-2 bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
+                className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 disabled:bg-caleno-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
               >
                 {savingReason ? "שומר..." : "שמור"}
               </button>

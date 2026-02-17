@@ -450,7 +450,7 @@ export default function AIFloatingWidget({ siteId }: AIFloatingWidgetProps) {
                   className={cn(
                     "max-w-[80%] rounded-lg p-3 text-sm",
                     msg.role === "user"
-                      ? "rounded-br-none bg-sky-600 text-white"
+                      ? "rounded-br-none bg-caleno-600 text-white"
                       : "rounded-bl-none bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100"
                   )}
                 >
@@ -499,14 +499,14 @@ export default function AIFloatingWidget({ siteId }: AIFloatingWidgetProps) {
                   }
                 }}
                 placeholder="הקלד הודעה..."
-                className="flex-1 px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500"
+                className="flex-1 px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500"
                 dir="rtl"
                 disabled={isLoading}
               />
               <button
                 onClick={handleSend}
                 disabled={isLoading || !input.trim()}
-                className="px-4 py-2 rounded-lg text-sm font-medium bg-sky-600 hover:bg-sky-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-caleno-600 hover:bg-caleno-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 שלח
               </button>

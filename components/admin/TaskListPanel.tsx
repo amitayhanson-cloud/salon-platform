@@ -107,7 +107,7 @@ export default function TaskListPanel({ siteId, maxHeight = "280px" }: TaskListP
         <button
           type="button"
           onClick={handleAddTask}
-          className="text-xs px-2 py-1 bg-sky-500 hover:bg-sky-600 text-white rounded font-medium flex-shrink-0"
+          className="text-xs px-2 py-1 bg-caleno-500 hover:bg-caleno-600 text-white rounded font-medium flex-shrink-0"
         >
           הוסף משימה
         </button>
@@ -150,7 +150,7 @@ export default function TaskListPanel({ siteId, maxHeight = "280px" }: TaskListP
                         className="inline-flex items-center justify-center w-5 h-5 rounded border border-slate-300 bg-white hover:bg-slate-50"
                         aria-label="סמן כהושלם"
                       >
-                        {task.completed ? <Check className="w-3 h-3 text-sky-600" /> : null}
+                        {task.completed ? <Check className="w-3 h-3 text-caleno-600" /> : null}
                       </button>
                     </div>
                   </td>
@@ -159,7 +159,7 @@ export default function TaskListPanel({ siteId, maxHeight = "280px" }: TaskListP
                       type="date"
                       value={task.dueDate}
                       onChange={(e) => handleUpdateDueDate(task, e.target.value)}
-                      className="w-full min-w-0 bg-transparent border-0 border-b border-transparent hover:border-slate-300 focus:border-sky-500 focus:outline-none py-0.5 text-right text-inherit"
+                      className="w-full min-w-0 bg-transparent border-0 border-b border-transparent hover:border-slate-300 focus:border-caleno-500 focus:outline-none py-0.5 text-right text-inherit"
                       dir="rtl"
                     />
                   </td>
@@ -186,7 +186,7 @@ export default function TaskListPanel({ siteId, maxHeight = "280px" }: TaskListP
                         }
                       }}
                       placeholder="כותרת..."
-                      className="w-full min-w-0 bg-transparent border-0 border-b border-transparent hover:border-slate-300 focus:border-sky-500 focus:outline-none py-0.5 text-right text-inherit placeholder-slate-400"
+                      className="w-full min-w-0 bg-transparent border-0 border-b border-transparent hover:border-slate-300 focus:border-caleno-500 focus:outline-none py-0.5 text-right text-inherit placeholder-slate-400"
                       dir="rtl"
                     />
                   </td>
@@ -215,7 +215,7 @@ export default function TaskListPanel({ siteId, maxHeight = "280px" }: TaskListP
                           <button
                             type="button"
                             onClick={() => handleToggleComplete(task)}
-                            className="inline-flex items-center justify-center w-5 h-5 rounded border border-slate-300 bg-white text-sky-600"
+                            className="inline-flex items-center justify-center w-5 h-5 rounded border border-slate-300 bg-white text-caleno-600"
                             aria-label="בטל השלמה"
                           >
                             <Check className="w-3 h-3" />

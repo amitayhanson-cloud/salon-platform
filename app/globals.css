@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+/* Caleno brand blue – admin primary actions (replaces sky in admin) */
+@theme {
+  --color-caleno-50: #e6f5f7;
+  --color-caleno-100: #cceef1;
+  --color-caleno-200: #99dde3;
+  --color-caleno-300: #18b0ba;
+  --color-caleno-500: #09899b;
+  --color-caleno-600: #155969;
+  --color-caleno-700: #0f4550;
+  --color-caleno-800: #0a3540;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
@@ -31,5 +43,39 @@ body {
     opacity: 1;
     transform: translateY(0);
     max-height: 500px;
+  }
+}
+
+/* Hero scroll indicator – Caleno teal (#2EC4C6) */
+.scroll-indicator-btn {
+  width: 30px;
+  height: 50px;
+  border-radius: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent;
+  border: none;
+  outline: 2px solid #2EC4C6;
+  box-shadow: 0px 0px 10px #2EC4C6;
+  position: relative;
+}
+
+.scroll-indicator-dot {
+  width: 5px;
+  height: 10px;
+  border-radius: 10px;
+  background-color: #2EC4C6;
+  box-shadow: 0px 0px 10px #2EC4C6;
+  animation: scroll_indicator 2s linear infinite;
+  transform: translateY(40%);
+}
+
+@keyframes scroll_indicator {
+  0% {
+    transform: translateY(40%);
+  }
+  50% {
+    transform: translateY(90%);
   }
 }

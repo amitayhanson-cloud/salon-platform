@@ -427,7 +427,7 @@ export default function AdminBookingFormSimple({
               type="checkbox"
               checked={recurringEnabled}
               onChange={(e) => setRecurringEnabled(e.target.checked)}
-              className="w-4 h-4 rounded border-slate-300 text-sky-500 shrink-0"
+              className="w-4 h-4 rounded border-slate-300 text-caleno-500 shrink-0"
             />
             <span className="text-sm font-medium text-slate-700">רצף</span>
           </label>
@@ -443,7 +443,7 @@ export default function AdminBookingFormSimple({
                   name="recurringMode"
                   checked={recurringMode === "count"}
                   onChange={() => setRecurringMode("count")}
-                  className="text-sky-500"
+                  className="text-caleno-500"
                 />
                 <span className="text-sm">מספר חזרות</span>
               </label>
@@ -453,7 +453,7 @@ export default function AdminBookingFormSimple({
                   name="recurringMode"
                   checked={recurringMode === "endDate"}
                   onChange={() => setRecurringMode("endDate")}
-                  className="text-sky-500"
+                  className="text-caleno-500"
                 />
                 <span className="text-sm">תאריך סיום</span>
               </label>
@@ -594,7 +594,7 @@ export default function AdminBookingFormSimple({
             onChange={(e) => setNotes(e.target.value)}
             placeholder="הוסף/י הערות להזמנה..."
             maxLength={1000}
-            className="w-full min-h-[72px] px-3 py-2 border border-slate-300 rounded-lg text-right placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500"
+            className="w-full min-h-[72px] px-3 py-2 border border-slate-300 rounded-lg text-right placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-caleno-500"
             dir="rtl"
           />
           <p className="text-xs text-slate-500 mt-0.5">{1000 - notes.length} תווים נותרים</p>
@@ -611,7 +611,7 @@ export default function AdminBookingFormSimple({
           <button
             type="submit"
             disabled={saving}
-            className="px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 disabled:opacity-50"
+            className="px-4 py-2 bg-caleno-500 text-white rounded-lg hover:bg-caleno-600 disabled:opacity-50"
           >
             {recurringProgress
               ? `יוצר ${recurringProgress.current}/${recurringProgress.total}…`

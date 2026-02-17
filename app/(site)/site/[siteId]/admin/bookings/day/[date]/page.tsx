@@ -826,7 +826,7 @@ export default function DaySchedulePage() {
 
   if (loading || bookingsLoading || workersLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50" dir="rtl">
+      <div className="min-h-screen flex items-center justify-center" dir="rtl">
         <div className="text-center">
           <p className="text-slate-600 text-sm mb-2">טוען…</p>
         </div>
@@ -836,7 +836,7 @@ export default function DaySchedulePage() {
 
   if (!siteId) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50" dir="rtl">
+      <div className="min-h-screen flex items-center justify-center" dir="rtl">
         <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-right">
           <p className="text-red-700 font-semibold mb-2">שגיאה</p>
           <p className="text-sm text-red-600">siteId חסר. אנא רענן את הדף.</p>
@@ -847,7 +847,7 @@ export default function DaySchedulePage() {
 
   if (config && !bookingEnabled(config)) {
     return (
-      <div className="min-h-screen bg-slate-50 py-8" dir="rtl">
+      <div className="min-h-screen py-8" dir="rtl">
         <div className="max-w-2xl mx-auto px-4">
           <div className="bg-white rounded-3xl shadow-lg border border-slate-200 p-6 sm:p-8 text-right">
             <h1 className="text-xl font-bold text-slate-900 mb-2">
@@ -858,7 +858,7 @@ export default function DaySchedulePage() {
             </p>
             <Link
               href={adminBasePath}
-              className="inline-block px-6 py-3 bg-sky-500 hover:bg-sky-600 text-white font-semibold rounded-lg transition-colors"
+              className="inline-block px-6 py-3 bg-caleno-500 hover:bg-caleno-600 text-white font-semibold rounded-lg transition-colors"
             >
               חזרה לפאנל
             </Link>
@@ -879,10 +879,10 @@ export default function DaySchedulePage() {
   };
 
   return (
-    <div className="h-screen bg-slate-50 flex flex-col overflow-hidden" dir="rtl">
+    <div className="h-screen flex flex-col overflow-hidden" dir="rtl">
       <div className="max-w-7xl mx-auto w-full px-4 py-4 flex flex-col h-full">
         {/* Toolbar: sticky below AdminHeader (top-16 = 64px) with z-40 so it stays clickable and is not covered by schedule or sticky header. */}
-        <div className="flex-shrink-0 mb-4 sticky top-16 z-40 bg-slate-50 -mx-4 px-4 py-4 -mt-4">
+        <div className="flex-shrink-0 mb-4 sticky top-16 z-40 bg-white/95 backdrop-blur-sm -mx-4 px-4 py-4 -mt-4 rounded-b-lg border-b border-slate-200/80">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-slate-900">
@@ -912,7 +912,7 @@ export default function DaySchedulePage() {
                       router.push(`${adminBasePath}/bookings/day/${newKey}${query}`);
                     }
                   }}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-base font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-base font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-caleno-500"
                 />
                 <span className="text-xl font-semibold text-slate-700 min-w-[8rem]">
                   {formatDayLabel(selectedDate)}
@@ -951,7 +951,7 @@ export default function DaySchedulePage() {
               <button
                 type="button"
                 onClick={handleAddBooking}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium transition-colors"
               >
                 <Plus className="w-4 h-4" />
                 הוסף תור
@@ -964,7 +964,7 @@ export default function DaySchedulePage() {
               </Link>
               <Link
                 href={`${adminBasePath}/bookings`}
-                className="text-sm text-sky-700 hover:text-sky-800"
+                className="text-sm text-caleno-700 hover:text-caleno-800"
               >
                 ← חזרה ליומן
               </Link>
@@ -1206,7 +1206,7 @@ export default function DaySchedulePage() {
               <button
                 type="button"
                 onClick={() => selectedBooking && handleEditBooking(selectedBooking)}
-                className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium"
+                className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium"
               >
                 ערוך תור
               </button>

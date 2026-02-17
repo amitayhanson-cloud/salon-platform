@@ -608,14 +608,14 @@ export default function ServicesPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="min-h-screen flex items-center justify-center">
         <p className="text-slate-600 text-sm">טוען מחירים…</p>
       </div>
     );
   }
 
   return (
-    <div dir="rtl" className="min-h-screen bg-slate-50">
+    <div dir="rtl" className="min-h-screen">
       <div className="max-w-7xl mx-auto px-4 py-6">
         <div className="mb-6">
           <div>
@@ -643,7 +643,7 @@ export default function ServicesPage() {
             </div>
             <button
               onClick={() => setShowAddService(true)}
-              className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+              className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
               הוסף שירות
@@ -658,7 +658,7 @@ export default function ServicesPage() {
                   value={newServiceName}
                   onChange={(e) => setNewServiceName(e.target.value)}
                   placeholder="שם השירות"
-                  className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       handleAddService();
@@ -670,7 +670,7 @@ export default function ServicesPage() {
                 />
                 <button
                   onClick={handleAddService}
-                  className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium"
+                  className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium"
                 >
                   שמור
                 </button>
@@ -717,7 +717,7 @@ export default function ServicesPage() {
                               e.stopPropagation();
                               handleEditService(service);
                             }}
-                            className="p-1.5 hover:bg-sky-50 rounded text-sky-600"
+                            className="p-1.5 hover:bg-caleno-50 rounded text-caleno-600"
                             title="ערוך שירות"
                           >
                             <Pencil className="w-4 h-4" />
@@ -744,7 +744,7 @@ export default function ServicesPage() {
                       </span>
                       <button
                         onClick={() => handleAddItem(service.name)}
-                        className="px-3 py-1.5 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+                        className="px-3 py-1.5 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium flex items-center gap-2"
                       >
                         <Plus className="w-4 h-4" />
                         הוסף סוג שירות / מחיר
@@ -798,7 +798,7 @@ export default function ServicesPage() {
                                     <div className="space-y-1">
                                       {item.notes && <div>{item.notes}</div>}
                                       {item.hasFollowUp && item.followUp && (
-                                        <div className="text-sky-600 font-medium">
+                                        <div className="text-caleno-600 font-medium">
                                           המשך טיפול: {item.followUp.name} ({item.followUp.durationMinutes} דק׳)
                                           {item.followUp.waitMinutes ? `, המתנה ${item.followUp.waitMinutes} דק׳` : ""}
                                         </div>
@@ -809,7 +809,7 @@ export default function ServicesPage() {
                                     <div className="flex items-center gap-2 justify-end">
                                       <button
                                         onClick={() => handleEditItem(item)}
-                                        className="p-1.5 hover:bg-sky-50 rounded text-sky-600"
+                                        className="p-1.5 hover:bg-caleno-50 rounded text-caleno-600"
                                         title="ערוך"
                                       >
                                         <Pencil className="w-4 h-4" />
@@ -900,7 +900,7 @@ export default function ServicesPage() {
                                 <div className="flex items-center gap-2 justify-end">
                                   <button
                                     onClick={() => handleEditItem(item)}
-                                    className="p-1.5 hover:bg-sky-50 rounded text-sky-600"
+                                    className="p-1.5 hover:bg-caleno-50 rounded text-caleno-600"
                                     title="ערוך ושייך לשירות"
                                   >
                                     <Pencil className="w-4 h-4" />
@@ -949,7 +949,7 @@ export default function ServicesPage() {
                 <button
                   type="button"
                   onClick={openComboCreate}
-                  className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+                  className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium flex items-center gap-2"
                 >
                   <Plus className="w-4 h-4" />
                   הוסף קומבו
@@ -991,7 +991,7 @@ export default function ServicesPage() {
                               <button
                                 type="button"
                                 onClick={() => openComboEdit(combo)}
-                                className="p-1.5 hover:bg-sky-50 rounded text-sky-600"
+                                className="p-1.5 hover:bg-caleno-50 rounded text-caleno-600"
                                 title="ערוך"
                               >
                                 <Pencil className="w-4 h-4" />
@@ -1036,7 +1036,7 @@ export default function ServicesPage() {
                   type="text"
                   value={comboForm.name}
                   onChange={(e) => setComboForm((prev) => ({ ...prev, name: e.target.value }))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                 />
               </div>
               <div>
@@ -1047,7 +1047,7 @@ export default function ServicesPage() {
                     const v = e.target.value;
                     if (v) addTriggerServiceType(v);
                   }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500 mb-2"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 mb-2"
                 >
                   <option value="">הוסף סוג שירות לתנאי...</option>
                   {validPricingItemsForCombo.filter((p) => !comboForm.triggerServiceTypeIds.includes(p.id)).map((p) => (
@@ -1076,7 +1076,7 @@ export default function ServicesPage() {
                     const v = e.target.value;
                     if (v) addOrderedServiceType(v);
                   }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500 mb-2"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 mb-2"
                 >
                   <option value="">הוסף סוג שירות לרצף...</option>
                   {validPricingItemsForCombo.map((p) => (
@@ -1120,7 +1120,7 @@ export default function ServicesPage() {
                       const v = e.target.value;
                       if (v) addAutoStep(v, 30);
                     }}
-                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                   >
                     <option value="">הוסף שירות אוטומטי...</option>
                     {services.map((s) => (
@@ -1168,7 +1168,7 @@ export default function ServicesPage() {
                   type="button"
                   onClick={saveCombo}
                   disabled={!comboForm.name.trim() || comboForm.triggerServiceTypeIds.length === 0 || comboForm.orderedServiceTypeIds.length === 0}
-                  className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   שמור
                 </button>
@@ -1203,7 +1203,7 @@ export default function ServicesPage() {
                   onChange={(e) =>
                     setEditingService({ ...editingService, name: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                 />
               </div>
 
@@ -1231,7 +1231,7 @@ export default function ServicesPage() {
                       }
                     }}
                     placeholder="#3B82F6"
-                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500 font-mono text-sm"
+                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 font-mono text-sm"
                   />
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
@@ -1250,7 +1250,7 @@ export default function ServicesPage() {
                     setEditingService({ ...editingService, description: e.target.value.trim() || undefined })
                   }
                   placeholder="תיאור אופציונלי לשירות..."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 resize-none"
                 />
               </div>
 
@@ -1275,7 +1275,7 @@ export default function ServicesPage() {
                       });
                     }}
                     placeholder="—"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                   />
                 </div>
                 <div>
@@ -1286,7 +1286,7 @@ export default function ServicesPage() {
                     value={editingService.duration ?? 15}
                     onChange={(n) => setEditingService({ ...editingService, duration: n })}
                     min={0}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                   />
                 </div>
               </div>
@@ -1305,7 +1305,7 @@ export default function ServicesPage() {
                     setEditingService({ ...editingService, imageUrl: e.target.value.trim() || undefined })
                   }
                   placeholder="https://..."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                 />
                 <p className="text-xs text-slate-500 mt-1">
                   אופציונלי. תוצג ברשת השירותים באתר
@@ -1319,7 +1319,7 @@ export default function ServicesPage() {
                   onChange={(e) =>
                     setEditingService({ ...editingService, enabled: e.target.checked })
                   }
-                  className="w-4 h-4 text-sky-500 rounded focus:ring-sky-500"
+                  className="w-4 h-4 text-caleno-500 rounded focus:ring-caleno-500"
                 />
                 <span className="text-sm text-slate-700">פעיל</span>
               </label>
@@ -1335,7 +1335,7 @@ export default function ServicesPage() {
               <button
                 onClick={handleSaveService}
                 disabled={!editingService.name.trim()}
-                className="px-4 py-2 bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
+                className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 disabled:bg-caleno-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
               >
                 שמור
               </button>
@@ -1374,7 +1374,7 @@ export default function ServicesPage() {
                       service: e.target.value, // Set service for backward compatibility
                     })
                   }
-                  className={`w-full px-3 py-2 border rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500 ${
+                  className={`w-full px-3 py-2 border rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 ${
                     !editingItem.serviceId && !editingItem.service ? "border-red-300" : "border-slate-300"
                   }`}
                   required
@@ -1411,7 +1411,7 @@ export default function ServicesPage() {
                     setEditingItem({ ...editingItem, type: e.target.value || null })
                   }
                   placeholder="למשל: רבע ראש, חצי ראש"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                 />
               </div>
 
@@ -1494,7 +1494,7 @@ export default function ServicesPage() {
                     }
                   }}
                   placeholder="0"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                 />
               </div>
 
@@ -1552,7 +1552,7 @@ export default function ServicesPage() {
                     }
                   }}
                   placeholder="0"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                 />
               </div>
 
@@ -1567,7 +1567,7 @@ export default function ServicesPage() {
                   }
                   rows={3}
                   placeholder="הערות נוספות..."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 resize-none"
                 />
               </div>
 
@@ -1593,7 +1593,7 @@ export default function ServicesPage() {
                       }
                       setError(null);
                     }}
-                    className="w-4 h-4 text-sky-500 rounded focus:ring-sky-500"
+                    className="w-4 h-4 text-caleno-500 rounded focus:ring-caleno-500"
                   />
                   <span className="text-sm font-medium text-slate-700">המשך טיפול</span>
                 </label>
@@ -1617,7 +1617,7 @@ export default function ServicesPage() {
                               : { name: v, serviceId: svc?.id, durationMinutes: 15, waitMinutes: 0 },
                           });
                         }}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 bg-white"
                       >
                         <option value="">בחר שירות...</option>
                         {(() => {
@@ -1654,7 +1654,7 @@ export default function ServicesPage() {
                           });
                         }}
                         min={0}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                       />
                     </div>
                     <div>
@@ -1673,7 +1673,7 @@ export default function ServicesPage() {
                           });
                         }}
                         min={0}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                       />
                     </div>
                   </div>
@@ -1725,8 +1725,8 @@ export default function ServicesPage() {
                 
                 // Explicit button classes - no conditional logic in className
                 const buttonClasses = isSaveDisabled
-                  ? "px-4 py-2 bg-sky-300 text-white rounded-lg text-sm font-medium cursor-not-allowed opacity-75"
-                  : "px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium cursor-pointer opacity-100 transition-colors";
+                  ? "px-4 py-2 bg-caleno-300 text-white rounded-lg text-sm font-medium cursor-not-allowed opacity-75"
+                  : "px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium cursor-pointer opacity-100 transition-colors";
                 
                 // Create a safe click handler that double-checks disabled state using current editingItem
                 const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {

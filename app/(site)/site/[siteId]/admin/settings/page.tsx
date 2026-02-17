@@ -168,7 +168,7 @@ function AdminReviewsEditor({
             type="text"
             value={newReview.name}
             onChange={(e) => setNewReview({ ...newReview, name: e.target.value })}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500"
             placeholder="הזן שם לקוח"
           />
         </div>
@@ -181,7 +181,7 @@ function AdminReviewsEditor({
             onChange={(e) =>
               setNewReview({ ...newReview, rating: Number(e.target.value) })
             }
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 bg-white"
           >
             {[1, 2, 3, 4, 5].map((n) => (
               <option key={n} value={n}>
@@ -198,7 +198,7 @@ function AdminReviewsEditor({
             value={newReview.text}
             onChange={(e) => setNewReview({ ...newReview, text: e.target.value })}
             rows={3}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 resize-none"
             placeholder="הזן את טקסט הביקורת"
           />
         </div>
@@ -211,7 +211,7 @@ function AdminReviewsEditor({
               type="text"
               value={newReview.avatarUrl}
               onChange={(e) => setNewReview({ ...newReview, avatarUrl: e.target.value })}
-              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500"
               placeholder="https://example.com/image.jpg"
             />
             {newReview.avatarUrl.trim() && (
@@ -231,7 +231,7 @@ function AdminReviewsEditor({
         <button
           type="button"
           onClick={handleAdd}
-          className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium"
+          className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium"
         >
           הוסף ביקורת
         </button>
@@ -257,7 +257,7 @@ function AdminReviewsEditor({
                     onChange={(e) =>
                       setEditReview({ ...editReview, name: e.target.value })
                     }
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500"
                     placeholder="שם הלקוח"
                   />
                   <select
@@ -265,7 +265,7 @@ function AdminReviewsEditor({
                     onChange={(e) =>
                       setEditReview({ ...editReview, rating: Number(e.target.value) })
                     }
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 bg-white"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 bg-white"
                   >
                     {[1, 2, 3, 4, 5].map((n) => (
                       <option key={n} value={n}>
@@ -279,7 +279,7 @@ function AdminReviewsEditor({
                       setEditReview({ ...editReview, text: e.target.value })
                     }
                     rows={3}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 resize-none"
                     placeholder="טקסט הביקורת"
                   />
                   <div>
@@ -293,7 +293,7 @@ function AdminReviewsEditor({
                         onChange={(e) =>
                           setEditReview({ ...editReview, avatarUrl: e.target.value })
                         }
-                        className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500"
                         placeholder="https://example.com/image.jpg"
                       />
                       {editReview.avatarUrl.trim() && (
@@ -314,7 +314,7 @@ function AdminReviewsEditor({
                     <button
                       type="button"
                       onClick={handleSaveEdit}
-                      className="px-3 py-1 bg-sky-500 hover:bg-sky-600 text-white rounded text-sm"
+                      className="px-3 py-1 bg-caleno-500 hover:bg-caleno-600 text-white rounded text-sm"
                     >
                       שמור
                     </button>
@@ -539,7 +539,7 @@ function AdminClientsTab({ siteId }: { siteId: string }) {
         <p className="text-sm text-red-600" role="alert">{saveError}</p>
       )}
       {deleteToast && (
-        <p className="text-sm text-sky-600" role="status">{deleteToast}</p>
+        <p className="text-sm text-caleno-600" role="status">{deleteToast}</p>
       )}
       {toast && (
         <div
@@ -559,7 +559,7 @@ function AdminClientsTab({ siteId }: { siteId: string }) {
             value={newName}
             onChange={(e) => { setNewName(e.target.value); setAddError(null); }}
             onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAdd())}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500"
             placeholder="למשל: VIP"
           />
         </div>
@@ -567,7 +567,7 @@ function AdminClientsTab({ siteId }: { siteId: string }) {
           type="button"
           onClick={handleAdd}
           disabled={saving}
-          className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+          className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
         >
           הוסף
         </button>
@@ -583,10 +583,10 @@ function AdminClientsTab({ siteId }: { siteId: string }) {
                   value={editValue}
                   onChange={(e) => setEditValue(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleSaveEdit())}
-                  className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500"
                   dir="rtl"
                 />
-                <button type="button" onClick={handleSaveEdit} className="px-3 py-1 bg-sky-500 hover:bg-sky-600 text-white rounded text-sm">שמור</button>
+                <button type="button" onClick={handleSaveEdit} className="px-3 py-1 bg-caleno-500 hover:bg-caleno-600 text-white rounded text-sm">שמור</button>
                 <button type="button" onClick={() => { setEditingIndex(null); setEditValue(""); setAddError(null); }} className="px-3 py-1 bg-slate-200 text-slate-700 rounded text-sm">ביטול</button>
               </>
             ) : (
@@ -595,7 +595,7 @@ function AdminClientsTab({ siteId }: { siteId: string }) {
                   {entry.labelHe}
                   {entry.isSystemDefault && <span className="text-slate-500 text-xs mr-1">(ברירת מחדל)</span>}
                 </span>
-                <button type="button" onClick={() => handleStartEdit(index)} disabled={!!entry.isSystemDefault} className="p-1.5 text-slate-500 hover:text-sky-600 hover:bg-sky-50 rounded disabled:opacity-50 disabled:cursor-not-allowed" aria-label="ערוך">✎</button>
+                <button type="button" onClick={() => handleStartEdit(index)} disabled={!!entry.isSystemDefault} className="p-1.5 text-slate-500 hover:text-caleno-600 hover:bg-caleno-50 rounded disabled:opacity-50 disabled:cursor-not-allowed" aria-label="ערוך">✎</button>
                 <button
                   type="button"
                   onClick={() => handleDelete(index)}
@@ -690,7 +690,7 @@ function AdminFaqEditor({
             type="text"
             value={newFaq.question}
             onChange={(e) => setNewFaq({ ...newFaq, question: e.target.value })}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500"
             placeholder="הזן שאלה"
           />
         </div>
@@ -702,14 +702,14 @@ function AdminFaqEditor({
             value={newFaq.answer}
             onChange={(e) => setNewFaq({ ...newFaq, answer: e.target.value })}
             rows={3}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 resize-none"
             placeholder="הזן תשובה"
           />
         </div>
         <button
           type="button"
           onClick={handleAdd}
-          className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium"
+          className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium"
         >
           הוסף שאלה
         </button>
@@ -735,7 +735,7 @@ function AdminFaqEditor({
                     onChange={(e) =>
                       setEditFaq({ ...editFaq, question: e.target.value })
                     }
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500"
                     placeholder="שאלה"
                   />
                   <textarea
@@ -744,14 +744,14 @@ function AdminFaqEditor({
                       setEditFaq({ ...editFaq, answer: e.target.value })
                     }
                     rows={3}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 resize-none"
                     placeholder="תשובה"
                   />
                   <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={handleSaveEdit}
-                      className="px-3 py-1 bg-sky-500 hover:bg-sky-600 text-white rounded text-sm"
+                      className="px-3 py-1 bg-caleno-500 hover:bg-caleno-600 text-white rounded text-sm"
                     >
                       שמור
                     </button>
@@ -1009,7 +1009,7 @@ function AdminBookingTab({
                           <button
                             type="button"
                             onClick={() => addBreak(index)}
-                            className="mt-1 text-sky-600 hover:underline"
+                            className="mt-1 text-caleno-600 hover:underline"
                           >
                             הוסף הפסקה
                           </button>
@@ -1115,7 +1115,7 @@ function ClosedDatesEditor({
         <button
           type="button"
           onClick={addDate}
-          className="px-3 py-1.5 rounded-lg bg-sky-600 text-white text-xs hover:bg-sky-700"
+          className="px-3 py-1.5 rounded-lg bg-caleno-600 text-white text-xs hover:bg-caleno-700"
         >
           הוסף תאריך
         </button>
@@ -1174,7 +1174,7 @@ function AdminSiteTab({
               type="text"
               value={siteConfig.salonName}
               onChange={(e) => onChange({ salonName: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-caleno-500"
               placeholder="הקלד את שם הסלון"
             />
           </div>
@@ -1187,7 +1187,7 @@ function AdminSiteTab({
               onChange={(e) =>
                 onChange({ salonType: e.target.value as SiteConfig["salonType"] })
               }
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 bg-white"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-caleno-500 bg-white"
             >
               {Object.entries(salonTypeLabels).map(([key, label]) => (
                 <option key={key} value={key}>
@@ -1212,7 +1212,7 @@ function AdminSiteTab({
             type="text"
             value={siteConfig.address || ""}
             onChange={(e) => onChange({ address: e.target.value })}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-caleno-500"
             placeholder="למשל: רחוב בן יהודה 10, תל אביב"
           />
           <p className="text-xs text-slate-500 mt-1 text-right">
@@ -1241,7 +1241,7 @@ function AdminSiteTab({
               type="text"
               value={siteConfig.phoneNumber || ""}
               onChange={(e) => onChange({ phoneNumber: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-caleno-500"
               placeholder="למשל: 050-1234567"
             />
           </div>
@@ -1258,7 +1258,7 @@ function AdminSiteTab({
               type="text"
               value={siteConfig.whatsappNumber || ""}
               onChange={(e) => onChange({ whatsappNumber: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-caleno-500"
               placeholder="למשל: 050-1234567"
             />
           </div>
@@ -1275,7 +1275,7 @@ function AdminSiteTab({
               type="text"
               value={siteConfig.instagramHandle || ""}
               onChange={(e) => onChange({ instagramHandle: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-caleno-500"
               placeholder="למשל: salon_beauty"
             />
           </div>
@@ -1292,7 +1292,7 @@ function AdminSiteTab({
               type="text"
               value={siteConfig.facebookPage || ""}
               onChange={(e) => onChange({ facebookPage: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-caleno-500"
               placeholder="למשל: https://facebook.com/your-salon"
             />
           </div>
@@ -1309,7 +1309,7 @@ function AdminSiteTab({
               type="email"
               value={siteConfig.contactEmail || ""}
               onChange={(e) => onChange({ contactEmail: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-caleno-500"
               placeholder="name@example.com"
             />
           </div>
@@ -1327,7 +1327,7 @@ function AdminSiteTab({
           >).map((option) => (
             <label
               key={option}
-              className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:border-sky-300 hover:bg-sky-50 transition-colors"
+              className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:border-caleno-300 hover:bg-caleno-50 transition-colors"
             >
               <input
                 type="radio"
@@ -1339,7 +1339,7 @@ function AdminSiteTab({
                     bookingOption: e.target.value as SiteConfig["bookingOption"],
                   })
                 }
-                className="w-4 h-4 text-sky-500 focus:ring-sky-500"
+                className="w-4 h-4 text-caleno-500 focus:ring-caleno-500"
               />
               <span className="text-sm text-slate-700">
                 {bookingOptionLabels[option]}
@@ -1358,7 +1358,7 @@ function AdminSiteTab({
               onChange={(e) =>
                 onChange({ bookingSystemName: e.target.value })
               }
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-caleno-500"
               placeholder="למשל: Calendly, Acuity"
             />
           </div>
@@ -1379,7 +1379,7 @@ function AdminSiteTab({
             value={siteConfig.specialNote || ""}
             onChange={(e) => onChange({ specialNote: e.target.value })}
             rows={4}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 resize-none"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-caleno-500 resize-none"
             placeholder="כתוב כאן הערות או פרטים מיוחדים..."
           />
         </div>
@@ -1526,7 +1526,7 @@ function BrandingLogoEditor({
               />
             </div>
             <div className="flex gap-2">
-              <label className="cursor-pointer px-3 py-1.5 text-sm font-medium text-sky-600 hover:text-sky-700 border border-sky-300 rounded-lg">
+              <label className="cursor-pointer px-3 py-1.5 text-sm font-medium text-caleno-600 hover:text-caleno-700 border border-caleno-300 rounded-lg">
                 החלף
                 <input
                   type="file"
@@ -1548,7 +1548,7 @@ function BrandingLogoEditor({
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium rounded-lg w-fit disabled:opacity-50">
+            <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white text-sm font-medium rounded-lg w-fit disabled:opacity-50">
               {uploading ? "מעלה…" : "העלה לוגו"}
               <input
                 type="file"
@@ -1755,7 +1755,7 @@ export default function SettingsPage() {
   // Early return AFTER all hooks are declared
   if (!siteConfig || !bookingState) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="min-h-screen flex items-center justify-center">
         <p className="text-slate-600 text-sm">טוען את נתוני הסלון…</p>
       </div>
     );
@@ -1793,7 +1793,7 @@ export default function SettingsPage() {
           <button
             onClick={() => { void handleSaveConfig(); }}
             disabled={isSaving}
-            className="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+            className="px-4 py-2 rounded-lg bg-caleno-500 hover:bg-caleno-600 disabled:bg-caleno-300 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
           >
             {isSaving ? "שומר…" : "שמור שינויים"}
           </button>

@@ -227,9 +227,7 @@ function HeroGeometric({
                 </div>
             )}
 
-            {isCalenoLight ? (
-                <div className="absolute inset-0 bg-gradient-to-b from-[#F7FBFC]/50 via-transparent to-[#EEF7F9]/40 pointer-events-none" />
-            ) : (
+            {!isCalenoLight && (
                 <div className="absolute inset-0 bg-gradient-to-t from-[#030303] via-transparent to-[#030303]/80 pointer-events-none" />
             )}
         </div>

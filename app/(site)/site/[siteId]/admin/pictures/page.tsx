@@ -204,7 +204,7 @@ function AdminImagesTab({
               type="button"
               onClick={handleRegenerateHero}
               disabled={savingHero}
-              className="w-full px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+              className="w-full px-4 py-2 rounded-lg bg-caleno-500 hover:bg-caleno-600 disabled:bg-caleno-300 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
             >
               {savingHero ? "שומר…" : "החלף תמונת הירו"}
             </button>
@@ -248,7 +248,7 @@ function AdminImagesTab({
               type="button"
               onClick={handleRegenerateAbout}
               disabled={savingAbout}
-              className="w-full px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+              className="w-full px-4 py-2 rounded-lg bg-caleno-500 hover:bg-caleno-600 disabled:bg-caleno-300 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
             >
               {savingAbout ? "שומר…" : "החלף תמונת אודות"}
             </button>
@@ -278,7 +278,7 @@ export default function PicturesPage() {
 
   if (!siteConfig) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="min-h-screen flex items-center justify-center">
         <p className="text-slate-600 text-sm">טוען את נתוני הסלון…</p>
       </div>
     );
