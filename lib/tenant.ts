@@ -33,15 +33,36 @@ function getRootHost(): string {
 
 /**
  * Returns true if the host is considered a "root" host (main app / marketing).
- * Root: caleno.co, www.caleno.co, localhost, *.vercel.app
+ * Root: caleno.co, www.caleno.co, localhost, 127.0.0.1, *.vercel.app
  */
 function isRootHost(hostLower: string): boolean {
   const root = getRootHost();
   if (hostLower === root) return true;
   if (hostLower === `www.${root}`) return true;
   if (hostLower === "localhost") return true;
+  if (hostLower === "127.0.0.1" || hostLower === "0.0.0.0") return true;
   if (hostLower.endsWith(".vercel.app")) return true;
   return false;
+}
+
+/**
+ * Normalize host: strip port, lowercase, trim. Use for routing decisions.
+ */
+export function normalizeHost(hostHeader: string): string {
+  if (!hostHeader || typeof hostHeader !== "string") return "";
+  const withoutPort = hostHeader.split(":")[0] ?? hostHeader;
+  return withoutPort.trim().toLowerCase();
+}
+
+/**
+ * Returns true if the host is a platform host (main app). Platform hosts must NEVER
+ * go through tenant/custom-domain lookup; they always serve the landing page.
+ * Allowlist: caleno.co, www.caleno.co, localhost, 127.0.0.1, 0.0.0.0, *.vercel.app
+ */
+export function isPlatformHost(hostHeader: string): boolean {
+  const hostLower = normalizeHost(hostHeader);
+  if (!hostLower) return true;
+  return isRootHost(hostLower);
 }
 
 /**

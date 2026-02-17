@@ -91,11 +91,12 @@ function initializeFirebase() {
   const isDev = process.env.NODE_ENV === "development";
 
   if (missing.length > 0) {
-    const errorMsg = `Firebase client: missing required env vars: ${missing.join(", ")}. Set them in .env.local (see .env.example), then restart the dev server (npm run dev).`;
+    const errorMsg = `Firebase client: missing required env vars in .env.local: ${missing.join(", ")}. Add NEXT_PUBLIC_FIREBASE_PROJECT_ID, NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET, NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_APP_ID, NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID, then restart the dev server (npm run dev).`;
     console.error("❌", errorMsg);
     initializationError = errorMsg;
     initialized = true;
     if (isDev) {
+      console.warn("⚠️ Firebase will not work until .env.local is configured. Copy .env.example to .env.local and fill in your Caleno project values.");
       throw new Error(errorMsg);
     }
     return;
@@ -127,7 +128,7 @@ function initializeFirebase() {
         (cfg.authDomain?.includes("salon-platform") ?? false)
       ) {
         console.warn(
-          "⚠️ Firebase client is still using salon-platform. Set NEXT_PUBLIC_FIREBASE_* to your Caleno project in .env.local and restart the dev server."
+          "⚠️ Firebase client is using the old salon-platform project. Set NEXT_PUBLIC_FIREBASE_* in .env.local to your Caleno project and restart the dev server (npm run dev)."
         );
       }
     }

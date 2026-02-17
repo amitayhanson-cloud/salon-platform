@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getHostKind } from "@/lib/tenant";
+import { getHostKind, isPlatformHost } from "@/lib/tenant";
 
 /** Path prefixes we never rewrite (Next.js internals, API, static assets) */
 const SKIP_PREFIXES = [
@@ -60,6 +60,12 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     slug = hostKind.slug;
   }
 
+  if (process.env.NODE_ENV === "development") {
+    const decision = slug ? "tenant" : isPlatformHost(host) ? "platform" : "custom";
+    // eslint-disable-next-line no-console
+    console.log("[proxy] host=%s decision=%s slug=%s", host, decision, slug ?? "(none)");
+  }
+
   const origin = new URL(request.url).origin;
   let siteId: string | null = null;
 
@@ -79,16 +85,20 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     } catch {
       // fall through
     }
+    if (process.env.NODE_ENV === "development") {
+      // eslint-disable-next-line no-console
+      console.log("[proxy] tenant slug=%s resolved tenantId=%s", slug, siteId ?? "(none)");
+    }
     if (!siteId) {
       const notFoundUrl = new URL("/not-found-tenant", request.url);
       return NextResponse.rewrite(notFoundUrl);
     }
   } else {
-    // Custom domain: resolve host -> siteId via API (domains collection).
-    // Skip lookup for local dev hosts so localhost works without a domain mapping.
-    if (isLocalHost) {
+    // Platform host (caleno.co, www.caleno.co, localhost, 127.0.0.1, *.vercel.app): never do tenant lookup.
+    if (isPlatformHost(host)) {
       return NextResponse.next();
     }
+    // Custom domain: resolve host -> siteId via API (domains collection).
     try {
       const res = await fetch(
         `${origin}/api/tenants/resolve-domain?host=${encodeURIComponent(host)}`
@@ -103,8 +113,16 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       // fall through
     }
     if (!siteId) {
+      if (process.env.NODE_ENV === "development") {
+        // eslint-disable-next-line no-console
+        console.log("[proxy] custom domain host=%s resolved tenantId=(none) → not-found-tenant", host);
+      }
       const notFoundUrl = new URL("/not-found-tenant", request.url);
       return NextResponse.rewrite(notFoundUrl);
+    }
+    if (process.env.NODE_ENV === "development") {
+      // eslint-disable-next-line no-console
+      console.log("[proxy] custom domain host=%s resolved tenantId=%s", host, siteId);
     }
     if (isTenantPassthroughPath(pathname)) {
       return NextResponse.next();
@@ -127,3 +145,5 @@ export const config = {
     "/((?!_next/|_next/static|api/|favicon.ico|favicon|static/|images/|brand/|templates/|robots\\.txt|sitemap\\.xml).*)",
   ],
 };
+
+export default proxy;
