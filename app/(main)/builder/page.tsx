@@ -217,12 +217,13 @@ export default function BuilderPage() {
       case 5:
         return config.services.length > 0;
       case 6: {
-        const hasContact =
-          (config.phoneNumber && config.phoneNumber.trim() !== "") ||
-          (config.whatsappNumber && config.whatsappNumber.trim() !== "") ||
-          (config.instagramHandle && config.instagramHandle.trim() !== "") ||
-          (config.facebookPage && config.facebookPage.trim() !== "") ||
-          (config.contactEmail && config.contactEmail.trim() !== "");
+        const hasPhone = Boolean(config.phoneNumber?.trim());
+        const hasWhatsapp = Boolean(config.whatsappNumber?.trim());
+        const hasInstagram = Boolean(config.instagramHandle?.trim());
+        const hasFacebook = Boolean(config.facebookPage?.trim());
+        const hasEmail = Boolean(config.contactEmail?.trim());
+        const hasContact: boolean =
+          hasPhone || hasWhatsapp || hasInstagram || hasFacebook || hasEmail;
         return hasContact;
       }
       case 7:
