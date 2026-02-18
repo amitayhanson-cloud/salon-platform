@@ -5,6 +5,11 @@ import { AuthProvider } from "@/components/auth/AuthProvider";
 export const metadata: Metadata = {
   title: "Caleno - בונים אתר מושלם לסלון שלך בדקות",
   description: "בונים אתר מקצועי לסלון שלך ללא צורך בידע טכני. מתאים לספריות, מכוני יופי וספא.",
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({
