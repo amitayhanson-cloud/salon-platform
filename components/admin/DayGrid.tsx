@@ -197,11 +197,7 @@ export default function DayGrid({
   }
 
   return (
-    <div
-      ref={scrollRef}
-      className="w-full h-full overflow-y-auto overflow-x-auto"
-      style={{ overflowY: "auto", overflowX: "auto" }}
-    >
+    <div ref={scrollRef} className="w-full min-w-max">
       <div
         className="grid min-w-max"
         style={{

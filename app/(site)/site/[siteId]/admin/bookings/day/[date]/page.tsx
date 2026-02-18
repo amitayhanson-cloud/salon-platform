@@ -23,7 +23,6 @@ import type { BreakRange } from "@/types/bookingSettings";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
 import { subscribeBookingSettings } from "@/lib/firestoreBookingSettings";
 import { isBusinessClosedAllDay } from "@/lib/closedDates";
-import { bookingEnabled } from "@/lib/bookingEnabled";
 import type { BookingSettings } from "@/types/bookingSettings";
 import type { SiteConfig } from "@/types/siteConfig";
 import type { SiteService } from "@/types/siteConfig";
@@ -845,29 +844,6 @@ export default function DaySchedulePage() {
     );
   }
 
-  if (config && !bookingEnabled(config)) {
-    return (
-      <div className="min-h-screen py-8" dir="rtl">
-        <div className="max-w-2xl mx-auto px-4">
-          <div className="bg-white rounded-3xl shadow-lg border border-slate-200 p-6 sm:p-8 text-right">
-            <h1 className="text-xl font-bold text-slate-900 mb-2">
-              ניהול תורים לא פעיל
-            </h1>
-            <p className="text-sm text-slate-600 mb-6">
-              באתר הזה לא הופעלה אפשרות הזמנות אונליין.
-            </p>
-            <Link
-              href={adminBasePath}
-              className="inline-block px-6 py-3 bg-caleno-500 hover:bg-caleno-600 text-white font-semibold rounded-lg transition-colors"
-            >
-              חזרה לפאנל
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // Print: open print-day page in new tab. Uses window.open so it works even if overlays/stacking would block anchor clicks (e.g. in production).
   // When "All workers" is selected, pass workerId=all to print all workers' schedules.
   const handlePrint = () => {
@@ -879,10 +855,14 @@ export default function DaySchedulePage() {
   };
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden" dir="rtl">
-      <div className="max-w-7xl mx-auto w-full px-4 py-4 flex flex-col h-full">
-        {/* Toolbar: sticky below AdminHeader (top-16 = 64px) with z-40 so it stays clickable and is not covered by schedule or sticky header. */}
-        <div className="flex-shrink-0 mb-4 sticky top-16 z-40 bg-white/95 backdrop-blur-sm -mx-4 px-4 py-4 -mt-4 rounded-b-lg border-b border-slate-200/80">
+    <div
+      className="flex flex-col overflow-hidden w-full"
+      style={{ height: "calc(100vh - 4rem)" }}
+      dir="rtl"
+    >
+      <div className="max-w-7xl mx-auto w-full px-4 flex flex-col flex-1 min-h-0">
+        {/* Calendar toolbar + filters (fixed; no page padding so calendar sits under header) */}
+        <div className="flex-shrink-0 mb-3 bg-white/95 backdrop-blur-sm -mx-4 px-4 py-3 rounded-b-lg border-b border-slate-200/80">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-slate-900">
@@ -997,13 +977,13 @@ export default function DaySchedulePage() {
           )}
         </div>
 
-        {/* Timeline Schedule - Takes remaining height; z-0 so toolbar (z-40) stays on top and clickable. */}
+        {/* Calendar card: flex-1 min-h-0 so only the grid body scrolls; worker names row is fixed above. */}
         {workers.length === 0 ? (
-          <div className="flex-1 min-h-0 relative z-0 bg-white rounded-lg shadow-sm border border-slate-200 p-6 flex items-center justify-center">
+          <div className="flex-1 min-h-0 flex flex-col bg-white rounded-lg shadow-sm border border-slate-200 p-6 flex items-center justify-center">
             <p className="text-sm text-slate-500">טוען עובדים...</p>
           </div>
         ) : selectedWorkerId === ALL_WORKERS ? (
-          <div className={`flex-1 min-h-0 relative z-0 bg-white rounded-lg shadow-sm border border-slate-200 p-6 overflow-hidden ${bookingSettings && dateKey && isBusinessClosedAllDay({ bookingSettings, date: dateKey }) ? "opacity-75" : ""}`}>
+          <div className={`flex-1 min-h-0 flex flex-col bg-white rounded-lg shadow-sm border border-slate-200 p-6 ${bookingSettings && dateKey && isBusinessClosedAllDay({ bookingSettings, date: dateKey }) ? "opacity-75" : ""}`}>
             <MultiWorkerScheduleView
               date={dateKey}
               bookings={filteredBookings}
@@ -1016,7 +996,7 @@ export default function DaySchedulePage() {
             />
           </div>
         ) : (
-          <div className={`flex-1 min-h-0 relative z-0 bg-white rounded-lg shadow-sm border border-slate-200 p-6 overflow-hidden ${bookingSettings && dateKey && isBusinessClosedAllDay({ bookingSettings, date: dateKey }) ? "opacity-75" : ""}`}>
+          <div className={`flex-1 min-h-0 flex flex-col bg-white rounded-lg shadow-sm border border-slate-200 p-6 ${bookingSettings && dateKey && isBusinessClosedAllDay({ bookingSettings, date: dateKey }) ? "opacity-75" : ""}`}>
             <DayScheduleView
               date={dateKey}
               bookings={filteredBookings}

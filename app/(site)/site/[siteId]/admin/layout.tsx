@@ -344,13 +344,17 @@ export default function AdminLayout({
     );
   }
 
+  const isDayView = typeof pathname === "string" && pathname.includes("/bookings/day");
+
   return (
-    <div className="min-h-screen relative w-full">
+    <div className="min-h-screen relative w-full overflow-x-hidden">
       <HeroBackground />
-      <div className="relative z-10 w-full">
+      <div className="relative z-10 w-full overflow-x-hidden">
         <AdminHeader />
-        {/* Full-width content area: max-w-7xl (1280px) on desktop, stacked on mobile */}
-        <main className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Full-width content area: no top padding on day view so calendar sits under header */}
+        <main
+          className={`w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ${isDayView ? "pt-0 pb-4" : "py-8"}`}
+        >
           {children}
         </main>
       </div>

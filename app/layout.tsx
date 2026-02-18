@@ -19,7 +19,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="he" dir="rtl">
-      <body className="min-h-screen bg-white text-slate-900 antialiased">
+      <body className="min-h-screen w-full overflow-x-hidden overscroll-none bg-white text-slate-900 antialiased">
         <AuthProvider>
           {children}
         </AuthProvider>

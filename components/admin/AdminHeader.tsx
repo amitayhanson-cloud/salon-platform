@@ -16,15 +16,16 @@ type MenuItem = {
 };
 
 function getMenuItems(basePath: string): MenuItem[] {
+  // Nav order (LTR): View Website first, then these. Desired RTL: User logo | ניהול אתר | צוות | לקוחות | יומן | צפייה באתר
   return [
     {
-      label: "ניהול אתר",
+      label: "יומן",
+      href: `${basePath}/bookings`,
+    },
+    {
+      label: "לקוחות",
       items: [
-        { label: "הגדרות", href: `${basePath}/settings` },
-        { label: "ייבוא CSV/Excel", href: `${basePath}/settings/import` },
-        { label: "שירותים", href: `${basePath}/services` },
-        { label: "צבעים", href: `${basePath}/colours` },
-        { label: "תמונות", href: `${basePath}/pictures` },
+        { label: "כרטיס לקוח", href: `${basePath}/clients/client-card` },
       ],
     },
     {
@@ -35,15 +36,15 @@ function getMenuItems(basePath: string): MenuItem[] {
       ],
     },
     {
-      label: "לקוחות",
+      label: "ניהול אתר",
       items: [
-        { label: "כרטיס לקוח", href: `${basePath}/clients/client-card` },
+        { label: "הגדרות", href: `${basePath}/settings` },
+        { label: "ייבוא CSV/Excel", href: `${basePath}/settings/import` },
+        { label: "שירותים", href: `${basePath}/services` },
+        { label: "צבעים", href: `${basePath}/colours` },
+        { label: "תמונות", href: `${basePath}/pictures` },
       ],
     },
-  {
-    label: "יומן",
-    href: `${basePath}/bookings`,
-  },
   ];
 }
 
@@ -282,21 +283,6 @@ export default function AdminHeader() {
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
           <nav className="md:hidden pb-4 animate-[dropdown_0.2s_ease-out_forwards]">
-            {/* View Website Button (Mobile) */}
-            {canViewSite && (
-              <div className="border-b border-slate-100 pb-3 mb-3">
-                <button
-                  onClick={() => {
-                    handleViewWebsite();
-                    setMobileMenuOpen(false);
-                  }}
-                  className="w-full px-4 py-3 text-sm font-medium transition-colors border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg flex items-center justify-between"
-                >
-                  <span>צפייה באתר</span>
-                  <ExternalLink className="w-4 h-4" />
-                </button>
-              </div>
-            )}
             {menuItems.map((item) => (
               <div key={item.label} className="border-b border-slate-100 last:border-0">
                 {item.href ? (
@@ -348,6 +334,20 @@ export default function AdminHeader() {
                 )}
               </div>
             ))}
+            {canViewSite && (
+              <div className="border-b border-slate-100 pb-3 mb-3 pt-3">
+                <button
+                  onClick={() => {
+                    handleViewWebsite();
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full px-4 py-3 text-sm font-medium transition-colors border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg flex items-center justify-between"
+                >
+                  <span>צפייה באתר</span>
+                  <ExternalLink className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </nav>
         )}
       </div>

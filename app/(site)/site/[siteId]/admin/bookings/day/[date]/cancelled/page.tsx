@@ -24,7 +24,6 @@ import {
 import { ymdLocal } from "@/lib/dateLocal";
 import { fromYYYYMMDD } from "@/lib/calendarUtils";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
-import { bookingEnabled } from "@/lib/bookingEnabled";
 import type { SiteConfig } from "@/types/siteConfig";
 import { useAuth } from "@/hooks/useAuth";
 import { getAdminBasePathFromSiteId } from "@/lib/url";
@@ -498,29 +497,6 @@ export default function CancelledBookingsPage() {
         <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-right">
           <p className="text-red-700 font-semibold mb-2">שגיאה</p>
           <p className="text-sm text-red-600">siteId חסר. אנא רענן את הדף.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (config && !bookingEnabled(config)) {
-    return (
-      <div className="min-h-screen py-8" dir="rtl">
-        <div className="max-w-2xl mx-auto px-4">
-          <div className="bg-white rounded-3xl shadow-lg border border-slate-200 p-6 sm:p-8 text-right">
-            <h1 className="text-xl font-bold text-slate-900 mb-2">
-              ניהול תורים לא פעיל
-            </h1>
-            <p className="text-sm text-slate-600 mb-6">
-              באתר הזה לא הופעלה אפשרות הזמנות אונליין.
-            </p>
-            <Link
-              href={adminBasePath}
-              className="inline-block px-6 py-3 bg-caleno-500 hover:bg-caleno-600 text-white font-semibold rounded-lg transition-colors"
-            >
-              חזרה לפאנל
-            </Link>
-          </div>
         </div>
       </div>
     );

@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { isBookingCancelled } from "@/lib/normalizeBooking";
 import DayGrid from "./DayGrid";
 
-/** Height of the worker header row so worker names can wrap and stay visible. */
+/** Height of the worker header row so worker names are fully visible (not clipped). */
 const HEADER_HEIGHT_PX = 56;
 interface Booking {
   id: string;
@@ -211,14 +211,13 @@ export default function MultiWorkerScheduleView({
   }, [confirmedBookings, workers]);
 
   return (
-    <div className="flex flex-col w-full h-full" style={{ height: "100%", minHeight: 0 }}>
-      {/* Header outside scroll so labels + grid scroll together inside DayGrid */}
+    <div className="flex flex-col w-full flex-1 min-h-0">
+      {/* Worker names header row: fixed height, never clipped, above scroll area */}
       {workersToRender.length > 0 && (
         <div
-          className="shrink-0 bg-white border-b-2 border-slate-300 grid"
+          className="shrink-0 h-14 flex items-center border-b-2 border-slate-300 z-20 bg-white/90 backdrop-blur-sm grid"
           style={{
             gridTemplateColumns: `${56}px repeat(${workersToRender.length}, minmax(140px, 1fr))`,
-            height: HEADER_HEIGHT_PX,
             minWidth: `${56 + workersToRender.length * 140}px`,
           }}
         >
@@ -226,7 +225,7 @@ export default function MultiWorkerScheduleView({
           {workersToRender.map((worker, index) => (
             <div
               key={worker.id}
-              className="flex items-center justify-center bg-slate-50 border-r border-slate-200 px-2 py-1"
+              className="flex items-center justify-center bg-slate-50 border-r border-slate-200 px-2 py-2"
               style={{ borderLeft: index === 0 ? "1px solid rgb(226 232 240)" : undefined }}
             >
               <span className="text-sm font-semibold text-slate-900 text-center leading-tight break-words" style={{ wordBreak: "break-word" }}>
@@ -236,8 +235,8 @@ export default function MultiWorkerScheduleView({
           ))}
         </div>
       )}
-      {/* Single scroll container: DayGrid has labels + slot rows + blocks in one coordinate system */}
-      <div className="flex-1 min-h-0 w-full" style={{ minHeight: 0 }}>
+      {/* Scrollable grid body only */}
+      <div className="flex-1 min-h-0 overflow-auto w-full">
         {workersToRender.length === 0 ? (
           <div className="flex items-center justify-center h-full text-slate-500 text-sm">אין עובדים</div>
         ) : (

@@ -142,13 +142,14 @@ export default function BuilderPage() {
   }, [user, authReady, authLoading, router, pathname]);
   
   const [config, setConfig] = useState<SiteConfig>(() => {
-    // Initialize with random hero image and default about image
+    // Initialize with random hero image and default about image; booking always enabled
     const randomHeroIndex = Math.floor(Math.random() * HAIR_HERO_IMAGES.length);
     return {
       ...defaultSiteConfig,
       salonType: "hair",
       heroImage: HAIR_HERO_IMAGES[randomHeroIndex],
       aboutImage: HAIR_ABOUT_IMAGES[0],
+      bookingOption: "simple_form",
     };
   });
   const [step, setStep] = useState(1);
@@ -222,17 +223,7 @@ export default function BuilderPage() {
           (config.instagramHandle && config.instagramHandle.trim() !== "") ||
           (config.facebookPage && config.facebookPage.trim() !== "") ||
           (config.contactEmail && config.contactEmail.trim() !== "");
-
-        if (!hasContact) return false;
-
-        if (config.bookingOption === "booking_system") {
-          return (
-            typeof config.bookingSystemName === "string" &&
-            config.bookingSystemName.trim() !== ""
-          );
-        }
-
-        return true;
+        return hasContact;
       }
       case 7:
         return true;
@@ -430,13 +421,6 @@ export default function BuilderPage() {
     own: "אני מעלה תמונות שלי",
     ai: "AI ייצור תמונות בשבילי",
     mixed: "שילוב של שניהם",
-  };
-
-  const bookingOptionLabels: Record<SiteConfig["bookingOption"], string> = {
-    simple_form: "כן, אני רוצה הזמנות אונליין",
-    none: "לא, בלי הזמנות אונליין כרגע",
-    // keep booking_system in the type but we won't render it in the UI for now
-    booking_system: "יש לי כבר מערכת הזמנות ואני רוצה לחבר אותה",
   };
 
   const extraPageLabels: Record<SiteConfig["extraPages"][number], string> = {
@@ -834,37 +818,6 @@ export default function BuilderPage() {
                 </div>
               </div>
 
-              <div className="pt-6 border-t border-slate-200">
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">
-                  האם תרצה הזמנות אונליין?
-                </h3>
-                <div className="space-y-3">
-                  {(["simple_form", "none"] as Array<keyof typeof bookingOptionLabels>).map(
-                    (option) => (
-                      <label
-                        key={option}
-                        className="flex items-center gap-3 p-4 border border-slate-200 rounded-lg cursor-pointer hover:border-sky-300 hover:bg-sky-50 transition-colors"
-                      >
-                        <input
-                          type="radio"
-                          name="bookingOption"
-                          value={option}
-                          checked={config.bookingOption === option}
-                          onChange={(e) =>
-                            updateConfig({
-                              bookingOption: e.target.value as SiteConfig["bookingOption"],
-                            })
-                          }
-                          className="w-4 h-4 text-sky-500 focus:ring-sky-500"
-                        />
-                        <span className="text-slate-700">
-                          {bookingOptionLabels[option]}
-                        </span>
-                      </label>
-                    )
-                  )}
-                </div>
-              </div>
             </div>
           )}
 

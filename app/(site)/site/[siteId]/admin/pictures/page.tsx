@@ -44,13 +44,6 @@ const photosOptionLabels: Record<NonNullable<SiteConfig["photosOption"]>, string
   mixed: "שילוב של שניהם",
 };
 
-
-const bookingOptionLabels: Record<SiteConfig["bookingOption"], string> = {
-  simple_form: "כן, אני רוצה הזמנות אונליין",
-  none: "לא, בלי הזמנות אונליין כרגע",
-  booking_system: "יש לי כבר מערכת הזמנות ואני רוצה לחבר אותה",
-};
-
 const extraPageLabels: Record<SiteConfig["extraPages"][number], string> = {
   reviews: "ביקורות מלקוחות",
   faq: "שאלות נפוצות",

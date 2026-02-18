@@ -56,13 +56,6 @@ const photosOptionLabels: Record<NonNullable<SiteConfig["photosOption"]>, string
 };
 
 
-const bookingOptionLabels: Record<SiteConfig["bookingOption"], string> = {
-  simple_form: "כן, אני רוצה הזמנות אונליין",
-  none: "לא, בלי הזמנות אונליין כרגע",
-  booking_system: "יש לי כבר מערכת הזמנות ואני רוצה לחבר אותה",
-};
-
-
 const salonTypeLabels: Record<SiteConfig["salonType"], string> = {
   hair: "ספרות / עיצוב שיער",
   nails: "מניקור / פדיקור",
@@ -1317,56 +1310,6 @@ function AdminSiteTab({
       </div>
       )}
 
-      {/* Booking Option */}
-      {shouldRender("booking") && (
-      <div className="space-y-4">
-        <h2 className="text-sm font-semibold text-slate-900">הזמנות אונליין</h2>
-        <div className="space-y-2">
-          {(["simple_form", "none", "booking_system"] as Array<
-            keyof typeof bookingOptionLabels
-          >).map((option) => (
-            <label
-              key={option}
-              className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:border-caleno-300 hover:bg-caleno-50 transition-colors"
-            >
-              <input
-                type="radio"
-                name="bookingOption"
-                value={option}
-                checked={siteConfig.bookingOption === option}
-                onChange={(e) =>
-                  onChange({
-                    bookingOption: e.target.value as SiteConfig["bookingOption"],
-                  })
-                }
-                className="w-4 h-4 text-caleno-500 focus:ring-caleno-500"
-              />
-              <span className="text-sm text-slate-700">
-                {bookingOptionLabels[option]}
-              </span>
-            </label>
-          ))}
-        </div>
-        {siteConfig.bookingOption === "booking_system" && (
-          <div className="mt-4">
-            <label className="block text-xs font-medium text-slate-700 mb-1">
-              שם מערכת ההזמנות *
-            </label>
-            <input
-              type="text"
-              value={siteConfig.bookingSystemName || ""}
-              onChange={(e) =>
-                onChange({ bookingSystemName: e.target.value })
-              }
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-caleno-500"
-              placeholder="למשל: Calendly, Acuity"
-            />
-          </div>
-        )}
-      </div>
-      )}
-
-
       {/* Special Note */}
       {shouldRender("specialNote") && (
       <div className="space-y-4">
@@ -1765,7 +1708,6 @@ export default function SettingsPage() {
   const settingsTabs = [
     { key: "basic", label: "מידע בסיסי" },
     { key: "contact", label: "פרטי יצירת קשר" },
-    { key: "booking", label: "הזמנה אונליין" },
     { key: "branding", label: "לוגו ומיתוג" },
     { key: "reviews", label: "ביקורות" },
     { key: "faq", label: "FAQ" },
@@ -1811,24 +1753,30 @@ export default function SettingsPage() {
         {/* Tab Content */}
         <div>
           {activeTab === "basic" && (
-            <AdminSiteTab
-              siteConfig={siteConfig}
-              onChange={handleConfigChange}
-              renderSections={["basic", "location", "specialNote"]}
-            />
+            <>
+              <AdminSiteTab
+                siteConfig={siteConfig}
+                onChange={handleConfigChange}
+                renderSections={["basic", "location", "specialNote"]}
+              />
+              <SubdomainSettingsCard firebaseUser={firebaseUser} />
+              <div className="mt-6">
+                <CustomDomainSettingsCard siteId={siteId} firebaseUser={firebaseUser} />
+              </div>
+              <div className="mt-10">
+                <DeleteAccountButton
+                  onDelete={handleDeleteAccount}
+                  isDeleting={isDeleting}
+                  deleteError={deleteError}
+                />
+              </div>
+            </>
           )}
           {activeTab === "contact" && (
             <AdminSiteTab
               siteConfig={siteConfig}
               onChange={handleConfigChange}
               renderSections={["contact"]}
-            />
-          )}
-          {activeTab === "booking" && (
-            <AdminSiteTab
-              siteConfig={siteConfig}
-              onChange={handleConfigChange}
-              renderSections={["booking"]}
             />
           )}
           {activeTab === "branding" && (
@@ -1869,21 +1817,6 @@ export default function SettingsPage() {
           {activeTab === "clients" && <AdminClientsTab siteId={siteId} />}
         </div>
       </div>
-
-      {/* Subdomain section */}
-      <SubdomainSettingsCard firebaseUser={firebaseUser} />
-
-      {/* Custom Domain section */}
-      <div className="mt-6">
-        <CustomDomainSettingsCard siteId={siteId} firebaseUser={firebaseUser} />
-      </div>
-
-      {/* Delete Account Section - Only button by default */}
-      <DeleteAccountButton
-        onDelete={handleDeleteAccount}
-        isDeleting={isDeleting}
-        deleteError={deleteError}
-      />
     </div>
   );
 }

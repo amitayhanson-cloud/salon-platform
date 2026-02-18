@@ -14,7 +14,6 @@ import {
   formatDateShort,
 } from "@/lib/timeSlots";
 import { ymdLocal } from "@/lib/dateLocal";
-import { bookingEnabled } from "@/lib/bookingEnabled";
 import { useRouter } from "next/navigation";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
 import {
@@ -572,10 +571,10 @@ export default function BookingPage() {
     return () => unsub();
   }, [siteId]);
 
-  // Load booking settings and workers (only if booking is enabled)
+  // Load booking settings and workers
   useEffect(() => {
     if (!siteId || !db || typeof window === "undefined") return;
-    if (!config || !bookingEnabled(config)) {
+    if (!config) {
       setLoading(false);
       return;
     }
@@ -1301,13 +1300,6 @@ export default function BookingPage() {
     }
   };
 
-  // Check if booking is enabled
-  useEffect(() => {
-    if (config && !bookingEnabled(config)) {
-      router.replace(getSiteUrl(config?.slug, siteId, ""));
-    }
-  }, [config, siteId, router]);
-
   // Get theme colors with defaults
   const theme = config?.themeColors || defaultThemeColors;
 
@@ -1402,45 +1394,6 @@ export default function BookingPage() {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "var(--bg)" }}>
         <p className="text-sm" style={{ color: "var(--muted)" }}>טוען את עמוד ההזמנה…</p>
-      </div>
-    );
-  }
-
-  // Show disabled message if booking is not enabled
-  if (!bookingEnabled(config)) {
-    return (
-      <div 
-        dir="rtl" 
-        className="min-h-screen py-8"
-        style={{ 
-          backgroundColor: "var(--bg)",
-          "--bg": theme.background,
-          "--surface": theme.surface,
-          "--text": theme.text,
-          "--muted": theme.mutedText,
-          "--primary": theme.primary,
-          "--primaryText": theme.primaryText,
-          "--accent": theme.accent,
-          "--border": theme.border,
-        } as React.CSSProperties}
-      >
-        <div className="max-w-2xl mx-auto px-4">
-          <div className="rounded-3xl shadow-lg p-6 sm:p-8 text-center" style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)", borderWidth: "1px" }}>
-            <h1 className="text-2xl font-bold mb-2" style={{ color: "var(--text)" }}>
-              הזמנות אונליין לא פעילות
-            </h1>
-            <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
-              באתר הזה לא הופעלה אפשרות הזמנות אונליין.
-            </p>
-            <Link
-              href={getSiteUrl(config?.slug, siteId, "")}
-              className="inline-block px-6 py-3 font-semibold rounded-lg transition-colors hover:opacity-90"
-              style={{ backgroundColor: "var(--primary)", color: "var(--primaryText)" }}
-            >
-              חזרה לאתר
-            </Link>
-          </div>
-        </div>
       </div>
     );
   }

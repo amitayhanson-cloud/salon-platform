@@ -139,7 +139,7 @@ export const defaultSiteConfig: SiteConfig = {
   instagramHandle: "",
   facebookPage: "",
   contactEmail: "",
-  bookingOption: "none",
+  bookingOption: "simple_form",
   bookingSystemName: "",
   extraPages: [],
   specialNote: "",

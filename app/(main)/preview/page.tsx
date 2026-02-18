@@ -344,7 +344,7 @@ function HairLuxuryPreview({
       </section>
 
       {/* Booking Section */}
-      {config.bookingOption !== "none" && bookingState && (
+      {bookingState && (
         <section id="booking-section" className="py-16 lg:py-24 bg-slate-100">
           <div className="max-w-4xl mx-auto px-4 lg:px-8">
             <div className="bg-white rounded-3xl border border-slate-200 shadow-lg p-6 lg:p-10">

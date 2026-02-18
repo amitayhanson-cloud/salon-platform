@@ -17,7 +17,6 @@ import {
 import { ymdLocal } from "@/lib/dateLocal";
 import { useAuth } from "@/hooks/useAuth";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
-import { bookingEnabled } from "@/lib/bookingEnabled";
 import type { SiteConfig } from "@/types/siteConfig";
 import { getDateRange, getTwoWeekStart, getSundayStart, toYYYYMMDD } from "@/lib/calendarUtils";
 import { normalizeBooking, isBookingCancelled, isBookingArchived } from "@/lib/normalizeBooking";
@@ -322,8 +321,7 @@ export default function BookingsAdminPage() {
     return (
       <div className="min-h-screen flex items-center justify-center" dir="rtl">
         <div className="text-center">
-          <p className="text-slate-600 text-sm mb-2">טוען…</p>
-          <p className="text-xs text-slate-400">siteId: {siteId || "לא זמין"}</p>
+          <p className="text-slate-600 text-sm">טוען…</p>
         </div>
       </div>
     );
@@ -340,42 +338,11 @@ export default function BookingsAdminPage() {
     );
   }
 
-  // Check if booking is enabled
-  if (config && !bookingEnabled(config)) {
-    return (
-      <div className="min-h-screen py-8" dir="rtl">
-        <div className="max-w-2xl mx-auto px-4">
-          <div className="bg-white rounded-3xl shadow-lg border border-slate-200 p-6 sm:p-8 text-right">
-            <h1 className="text-xl font-bold text-slate-900 mb-2">
-              ניהול תורים לא פעיל
-            </h1>
-            <p className="text-sm text-slate-600 mb-6">
-              באתר הזה לא הופעלה אפשרות הזמנות אונליין.
-            </p>
-            <Link
-              href={getAdminBasePathFromSiteId(siteId)}
-              className="inline-block px-6 py-3 bg-caleno-500 hover:bg-caleno-600 text-white font-semibold rounded-lg transition-colors"
-            >
-              חזרה לפאנל
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen" dir="rtl">
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Header */}
         <div className="mb-6">
-          {/* Debug info */}
-          <div className="mb-2 p-2 bg-slate-100 rounded text-xs text-slate-600 text-right">
-            siteId: {siteId}
-          </div>
-          <div className="mb-2 p-2 bg-slate-100 rounded text-xs text-slate-600 text-right">
-            bookings loaded: {bookingsCount} {bookingsCount === 0 && "(אין תורים עדיין)"}
-          </div>
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-2xl font-bold text-slate-900">ניהול הזמנות</h1>
             <div className="flex items-center gap-3">
