@@ -67,6 +67,14 @@ interface Booking {
   _path?: string;
 }
 
+/** Coerce to string when value is a non-empty string; otherwise undefined. */
+function asString(v: unknown): string | undefined {
+  if (v == null) return undefined;
+  const s = typeof v === "string" ? v : String(v);
+  const t = s.trim();
+  return t !== "" ? t : undefined;
+}
+
 /** Hebrew label for booking history status (archived and live). */
 function historyStatusLabel(status: string | undefined): string {
   const s = (status ?? "booked").trim().toLowerCase();
@@ -338,7 +346,7 @@ export default function ClientCardPage() {
               time: (data.time as string) || (data.timeHHmm as string) || "",
               durationMin: typeof data.durationMin === "number" ? data.durationMin : undefined,
               status: statusAtArchiveStr ?? "unknown",
-              displayedStatus: statusAtArchiveStr ?? (data["status"] ?? data.status) ?? "unknown",
+              displayedStatus: statusAtArchiveStr ?? asString(data.status) ?? asString(data["status"]) ?? "unknown",
               createdAt: data.createdAt,
               note: (data.note as string) ?? undefined,
               price: typeof data.price === "number" ? data.price : undefined,
