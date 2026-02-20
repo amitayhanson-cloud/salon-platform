@@ -4,12 +4,13 @@
  * Validates worker conflicts (no overlapping bookings for same worker) before write.
  */
 
-import { addDoc, updateDoc, writeBatch, serverTimestamp, Timestamp } from "firebase/firestore";
+import { addDoc, getDoc, updateDoc, writeBatch, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "./firebaseClient";
 import { bookingsCollection, bookingDoc } from "./firestorePaths";
 import { getOrCreateClient } from "./firestoreClients";
 import { computePhases } from "./bookingPhasesTiming";
 import { checkWorkerConflicts } from "./bookingConflicts";
+import { deriveBookingStatusForWrite } from "./bookingStatusForWrite";
 
 function cleanUndefined<T>(value: T): T {
   if (value === undefined) return value;
@@ -63,7 +64,7 @@ export interface AdminBookingPayload {
   note?: string | null;
   /** הערות – booking notes (saved on booking doc as `notes`). */
   notes?: string | null;
-  status?: "confirmed" | "cancelled" | "active";
+  status?: "booked" | "confirmed" | "cancelled" | "active";
   price?: number | null;
 }
 
@@ -104,7 +105,7 @@ export async function createAdminBooking(
 
   const dateStr = payload.date;
   const timeStr = payload.time;
-  const status = payload.status ?? "confirmed";
+  const status = deriveBookingStatusForWrite({ status: payload.status }, "create");
 
   const phase1Conflict = await checkWorkerConflicts({
     siteId,
@@ -169,8 +170,14 @@ export async function createAdminBooking(
     updatedAt: serverTimestamp(),
     ...(hasPhase2 && { waitMinutes: waitMin }),
   };
+  if (process.env.NODE_ENV === "development") {
+    console.log("[createBooking] writing booking (phase1) status:", status);
+  }
   const refA = await addDoc(bookingsCollection(siteId), cleanUndefined(bookingA) as Record<string, unknown>);
   const phase1Id = refA.id;
+  if (process.env.NODE_ENV === "development") {
+    console.log("[createBooking] bookingId", phase1Id, "status:", status);
+  }
   if (process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
     console.log("TRACE_BOOKING_SAVED", JSON.stringify({ siteId, bookingGroupId: null, documentId: refA.id, workerId: payload.phase1.workerId, serviceId: payload.phase1.serviceId ?? null, serviceName: payload.phase1.serviceName, phase: 1 }));
   }
@@ -278,7 +285,18 @@ export async function updateAdminBooking(
 
   const dateStr = payload.date;
   const timeStr = payload.time;
-  const status = payload.status ?? "confirmed";
+
+  const phase1Ref = bookingDoc(siteId, phase1Id);
+  const phase1Snap = await getDoc(phase1Ref);
+  const existingWhatsappStatus = phase1Snap.exists() ? (phase1Snap.data() as { whatsappStatus?: string })?.whatsappStatus : undefined;
+  const status =
+    payload.status !== undefined
+      ? deriveBookingStatusForWrite(
+          { status: payload.status, whatsappStatus: existingWhatsappStatus },
+          "update",
+          "updateAdminBooking"
+        )
+      : undefined;
 
   const excludeIds: string[] = [phase1Id, phase2Id].filter(
     (x): x is string => x !== null && typeof x === "string" && x.length > 0
@@ -319,7 +337,6 @@ export async function updateAdminBooking(
 
   const batch = writeBatch(db);
 
-  const phase1Ref = bookingDoc(siteId, phase1Id);
   const phase1Update: Record<string, unknown> = {
     clientId,
     customerName: payload.customerName.trim(),
@@ -337,7 +354,7 @@ export async function updateAdminBooking(
     timeHHmm: timeStr,
     date: dateStr,
     time: timeStr,
-    status,
+    ...(status !== undefined && { status }),
     note: payload.note ?? null,
     notes: payload.notes ?? null,
     serviceColor: payload.phase1.serviceColor ?? null,
@@ -345,6 +362,9 @@ export async function updateAdminBooking(
     updatedAt: serverTimestamp(),
     ...(hasPhase2 && { waitMinutes: waitMin }),
   };
+  if (process.env.NODE_ENV === "development" && status !== undefined) {
+    console.log("[statusUpdate] booking", phase1Id, "to:", status, "reason: updateAdminBooking");
+  }
   batch.update(phase1Ref, cleanUndefined(phase1Update) as Record<string, unknown>);
 
   if (hasPhase2 && payload.phase2) {
@@ -382,7 +402,7 @@ export async function updateAdminBooking(
         timeHHmm: phase2TimeStr,
         date: phase2DateStr,
         time: phase2TimeStr,
-        status,
+        ...(status !== undefined && { status }),
         note: payload.note ?? null,
         notes: payload.notes ?? null,
         serviceColor: payload.phase2.serviceColor ?? null,
@@ -478,7 +498,6 @@ export async function updatePhase1Only(
 
   const dateStr = payload.date;
   const timeStr = payload.time;
-  const status = payload.status ?? "confirmed";
 
   const phase1Conflict = await checkWorkerConflicts({
     siteId,
@@ -493,6 +512,16 @@ export async function updatePhase1Only(
   }
 
   const phase1Ref = bookingDoc(siteId, phase1Id);
+  const phase1Snap = await getDoc(phase1Ref);
+  const existingWhatsappStatus = phase1Snap.exists() ? (phase1Snap.data() as { whatsappStatus?: string })?.whatsappStatus : undefined;
+  const statusForWrite =
+    payload.status !== undefined
+      ? deriveBookingStatusForWrite(
+          { status: payload.status, whatsappStatus: existingWhatsappStatus },
+          "update",
+          "updatePhase1Only"
+        )
+      : undefined;
   const phase1Update: Record<string, unknown> = {
     clientId,
     customerName: payload.customerName.trim(),
@@ -510,7 +539,7 @@ export async function updatePhase1Only(
     timeHHmm: timeStr,
     date: dateStr,
     time: timeStr,
-    status,
+    ...(statusForWrite !== undefined && { status: statusForWrite }),
     note: payload.note ?? null,
     notes: payload.notes ?? null,
     serviceColor: payload.phase1.serviceColor ?? null,
@@ -518,6 +547,9 @@ export async function updatePhase1Only(
     updatedAt: serverTimestamp(),
     updateMeta: { source: "admin", scope: "single", ts: Date.now() },
   };
+  if (process.env.NODE_ENV === "development" && statusForWrite !== undefined) {
+    console.log("[statusUpdate] booking", phase1Id, "to:", statusForWrite, "reason: updatePhase1Only");
+  }
   await updateDoc(phase1Ref, cleanUndefined(phase1Update) as Record<string, unknown>);
 }
 
@@ -682,7 +714,7 @@ export async function createAdminMultiServiceVisit(
       timeHHmm: timeStr,
       date: dateStr,
       time: timeStr,
-      status: "confirmed",
+      status: deriveBookingStatusForWrite({ status: "booked" }, "create"),
       phase: 1,
       note: payload.note ?? null,
       serviceColor: null,
@@ -692,8 +724,14 @@ export async function createAdminMultiServiceVisit(
       updatedAt: serverTimestamp(),
       serviceOrder: i,
     };
+    if (process.env.NODE_ENV === "development") {
+      console.log("[createBooking] writing booking (multi-service) status: booked");
+    }
     const ref = await addDoc(bookingsRef, cleanUndefined(doc) as Record<string, unknown>);
     if (!firstBookingId) firstBookingId = ref.id;
+    if (process.env.NODE_ENV === "development") {
+      console.log("[createBooking] bookingId", ref.id, "status: booked");
+    }
     if (process.env.NODE_ENV !== "production") {
       console.log("[createAdminMultiServiceVisit] saved document", { docId: ref.id, serviceId: slot.serviceId ?? slot.serviceName, workerId: slot.workerId });
     }

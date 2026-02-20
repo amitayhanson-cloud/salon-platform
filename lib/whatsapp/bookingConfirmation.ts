@@ -7,6 +7,12 @@
 import admin from "firebase-admin";
 import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
+import { isFollowUpBooking } from "@/lib/normalizeBooking";
+import { deriveBookingStatusForWrite } from "@/lib/bookingStatusForWrite";
+import {
+  getDeterministicArchiveDocId,
+  archiveBookingUniqueByServiceTypeAdmin,
+} from "@/lib/archiveReplaceAdmin";
 import { normalizeE164 } from "./e164";
 import { getRelatedBookingIds } from "./relatedBookings";
 
@@ -134,13 +140,19 @@ export async function findNextBookingByPhoneWithStatus(
 /**
  * Set booking to confirmed and set confirmationReceivedAt.
  * Propagates to all related bookings (same visitGroupId/parentBookingId chain) for status consistency.
+ * This is the ONLY place that sets Firestore status to "confirmed" when user explicitly confirms (e.g. WhatsApp YES).
  */
 export async function markBookingConfirmed(siteId: string, bookingId: string): Promise<void> {
   const db = getAdminDb();
   const { bookingIds, groupKey, rootId } = await getRelatedBookingIds(siteId, bookingId);
 
+  if (process.env.NODE_ENV === "development") {
+    console.log("[confirmStage] bookingId=" + bookingId + " setting status confirmed (user explicitly confirmed)");
+  }
+
   const payload = {
     whatsappStatus: "confirmed" as const,
+    status: deriveBookingStatusForWrite({ status: "confirmed" }, "confirm") as "confirmed",
     confirmationReceivedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -203,7 +215,7 @@ const CANCELLED_BY_WHATSAPP_PAYLOAD = {
 
 /**
  * Apply cancellation (status + archive) to a single booking. Idempotent.
- * Same payload as cancelBookingGroupByWhatsApp (used for single-booking or fallback).
+ * Uses deterministic archive: one doc per (client, serviceType).
  */
 export async function applyCancelledByWhatsAppToBooking(
   siteId: string,
@@ -211,10 +223,55 @@ export async function applyCancelledByWhatsAppToBooking(
 ): Promise<void> {
   const db = getAdminDb();
   const ref = db.collection("sites").doc(siteId).collection("bookings").doc(memberId);
-  if (process.env.NODE_ENV !== "production") {
-    console.log("ARCHIVE PAYLOAD", { bookingId: memberId, statusAtArchive: "cancelled" });
+  const snap = await ref.get();
+  if (!snap.exists) return;
+  const d = snap.data() as Record<string, unknown>;
+  if (isFollowUpBooking(d)) {
+    await ref.delete();
+    if (process.env.NODE_ENV === "development") {
+      console.log("[applyCancelledByWhatsApp] Skipping archive for follow-up booking", memberId);
+    }
+    return;
   }
-  await ref.update(CANCELLED_BY_WHATSAPP_PAYLOAD);
+  const data = d as {
+    clientId?: string;
+    serviceTypeId?: string;
+    serviceType?: string;
+    date?: string;
+    dateISO?: string;
+    serviceName?: string;
+    customerPhone?: string;
+    phone?: string;
+    customerName?: string;
+    name?: string;
+    workerId?: string;
+    workerName?: string;
+  };
+  const clientId = data?.clientId != null && String(data.clientId).trim() !== "" ? String(data.clientId).trim() : null;
+  const serviceTypeId =
+    data?.serviceTypeId != null && String(data.serviceTypeId).trim() !== ""
+      ? String(data.serviceTypeId).trim()
+      : (data?.serviceType != null && String(data.serviceType).trim() !== "" ? String(data.serviceType).trim() : null);
+  const customerPhone = (data?.customerPhone ?? data?.phone ?? "").trim() || "";
+  const dateStr = (data?.date ?? data?.dateISO ?? "") as string;
+  const minimal: Record<string, unknown> = {
+    date: dateStr,
+    serviceName: (data?.serviceName as string) ?? "",
+    serviceType: (data?.serviceType as string) ?? null,
+    serviceTypeId: (data?.serviceTypeId as string) ?? null,
+    workerId: (data?.workerId as string) ?? null,
+    workerName: (data?.workerName as string) ?? null,
+    customerPhone,
+    customerName: (data?.customerName ?? data?.name ?? "") as string,
+    clientId,
+    ...CANCELLED_BY_WHATSAPP_PAYLOAD,
+  };
+  await archiveBookingUniqueByServiceTypeAdmin(db, siteId, memberId, {
+    clientId,
+    customerPhone,
+    serviceTypeId,
+    minimal,
+  });
 }
 
 /**
@@ -224,7 +281,6 @@ export async function applyCancelledByWhatsAppToBooking(
  */
 export async function cancelBookingGroupByWhatsApp(siteId: string, bookingId: string): Promise<void> {
   const db = getAdminDb();
-  // Resolve group BEFORE any write so follow-ups are included
   const { bookingIds, rootId, groupKey } = await getRelatedBookingIds(siteId, bookingId);
   const rootBookingRef = `sites/${siteId}/bookings/${rootId}`;
   const bookingRefsInGroup = bookingIds.map((id) => `sites/${siteId}/bookings/${id}`);
@@ -237,13 +293,65 @@ export async function cancelBookingGroupByWhatsApp(siteId: string, bookingId: st
     bookingRefsInGroup,
   });
 
+  const col = db.collection("sites").doc(siteId).collection("bookings");
+  type DocData = {
+    clientId?: string;
+    serviceTypeId?: string;
+    serviceType?: string;
+    date?: string;
+    dateISO?: string;
+    serviceName?: string;
+    customerPhone?: string;
+    phone?: string;
+    customerName?: string;
+    name?: string;
+    workerId?: string;
+    workerName?: string;
+    parentBookingId?: string | null;
+  };
+  const archiveWrites: { clientKey: string; docId: string; minimal: Record<string, unknown> }[] = [];
+  for (const id of bookingIds) {
+    const ref = col.doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) continue;
+    const d = snap.data() as DocData;
+    if (isFollowUpBooking(d as Record<string, unknown>)) {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[cancelBookingGroupByWhatsApp] Skipping archive for follow-up booking", id);
+      }
+      continue;
+    }
+    const clientId = d?.clientId != null && String(d.clientId).trim() !== "" ? String(d.clientId).trim() : null;
+    const serviceTypeId =
+      d?.serviceTypeId != null && String(d.serviceTypeId).trim() !== ""
+        ? String(d.serviceTypeId).trim()
+        : (d?.serviceType != null && String(d.serviceType).trim() !== "" ? String(d.serviceType).trim() : null);
+    const customerPhone = (d?.customerPhone ?? d?.phone ?? "").trim() || "";
+    const clientKey = clientId ?? customerPhone ?? "unknown";
+    const dateStr = (d?.date ?? d?.dateISO ?? "") as string;
+    const minimal: Record<string, unknown> = {
+      date: dateStr,
+      serviceName: (d?.serviceName as string) ?? "",
+      serviceType: (d?.serviceType as string) ?? null,
+      serviceTypeId: (d?.serviceTypeId as string) ?? null,
+      workerId: (d?.workerId as string) ?? null,
+      workerName: (d?.workerName as string) ?? null,
+      customerPhone,
+      customerName: (d?.customerName ?? d?.name ?? "") as string,
+      clientId,
+      ...CANCELLED_BY_WHATSAPP_PAYLOAD,
+    };
+    const { docId } = getDeterministicArchiveDocId(clientId, customerPhone, serviceTypeId, id);
+    archiveWrites.push({ clientKey, docId, minimal });
+  }
   const batch = db.batch();
   for (const id of bookingIds) {
-    const ref = db.collection("sites").doc(siteId).collection("bookings").doc(id);
-    if (process.env.NODE_ENV !== "production") {
-      console.log("ARCHIVE PAYLOAD", { bookingId: id, statusAtArchive: "cancelled" });
-    }
-    batch.update(ref, CANCELLED_BY_WHATSAPP_PAYLOAD);
+    batch.delete(col.doc(id));
+  }
+  const clientsRef = db.collection("sites").doc(siteId).collection("clients");
+  for (const { clientKey, docId, minimal } of archiveWrites) {
+    const archiveRef = clientsRef.doc(clientKey).collection("archivedServiceTypes").doc(docId);
+    batch.set(archiveRef, minimal, { merge: false });
   }
   await batch.commit();
 

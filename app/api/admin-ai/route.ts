@@ -5,6 +5,7 @@ import { z } from "zod";
 import OpenAI from "openai";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
+import { deriveBookingStatusForWrite } from "@/lib/bookingStatusForWrite";
 
 const requestSchema = z.object({
   siteId: z.string(),
@@ -490,18 +491,24 @@ async function createBooking(
       timeHHmm: time,
       startAt: Timestamp.fromDate(startAt),
       endAt: Timestamp.fromDate(endAt),
-      status: "confirmed",
+      status: deriveBookingStatusForWrite({ status: "booked" }, "create"),
       durationMin: duration,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     };
 
     const adminDb = getAdminDb();
+    if (process.env.NODE_ENV === "development") {
+      console.log("[createBooking] writing booking (admin-ai) status: booked");
+    }
     const docRef = await adminDb
       .collection("sites")
       .doc(siteId)
       .collection("bookings")
       .add(bookingData);
+    if (process.env.NODE_ENV === "development") {
+      console.log("[createBooking] bookingId", docRef.id, "status: booked");
+    }
 
     return {
       kind: "booking_created",

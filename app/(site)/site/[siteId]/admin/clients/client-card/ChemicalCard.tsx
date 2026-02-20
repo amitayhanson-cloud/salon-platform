@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getDoc, setDoc, serverTimestamp, Timestamp, onSnapshot } from "firebase/firestore";
+import { getDoc, setDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 import { clientDocRef } from "@/lib/firestoreClientRefs";
+import { onSnapshotDebugDoc } from "@/lib/firestoreListeners";
 import { Plus, Pencil, Trash2, X, Check } from "lucide-react";
 
 interface ColorEntry {
@@ -78,7 +79,8 @@ export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
     setLoading(true);
 
     // Subscribe to client document for real-time updates
-    const unsubscribe = onSnapshot(
+    const unsubscribe = onSnapshotDebugDoc(
+      "chemical-card-client",
       clientRef,
       (snapshot) => {
         console.log("[ChemicalCard] Subscription update", {
@@ -89,7 +91,8 @@ export function ChemicalCard({ siteId, phone }: ChemicalCardProps) {
 
         if (snapshot.exists()) {
           const data = snapshot.data();
-          const chemicalCard = data.chemicalCard || { colors: [], oxygen: [] };
+          const raw = data?.chemicalCard as { colors?: unknown[]; oxygen?: unknown[] } | undefined;
+          const chemicalCard = raw || { colors: [], oxygen: [] };
           
           // Convert Timestamps to objects for state
           setChemicalData({

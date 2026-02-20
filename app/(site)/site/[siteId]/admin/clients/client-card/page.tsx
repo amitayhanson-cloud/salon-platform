@@ -3,9 +3,10 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { query, where, orderBy, onSnapshot, collection } from "firebase/firestore";
+import { query, where, orderBy, getDocs, collection, limit } from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
-import { bookingsCollection } from "@/lib/firestorePaths";
+import { onSnapshotDebug } from "@/lib/firestoreListeners";
+import { bookingsCollection, clientArchivedServiceTypesCollection } from "@/lib/firestorePaths";
 import { ChemicalCard } from "./ChemicalCard";
 import PersonalPricingTab from "./PersonalPricingTab";
 import AdminTabs from "@/components/ui/AdminTabs";
@@ -43,6 +44,7 @@ interface Booking {
   customerPhone: string;
   serviceName: string;
   serviceType?: string | null;
+  serviceTypeId?: string | null;
   workerName?: string | null;
   date: string; // YYYY-MM-DD
   time: string; // HH:mm
@@ -59,11 +61,16 @@ interface Booking {
   archivedReason?: string;
   statusAtArchive?: string;
   whatsappStatus?: string;
+  /** Dev only: which collection this item was read from (for debug after dev-reset). */
+  _source?: "bookings" | "archivedServiceTypes";
+  /** Dev only: full Firestore path (for debug). */
+  _path?: string;
 }
 
 /** Hebrew label for booking history status (archived and live). */
 function historyStatusLabel(status: string | undefined): string {
   const s = (status ?? "booked").trim().toLowerCase();
+  if (s === "unknown" || s === "") return "לא ידוע";
   if (s === "confirmed" || s === "אושר") return "מאושר";
   if (s === "pending" || s === "awaiting_confirmation") return "ממתין לאישור";
   if (s === "cancelled" || s === "canceled") return "בוטל";
@@ -99,6 +106,9 @@ export default function ClientCardPage() {
 
   // Toast
   const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
+
+  /** When loading archived from archivedServiceTypes fails (e.g. permission), show notice without blocking. */
+  const [archivedLoadError, setArchivedLoadError] = useState<string | null>(null);
 
   // Edit modal
   const [editClient, setEditClient] = useState<Client | null>(null);
@@ -167,21 +177,22 @@ export default function ClientCardPage() {
     setClientsError(null);
 
     const clientsRef = collection(db, "sites", siteId, "clients");
-    const clientsQuery = query(clientsRef);
+    const clientsQuery = query(clientsRef, limit(500));
 
-    const unsubscribe = onSnapshot(
+    const unsubscribe = onSnapshotDebug(
+      "client-card-clients",
       clientsQuery,
       (snapshot) => {
         // REPLACE state entirely from this snapshot (no append, no merge with bookings or previous state)
         const mapped = snapshot.docs.map((docSnap) => {
           const data = docSnap.data();
           if (data.archived === true) return null;
-          const phone = (data.phone || docSnap.id || "").replace(/\s|-|\(|\)/g, "") || docSnap.id;
+          const phone = String(data.phone ?? docSnap.id ?? "").replace(/\s|-|\(|\)/g, "") || docSnap.id;
           const clientTypeRaw = (data.clientType != null && typeof data.clientType === "string") ? data.clientType.trim() : "";
           const typeId = (data.clientTypeId != null && typeof data.clientTypeId === "string") ? data.clientTypeId.trim() : undefined;
           return {
             id: docSnap.id,
-            name: data.name || "",
+            name: (data.name as string) || "",
             phone,
             email: data.email || undefined,
             notes: data.notes || undefined,
@@ -189,7 +200,7 @@ export default function ClientCardPage() {
             clientTypeId: typeId || REGULAR_CLIENT_TYPE_ID,
             clientNotes: data.clientNotes != null ? String(data.clientNotes).trim() || undefined : (data.notes != null ? String(data.notes).trim() || undefined : undefined),
             lastVisit: undefined,
-            createdAt: data.createdAt?.toDate?.()?.toISOString?.() ?? (typeof data.createdAt === "string" ? data.createdAt : undefined),
+            createdAt: (data.createdAt as { toDate?: () => Date } | undefined)?.toDate?.()?.toISOString?.() ?? (typeof data.createdAt === "string" ? data.createdAt : undefined),
             totalBookings: 0,
           };
         });
@@ -221,7 +232,7 @@ export default function ClientCardPage() {
     return entry ? entry.labelHe : "רגיל";
   }, [clientTypes]);
 
-  // Load bookings for selected client
+  // Load bookings for selected client (one-time getDocs; no realtime listener to reduce reads)
   useEffect(() => {
     if (!db || !siteId || !selectedClientId) {
       setClientBookings([]);
@@ -229,101 +240,159 @@ export default function ClientCardPage() {
       setBookingsError(null);
       return;
     }
+    const clientId = selectedClientId;
 
-    // Use a cancellation flag to prevent state updates after unmount or client change
+    // Clear stale list immediately when clientId changes so we don't show previous client's data
+    setClientBookings([]);
     let cancelled = false;
-
     setBookingsLoading(true);
     setBookingsError(null);
+    setArchivedLoadError(null);
 
-    let bookingsQuery;
-    try {
-      bookingsQuery = query(
-        bookingsCollection(siteId),
-        where("customerPhone", "==", selectedClientId),
-        orderBy("date", "desc")
-      );
-    } catch (e) {
-      // If orderBy fails, try without it
+    async function fetchClientBookings() {
+      let bookingsQuery;
       try {
         bookingsQuery = query(
           bookingsCollection(siteId),
-          where("customerPhone", "==", selectedClientId)
+          where("customerPhone", "==", clientId),
+          orderBy("date", "desc"),
+          limit(100)
         );
-      } catch (e2) {
-        // If query fails completely, fetch all and filter client-side
-        bookingsQuery = bookingsCollection(siteId);
-      }
-    }
-
-    const unsubscribe = onSnapshot(
-      bookingsQuery,
-      (snapshot) => {
-        if (cancelled) return; // Don't update if cancelled
-        
+      } catch {
         try {
-          const rawItems = snapshot.docs
-            .filter((doc) => (doc.data() as Record<string, unknown>).customerPhone === selectedClientId)
-            .map((doc): Booking => {
-              const data = doc.data() as Record<string, unknown>;
-              const id = doc.id;
-              const rawStatusAtArchive = data["statusAtArchive"] ?? data.statusAtArchive;
-              const rawStatus = data["status"] ?? data.status;
-              const statusAtArchiveStr =
-                rawStatusAtArchive != null && String(rawStatusAtArchive).trim() !== ""
-                  ? String(rawStatusAtArchive).trim()
-                  : undefined;
-              const statusStr =
-                rawStatus != null && String(rawStatus).trim() !== "" ? String(rawStatus).trim() : undefined;
-              const displayedStatus = statusAtArchiveStr ?? statusStr ?? "booked";
-
-              return {
-                id,
-                customerName: (data.customerName as string) || "",
-                customerPhone: (data.customerPhone as string) || "",
-                serviceName: (data.serviceName as string) || "",
-                serviceType: (data.serviceType as string) ?? null,
-                workerName: (data.workerName as string) ?? null,
-                date: (data.date as string) || (data.dateISO as string) || "",
-                time: (data.time as string) || (data.timeHHmm as string) || "",
-                durationMin: typeof data.durationMin === "number" ? data.durationMin : undefined,
-                status: statusStr ?? "booked",
-                displayedStatus,
-                createdAt: data.createdAt,
-                note: (data.note as string) ?? undefined,
-                price: typeof data.price === "number" ? data.price : undefined,
-                isArchived: data.isArchived === true,
-                archivedAt: data.archivedAt,
-                archivedReason: (data.archivedReason as string) ?? undefined,
-                statusAtArchive: statusAtArchiveStr,
-                whatsappStatus: (data.whatsappStatus as string) ?? undefined,
-              };
-            });
-
-          const bookings = [...rawItems].sort((a, b) => {
-            const dateCompare = (b.date || "").localeCompare(a.date || "");
-            if (dateCompare !== 0) return dateCompare;
-            return (b.time || "").localeCompare(a.time || "");
-          });
-
-          if (!cancelled) {
-            setClientBookings(bookings);
-            setBookingsLoading(false);
-          }
-        } catch (err) {
-          console.error("[ClientCard] Failed to process bookings", err);
-          if (!cancelled) {
-            setBookingsError("שגיאה בעיבוד התורים");
-            setBookingsLoading(false);
-          }
+          bookingsQuery = query(
+            bookingsCollection(siteId),
+            where("customerPhone", "==", clientId),
+            limit(100)
+          );
+        } catch {
+          bookingsQuery = query(bookingsCollection(siteId), limit(200));
         }
-      },
-      (err) => {
-        if (cancelled) return; // Don't update if cancelled
-        
+      }
+
+      try {
+        const snapshot = await getDocs(bookingsQuery);
+        if (cancelled) return;
+        const rawItems = snapshot.docs
+          .filter((doc) => (doc.data() as Record<string, unknown>).customerPhone === clientId)
+          .map((doc): Booking => {
+            const data = doc.data() as Record<string, unknown>;
+            const id = doc.id;
+            const rawStatusAtArchive = data["statusAtArchive"] ?? data.statusAtArchive;
+            const rawStatus = data["status"] ?? data.status;
+            const statusAtArchiveStr =
+              rawStatusAtArchive != null && String(rawStatusAtArchive).trim() !== ""
+                ? String(rawStatusAtArchive).trim()
+                : undefined;
+            const statusStr =
+              rawStatus != null && String(rawStatus).trim() !== "" ? String(rawStatus).trim() : undefined;
+            const displayedStatus = statusAtArchiveStr ?? statusStr ?? "unknown";
+            return {
+              id,
+              customerName: (data.customerName as string) || "",
+              customerPhone: (data.customerPhone as string) || "",
+              serviceName: (data.serviceName as string) || "",
+              serviceType: (data.serviceType as string) ?? null,
+              serviceTypeId: (data.serviceTypeId as string) ?? null,
+              workerName: (data.workerName as string) ?? null,
+              date: (data.date as string) || (data.dateISO as string) || "",
+              time: (data.time as string) || (data.timeHHmm as string) || "",
+              durationMin: typeof data.durationMin === "number" ? data.durationMin : undefined,
+              status: statusStr ?? "unknown",
+              displayedStatus,
+              createdAt: data.createdAt,
+              note: (data.note as string) ?? undefined,
+              price: typeof data.price === "number" ? data.price : undefined,
+              isArchived: data.isArchived === true,
+              archivedAt: data.archivedAt,
+              archivedReason: (data.archivedReason as string) ?? undefined,
+              statusAtArchive: statusAtArchiveStr,
+              whatsappStatus: (data.whatsappStatus as string) ?? undefined,
+              _source: "bookings" as const,
+              _path: `sites/${siteId}/bookings/${id}`,
+            };
+          });
+        const active = rawItems.filter((b) => !b.isArchived);
+
+        let archivedFromNewPath: Booking[] = [];
+        try {
+          const archivedRef = clientArchivedServiceTypesCollection(siteId, clientId);
+          const archivedSnap = await getDocs(archivedRef);
+          if (cancelled) return;
+          archivedFromNewPath = archivedSnap.docs.map((doc): Booking => {
+            const data = doc.data() as Record<string, unknown>;
+            const rawStatusAtArchive = data["statusAtArchive"] ?? data.statusAtArchive;
+            const statusAtArchiveStr =
+              rawStatusAtArchive != null && String(rawStatusAtArchive).trim() !== ""
+                ? String(rawStatusAtArchive).trim()
+                : undefined;
+            return {
+              id: doc.id,
+              customerName: (data.customerName as string) || "",
+              customerPhone: (data.customerPhone as string) || "",
+              serviceName: (data.serviceName as string) || "",
+              serviceType: (data.serviceType as string) ?? null,
+              serviceTypeId: (data.serviceTypeId as string) ?? doc.id,
+              workerName: (data.workerName as string) ?? null,
+              date: (data.date as string) || (data.dateISO as string) || "",
+              time: (data.time as string) || (data.timeHHmm as string) || "",
+              durationMin: typeof data.durationMin === "number" ? data.durationMin : undefined,
+              status: statusAtArchiveStr ?? "unknown",
+              displayedStatus: statusAtArchiveStr ?? (data["status"] ?? data.status) ?? "unknown",
+              createdAt: data.createdAt,
+              note: (data.note as string) ?? undefined,
+              price: typeof data.price === "number" ? data.price : undefined,
+              isArchived: true,
+              archivedAt: data.archivedAt,
+              archivedReason: (data.archivedReason as string) ?? undefined,
+              statusAtArchive: statusAtArchiveStr,
+              whatsappStatus: (data.whatsappStatus as string) ?? undefined,
+              _source: "archivedServiceTypes" as const,
+              _path: `sites/${siteId}/clients/${clientId}/archivedServiceTypes/${doc.id}`,
+            };
+          });
+        } catch (e) {
+          const err = e as { code?: string; message?: string };
+          const isPermission = err?.code === "permission-denied" || err?.message?.includes("permission");
+          if (!cancelled) {
+            setArchivedLoadError(
+              isPermission
+                ? "הרשאות: לא ניתן לטעון תורים שהוסרו. עדכן כללי אבטחה ב-Firestore."
+                : null
+            );
+          }
+          console.warn("[ClientCard] Failed to load archived from archivedServiceTypes", e);
+        }
+
+        const bookings = [...active, ...archivedFromNewPath].sort((a, b) => {
+          const dateCompare = (b.date || "").localeCompare(a.date || "");
+          if (dateCompare !== 0) return dateCompare;
+          return (b.time || "").localeCompare(a.time || "");
+        });
+        if (!cancelled) {
+          if (process.env.NODE_ENV !== "production") {
+            const fromBookings = bookings.filter((b) => b._source === "bookings").length;
+            const fromArchived = bookings.filter((b) => b._source === "archivedServiceTypes").length;
+            console.log("[ClientCard] History loaded", {
+              clientId,
+              total: bookings.length,
+              fromBookings,
+              fromArchived,
+              paths: {
+                bookings: `sites/${siteId}/bookings (customerPhone==${clientId})`,
+                archivedServiceTypes: `sites/${siteId}/clients/${clientId}/archivedServiceTypes`,
+              },
+            });
+          }
+          setClientBookings(bookings);
+          setBookingsLoading(false);
+          setBookingsError(null);
+        }
+      } catch (err) {
+        if (cancelled) return;
         console.error("[ClientCard] Failed to load bookings", err);
-        // If index is missing, show helpful error (don't retry in loop)
-        if (err.message?.includes("index") || err.code === "failed-precondition") {
+        const msg = (err as { message?: string })?.message ?? "";
+        if (msg.includes("index") || (err as { code?: string }).code === "failed-precondition") {
           setBookingsError("נדרש אינדקס ב-Firestore. אנא צור אינדקס עבור customerPhone + date.");
         } else {
           setBookingsError("שגיאה בטעינת התורים");
@@ -331,13 +400,13 @@ export default function ClientCardPage() {
         setBookingsLoading(false);
         setClientBookings([]);
       }
-    );
+    }
 
+    fetchClientBookings();
     return () => {
-      cancelled = true; // Mark as cancelled on cleanup
-      unsubscribe();
+      cancelled = true;
     };
-  }, [siteId, selectedClientId]); // Only depend on primitives
+  }, [siteId, selectedClientId]);
 
   // Derive selected client from ID and clients list (useMemo prevents loops)
   const selectedClient = useMemo(() => {
@@ -992,6 +1061,11 @@ export default function ClientCardPage() {
                           <p className="text-sm text-yellow-700">{bookingsError}</p>
                         </div>
                       )}
+                      {archivedLoadError && (
+                        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-right">
+                          <p className="text-sm text-amber-700">{archivedLoadError}</p>
+                        </div>
+                      )}
 
                       {bookingsLoading ? (
                         <p className="text-sm text-slate-500 text-center py-8">טוען תורים…</p>
@@ -1008,6 +1082,8 @@ export default function ClientCardPage() {
                             if (process.env.NODE_ENV !== "production") {
                               console.log("HISTORY ITEM", {
                                 id: booking.id,
+                                source: booking._source ?? "unknown",
+                                path: booking._path ?? "unknown",
                                 statusAtArchive: booking.statusAtArchive,
                                 status: booking.status,
                                 displayedStatus,

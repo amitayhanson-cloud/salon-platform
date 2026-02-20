@@ -257,7 +257,7 @@ export default function AdminBookingFormSimple({
       phase2: null,
       note: null,
       notes: notes.trim() || null,
-      status: "confirmed",
+      status: "booked",
       price: null,
     };
   }, [customerName, customerPhone, date, time, workerId, workerName, durationMin, notes]);
@@ -293,7 +293,7 @@ export default function AdminBookingFormSimple({
         : null,
       note: initialData.note ?? null,
       notes: notes.trim() || null,
-      status: (initialData.status as "confirmed" | "cancelled" | "active") ?? "confirmed",
+      status: (initialData.status as "booked" | "confirmed" | "cancelled" | "active") ?? undefined,
       price: initialData.price ?? null,
     };
   }, [initialData, date, time, workerId, workerName, durationMin, notes]);

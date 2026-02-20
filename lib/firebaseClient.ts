@@ -16,7 +16,10 @@ function cleanApiKey(apiKey: string | undefined): string | undefined {
   return apiKey.trim().split(":")[0];
 }
 
-/** Build config ONLY from env vars; no fallbacks. */
+/**
+ * Build config ONLY from env vars; no hardcoded projectId or fallbacks.
+ * projectId comes solely from NEXT_PUBLIC_FIREBASE_PROJECT_ID.
+ */
 function getFirebaseConfigFromEnv() {
   return {
     apiKey: cleanApiKey(process.env.NEXT_PUBLIC_FIREBASE_API_KEY),
@@ -116,27 +119,14 @@ function initializeFirebase() {
 
   try {
     const isClient = typeof window !== "undefined";
-    if (isClient && isDev) {
-      console.log("🔧 Firebase config (client):", {
-        projectId: cfg.projectId,
-        authDomain: cfg.authDomain,
-        storageBucket: cfg.storageBucket ? `${cfg.storageBucket.slice(0, 24)}...` : "—",
-        apiKeyPrefix: cfg.apiKey ? `${cfg.apiKey.substring(0, 6)}...` : "—",
-      });
-      if (
-        (cfg.projectId?.includes("salon-platform") ?? false) ||
-        (cfg.authDomain?.includes("salon-platform") ?? false)
-      ) {
-        console.warn(
-          "⚠️ Firebase client is using the old salon-platform project. Set NEXT_PUBLIC_FIREBASE_* in .env.local to your Caleno project and restart the dev server (npm run dev)."
-        );
-      }
-    }
-
     if (getApps().length === 0) {
       app = initializeApp(cfg as any);
     } else {
       app = getApp();
+    }
+
+    if (isDev) {
+      console.log("🔥 CLIENT FIREBASE PROJECT:", cfg.projectId ?? "(not set)");
     }
 
     if (isClient) {
@@ -146,12 +136,8 @@ function initializeFirebase() {
 
     if (isClient && cfg.storageBucket) {
       _storage = firebaseGetStorage(app, `gs://${cfg.storageBucket}`);
-      if (isDev) console.log("🔍 Storage bucket (client):", cfg.storageBucket);
     }
 
-    if (isDev) {
-      console.log("✅ Firebase client initialized, projectId:", cfg.projectId);
-    }
     initialized = true;
   } catch (error: any) {
     const errorMsg = `Firebase initialization failed: ${error.message || String(error)}`;

@@ -348,7 +348,7 @@ function phaseEventsFromPhasesArray(booking: BookingLike): BookingPhaseEvent[] |
   const clientName = booking.customerName ?? booking.clientName ?? "—";
   const parentServiceName = booking.serviceName ?? "—";
   const parentColor = booking.serviceColor ?? undefined;
-  const status = booking.status ?? "confirmed";
+  const status = booking.status ?? "booked";
   const events: BookingPhaseEvent[] = [];
   for (const p of booking.phases) {
     const phaseNum = (p as { phase?: number }).phase ?? ((p as { kind?: string }).kind === "secondary" ? 2 : (p as { kind?: string }).kind === "primary" ? 1 : null);
@@ -385,7 +385,7 @@ function phaseEventsFromPhasesArray(booking: BookingLike): BookingPhaseEvent[] |
  */
 export function toPhaseEvents(booking: BookingLike): BookingPhaseEvent[] {
   const clientName = booking.customerName ?? booking.clientName ?? "—";
-  const status = booking.status ?? "confirmed";
+  const status = booking.status ?? "booked";
   const color = booking.serviceColor ?? undefined;
   const mainStart = toDate(booking.start ?? booking.startAt);
   const mainEnd = toDate(booking.end ?? booking.endAt);
@@ -419,7 +419,7 @@ export function toPhaseEvents(booking: BookingLike): BookingPhaseEvent[] {
   const events: BookingPhaseEvent[] = [];
   const legClientName = booking.customerName ?? booking.clientName ?? "—";
   const legServiceName = booking.serviceName ?? "—";
-  const legStatus = booking.status ?? "confirmed";
+  const legStatus = booking.status ?? "booked";
   const legColor = booking.serviceColor ?? undefined;
 
   const phase1Start = toDate(booking.startAt) ?? (() => {

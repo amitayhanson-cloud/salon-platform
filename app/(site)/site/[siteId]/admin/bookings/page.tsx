@@ -8,9 +8,10 @@ import {
   query,
   where,
   orderBy,
-  onSnapshot,
+  limit,
 } from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
+import { onSnapshotDebug } from "@/lib/firestoreListeners";
 import {
   bookingsCollection,
 } from "@/lib/firestorePaths";
@@ -178,10 +179,12 @@ export default function BookingsAdminPage() {
       where("date", ">=", rangeStartStr),
       where("date", "<=", rangeEndStr),
       orderBy("date", "asc"),
-      orderBy("time", "asc")
+      orderBy("time", "asc"),
+      limit(500)
     );
 
-    const bookingsUnsubscribe = onSnapshot(
+    const bookingsUnsubscribe = onSnapshotDebug(
+      "bookings-list",
       bookingsQuery,
       (snapshot) => {
         const raw = snapshot.docs.map((d) => normalizeBooking(d as { id: string; data: () => Record<string, unknown> }));
@@ -197,9 +200,11 @@ export default function BookingsAdminPage() {
           const fallbackQuery = query(
             bookingsCollection(siteId),
             where("date", ">=", rangeStartStr),
-            where("date", "<=", rangeEndStr)
+            where("date", "<=", rangeEndStr),
+            limit(500)
           );
-          fallbackUnsubscribe = onSnapshot(
+          fallbackUnsubscribe = onSnapshotDebug(
+            "bookings-list-fallback",
             fallbackQuery,
             (snapshot) => {
               const raw = snapshot.docs.map((d) => normalizeBooking(d as { id: string; data: () => Record<string, unknown> }));
@@ -265,15 +270,25 @@ export default function BookingsAdminPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setDeleteError(data.error === "forbidden" ? "אין הרשאה" : data.error || "שגיאה במחיקה");
+        const raw = data.error || "שגיאה במחיקה";
+        const errMsg =
+          raw === "forbidden"
+            ? "אין הרשאה"
+            : typeof raw === "string" && (raw.includes("RESOURCE_EXHAUSTED") || raw.includes("quota") || raw.includes("exhausted"))
+              ? "עומס על המערכת. נסה שוב בעוד רגע."
+              : raw;
+        setDeleteError(errMsg);
+        setTimeout(() => setDeleteError(null), 4000);
         return;
       }
       setCancelModalBookingId(null);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setDeleteError(msg);
+      setTimeout(() => setDeleteError(null), 4000);
     } finally {
       setDeleting(false);
+      setCancelModalBookingId(null);
     }
   };
 
@@ -474,7 +489,7 @@ export default function BookingsAdminPage() {
         submitting={deleting}
       />
 
-      {deleteError && cancelModalBookingId && (
+      {deleteError && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[56] px-4 py-2 rounded-lg shadow-lg text-sm font-medium bg-red-600 text-white" dir="rtl">
           {deleteError}
         </div>

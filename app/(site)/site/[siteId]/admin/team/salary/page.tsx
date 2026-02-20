@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
-import { query, where, orderBy, onSnapshot, Timestamp, getDocs } from "firebase/firestore";
+import { query, where, orderBy, limit, Timestamp, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
+import { onSnapshotDebug } from "@/lib/firestoreListeners";
 import { bookingsCollection, workersCollection } from "@/lib/firestorePaths";
 import { ymdLocal } from "@/lib/dateLocal";
 import { RefreshCw } from "lucide-react";
@@ -84,14 +85,15 @@ export default function TeamPerformancePage() {
     if (!siteId || !db) return;
 
     const workersQuery = query(workersCollection(siteId), orderBy("name", "asc"));
-    const unsubscribe = onSnapshot(
+    const unsubscribe = onSnapshotDebug(
+      "salary-workers",
       workersQuery,
       (snapshot) => {
         const items = snapshot.docs.map((d) => {
           const data = d.data();
           return {
             id: d.id,
-            name: data.name || "",
+            name: (data.name as string) || "",
             treatmentCommissionPercent: data.treatmentCommissionPercent != null ? Number(data.treatmentCommissionPercent) : 0,
           };
         });
@@ -185,13 +187,14 @@ export default function TeamPerformancePage() {
             );
           }
         } else {
-          // For monthly, we need to query all and filter client-side
-          bookingsQuery = query(bookingsCollection(siteId));
+          // For monthly, bounded query then filter client-side by month
+          bookingsQuery = query(bookingsCollection(siteId), limit(500));
         }
       }
     }
 
-    const unsubscribe = onSnapshot(
+    const unsubscribe = onSnapshotDebug(
+      "salary-bookings",
       bookingsQuery,
       (snapshot) => {
         const items: Booking[] = [];
@@ -199,14 +202,14 @@ export default function TeamPerformancePage() {
           const data = doc.data();
           if (data.isArchived === true) return;
           // Filter by status - only include confirmed/completed bookings
-          const status = data.status || "confirmed";
+          const status = data.status ?? "booked";
           if (status === "cancelled" || status === "canceled" || status === "cancelled_by_salon" || status === "no_show") {
             return;
           }
 
           // For monthly, also filter by date range client-side
           if (periodType === "monthly") {
-            const bookingDate = data.dateISO || data.date;
+            const bookingDate = (data.dateISO || data.date) as string | undefined;
             if (bookingDate) {
               const [y, m] = selectedMonth.split("-").map(Number);
               const [by, bm] = bookingDate.split("-").map(Number);
@@ -214,7 +217,7 @@ export default function TeamPerformancePage() {
                 return;
               }
             } else if (data.startAt) {
-              const bookingDate = data.startAt.toDate();
+              const bookingDate = (data.startAt as { toDate: () => Date }).toDate();
               const [y, m] = selectedMonth.split("-").map(Number);
               if (bookingDate.getFullYear() !== y || bookingDate.getMonth() + 1 !== m) {
                 return;
@@ -231,20 +234,20 @@ export default function TeamPerformancePage() {
 
           items.push({
             id: doc.id,
-            workerId: data.workerId || null,
-            clientId: data.clientId || data.customerPhone || null, // Use clientId or customerPhone as fallback
-            customerPhone: data.customerPhone || data.phone || null,
-            pricingItemId: data.pricingItemId || null,
-            serviceTypeId: data.pricingItemId || data.serviceTypeId || null, // Alias
-            price: data.price || null,
-            priceApplied: data.priceApplied || data.finalPrice || null,
-            finalPrice: data.priceApplied || data.finalPrice || null,
+            workerId: (data.workerId as string) || null,
+            clientId: (data.clientId as string) || (data.customerPhone as string) || null,
+            customerPhone: (data.customerPhone as string) || (data.phone as string) || null,
+            pricingItemId: (data.pricingItemId as string) || null,
+            serviceTypeId: (data.pricingItemId as string) || (data.serviceTypeId as string) || null,
+            price: typeof data.price === "number" ? data.price : null,
+            priceApplied: typeof data.priceApplied === "number" ? data.priceApplied : (data.finalPrice as number) ?? null,
+            finalPrice: typeof data.priceApplied === "number" ? data.priceApplied : (data.finalPrice as number) ?? null,
             startAt: data.startAt,
             endAt: data.endAt,
-            durationMin: data.durationMin || null,
-            status: data.status || "confirmed",
-            dateISO: data.dateISO || data.date,
-            date: data.date || data.dateISO,
+            durationMin: typeof data.durationMin === "number" ? data.durationMin : undefined,
+            status: (data.status as string) ?? "booked",
+            dateISO: (data.dateISO as string) || (data.date as string),
+            date: (data.date as string) || (data.dateISO as string),
           });
         });
 

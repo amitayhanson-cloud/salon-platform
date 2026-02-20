@@ -123,7 +123,7 @@ export async function checkWorkerConflicts(params: CheckWorkerConflictsParams): 
         startAt: d.startAt,
         endAt: d.endAt,
         dateISO: (d.dateISO ?? d.date ?? "") as string,
-        status: (d.status as string) ?? "confirmed",
+        status: (d.status as string) ?? "booked",
       };
     });
   return findWorkerConflictFromBookings(bookings, workerId, dayISO, startAt, endAt, [...exclude]);

@@ -109,12 +109,20 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
       meta: { reminder_sent_immediately_due_to_last_minute_booking: true },
     });
 
+    const statusBefore = (data.status as string) ?? "booked";
+    if (process.env.NODE_ENV === "development") {
+      console.log("[pendingStage] bookingId=" + bookingId + " status before=" + statusBefore + " (not writing status; only setting whatsappStatus=awaiting_confirmation)");
+    }
+    // Do NOT write Firestore `status` here. Pending is UI-derived from whatsappStatus.
     await bookingRef.update({
       whatsappStatus: "awaiting_confirmation",
       reminder24hSentAt: Timestamp.now(),
       confirmationRequestedAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     });
+    if (process.env.NODE_ENV === "development") {
+      console.log("[pendingStage] bookingId=" + bookingId + " status after=unchanged (still " + statusBefore + ")");
+    }
 
     console.log("[onBookingCreated] reminder_sent_immediately_due_to_last_minute_booking: true", {
       siteId,

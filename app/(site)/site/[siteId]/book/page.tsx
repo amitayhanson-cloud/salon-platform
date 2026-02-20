@@ -713,7 +713,7 @@ export default function BookingPage() {
         id: docSnap.id,
         workerId: (data.workerId as string) || null,
         time: timeVal,
-        status: (data.status as string) || "confirmed",
+        status: (data.status as string) || "booked",
         durationMin: typeof durationMin === "number" ? durationMin : 60,
         date: dateLabel,
         dateISO: (data.dateISO ?? data.date ?? dateLabel) as string,
@@ -745,7 +745,7 @@ export default function BookingPage() {
     const qByDate = query(
       bookingsCollection(siteId),
       where("date", "==", dateStr),
-      where("status", "in", ["confirmed", "active"])
+      where("status", "in", ["confirmed", "active", "booked"])
     );
     const unsubDate = onSnapshot(
       qByDate,
@@ -767,7 +767,7 @@ export default function BookingPage() {
     const qByDateISO = query(
       bookingsCollection(siteId),
       where("dateISO", "==", dateStr),
-      where("status", "in", ["confirmed", "active"])
+      where("status", "in", ["confirmed", "active", "booked"])
     );
     const unsubDateISO = onSnapshot(
       qByDateISO,

@@ -8,9 +8,10 @@ import {
   deleteDoc,
   query,
   orderBy,
-  onSnapshot,
+  limit,
 } from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
+import { onSnapshotDebug } from "@/lib/firestoreListeners";
 import {
   workersCollection,
   workerDoc,
@@ -342,12 +343,13 @@ export default function WorkersPage() {
 
     let workersQuery;
     try {
-      workersQuery = query(workersCollection(siteId), orderBy("createdAt", "asc"));
+      workersQuery = query(workersCollection(siteId), orderBy("createdAt", "asc"), limit(100));
     } catch (e) {
-      workersQuery = workersCollection(siteId);
+      workersQuery = query(workersCollection(siteId), limit(100));
     }
 
-    const workersUnsubscribe = onSnapshot(
+    const workersUnsubscribe = onSnapshotDebug(
+      "workers-list",
       workersQuery,
       (snapshot) => {
         const items = snapshot.docs.map((d) => {

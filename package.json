@@ -11,7 +11,12 @@
     "test:e2e": "playwright test",
     "demo:israel-time": "vitest run --run lib/datetime/formatIsraelTime.test.ts",
     "verify": "npm run lint && npm run build",
-    "generate-favicon": "png-to-ico public/favicon.png > public/favicon.ico"
+    "generate-favicon": "png-to-ico public/favicon.png > public/favicon.ico",
+    "list-archive-duplicates": "tsx scripts/list-archive-duplicates.ts",
+    "dedupe-client-archived-bookings": "tsx scripts/dedupe-client-archived-bookings.ts",
+    "dev-reset-bookings": "tsx scripts/dev-reset-bookings.ts",
+    "dev-reset-site": "tsx scripts/dev-reset-site.ts",
+    "fix-bad-booking-statuses": "tsx scripts/fix-bad-booking-statuses.ts"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.3.2",
@@ -43,6 +48,7 @@
     "eslint-config-next": "16.1.1",
     "png-to-ico": "^3.0.1",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5",
     "vitest": "^4.0.18"
   }

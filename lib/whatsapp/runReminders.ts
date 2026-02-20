@@ -5,6 +5,7 @@
 
 import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
+import { assertNoAwaitingConfirmationWithConfirmed } from "@/lib/bookingStatusForWrite";
 import { sendWhatsApp, normalizeE164 } from "@/lib/whatsapp";
 import { getReminderWindow } from "@/lib/whatsapp/reminderWindow";
 import { buildReminderMessage } from "@/lib/whatsapp/messages";
@@ -145,18 +146,31 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
       });
 
       const { bookingIds, groupKey: gk } = await getRelatedBookingIds(siteId, doc.id);
+      const statusBefore = (data.status as string) ?? "booked";
+      if (process.env.NODE_ENV === "development") {
+        console.log("[pendingStage] bookingId=" + doc.id + " status before=" + statusBefore + " (not writing status; keeping " + statusBefore + "; only setting whatsappStatus=awaiting_confirmation)");
+      }
+      // Do NOT write Firestore `status` here. Pending is UI-derived from whatsappStatus.
+      // Only confirm button (or markBookingConfirmed) may set status to "confirmed".
       const payload = {
         whatsappStatus: "awaiting_confirmation" as const,
         confirmationRequestedAt: Timestamp.now(),
         reminder24hSentAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       };
+      assertNoAwaitingConfirmationWithConfirmed(
+        { status: (payload as Record<string, unknown>).status, whatsappStatus: payload.whatsappStatus },
+        "runReminders"
+      );
       const batch = db.batch();
       for (const id of bookingIds) {
         batch.update(db.collection("sites").doc(siteId).collection("bookings").doc(id), payload);
       }
       await batch.commit();
       if (gk) sentGroupKeys.add(gk);
+      if (process.env.NODE_ENV === "development") {
+        console.log("[pendingStage] bookingId=" + doc.id + " status after=unchanged (still " + statusBefore + ")");
+      }
 
       console.log("[whatsapp-reminders] status_propagated", {
         bookingId: doc.id,

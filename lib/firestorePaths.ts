@@ -58,6 +58,21 @@ export function clientDoc(siteId: string, clientId: string) {
   return doc(db, "sites", siteId, "clients", clientId);
 }
 
+/**
+ * Option A: One archived doc per (client, serviceTypeId) for history.
+ * Path: sites/{siteId}/clients/{clientId}/archivedServiceTypes/{serviceTypeId}
+ * Uniqueness is by serviceTypeId only (ignores worker/date).
+ */
+export function clientArchivedServiceTypesCollection(siteId: string, clientId: string) {
+  if (!db) throw new Error("Firestore db not initialized");
+  return collection(db, "sites", siteId, "clients", clientId, "archivedServiceTypes");
+}
+
+export function clientArchivedServiceTypeDoc(siteId: string, clientId: string, serviceTypeIdOrFallback: string) {
+  if (!db) throw new Error("Firestore db not initialized");
+  return doc(db, "sites", siteId, "clients", clientId, "archivedServiceTypes", serviceTypeIdOrFallback);
+}
+
 // DEPRECATED: Personal pricing is now stored as a field on the client document
 // sites/{siteId}/clients/{clientId}.personalPricing[serviceTypeId]
 // These functions are kept for backward compatibility but should not be used

@@ -1,4 +1,10 @@
-// lib/firebaseAdmin.ts
+/**
+ * lib/firebaseAdmin.ts
+ * Single Firebase Admin SDK entry point for the app.
+ * - Initializes only when admin.apps.length === 0; reuses existing app otherwise (safe for Next.js hot reload).
+ * - Supports FIREBASE_SERVICE_ACCOUNT_JSON and FIREBASE_SERVICE_ACCOUNT_PATH.
+ * - Export: adminApp, adminDb, getAdmin(), getAdminDb(), getAdminAuth(), getAdminProjectId().
+ */
 import admin from "firebase-admin";
 import fs from "fs";
 import path from "path";
@@ -48,10 +54,11 @@ function parseServiceAccountFromEnv(): any | null {
 }
 
 /**
- * Build service account from separate env vars (fallback method)
+ * Build service account from separate env vars (fallback method).
+ * FIREBASE_PROJECT_ID should match NEXT_PUBLIC_FIREBASE_PROJECT_ID (same project as client).
  */
 function buildServiceAccountFromSplitEnv(): any | null {
-  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const projectId = process.env.FIREBASE_PROJECT_ID?.trim() ?? process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.trim();
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
 
@@ -75,56 +82,67 @@ function buildServiceAccountFromSplitEnv(): any | null {
 }
 
 /**
- * Load service account from path in FIREBASE_SERVICE_ACCOUNT_PATH (DEVELOPMENT ONLY).
- * No hardcoded paths — must point to your project (e.g. Caleno), not old salon-platform.
+ * Load service account from path in FIREBASE_SERVICE_ACCOUNT_PATH.
+ * Path is resolved relative to process.cwd() (project root).
+ * In production/Vercel we skip file and use JSON env instead.
  */
 function loadServiceAccountFromFile(): any | null {
-  if (isProduction || isVercel) return null;
   const pathEnv = process.env.FIREBASE_SERVICE_ACCOUNT_PATH?.trim();
   if (!pathEnv) return null;
-  const filePath = path.isAbsolute(pathEnv) ? pathEnv : path.join(process.cwd(), pathEnv);
-  if (!fs.existsSync(filePath)) return null;
+  const filePath = path.isAbsolute(pathEnv) ? pathEnv : path.resolve(process.cwd(), pathEnv);
+  if (!fs.existsSync(filePath)) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[firebaseAdmin] FIREBASE_SERVICE_ACCOUNT_PATH file not found:", filePath);
+    }
+    return null;
+  }
+  if (isProduction || isVercel) {
+    return null;
+  }
   try {
     const raw = fs.readFileSync(filePath, "utf8");
     const obj = JSON.parse(raw);
     if (obj?.private_key && typeof obj.private_key === "string") {
       obj.private_key = obj.private_key.replace(/\\n/g, "\n");
     }
-    console.log("[firebaseAdmin] Loaded credentials from FIREBASE_SERVICE_ACCOUNT_PATH (development only), project_id:", obj?.project_id ?? "unknown");
     return obj;
   } catch {
-    console.warn("[firebaseAdmin] FIREBASE_SERVICE_ACCOUNT_PATH file failed to read/parse");
+    console.warn("[firebaseAdmin] FIREBASE_SERVICE_ACCOUNT_PATH file failed to read/parse:", filePath);
     return null;
   }
 }
 
+export type AdminCredentialType = "cert/path" | "cert/json" | "cert/split" | "applicationDefault";
+
 /**
- * Get service account credentials
- * Priority:
- * 1. FIREBASE_SERVICE_ACCOUNT_JSON (preferred for production)
- * 2. Split env vars (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY)
- * 3. Local JSON file (development only, never in production/Vercel)
+ * Get service account credentials and which source was used.
+ * Priority (forced when env is set):
+ * 1. FIREBASE_SERVICE_ACCOUNT_PATH — read file from project root (dev only; prod uses JSON)
+ * 2. FIREBASE_SERVICE_ACCOUNT_JSON — parsed JSON string
+ * 3. Split env vars (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY)
+ * 4. applicationDefault (with warning)
  */
-function getServiceAccount(): any {
-  // Try env var first (required for production/Vercel)
-  const fromEnv = parseServiceAccountFromEnv();
-  if (fromEnv) {
-    return fromEnv;
+function getServiceAccountAndType(): { account: any; credentialType: AdminCredentialType } {
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH?.trim()) {
+    const fromFile = loadServiceAccountFromFile();
+    if (fromFile) {
+      return { account: fromFile, credentialType: "cert/path" };
+    }
   }
 
-  // Try split env vars
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim()) {
+    const fromEnv = parseServiceAccountFromEnv();
+    if (fromEnv) {
+      return { account: fromEnv, credentialType: "cert/json" };
+    }
+  }
+
   const fromSplit = buildServiceAccountFromSplitEnv();
   if (fromSplit) {
-    return fromSplit;
+    return { account: fromSplit, credentialType: "cert/split" };
   }
 
-  // Try local file (development only)
-  const fromFile = loadServiceAccountFromFile();
-  if (fromFile) {
-    return fromFile;
-  }
-
-  return null;
+  return { account: null, credentialType: "applicationDefault" };
 }
 
 // Lazy initialization - only initialize when getAdmin() is first called
@@ -154,7 +172,7 @@ export function getAdmin(): typeof admin {
     throw _initializationError;
   }
 
-  // Check if already initialized by another call
+  // Reuse existing app if already initialized (required for Next.js hot reload and multiple route handlers)
   if (admin.apps.length > 0) {
     _admin = admin;
     const app = admin.app();
@@ -162,21 +180,37 @@ export function getAdmin(): typeof admin {
     return _admin;
   }
 
-  // Get service account credentials
-  const serviceAccount = getServiceAccount();
+  const { account: serviceAccount, credentialType } = getServiceAccountAndType();
 
-  if (!serviceAccount) {
-    const error = new Error(
-      isProduction || isVercel
-        ? "Missing FIREBASE_SERVICE_ACCOUNT_JSON environment variable. Required for production builds."
-        : "No Firebase credentials found. Set FIREBASE_SERVICE_ACCOUNT_JSON or split env vars (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY), or FIREBASE_SERVICE_ACCOUNT_PATH to a Caleno/your-project JSON file (development only)."
+  if (credentialType === "applicationDefault") {
+    if (isProduction || isVercel) {
+      const error = new Error(
+        "Missing Firebase credentials in production. Set FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_SERVICE_ACCOUNT_PATH."
+      );
+      _initializationError = error;
+      throw error;
+    }
+    console.warn(
+      "\n⚠️ [firebaseAdmin] BIG WARNING: Using Application Default Credentials (ADC). No FIREBASE_SERVICE_ACCOUNT_PATH or FIREBASE_SERVICE_ACCOUNT_JSON set. Set one of them in .env.local to use the correct project.\n"
     );
-    _initializationError = error;
-    throw error;
+    console.log("🔥 ADMIN CREDENTIAL TYPE: applicationDefault");
+    try {
+      const storageBucket = process.env.FIREBASE_STORAGE_BUCKET?.trim();
+      const initOptions: { credential: admin.credential.Credential; storageBucket?: string } = {
+        credential: admin.credential.applicationDefault(),
+      };
+      if (storageBucket) initOptions.storageBucket = storageBucket;
+      admin.initializeApp(initOptions);
+      _admin = admin;
+      _adminProjectId = process.env.GOOGLE_CLOUD_PROJECT ?? process.env.GCLOUD_PROJECT ?? null;
+      return _admin;
+    } catch (error: any) {
+      _initializationError = error;
+      throw error;
+    }
   }
 
-  // Validate required fields
-  if (!serviceAccount.private_key || !serviceAccount.client_email || !serviceAccount.project_id) {
+  if (!serviceAccount?.private_key || !serviceAccount?.client_email || !serviceAccount?.project_id) {
     const error = new Error(
       "Invalid Firebase service account. Missing required fields: private_key, client_email, or project_id"
     );
@@ -184,38 +218,67 @@ export function getAdmin(): typeof admin {
     throw error;
   }
 
+  const adminProjectId = String(serviceAccount.project_id).trim();
+  const isDev = process.env.NODE_ENV === "development";
+
+  console.log("🔥 ADMIN CREDENTIAL TYPE:", credentialType);
+  console.log("🔥 ADMIN CREDENTIAL EMAIL:", serviceAccount.client_email);
+
+  if (isDev) {
+    const clientProjectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.trim();
+    console.log("🔥 ADMIN FIREBASE PROJECT:", adminProjectId);
+    if (clientProjectId) {
+      console.log("🔥 CLIENT FIREBASE PROJECT (expected):", clientProjectId);
+      if (adminProjectId !== clientProjectId) {
+        const error = new Error(
+          "Firebase project mismatch between client and admin. " +
+            "Ensure your service account (FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_SERVICE_ACCOUNT_PATH) belongs to the same project as NEXT_PUBLIC_FIREBASE_PROJECT_ID."
+        );
+        _initializationError = error;
+        throw error;
+      }
+    }
+  }
+
   try {
-    // Storage is optional (we use Cloudinary for uploads). Only set storageBucket when env is present.
     const storageBucket = process.env.FIREBASE_STORAGE_BUCKET?.trim();
     const initOptions: { credential: admin.credential.Credential; storageBucket?: string } = {
       credential: admin.credential.cert(serviceAccount),
     };
-    if (storageBucket) {
-      initOptions.storageBucket = storageBucket;
-      if (process.env.NODE_ENV === "development") {
-        console.log("[firebaseAdmin] Storage bucket (server):", storageBucket);
-      }
-    }
+    if (storageBucket) initOptions.storageBucket = storageBucket;
     admin.initializeApp(initOptions);
-    _adminProjectId = serviceAccount.project_id ?? null;
-    if (process.env.NODE_ENV === "development") {
-      console.log("[firebaseAdmin] projectId (server):", _adminProjectId ?? "unknown");
-    }
+    _adminProjectId = adminProjectId;
     _admin = admin;
     return _admin;
   } catch (error: any) {
-    // Cache the error to avoid repeated initialization attempts
-    const initError = new Error(
-      `Failed to initialize Firebase Admin: ${error.message || "Unknown error"}. Check your FIREBASE_SERVICE_ACCOUNT_JSON format.`
+    _initializationError = new Error(
+      `Failed to initialize Firebase Admin: ${error.message || "Unknown error"}. Check your service account file or JSON.`
     );
-    _initializationError = initError;
-    throw initError;
+    throw _initializationError;
   }
 }
 
 export function getAdminDb() {
   return getAdmin().firestore();
 }
+
+/** Single Firestore instance; use this or getAdminDb() so Admin is initialized once and reused everywhere. */
+export const adminDb = new Proxy({} as ReturnType<typeof getAdminDb>, {
+  get(_, prop) {
+    const db = getAdminDb();
+    const v = (db as any)[prop];
+    return typeof v === "function" ? v.bind(db) : v;
+  },
+});
+
+/** Single Admin app instance; use getAdmin() or this so Admin is initialized once and reused everywhere. */
+export const adminApp = new Proxy({} as ReturnType<typeof admin.app>, {
+  get(_, prop) {
+    const app = getAdmin();
+    const v = (app as any)[prop];
+    return typeof v === "function" ? v.bind(app) : v;
+  },
+});
 
 // Export admin auth instance (lazy initialization)
 export function getAdminAuth() {

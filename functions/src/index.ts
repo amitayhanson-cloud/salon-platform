@@ -14,6 +14,66 @@ const db = admin.firestore();
 const BATCH_SIZE = 400;
 const TZ = "Asia/Jerusalem";
 
+/** Service type key from doc (serviceTypeId preferred, else serviceType, else unknown). */
+function getServiceTypeKey(d: admin.firestore.DocumentData): string {
+  const v = (d.serviceTypeId as string) ?? (d.serviceType as string);
+  return v != null && String(v).trim() !== "" ? String(v).trim() : "unknown";
+}
+
+/**
+ * Deterministic archive doc id. clientKey = clientId ?? customerPhone ?? "unknown".
+ * If no serviceTypeId: docId = clientKey__unknown__bookingId (do not delete others).
+ */
+function getDeterministicArchiveDocId(
+  clientId: string | null | undefined,
+  customerPhone: string | null | undefined,
+  serviceTypeId: string | null | undefined,
+  bookingId: string
+): { docId: string; shouldDeleteOthers: boolean } {
+  const clientKey =
+    (clientId != null && String(clientId).trim() !== "" ? String(clientId).trim() : null) ??
+    (customerPhone != null && String(customerPhone).trim() !== "" ? String(customerPhone).trim() : null) ??
+    "unknown";
+  const serviceTypeKey =
+    serviceTypeId != null && String(serviceTypeId).trim() !== ""
+      ? String(serviceTypeId).trim()
+      : null;
+  if (serviceTypeKey) {
+    return { docId: `${clientKey}__${serviceTypeKey}`, shouldDeleteOthers: true };
+  }
+  return { docId: `${clientKey}__unknown__${bookingId}`, shouldDeleteOthers: false };
+}
+
+/**
+ * Return archived booking IDs for same (clientId, serviceType) to delete before writing new archive.
+ */
+async function getArchivedIdsToReplace(
+  siteId: string,
+  clientId: string | null | undefined,
+  serviceTypeId: string | null | undefined,
+  excludeIds: string[]
+): Promise<string[]> {
+  const clientIdTrimmed =
+    clientId != null && String(clientId).trim() !== "" ? String(clientId).trim() : null;
+  const serviceTypeKey =
+    serviceTypeId != null && String(serviceTypeId).trim() !== ""
+      ? String(serviceTypeId).trim()
+      : null;
+  if (!clientIdTrimmed || !serviceTypeKey) return [];
+  const excludeSet = new Set(excludeIds);
+  const col = db.collection("sites").doc(siteId).collection("bookings");
+  const snapshot = await col.where("isArchived", "==", true).where("clientId", "==", clientIdTrimmed).get();
+  const toDelete: string[] = [];
+  for (const doc of snapshot.docs) {
+    if (excludeSet.has(doc.id)) continue;
+    if (getServiceTypeKey(doc.data()) === serviceTypeKey) toDelete.push(doc.id);
+  }
+  if (toDelete.length > 0 && process.env.GCLOUD_PROJECT) {
+    console.log("[archiveReplace] expired cleanup replace", { siteId, clientId: clientIdTrimmed, serviceTypeKey, toDeleteCount: toDelete.length });
+  }
+  return toDelete;
+}
+
 /** Max related bookings per group (same as lib/whatsapp/relatedBookings). Used only for expiry cleanup. */
 const MAX_RELATED_BOOKINGS = 20;
 
@@ -235,35 +295,85 @@ export const expiredBookingsCleanup = functions.pubsub
           const statusAtArchive = (d.status != null && String(d.status).trim()) ? String(d.status).trim() : "booked";
           console.log("ARCHIVE PAYLOAD", { bookingId: doc.id, status: d.status, statusAtArchive });
           const dateStr = (d.date as string) ?? (d.dateISO as string) ?? "";
+          const clientId = (d.clientId as string) ?? null;
+          const customerPhone = ((d.customerPhone as string) ?? (d.phone as string) ?? "").trim() || "";
+          const serviceTypeId = (d.serviceTypeId as string) ?? (d.serviceType as string) ?? null;
+          const idsToReplace = await getArchivedIdsToReplace(siteId, clientId, serviceTypeId, [doc.id, ...otherIds]);
+          const { docId: deterministicId, shouldDeleteOthers } = getDeterministicArchiveDocId(clientId, customerPhone, serviceTypeId, doc.id);
           const minimal: Record<string, unknown> = {
             date: dateStr,
             serviceName: (d.serviceName as string) ?? "",
             serviceType: (d.serviceType as string) ?? null,
+            serviceTypeId: (d.serviceTypeId as string) ?? null,
             workerId: (d.workerId as string) ?? null,
             workerName: (d.workerName as string) ?? null,
-            customerPhone: (d.customerPhone as string) ?? (d.phone as string) ?? "",
+            customerPhone,
             customerName: (d.customerName as string) ?? (d.name as string) ?? "",
+            clientId,
             ...archivePayload,
             statusAtArchive,
           };
-          batch.set(doc.ref, minimal);
-          batchCount++;
-          deleted++;
+
+          const clientKey = (clientId != null && String(clientId).trim() !== "") ? String(clientId).trim() : customerPhone || "unknown";
+          const allToDelete = new Set<string>([doc.id, ...idsToReplace]);
+          const archiveWrites: { clientKey: string; docId: string; minimal: Record<string, unknown> }[] = [];
+          archiveWrites.push({ clientKey, docId: deterministicId, minimal });
           processedInRun.add(doc.id);
+          deleted++;
 
           if (otherIds.length > 0) {
             const refs = otherIds.map((id) => bookingsRef.doc(id));
             const snaps = await db.getAll(...refs);
             for (const s of snaps) {
               if (!s.exists || (s.data() as { isArchived?: boolean })?.isArchived === true) continue;
-              const sd = s.data() as { status?: string };
+              const sd = s.data() as admin.firestore.DocumentData;
               const memberStatusAtArchive = (sd?.status != null && String(sd.status).trim()) ? String(sd.status).trim() : "booked";
               console.log("ARCHIVE PAYLOAD", { bookingId: s.id, status: sd?.status, statusAtArchive: memberStatusAtArchive });
-              batch.update(s.ref, { ...archivePayload, statusAtArchive: memberStatusAtArchive });
-              batchCount++;
+              const mClientId = (sd.clientId as string) ?? null;
+              const mPhone = ((sd.customerPhone as string) ?? (sd.phone as string) ?? "").trim() || "";
+              const mServiceTypeId = (sd.serviceTypeId as string) ?? (sd.serviceType as string) ?? null;
+              const mIdsToReplace = await getArchivedIdsToReplace(siteId, mClientId, mServiceTypeId, [s.id]);
+              const { docId: mDocId } = getDeterministicArchiveDocId(mClientId, mPhone, mServiceTypeId, s.id);
+              const mClientKey = (mClientId != null && String(mClientId).trim() !== "") ? String(mClientId).trim() : mPhone || "unknown";
+              const mMinimal: Record<string, unknown> = {
+                date: (sd.date as string) ?? (sd.dateISO as string) ?? "",
+                serviceName: (sd.serviceName as string) ?? "",
+                serviceType: (sd.serviceType as string) ?? null,
+                serviceTypeId: (sd.serviceTypeId as string) ?? null,
+                workerId: (sd.workerId as string) ?? null,
+                workerName: (sd.workerName as string) ?? null,
+                customerPhone: mPhone,
+                customerName: (sd.customerName as string) ?? (sd.name as string) ?? "",
+                clientId: mClientId,
+                ...archivePayload,
+                statusAtArchive: memberStatusAtArchive,
+              };
+              allToDelete.add(s.id);
+              mIdsToReplace.forEach((id) => allToDelete.add(id));
+              archiveWrites.push({ clientKey: mClientKey, docId: mDocId, minimal: mMinimal });
               deleted++;
               processedInRun.add(s.id);
             }
+          }
+
+          const opCount = allToDelete.size + archiveWrites.length;
+          if (batchCount > 0 && batchCount + opCount > FIRESTORE_BATCH_LIMIT) {
+            await batch.commit();
+            batch = db.batch();
+            batchCount = 0;
+          }
+          for (const id of allToDelete) {
+            batch.delete(bookingsRef.doc(id));
+            batchCount++;
+          }
+          const clientsRef = db.collection("sites").doc(siteId).collection("clients");
+          for (const { clientKey: ck, docId: dId, minimal: min } of archiveWrites) {
+            const archiveRef = clientsRef.doc(ck).collection("archivedServiceTypes").doc(dId);
+            batch.set(archiveRef, min, { merge: false });
+            batchCount++;
+          }
+          if (process.env.GCLOUD_PROJECT) {
+            console.log("[archiveBookingByServiceTypeUnique] expired", { siteId, clientId, serviceTypeId, deletedLegacyCount: allToDelete.size, wroteDocPath: `sites/${siteId}/clients/${clientKey}/archivedServiceTypes/${deterministicId}` });
           }
 
           if (dateStr) {

@@ -1,6 +1,8 @@
-import { addDoc, getDocs, getDoc, setDoc, query, where, orderBy, serverTimestamp, Timestamp, updateDoc } from "firebase/firestore";
+import { addDoc, getDocs, getDoc, setDoc, query, where, orderBy, serverTimestamp, Timestamp, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "./firebaseClient";
 import { bookingsCollection, bookingDoc } from "./firestorePaths";
+import { deriveBookingStatusForWrite } from "./bookingStatusForWrite";
+import { archiveBookingUniqueByServiceTypeClient } from "./archiveReplace";
 import { getOrCreateClient } from "./firestoreClients";
 import { computePhases } from "./bookingPhasesTiming";
 import { getPersonalPricing } from "./firestorePersonalPricing";
@@ -8,6 +10,7 @@ import { resolveServicePrice } from "./pricingUtils";
 import { validateChainAssignments, type WorkersForValidation } from "./multiServiceChain";
 import { workerCanDoService } from "./workerServiceCompatibility";
 import type { MultiBookingSelectionPayload } from "@/types/multiBookingCombo";
+import { isFollowUpBooking } from "./normalizeBooking";
 
 /** Removes keys with value undefined so Firestore never receives undefined. Preserves Timestamp and FieldValue. */
 function cleanUndefined<T>(value: T): T {
@@ -215,7 +218,7 @@ export async function saveBooking(
       timeHHmm: timeStr,
       date: dateStr,
       time: timeStr,
-      status: "confirmed",
+      status: deriveBookingStatusForWrite({ status: "booked" }, "create"),
       phase: 1,
       note: booking.note ?? null,
       serviceColor: serviceColor ?? booking.serviceColor ?? null,
@@ -225,8 +228,14 @@ export async function saveBooking(
       updatedAt: serverTimestamp(),
       ...(hasFollowUp && { waitMinutes: waitMin }),
     };
+    if (process.env.NODE_ENV === "development") {
+      console.log("[createBooking] writing booking status: booked");
+    }
     const payloadA = cleanUndefined(bookingA) as Record<string, unknown>;
     const refA = await addDoc(bookingsRef, payloadA);
+    if (process.env.NODE_ENV === "development") {
+      console.log("[createBooking] bookingId", refA.id, "status: booked");
+    }
     const bookingAId = refA.id;
     if (process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
       console.log("TRACE_BOOKING_SAVED", JSON.stringify({ siteId, bookingGroupId: null, documentId: refA.id, workerId: primaryWorkerId, serviceId: booking.pricingItemId ?? null, serviceName: booking.serviceName, phase: 1 }));
@@ -268,7 +277,7 @@ export async function saveBooking(
         timeHHmm: phase2TimeStr,
         date: phase2DateStr,
         time: phase2TimeStr,
-        status: "confirmed",
+        status: deriveBookingStatusForWrite({ status: "booked" }, "create"),
         phase: 2,
         parentBookingId: bookingAId,
         note: booking.note ?? null,
@@ -504,7 +513,7 @@ export async function saveMultiServiceBooking(
       timeHHmm: timeStr,
       date: dateStr,
       time: timeStr,
-      status: "confirmed",
+      status: deriveBookingStatusForWrite({ status: "booked" }, "create"),
       phase: item.phase,
       serviceOrder: item.serviceOrder,
       note: client.note ?? null,
@@ -538,7 +547,13 @@ export async function saveMultiServiceBooking(
         payload.appliedAutoSteps = multiPayload.appliedAutoSteps;
       }
     }
+    if (process.env.NODE_ENV === "development") {
+      console.log("[createBooking] writing booking (multi-service chain) status: booked");
+    }
     const ref = await addDoc(bookingsRef, cleanUndefined(payload) as Record<string, unknown>);
+    if (process.env.NODE_ENV === "development") {
+      console.log("[createBooking] bookingId", ref.id, "status: booked");
+    }
     if (!firstBookingId) firstBookingId = ref.id;
     if (item.phase === 1) lastPhase1DocId = ref.id;
 
@@ -579,7 +594,7 @@ export async function isSlotTaken(
       where("date", "==", date),
       where("time", "==", time),
       where("workerId", "==", workerId),
-      where("status", "in", ["active", "confirmed"])
+      where("status", "in", ["active", "confirmed", "booked"])
     );
     const snapshot = await getDocs(q);
     return !snapshot.empty;
@@ -603,8 +618,11 @@ export async function cancelBooking(
   }
 
   try {
+    if (process.env.NODE_ENV === "development") {
+      console.log("[statusUpdate] booking", bookingId, "to: cancelled", "reason: cancelBooking");
+    }
     await updateDoc(bookingDoc(siteId, bookingId), {
-      status: "cancelled",
+      status: deriveBookingStatusForWrite({ status: "cancelled" }, "cancel"),
       cancelledAt: serverTimestamp(),
       cancelledBy: cancelledBy || "admin",
       cancellationReason: cancellationReason || null,
@@ -637,31 +655,47 @@ export async function archiveBooking(
     if (!snap.exists()) {
       throw new Error("Booking not found");
     }
-    const d = snap.data();
-    const statusAtArchive = (d.status != null && String(d.status).trim()) ? String(d.status).trim() : "booked";
-    if (process.env.NODE_ENV !== "production") {
-      console.log("ARCHIVE PAYLOAD", { bookingId, status: d.status, statusAtArchive });
+    const d = snap.data() as Record<string, unknown>;
+    if (isFollowUpBooking(d)) {
+      await deleteDoc(ref);
+      if (process.env.NODE_ENV === "development") {
+        console.log("[archiveBooking] Skipping archive for follow-up booking", bookingId);
+      }
+      return;
     }
+    const originalStatus = d.status != null && String(d.status).trim() !== "" ? String(d.status).trim() : null;
+    console.log("[archive] bookingId", bookingId, "statusAtArchive", d.status ?? originalStatus);
+    if (originalStatus == null) {
+      console.warn("[archiveBooking] Archiving booking without status", bookingId);
+    }
+    const statusAtArchive = originalStatus ?? "booked";
     const dateStr = (d.date as string) ?? (d.dateISO as string) ?? "";
     const customerPhone = (d.customerPhone as string) ?? (d.phone as string) ?? "";
+    const clientId = (d.clientId as string) ?? null;
+    const serviceTypeId = (d.serviceTypeId as string) ?? (d.serviceType as string) ?? null;
     const minimal: Record<string, unknown> = {
       date: dateStr,
       serviceName: (d.serviceName as string) ?? "",
       serviceType: (d.serviceType as string) ?? null,
       serviceId: (d.serviceId as string) ?? null,
+      serviceTypeId: (d.serviceTypeId as string) ?? null,
       workerId: (d.workerId as string) ?? null,
       workerName: (d.workerName as string) ?? null,
       customerPhone,
       customerName: (d.customerName as string) ?? (d.name as string) ?? "",
-      clientId: (d.clientId as string) ?? null,
+      clientId,
       bookingGroupId: (d.bookingGroupId as string) ?? (d.visitGroupId as string) ?? null,
       isArchived: true,
       archivedAt: serverTimestamp(),
       archivedReason: reason,
       statusAtArchive,
     };
-    await setDoc(ref, cleanUndefined(minimal));
-    console.log("[archiveBooking] archived and trimmed booking", { siteId, bookingId, reason });
+    await archiveBookingUniqueByServiceTypeClient(siteId, bookingId, {
+      clientId,
+      customerPhone,
+      serviceTypeId,
+      minimal: cleanUndefined(minimal) as Record<string, unknown>,
+    });
   } catch (e) {
     console.error("Failed to archive booking in Firestore", e);
     throw e;

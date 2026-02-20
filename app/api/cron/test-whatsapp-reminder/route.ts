@@ -151,6 +151,10 @@ export async function POST(request: NextRequest) {
         siteId,
         bookingRef: `sites/${siteId}/bookings/${bookingId}`,
       });
+      const statusBefore = (data.status as string) ?? "booked";
+      if (process.env.NODE_ENV === "development") {
+        console.log("[pendingStage] bookingId=" + bookingId + " status before=" + statusBefore + " (test endpoint; not writing status)");
+      }
       await ref.update({
         whatsappStatus: "awaiting_confirmation",
         confirmationRequestedAt: Timestamp.now(),

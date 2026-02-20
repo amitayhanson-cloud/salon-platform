@@ -39,7 +39,7 @@ function normalize(docSnap: any): BookingDTO {
     customerName: data.customerName || data.clientName || data.name || "",
     customerPhone: data.customerPhone || data.phone || "",
     startAtMillis: startAt ? startAt.getTime() : undefined,
-    status: data.status || "confirmed",
+    status: data.status || "booked",
   };
 }
 

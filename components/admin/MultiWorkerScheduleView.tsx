@@ -154,7 +154,7 @@ export function bookingToBlock(
     serviceName: displayName,
     notes: notes && String(notes).trim() ? String(notes).trim() : null,
     color: booking.serviceColor ?? undefined,
-    status: booking.status ?? "confirmed",
+    status: booking.status ?? "booked",
     isSecondary: phase === 2,
   };
 

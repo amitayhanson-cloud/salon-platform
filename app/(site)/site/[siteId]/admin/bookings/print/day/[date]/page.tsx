@@ -5,8 +5,9 @@ export const dynamic = "force-dynamic";
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { getDoc } from "firebase/firestore";
-import { query, where, orderBy, onSnapshot } from "firebase/firestore";
+import { query, where, orderBy, limit } from "firebase/firestore";
 import { bookingsCollection, workerDoc, workersCollection } from "@/lib/firestorePaths";
+import { onSnapshotDebug } from "@/lib/firestoreListeners";
 import { clientDocRef } from "@/lib/firestoreClientRefs";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
 import { subscribeBookingSettings } from "@/lib/firestoreBookingSettings";
@@ -98,8 +99,8 @@ export default function PrintDayPage() {
       setWorkersLoaded(false);
       return;
     }
-    const q = query(workersCollection(siteId), orderBy("name", "asc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const q = query(workersCollection(siteId), orderBy("name", "asc"), limit(100));
+    const unsubscribe = onSnapshotDebug("print-workers", q, (snapshot) => {
       setWorkers(
         snapshot.docs.map((d) => {
           const data = d.data();
@@ -111,14 +112,15 @@ export default function PrintDayPage() {
     return () => unsubscribe();
   }, [siteId, validAllWorkers]);
 
-  // Subscribe to bookings for the day
+  // Subscribe to bookings for the day (bounded)
   useEffect(() => {
     if (!siteId || !dateKey) return;
     const q = query(
       bookingsCollection(siteId),
-      where("date", "==", dateKey)
+      where("date", "==", dateKey),
+      limit(200)
     );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribe = onSnapshotDebug("print-bookings", q, (snapshot) => {
       const normalized = snapshot.docs.map((d) =>
         normalizeBooking(d as { id: string; data: () => Record<string, unknown> })
       );

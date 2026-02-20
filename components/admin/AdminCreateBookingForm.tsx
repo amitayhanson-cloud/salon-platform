@@ -628,7 +628,7 @@ export default function AdminCreateBookingForm({
           phase2: phase2Payload,
           note: null,
           notes: notes.trim() || null,
-          status: "confirmed" as const,
+          status: "booked" as const,
           price: null,
         };
         if (recurringEnabled && occurrences.length > 0) {

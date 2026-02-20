@@ -9,9 +9,10 @@ import {
   query,
   orderBy,
   where,
-  onSnapshot,
+  limit,
 } from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
+import { onSnapshotDebug } from "@/lib/firestoreListeners";
 import {
   bookingsCollection,
   workersCollection,
@@ -337,14 +338,15 @@ export default function DaySchedulePage() {
 
     setWorkersLoading(true);
     const workersQuery = query(workersCollection(siteId), orderBy("name", "asc"));
-    const unsubscribe = onSnapshot(
+    const unsubscribe = onSnapshotDebug(
+      "day-workers",
       workersQuery,
       (snapshot) => {
         const items = snapshot.docs.map((d) => {
           const data = d.data();
           return {
             id: d.id,
-            name: data.name || "",
+            name: (data.name as string) || "",
             services: (data.services as string[] | undefined) || [],
             availability: (data.availability as { day: string; open: string | null; close: string | null; breaks?: { start: string; end: string }[] }[] | undefined) || [],
             active: data.active !== false,
@@ -403,19 +405,25 @@ export default function DaySchedulePage() {
       setLoading(false);
     }
 
-    // Query by "date" (with orderBy if index exists)
+    // Query by "date" (with orderBy if index exists). Bounded to one day + limit.
     let bookingsQuery;
     try {
       bookingsQuery = query(
         bookingsCollection(siteId),
         where("date", "==", dateKey),
-        orderBy("time", "asc")
+        orderBy("time", "asc"),
+        limit(200)
       );
     } catch (e) {
-      bookingsQuery = query(bookingsCollection(siteId), where("date", "==", dateKey));
+      bookingsQuery = query(
+        bookingsCollection(siteId),
+        where("date", "==", dateKey),
+        limit(200)
+      );
     }
 
-    const unsubscribeDate = onSnapshot(
+    const unsubscribeDate = onSnapshotDebug(
+      "day-bookings-date",
       bookingsQuery,
       (snapshot) => {
         refByDate.current = snapshot.docs as DocSnap[];
@@ -424,8 +432,13 @@ export default function DaySchedulePage() {
       (err) => {
         console.error("[DaySchedule] Failed to load bookings (date)", err);
         if (err.message?.includes("index") || err.message?.includes("orderBy")) {
-          const fallbackQuery = query(bookingsCollection(siteId), where("date", "==", dateKey));
-          const fallbackUnsubscribe = onSnapshot(
+          const fallbackQuery = query(
+            bookingsCollection(siteId),
+            where("date", "==", dateKey),
+            limit(200)
+          );
+          const fallbackUnsubscribe = onSnapshotDebug(
+            "day-bookings-date-fallback",
             fallbackQuery,
             (snapshot) => {
               refByDate.current = snapshot.docs as DocSnap[];
@@ -446,12 +459,14 @@ export default function DaySchedulePage() {
       }
     );
 
-    // Query by "dateISO" so we match the same docs the conflict check uses
+    // Query by "dateISO" so we match the same docs the conflict check uses. Bounded.
     const queryDateISO = query(
       bookingsCollection(siteId),
-      where("dateISO", "==", dateKey)
+      where("dateISO", "==", dateKey),
+      limit(200)
     );
-    const unsubscribeDateISO = onSnapshot(
+    const unsubscribeDateISO = onSnapshotDebug(
+      "day-bookings-dateISO",
       queryDateISO,
       (snapshot) => {
         refByDateISO.current = snapshot.docs as DocSnap[];
@@ -469,7 +484,7 @@ export default function DaySchedulePage() {
       fallbackUnsubRef.current?.();
       fallbackUnsubRef.current = null;
     };
-  }, [siteId, dateKey, selectedWorkerId]);
+  }, [siteId, dateKey]); // Worker filter is client-side; do not re-subscribe when selectedWorkerId changes
 
   // Update URL when worker filter changes
   useEffect(() => {
@@ -587,18 +602,35 @@ export default function DaySchedulePage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setDeleteError(data.error === "forbidden" ? "אין הרשאה" : data.error || "שגיאה במחיקה");
+        const raw = data.error || "שגיאה במחיקה";
+        const errMsg =
+          raw === "forbidden"
+            ? "אין הרשאה"
+            : typeof raw === "string" && (raw.includes("RESOURCE_EXHAUSTED") || raw.includes("quota") || raw.includes("exhausted"))
+              ? "עומס על המערכת. נסה שוב בעוד רגע."
+              : raw;
+        setDeleteError(errMsg);
+        setToastMessage(errMsg);
+        setToastError(true);
+        setTimeout(() => setToastMessage(null), 4000);
         return;
       }
       setCancelModalBookingId(null);
       setSelectedBooking(null);
       setDeleteSuccess(true);
       setTimeout(() => setDeleteSuccess(false), 500);
+      setToastMessage("התור בוטל");
+      setToastError(false);
+      setTimeout(() => setToastMessage(null), 3000);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setDeleteError(msg);
+      setToastMessage(msg);
+      setToastError(true);
+      setTimeout(() => setToastMessage(null), 4000);
     } finally {
       setDeleting(false);
+      setCancelModalBookingId(null);
     }
   };
 
@@ -695,7 +727,7 @@ export default function DaySchedulePage() {
       customerPhone: b1.customerPhone ?? b1.phone ?? "",
       note: b1.note ?? null,
       notes: (b1 as { notes?: string }).notes ?? b1.note ?? null,
-      status: b1.status ?? "confirmed",
+      status: b1.status ?? "booked",
       price: (b1 as { price?: number }).price ?? null,
       phase1: {
         serviceName: b1.serviceName ?? "",

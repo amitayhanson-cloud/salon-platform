@@ -9,13 +9,13 @@ import {
   query,
   orderBy,
   where,
-  onSnapshot,
+  limit,
   updateDoc,
   deleteDoc,
   serverTimestamp,
-  limit,
 } from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
+import { onSnapshotDebug } from "@/lib/firestoreListeners";
 import {
   bookingsCollection,
   workersCollection,
@@ -142,6 +142,9 @@ export default function CancelledBookingsPage() {
     workerNameMapRef.current = workerNameMap;
   }, [workerNameMap]);
 
+  // When day scope hits index error we create a fallback listener; must clean it up on unmount
+  const cancelledDayFallbackUnsubRef = useRef<(() => void) | null>(null);
+
   // Load site config
   useEffect(() => {
     if (!siteId) return;
@@ -164,12 +167,13 @@ export default function CancelledBookingsPage() {
     if (!siteId || !db) return;
 
     const workersQuery = query(workersCollection(siteId), orderBy("name", "asc"));
-    const unsubscribe = onSnapshot(
+    const unsubscribe = onSnapshotDebug(
+      "cancelled-workers",
       workersQuery,
       (snapshot) => {
         const items = snapshot.docs.map((d) => ({
           id: d.id,
-          name: d.data().name || "",
+          name: (d.data().name as string) || "",
         }));
         setWorkers(items);
       },
@@ -227,17 +231,24 @@ export default function CancelledBookingsPage() {
     setError(null);
 
     if (scope === "day") {
+      cancelledDayFallbackUnsubRef.current = null;
       let dayQuery;
       try {
         dayQuery = query(
           bookingsCollection(siteId),
           where("date", "==", dateKey),
-          orderBy("time", "asc")
+          orderBy("time", "asc"),
+          limit(200)
         );
       } catch {
-        dayQuery = query(bookingsCollection(siteId), where("date", "==", dateKey));
+        dayQuery = query(
+          bookingsCollection(siteId),
+          where("date", "==", dateKey),
+          limit(200)
+        );
       }
-      const unsubscribe = onSnapshot(
+      const unsubscribe = onSnapshotDebug(
+        "cancelled-day",
         dayQuery,
         (snapshot) => {
           const items = snapshot.docs
@@ -252,8 +263,13 @@ export default function CancelledBookingsPage() {
         (err) => {
           console.error("[ArchiveBookings] day cancelled failed", err);
           if (err.message?.includes("index") || err.message?.includes("orderBy")) {
-            const fallback = query(bookingsCollection(siteId), where("date", "==", dateKey));
-            const unsub = onSnapshot(
+            const fallback = query(
+              bookingsCollection(siteId),
+              where("date", "==", dateKey),
+              limit(200)
+            );
+            const unsub = onSnapshotDebug(
+              "cancelled-day-fallback",
               fallback,
               (snap) => {
                 const items = snap.docs
@@ -271,14 +287,19 @@ export default function CancelledBookingsPage() {
                 setLoading(false);
               }
             );
-            return () => unsub();
+            cancelledDayFallbackUnsubRef.current = unsub;
+          } else {
+            setError(err.message || "שגיאה בטעינת התורים");
+            setBookingsLoading(false);
+            setLoading(false);
           }
-          setError(err.message || "שגיאה בטעינת התורים");
-          setBookingsLoading(false);
-          setLoading(false);
         }
       );
-      return () => unsubscribe();
+      return () => {
+        unsubscribe();
+        cancelledDayFallbackUnsubRef.current?.();
+        cancelledDayFallbackUnsubRef.current = null;
+      };
     }
 
     const allQuery = query(
@@ -288,7 +309,8 @@ export default function CancelledBookingsPage() {
       orderBy("date", "desc"),
       limit(100)
     );
-    const unsubscribe = onSnapshot(
+    const unsubscribe = onSnapshotDebug(
+      "cancelled-all",
       allQuery,
       (snapshot) => {
         const items = snapshot.docs

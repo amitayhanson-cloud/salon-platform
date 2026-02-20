@@ -66,6 +66,15 @@ export interface NormalizedBooking {
   [key: string]: unknown;
 }
 
+/**
+ * True if this booking is a follow-up (phase 2) of a main booking.
+ * Follow-ups have parentBookingId set; they should be deleted without archiving to archivedServiceTypes.
+ */
+export function isFollowUpBooking(data: Record<string, unknown>): boolean {
+  const v = data.parentBookingId;
+  return v != null && String(v).trim() !== "";
+}
+
 type FirestoreDoc = { id: string; data: () => Record<string, unknown> };
 
 function toDateSafe(val: unknown): Date | null {
@@ -201,7 +210,7 @@ export function normalizeBooking(doc: FirestoreDoc): NormalizedBooking {
     start: startDate,
     end: endDate,
     workerId,
-    status: (d.status as string) ?? "confirmed",
+    status: (d.statusAtArchive as string) ?? (d.status as string) ?? "unknown",
     durationMin,
     phases,
     primaryWorkerId: d.primaryWorkerId ?? d.workerId ?? null,
@@ -229,6 +238,15 @@ export function normalizeBooking(doc: FirestoreDoc): NormalizedBooking {
     statusAtArchive: (d.statusAtArchive as string | undefined) ?? undefined,
     whatsappStatus: (d.whatsappStatus as string) ?? "booked",
   } as NormalizedBooking;
+}
+
+/**
+ * When reading an archived doc: if statusAtArchive is missing (legacy), derive display status in-memory.
+ * Does not write to DB. Use for backward compatibility when displaying archived bookings.
+ */
+export function getStatusAtArchiveForDisplay(data: { statusAtArchive?: string | null; status?: string | null }): string {
+  const s = data.statusAtArchive ?? data.status;
+  return s != null && String(s).trim() !== "" ? String(s).trim() : "unknown";
 }
 
 /**

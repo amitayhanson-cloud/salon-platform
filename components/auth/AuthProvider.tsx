@@ -13,6 +13,7 @@ import {
 } from "firebase/auth";
 import { getUserDocument, createUserDocument } from "@/lib/firestoreUsers";
 import { normalizeFirebaseError, logFirebaseError } from "@/lib/firebaseErrors";
+import { getActiveListenerCount } from "@/lib/firestoreListeners";
 import type { User } from "@/types/user";
 
 function isFirestorePermissionError(err: unknown): boolean {
@@ -123,12 +124,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (typeof window !== "undefined") {
       const isValid = isFirebaseConfigValid();
       setConfigValid(isValid);
-      
+
       if (!isValid) {
         setLoading(false);
         setAuthReady(true);
         return;
       }
+    }
+  }, []);
+
+  // Expose Firestore listener debug getter on window in development (console: window.__getActiveListenerCount?.())
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production" && typeof window !== "undefined") {
+      (window as unknown as { __getActiveListenerCount?: () => number }).__getActiveListenerCount =
+        () => getActiveListenerCount();
     }
   }, []);
 
