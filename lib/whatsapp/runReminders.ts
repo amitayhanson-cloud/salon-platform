@@ -159,7 +159,7 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
         updatedAt: Timestamp.now(),
       };
       assertNoAwaitingConfirmationWithConfirmed(
-        { status: (payload as Record<string, unknown>).status, whatsappStatus: payload.whatsappStatus },
+        { status: undefined, whatsappStatus: payload.whatsappStatus },
         "runReminders"
       );
       const batch = db.batch();

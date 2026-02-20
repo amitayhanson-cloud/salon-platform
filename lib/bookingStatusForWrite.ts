@@ -62,7 +62,7 @@ export function deriveBookingStatusForWrite(
  * whatsappStatus === "awaiting_confirmation" and status === "confirmed" (inconsistent).
  */
 export function assertNoAwaitingConfirmationWithConfirmed(
-  payload: { status?: string | null; whatsappStatus?: string | null },
+  payload: { status?: unknown; whatsappStatus?: unknown },
   callsite: string
 ): void {
   if (process.env.NODE_ENV !== "development") return;
