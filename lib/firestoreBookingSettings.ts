@@ -54,11 +54,7 @@ export function subscribeBookingSettings(
 ) {
   if (!db) throw new Error("Firestore db not initialized");
   const ref = bookingSettingsDoc(siteId);
-  // source: "server" ensures we always get fresh data (no stale cache from Firestore persistence)
-  return onSnapshot(
-    ref,
-    { source: "server" },
-    (snap) => {
+  return onSnapshot(ref, (snap) => {
       const data = snap.exists() ? (snap.data() as BookingSettings & { updatedAt?: unknown }) : defaultBookingSettings;
       const merged: BookingSettings = {
         ...defaultBookingSettings,
