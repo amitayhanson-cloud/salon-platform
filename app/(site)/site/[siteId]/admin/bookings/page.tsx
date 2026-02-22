@@ -73,6 +73,8 @@ export default function BookingsAdminPage() {
 
   // Auto-cleanup settings popover
   const [autoCleanupOpen, setAutoCleanupOpen] = useState(false);
+  const [cleanupToast, setCleanupToast] = useState<string | null>(null);
+  const [cleanupToastError, setCleanupToastError] = useState(false);
 
   // Store unsubscribe function reference for manual refresh
   const unsubscribeRef = useRef<(() => void) | null>(null);
@@ -361,6 +363,12 @@ export default function BookingsAdminPage() {
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-2xl font-bold text-slate-900">ניהול הזמנות</h1>
             <div className="flex items-center gap-3">
+              <Link
+                href={`${getAdminBasePathFromSiteId(siteId)}/bookings/day/${toYYYYMMDD(new Date())}/cancelled`}
+                className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm font-medium transition-colors"
+              >
+                תורים שבוטלו
+              </Link>
               <div className="relative">
                 <button
                   type="button"
@@ -385,7 +393,14 @@ export default function BookingsAdminPage() {
                       role="dialog"
                       aria-label="הגדרות מחיקה אוטומטית"
                     >
-                      <AutoCleanupSettings siteId={siteId} />
+                      <AutoCleanupSettings
+                        siteId={siteId}
+                        onToast={(msg, isError) => {
+                          setCleanupToast(msg);
+                          setCleanupToastError(!!isError);
+                          setTimeout(() => setCleanupToast(null), 4000);
+                        }}
+                      />
                     </div>
                   </>
                 )}
@@ -492,6 +507,17 @@ export default function BookingsAdminPage() {
       {deleteError && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[56] px-4 py-2 rounded-lg shadow-lg text-sm font-medium bg-red-600 text-white" dir="rtl">
           {deleteError}
+        </div>
+      )}
+
+      {cleanupToast && (
+        <div
+          className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[56] px-4 py-2 rounded-lg shadow-lg text-sm font-medium ${
+            cleanupToastError ? "bg-red-600 text-white" : "bg-slate-800 text-white"
+          }`}
+          dir="rtl"
+        >
+          {cleanupToast}
         </div>
       )}
     </div>

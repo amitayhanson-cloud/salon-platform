@@ -17,7 +17,11 @@ const serverTimestamp = () => admin.firestore.FieldValue.serverTimestamp();
 /** Hard cap for cascade (heuristic path). */
 export const CASCADE_CAP = 10;
 
-export type CascadeCancelReason = "manual" | "auto" | "customer_cancelled_via_whatsapp";
+export type CascadeCancelReason =
+  | "manual"
+  | "auto"
+  | "customer_cancelled_via_whatsapp"
+  | "admin_delete";
 
 /**
  * Resolve all booking IDs that must be cancelled together when one is cancelled.
@@ -110,7 +114,15 @@ export async function cancelBookingsCascade(
   }
   const db = getAdminDb();
   const isWhatsApp = reason === "customer_cancelled_via_whatsapp";
-  const base: Record<string, unknown> = isWhatsApp
+  const isAdminDelete = reason === "admin_delete";
+  const base: Record<string, unknown> = isAdminDelete
+    ? {
+        isArchived: true,
+        archivedAt: serverTimestamp(),
+        archivedReason: "admin_delete" as const,
+        updatedAt: serverTimestamp(),
+      }
+    : isWhatsApp
     ? {
         whatsappStatus: "cancelled" as const,
         status: "cancelled" as const,
@@ -128,7 +140,7 @@ export async function cancelBookingsCascade(
         updatedAt: serverTimestamp(),
       };
   const payload: Record<string, unknown> = { ...base };
-  if (reason === "manual" && adminOptions) {
+  if (reason === "manual" && adminOptions && !isAdminDelete) {
     if (adminOptions.cancellationReason != null && adminOptions.cancellationReason !== "") {
       payload.cancellationReason = adminOptions.cancellationReason;
     }
@@ -136,6 +148,7 @@ export async function cancelBookingsCascade(
       payload.cancelledBy = adminOptions.cancelledBy;
     }
     payload.cancelledAt = serverTimestamp();
+    payload.archivedReason = "admin_cancel";
   }
 
   const col = db.collection("sites").doc(siteId).collection("bookings");
@@ -177,11 +190,17 @@ export async function cancelBookingsCascade(
       continue;
     }
     const originalStatus = d?.status != null && String(d.status).trim() !== "" ? String(d.status).trim() : null;
-    console.log("[archive] bookingId", id, "statusAtArchive", d?.status ?? originalStatus);
-    if (originalStatus == null) {
-      console.warn("[booking-cascade] Archiving booking without status", id);
+    // For manual (admin cancel) and customer_cancelled_via_whatsapp: MUST use "cancelled"
+    // so archived docs appear on Cancelled Bookings page. For "auto" (expiry): keep original status.
+    const statusAtArchive =
+      reason === "admin_delete" || reason === "auto"
+        ? (originalStatus ?? "booked")
+        : reason === "manual" || reason === "customer_cancelled_via_whatsapp"
+          ? "cancelled"
+          : (originalStatus ?? "booked");
+    if (process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+      console.log("[archive] bookingId", id, "reason", reason, "statusAtArchive", statusAtArchive);
     }
-    const statusAtArchive = originalStatus ?? "booked";
     const clientId = d?.clientId != null && String(d.clientId).trim() !== "" ? String(d.clientId).trim() : null;
     const serviceTypeId =
       d?.serviceTypeId != null && String(d.serviceTypeId).trim() !== ""
@@ -206,6 +225,7 @@ export async function cancelBookingsCascade(
       ...(payload.cancellationReason != null && { cancellationReason: payload.cancellationReason }),
       ...(payload.cancelledBy != null && { cancelledBy: payload.cancelledBy }),
       statusAtArchive,
+      ...(statusAtArchive === "cancelled" && { status: "cancelled" as const }),
     };
     toUpdate.push({ ref, clientId, customerPhone, serviceTypeId, minimal });
   }

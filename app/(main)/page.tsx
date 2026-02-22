@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { useTenantInfo } from "@/hooks/useTenantInfo";
-import { getDashboardUrl } from "@/lib/url";
 import { getLandingContent } from "@/lib/firestoreLanding";
 import { DEFAULT_LANDING_CONTENT } from "@/lib/landingContentDefaults";
 import type { LandingContent } from "@/types/landingContent";
@@ -15,8 +13,6 @@ export default function Home() {
   const [content, setContent] = useState<LandingContent>(DEFAULT_LANDING_CONTENT);
   const [contentLoading, setContentLoading] = useState(true);
   const { user, firebaseUser, loading: authLoading } = useAuth();
-  const { data: tenantInfo } = useTenantInfo();
-
   useEffect(() => {
     getLandingContent()
       .then(setContent)
@@ -30,16 +26,7 @@ export default function Home() {
   const faqItems = content.faq;
 
   const isLoggedIn = !!(firebaseUser && user);
-  const hasSite = !!(tenantInfo?.siteId ?? user?.siteId);
-  const dashboardUrl =
-    tenantInfo?.dashboardUrl ??
-    (user?.siteId
-      ? getDashboardUrl({
-          slug: tenantInfo?.slug ?? user?.primarySlug ?? null,
-          siteId: user.siteId,
-        })
-      : "/dashboard");
-  const dashboardIsFullUrl = dashboardUrl.startsWith("http");
+  const hasSite = !!(user?.siteId);
 
   const renderHeroCtas = () => {
     if (authLoading) {
@@ -55,12 +42,8 @@ export default function Home() {
     const heroSecondaryClass =
       "inline-block w-full sm:w-auto min-h-[44px] flex items-center justify-center px-8 py-3 text-base rounded-xl bg-white border border-[#2EC4C6] text-[#2EC4C6] hover:bg-[#EEF7F9] font-medium transition-colors text-center";
     if (isLoggedIn && hasSite) {
-      return dashboardIsFullUrl ? (
-        <a href={dashboardUrl} className={heroPrimaryClass}>
-          לדשבורד
-        </a>
-      ) : (
-        <Link href={dashboardUrl} className={heroPrimaryClass}>
+      return (
+        <Link href="/dashboard" className={heroPrimaryClass}>
           לדשבורד
         </Link>
       );

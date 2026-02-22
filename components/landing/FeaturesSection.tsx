@@ -9,8 +9,6 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { useTenantInfo } from "@/hooks/useTenantInfo";
-import { getDashboardUrl } from "@/lib/url";
 
 const FEATURES = [
   {
@@ -67,17 +65,7 @@ const FEATURES = [
 
 export default function FeaturesSection() {
   const { user, firebaseUser } = useAuth();
-  const { data: tenantInfo } = useTenantInfo();
-  const isLoggedInWithSite = !!(tenantInfo?.siteId ?? user?.siteId);
-  const dashboardUrl =
-    tenantInfo?.dashboardUrl ??
-    (user?.siteId
-      ? getDashboardUrl({
-          slug: tenantInfo?.slug ?? user?.primarySlug ?? null,
-          siteId: user.siteId,
-        })
-      : "/dashboard");
-  const dashboardIsFullUrl = dashboardUrl.startsWith("http");
+  const isLoggedInWithSite = !!user?.siteId;
 
   return (
     <section
@@ -127,21 +115,12 @@ export default function FeaturesSection() {
             רוצים לראות איך זה נראה אצלכם בעסק? הקימו אתר והתחילו לקבל הזמנות אונליין.
           </p>
           {isLoggedInWithSite ? (
-            dashboardIsFullUrl ? (
-              <a
-                href={dashboardUrl}
-                className="inline-block min-h-[44px] px-6 py-3 bg-[#2EC4C6] hover:bg-[#22A6A8] text-white font-semibold rounded-xl shadow-sm transition-colors flex items-center justify-center"
-              >
-                כנסו לדשבורד
-              </a>
-            ) : (
-              <Link
-                href={dashboardUrl}
-                className="inline-block min-h-[44px] px-6 py-3 bg-[#2EC4C6] hover:bg-[#22A6A8] text-white font-semibold rounded-xl shadow-sm transition-colors flex items-center justify-center"
-              >
-                כנסו לדשבורד
-              </Link>
-            )
+            <Link
+              href="/dashboard"
+              className="inline-block min-h-[44px] px-6 py-3 bg-[#2EC4C6] hover:bg-[#22A6A8] text-white font-semibold rounded-xl shadow-sm transition-colors flex items-center justify-center"
+            >
+              כנסו לדשבורד
+            </Link>
           ) : (
             <Link
               href="/signup"

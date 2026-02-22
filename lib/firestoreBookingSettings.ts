@@ -1,7 +1,34 @@
 import { db } from "@/lib/firebaseClient";
-import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, setDoc, onSnapshot, serverTimestamp } from "firebase/firestore";
 import type { BookingSettings } from "@/types/bookingSettings";
 import { defaultBookingSettings } from "@/types/bookingSettings";
+
+/** Deep-merge days so all keys "0"-"6" exist; Firestore/partial writes must not drop keys. */
+function mergeDays(
+  fromFirestore: Record<string, unknown> | undefined
+): Record<"0" | "1" | "2" | "3" | "4" | "5" | "6", { enabled: boolean; start: string; end: string }> {
+  const keys: ("0" | "1" | "2" | "3" | "4" | "5" | "6")[] = ["0", "1", "2", "3", "4", "5", "6"];
+  const result = { ...defaultBookingSettings.days };
+  if (!fromFirestore || typeof fromFirestore !== "object") return result;
+  for (const k of keys) {
+    const src = (fromFirestore[k] ?? fromFirestore[String(Number(k))]) as { enabled?: boolean; start?: string; end?: string; breaks?: { start: string; end: string }[] } | undefined;
+    if (src && typeof src === "object") {
+      result[k] = {
+        enabled: src.enabled ?? false,
+        start: typeof src.start === "string" ? src.start : "09:00",
+        end: typeof src.end === "string" ? src.end : "17:00",
+      };
+      if (src.breaks && Array.isArray(src.breaks) && src.breaks.length > 0) {
+        (result[k] as { breaks?: { start: string; end: string }[] }).breaks = src.breaks
+          .filter((b: unknown): b is { start: string; end: string } =>
+            !!b && typeof b === "object" && typeof (b as { start?: unknown }).start === "string" && typeof (b as { end?: unknown }).end === "string"
+          )
+          .map((b) => ({ start: b.start, end: b.end }));
+      }
+    }
+  }
+  return result;
+}
 import type { SalonBookingState } from "@/types/booking";
 import { sanitizeForFirestore } from "@/lib/sanitizeForFirestore";
 
@@ -26,11 +53,18 @@ export function subscribeBookingSettings(
   onError?: (e: unknown) => void
 ) {
   if (!db) throw new Error("Firestore db not initialized");
+  const ref = bookingSettingsDoc(siteId);
+  // source: "server" ensures we always get fresh data (no stale cache from Firestore persistence)
   return onSnapshot(
-    bookingSettingsDoc(siteId),
+    ref,
+    { source: "server" },
     (snap) => {
-      const data = snap.exists() ? (snap.data() as BookingSettings) : defaultBookingSettings;
-      const merged = { ...defaultBookingSettings, ...data };
+      const data = snap.exists() ? (snap.data() as BookingSettings & { updatedAt?: unknown }) : defaultBookingSettings;
+      const merged: BookingSettings = {
+        ...defaultBookingSettings,
+        ...data,
+        days: mergeDays(data?.days),
+      };
       // Client types live in settings/clients only; do not expose from booking doc
       delete (merged as Record<string, unknown>).clientTypes;
       onData(merged);
@@ -42,11 +76,11 @@ export function subscribeBookingSettings(
 export async function saveBookingSettings(siteId: string, settings: BookingSettings) {
   if (!db) throw new Error("Firestore db not initialized");
   const sanitized = sanitizeForFirestore(settings) as BookingSettings;
+  const ref = bookingSettingsDoc(siteId);
   if (process.env.NODE_ENV !== "production") {
-    console.log("[Admin] saveBookingSettings raw payload:", JSON.stringify(settings, null, 2));
-    console.log("[Admin] saveBookingSettings sanitized payload:", JSON.stringify(sanitized, null, 2));
+    console.log("[Admin] saveBookingSettings path: sites/" + siteId + "/settings/booking", "payload:", JSON.stringify(settings, null, 2));
   }
-  await setDoc(bookingSettingsDoc(siteId), sanitized, { merge: true });
+  await setDoc(ref, { ...sanitized, updatedAt: serverTimestamp() }, { merge: true });
 }
 
 /**
@@ -86,10 +120,10 @@ export function convertSalonBookingStateToBookingSettings(
         enabled: day.open !== null && day.close !== null,
         start: day.open || "09:00",
         end: day.close || "17:00",
+        breaks: day.breaks && day.breaks.length > 0
+          ? day.breaks.map((b) => ({ start: b.start, end: b.end }))
+          : [],
       };
-      if (day.breaks && day.breaks.length > 0) {
-        dayEntry.breaks = day.breaks.map((b) => ({ start: b.start, end: b.end }));
-      }
       days[numericKey] = dayEntry;
     }
   }

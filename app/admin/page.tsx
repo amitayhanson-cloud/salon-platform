@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useRouter } from "next/navigation";
 import { isPlatformAdmin } from "@/lib/platformAdmin";
+import CleanupCard from "@/components/admin/CleanupCard";
 
 interface SiteListItem {
   siteId: string;
@@ -14,10 +15,14 @@ interface SiteListItem {
 }
 
 export default function PlatformAdminPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, firebaseUser, loading: authLoading } = useAuth();
+  const firebaseUserRef = useRef(firebaseUser);
+  firebaseUserRef.current = firebaseUser;
   const router = useRouter();
   const [sites, setSites] = useState<SiteListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState<{ message: string; isError?: boolean } | null>(null);
+  const [selectedSiteId, setSelectedSiteId] = useState<string>("");
 
   useEffect(() => {
     if (authLoading) return;
@@ -25,26 +30,45 @@ export default function PlatformAdminPage() {
       router.push("/login");
       return;
     }
-    if (!isPlatformAdmin(user.email)) {
+    const fbUser = firebaseUserRef.current;
+    if (!isPlatformAdmin(user.email) || !fbUser) {
+      setLoading(false);
       return;
     }
-    if (typeof window === "undefined") return;
 
-    try {
-      const raw = window.localStorage.getItem("siteList");
-      if (raw) {
-        const parsed = JSON.parse(raw) as SiteListItem[];
-        setSites(parsed);
-      } else {
-        setSites([]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await fbUser.getIdToken();
+        const res = await fetch("/api/admin/sites", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (res.ok && Array.isArray(data?.sites)) {
+          setSites(data.sites);
+        } else {
+          setSites([]);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          console.error("Failed to load sites", e);
+          setSites([]);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    } catch (e) {
-      console.error("Failed to load siteList", e);
-      setSites([]);
-    } finally {
-      setLoading(false);
-    }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [user, authLoading, router]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   if (authLoading || !user) {
     return (
@@ -104,6 +128,34 @@ export default function PlatformAdminPage() {
         </div>
         </header>
 
+        {sites.length > 0 && (
+          <div className="mb-8 max-w-xl">
+            <label htmlFor="cleanup-site" className="block text-sm font-semibold text-slate-900 mb-2">
+              ניקוי תורים – בחר אתר
+            </label>
+            <select
+              id="cleanup-site"
+              value={selectedSiteId}
+              onChange={(e) => setSelectedSiteId(e.target.value)}
+              className="mb-3 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="">בחר אתר</option>
+              {sites.map((s) => (
+                <option key={s.siteId} value={s.siteId}>
+                  {s.salonName || s.siteId}
+                </option>
+              ))}
+            </select>
+            {selectedSiteId && (
+              <CleanupCard
+                siteId={selectedSiteId}
+                onToast={(msg, isError) => setToast({ message: msg, isError })}
+                onComplete={() => router.refresh()}
+              />
+            )}
+          </div>
+        )}
+
         {sites.length === 0 ? (
           <p className="text-sm text-slate-600">
             עדיין אין אתרים שנוצרו על ידי משתמשים.
@@ -153,6 +205,17 @@ export default function PlatformAdminPage() {
           </div>
         )}
       </div>
+
+      {toast && (
+        <div
+          role="alert"
+          className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg text-sm ${
+            toast.isError ? "bg-red-600 text-white" : "bg-slate-800 text-white"
+          }`}
+        >
+          {toast.message}
+        </div>
+      )}
     </div>
   );
 }

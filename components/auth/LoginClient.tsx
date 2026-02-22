@@ -5,11 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { clearStaleRedirectStorage } from "@/lib/clearStaleRedirectStorage";
+import { auth } from "@/lib/firebaseClient";
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, loginWithGoogle, user, loading: authLoading } = useAuth();
+  const { login, loginWithGoogle, user, logout, loading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +21,13 @@ function LoginForm() {
     clearStaleRedirectStorage();
   }, []);
 
+  useEffect(() => {
+    if (searchParams?.get("error") === "no_tenant") {
+      setError("אין חשבון אתר משויך. נא לפנות לתמיכה.");
+      router.replace("/login", { scroll: false });
+    }
+  }, [searchParams, router]);
+
   // Redirect if already logged in
   useEffect(() => {
     if (!authLoading && user) {
@@ -27,23 +35,38 @@ function LoginForm() {
     }
   }, [user, authLoading, router]);
 
-  const handleRedirect = (redirectPath: string | undefined) => {
-    // Never use returnTo for admin/site/tenant - always use current user's canonical dashboard.
-    // Redirect to /dashboard so server/API computes URL from users/<uid>.primarySlug and siteId.
-    if (redirectPath && redirectPath !== "/dashboard") {
-      try {
-        if (redirectPath.startsWith("http")) {
-          window.location.href = redirectPath;
-        } else {
-          router.replace(redirectPath);
-        }
-      } catch (redirectErr) {
-        console.error("[LoginForm] Redirect failed:", redirectErr);
+  const handleRedirectAfterLogin = async () => {
+    // Single source of truth: fetch user's tenant URL from API (never localStorage or host).
+    // Hard navigation ensures we land on correct tenant host/subdomain.
+    try {
+      const currentUser = auth?.currentUser ?? null;
+      if (!currentUser) {
         router.replace("/dashboard");
+        return;
       }
-    } else {
-      router.replace("/dashboard");
+      const token = await currentUser.getIdToken(true);
+      const res = await fetch("/api/dashboard-redirect", {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+      const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+      if (res.status === 403 && data.error === "no_tenant") {
+        setError("אין חשבון אתר משויך. נא לפנות לתמיכה.");
+        await logout();
+        return;
+      }
+      if (res.ok && typeof data.url === "string" && data.url) {
+        if (process.env.NODE_ENV === "development") {
+          console.log("[LoginForm] currentHost=%s targetUrl=%s (same-origin=no double login)", typeof window !== "undefined" ? window.location.origin : "ssr", data.url);
+        }
+        window.location.assign(data.url);
+        return;
+      }
+    } catch (e) {
+      console.error("[LoginForm] Redirect fetch failed:", e);
     }
+    router.replace("/dashboard");
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -54,7 +77,7 @@ function LoginForm() {
     try {
       const result = await login(email, password);
       if (result.success) {
-        handleRedirect(result.redirectPath);
+        await handleRedirectAfterLogin();
       } else if (!result.success) {
         setError(result.error || "פרטי ההתחברות אינם נכונים");
       }
@@ -73,7 +96,7 @@ function LoginForm() {
     try {
       const result = await loginWithGoogle();
       if (result.success) {
-        handleRedirect(result.redirectPath);
+        await handleRedirectAfterLogin();
       } else if (!result.success) {
         setError(result.error || "התחברות עם Google נכשלה");
       }

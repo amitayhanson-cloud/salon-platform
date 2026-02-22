@@ -236,6 +236,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setFirebaseUser(null);
         setUser(null);
+        try {
+          const { clearStaleRedirectStorage } = await import("@/lib/clearStaleRedirectStorage");
+          clearStaleRedirectStorage();
+        } catch {
+          // ignore
+        }
       }
       
       if (isMounted) {

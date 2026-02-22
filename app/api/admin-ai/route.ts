@@ -465,6 +465,19 @@ async function createBooking(
       parsedDateISO = parsed;
     }
 
+    // Server guard: reject past-dated bookings
+    const adminDb = getAdminDb();
+    const siteDoc = await adminDb.collection("sites").doc(siteId).get();
+    const siteData = siteDoc.exists ? (siteDoc.data() as { config?: { archiveRetention?: { timezone?: string }; timezone?: string } }) : {};
+    const siteTz = siteData?.config?.archiveRetention?.timezone ?? siteData?.config?.timezone ?? "Asia/Jerusalem";
+    const { isBookingDateInPast } = await import("@/lib/validateBookingDate");
+    if (isBookingDateInPast(siteTz, parsedDateISO)) {
+      return {
+        kind: "text",
+        text: "לא ניתן ליצור תור לתאריך שעבר. נא לבחור תאריך מהיום ואילך.",
+      };
+    }
+
     // Parse time
     const [hours, minutes] = time.split(":").map(Number);
     const [year, month, day] = parsedDateISO.split("-").map(Number);
@@ -497,7 +510,6 @@ async function createBooking(
       updatedAt: Timestamp.now(),
     };
 
-    const adminDb = getAdminDb();
     if (process.env.NODE_ENV === "development") {
       console.log("[createBooking] writing booking (admin-ai) status: booked");
     }

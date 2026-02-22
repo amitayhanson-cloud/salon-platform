@@ -1,7 +1,8 @@
 "use strict";
 /**
  * Firebase Cloud Functions for Caleno
- * - expiredBookingsCleanup: scheduled deletion of expired (past) bookings per site setting
+ * - expiredBookingsCleanup: daily deletion of past bookings (date < today in site TZ)
+ * - runExpiredCleanupForSite: callable for dev/test (admin only)
  * - deleteArchivedBookings: callable to delete cancelled (+ legacy expired) bookings (admin only)
  * - scheduledArchiveCleanup: weekly scheduled deletion per site archiveRetention
  */
@@ -39,264 +40,210 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.scheduledArchiveCleanup = exports.deleteArchivedBookings = exports.expiredBookingsCleanup = void 0;
-const functions = __importStar(require("firebase-functions"));
+exports.scheduledArchiveCleanup = exports.deleteArchivedBookings = exports.runExpiredCleanupForSite = exports.expiredBookingsCleanup = void 0;
+const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 admin.initializeApp();
 const db = admin.firestore();
 const BATCH_SIZE = 400;
 const TZ = "Asia/Jerusalem";
-/** Max related bookings per group (same as lib/whatsapp/relatedBookings). Used only for expiry cleanup. */
-const MAX_RELATED_BOOKINGS = 20;
 /**
- * Expired = booking date/time is in the past.
- * - If endAt exists: expired if endAt < now
- * - Else if startAt exists: expired if startAt < now
- * - Else if date + time: parse in site TZ, expired if that moment < now
- * - Else if date only: expired if date < today (end of day)
+ * Deterministic archive doc id. clientKey = clientId ?? customerPhone ?? "unknown".
+ * If no serviceTypeId: docId = clientKey__unknown__bookingId (do not delete others).
  */
-function isBookingExpired(data, nowMillis, todayYMD) {
-    const endAt = data.endAt;
-    if (endAt?.toMillis)
-        return endAt.toMillis() < nowMillis;
-    const startAt = data.startAt;
-    if (startAt?.toMillis)
-        return startAt.toMillis() < nowMillis;
-    const dateStr = data.date;
-    const timeStr = (data.time ?? data.timeHHmm);
-    if (dateStr && timeStr) {
-        const [h, m] = timeStr.split(":").map(Number);
-        const [y, mo, d] = dateStr.split("-").map(Number);
-        const bookingEnd = new Date(y, (mo ?? 1) - 1, d ?? 1, h ?? 0, m ?? 0, 0, 0);
-        const durationMin = data.durationMin ?? data.durationMinutes ?? 60;
-        bookingEnd.setMinutes(bookingEnd.getMinutes() + durationMin);
-        return bookingEnd.getTime() < nowMillis;
+function getDeterministicArchiveDocId(clientId, customerPhone, serviceTypeId, bookingId) {
+    const clientKey = (clientId != null && String(clientId).trim() !== "" ? String(clientId).trim() : null) ??
+        (customerPhone != null && String(customerPhone).trim() !== "" ? String(customerPhone).trim() : null) ??
+        "unknown";
+    const serviceTypeKey = serviceTypeId != null && String(serviceTypeId).trim() !== ""
+        ? String(serviceTypeId).trim()
+        : null;
+    if (serviceTypeKey) {
+        return { docId: `${clientKey}__${serviceTypeKey}`, shouldDeleteOthers: true };
     }
-    if (dateStr)
-        return dateStr < todayYMD;
-    return false;
+    return { docId: `${clientKey}__unknown__${bookingId}`, shouldDeleteOthers: false };
+}
+/** True if this booking is a follow-up (phase 2); should be deleted without archiving. */
+function isFollowUpBooking(data) {
+    const v = data.parentBookingId;
+    return v != null && String(v).trim() !== "";
 }
 /**
- * Should we run cleanup today for this site? Uses lastExpiredCleanupRunAt to avoid duplicates.
+ * Returns YYYY-MM-DD for "today" in the given timezone.
  */
-function shouldRunToday(setting, now, lastRunAt) {
-    const todayYMD = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
-    const lastRunYMD = lastRunAt ? lastRunAt.slice(0, 10) : null;
-    if (setting === "off")
-        return false;
-    if (setting === "daily")
-        return lastRunYMD !== todayYMD;
-    if (setting === "weekly") {
-        if (now.getDay() !== 0)
-            return false; // Sunday
-        if (!lastRunYMD)
-            return true;
-        const last = new Date(lastRunYMD);
-        return (now.getTime() - last.getTime()) / (24 * 60 * 60 * 1000) >= 7;
+function getTodayYMDInTimezone(tz) {
+    try {
+        return new Date().toLocaleString("en-CA", { timeZone: tz }).slice(0, 10);
     }
-    if (setting === "monthly") {
-        if (now.getDate() !== 1)
-            return false;
-        if (!lastRunYMD)
-            return true;
-        return lastRunYMD.slice(0, 7) !== todayYMD.slice(0, 7);
+    catch {
+        return new Date().toISOString().slice(0, 10);
     }
-    if (setting === "quarterly") {
-        const month = now.getMonth();
-        if (month !== 0 && month !== 3 && month !== 6 && month !== 9)
-            return false;
-        if (now.getDate() !== 1)
-            return false;
-        if (!lastRunYMD)
-            return true;
-        const q = Math.floor(month / 3) + 1;
-        const lastQ = Math.floor(new Date(lastRunYMD).getMonth() / 3) + 1;
-        const lastYear = lastRunYMD.slice(0, 4);
-        const thisYear = todayYMD.slice(0, 4);
-        return lastYear !== thisYear || lastQ !== q;
+}
+const FIRESTORE_BATCH_LIMIT = 500;
+/**
+ * Core cleanup logic: delete bookings with date < todayYMD in site TZ.
+ * Main bookings: archive with statusAtArchive = originalStatus (preserve cancelled for Cancelled page).
+ * Follow-ups: delete only, do not archive.
+ */
+async function runPastBookingsCleanupForSite(siteId, siteTz, dateOverride) {
+    const todayYMD = dateOverride ?? getTodayYMDInTimezone(siteTz);
+    const bookingsRef = db.collection("sites").doc(siteId).collection("bookings");
+    const clientsRef = db.collection("sites").doc(siteId).collection("clients");
+    const archivePayload = {
+        isArchived: true,
+        archivedAt: admin.firestore.FieldValue.serverTimestamp(),
+        archivedReason: "auto",
+    };
+    let archived = 0;
+    let deletedOnly = 0;
+    let minDate = null;
+    let maxDate = null;
+    let errors = 0;
+    let q = bookingsRef
+        .where("date", "<", todayYMD)
+        .orderBy("date", "asc")
+        .orderBy(admin.firestore.FieldPath.documentId())
+        .limit(BATCH_SIZE);
+    let snapshot = await q.get();
+    while (!snapshot.empty) {
+        let batch = db.batch();
+        let batchCount = 0;
+        for (const doc of snapshot.docs) {
+            const d = doc.data();
+            if (d.isArchived === true)
+                continue;
+            const dateStr = d.date ?? d.dateISO ?? "";
+            if (dateStr) {
+                if (minDate == null || dateStr < minDate)
+                    minDate = dateStr;
+                if (maxDate == null || dateStr > maxDate)
+                    maxDate = dateStr;
+            }
+            if (isFollowUpBooking(d)) {
+                batch.delete(bookingsRef.doc(doc.id));
+                batchCount++;
+                deletedOnly++;
+                continue;
+            }
+            const statusAtArchive = (d.status != null && String(d.status).trim())
+                ? String(d.status).trim()
+                : "booked";
+            const clientId = d.clientId ?? null;
+            const customerPhone = (d.customerPhone ?? d.phone ?? "").trim() || "";
+            const serviceTypeId = d.serviceTypeId ?? d.serviceType ?? null;
+            const { docId: deterministicId } = getDeterministicArchiveDocId(clientId, customerPhone, serviceTypeId, doc.id);
+            const clientKey = (clientId != null && String(clientId).trim() !== "")
+                ? String(clientId).trim()
+                : customerPhone || "unknown";
+            const minimal = {
+                date: dateStr,
+                serviceName: d.serviceName ?? "",
+                serviceType: d.serviceType ?? null,
+                serviceTypeId: d.serviceTypeId ?? null,
+                workerId: d.workerId ?? null,
+                workerName: d.workerName ?? null,
+                customerPhone,
+                customerName: d.customerName ?? d.name ?? "",
+                clientId,
+                ...archivePayload,
+                statusAtArchive,
+            };
+            if (batchCount + 2 > FIRESTORE_BATCH_LIMIT) {
+                await batch.commit();
+                batch = db.batch();
+                batchCount = 0;
+            }
+            batch.delete(bookingsRef.doc(doc.id));
+            batch.set(clientsRef.doc(clientKey).collection("archivedServiceTypes").doc(deterministicId), minimal, { merge: false });
+            batchCount += 2;
+            archived++;
+        }
+        if (batchCount > 0) {
+            try {
+                await batch.commit();
+            }
+            catch (e) {
+                errors++;
+                if (process.env.GCLOUD_PROJECT)
+                    console.error("[expiredBookingsCleanup] batch commit error", { siteId, error: e });
+            }
+        }
+        if (snapshot.docs.length < BATCH_SIZE)
+            break;
+        const last = snapshot.docs[snapshot.docs.length - 1];
+        q = bookingsRef
+            .where("date", "<", todayYMD)
+            .orderBy("date", "asc")
+            .orderBy(admin.firestore.FieldPath.documentId())
+            .startAfter(last)
+            .limit(BATCH_SIZE);
+        snapshot = await q.get();
     }
-    return false;
+    return { archived, deletedOnly, minDate, maxDate, errors };
 }
 /**
- * Resolve all booking IDs in the same "booking action" (root + follow-ups).
- * Read-only; uses existing fields only: visitGroupId, bookingGroupId, parentBookingId.
- * Used so expiry cleanup can archive the whole group when any member expires.
- */
-async function resolveBookingGroup(siteId, bookingId) {
-    const ref = db.collection("sites").doc(siteId).collection("bookings").doc(bookingId);
-    const snap = await ref.get();
-    if (!snap.exists) {
-        return { rootId: bookingId, memberIds: [bookingId] };
-    }
-    const data = snap.data();
-    const groupKey = data.visitGroupId?.trim() || data.bookingGroupId?.trim() || null;
-    if (groupKey) {
-        const byVisit = await db
-            .collection("sites")
-            .doc(siteId)
-            .collection("bookings")
-            .where("visitGroupId", "==", groupKey)
-            .limit(MAX_RELATED_BOOKINGS + 1)
-            .get();
-        const byBooking = await db
-            .collection("sites")
-            .doc(siteId)
-            .collection("bookings")
-            .where("bookingGroupId", "==", groupKey)
-            .limit(MAX_RELATED_BOOKINGS + 1)
-            .get();
-        const idSet = new Set();
-        for (const d of byVisit.docs)
-            idSet.add(d.id);
-        for (const d of byBooking.docs)
-            idSet.add(d.id);
-        const ids = Array.from(idSet);
-        if (ids.length === 0)
-            ids.push(bookingId);
-        const memberIds = ids.slice(0, MAX_RELATED_BOOKINGS);
-        return { rootId: memberIds[0] ?? bookingId, memberIds };
-    }
-    const parentId = data.parentBookingId?.trim() || null;
-    const rootId = parentId || bookingId;
-    const out = [rootId];
-    const withParent = await db
-        .collection("sites")
-        .doc(siteId)
-        .collection("bookings")
-        .where("parentBookingId", "==", rootId)
-        .limit(MAX_RELATED_BOOKINGS)
-        .get();
-    for (const d of withParent.docs) {
-        if (d.id !== rootId && !out.includes(d.id))
-            out.push(d.id);
-    }
-    if (!out.includes(bookingId))
-        out.push(bookingId);
-    return { rootId, memberIds: out.slice(0, MAX_RELATED_BOOKINGS) };
-}
-/**
- * Scheduled job: runs daily at 03:00 Asia/Jerusalem. For each site with expiredAutoDelete != "off",
- * if today is a run day, deletes expired (past) bookings. Uses sites/{siteId}/settings/cleanup.
+ * Scheduled job: runs daily at 02:00 Asia/Jerusalem. For each site, deletes all bookings
+ * with date < today (in site timezone). Idempotent: runs at most once per calendar day per site.
  */
 exports.expiredBookingsCleanup = functions.pubsub
-    .schedule("0 3 * * *")
+    .schedule("0 2 * * *")
     .timeZone(TZ)
     .onRun(async () => {
-    const now = new Date();
-    const nowMillis = now.getTime();
-    const todayYMD = now.getFullYear() +
-        "-" +
-        String(now.getMonth() + 1).padStart(2, "0") +
-        "-" +
-        String(now.getDate()).padStart(2, "0");
     const sitesSnap = await db.collection("sites").get();
     for (const siteDoc of sitesSnap.docs) {
         const siteId = siteDoc.id;
+        const siteData = siteDoc.data();
+        const siteTz = siteData.config?.archiveRetention?.timezone ||
+            siteData.config?.timezone ||
+            TZ;
         const cleanupRef = db.collection("sites").doc(siteId).collection("settings").doc("cleanup");
+        const todayYMD = getTodayYMDInTimezone(siteTz);
         const cleanupSnap = await cleanupRef.get();
         const data = cleanupSnap.exists ? cleanupSnap.data() : {};
-        const setting = data.expiredAutoDelete ?? "off";
-        const lastRunAt = data.lastExpiredCleanupRunAt;
-        if (!shouldRunToday(setting, now, lastRunAt))
+        const lastRunYMD = data.lastExpiredCleanupRunAt?.slice(0, 10);
+        if (lastRunYMD === todayYMD)
             continue;
-        const bookingsRef = db.collection("sites").doc(siteId).collection("bookings");
-        let deleted = 0;
-        let minDate = null;
-        let maxDate = null;
-        /** Track IDs already queued for archive in this run so we archive whole group once. */
-        const processedInRun = new Set();
-        let q = bookingsRef
-            .where("date", "<=", todayYMD)
-            .orderBy("date", "asc")
-            .orderBy(admin.firestore.FieldPath.documentId())
-            .limit(BATCH_SIZE);
-        let snapshot = await q.get();
-        const archivePayload = {
-            isArchived: true,
-            archivedAt: admin.firestore.FieldValue.serverTimestamp(),
-            archivedReason: "auto",
-        };
-        const FIRESTORE_BATCH_LIMIT = 500;
-        while (!snapshot.empty) {
-            let batch = db.batch();
-            let batchCount = 0;
-            for (const doc of snapshot.docs) {
-                const d = doc.data();
-                if (d.isArchived === true)
-                    continue; // already archived
-                if (processedInRun.has(doc.id))
-                    continue; // already in this batch from a group
-                if (!isBookingExpired(d, nowMillis, todayYMD))
-                    continue;
-                // Only archive whole group when this booking was still "pending reminder" (no reply); else single doc only
-                const wasAwaitingConfirmation = d.whatsappStatus === "awaiting_confirmation";
-                const { memberIds } = wasAwaitingConfirmation
-                    ? await resolveBookingGroup(siteId, doc.id)
-                    : { memberIds: [doc.id] };
-                const otherIds = memberIds.filter((id) => id !== doc.id);
-                const writesForThisGroup = 1 + otherIds.length;
-                if (batchCount > 0 && batchCount + writesForThisGroup > FIRESTORE_BATCH_LIMIT) {
-                    await batch.commit();
-                    batch = db.batch();
-                    batchCount = 0;
-                }
-                const dateStr = d.date ?? d.dateISO ?? "";
-                const minimal = {
-                    date: dateStr,
-                    serviceName: d.serviceName ?? "",
-                    serviceType: d.serviceType ?? null,
-                    workerId: d.workerId ?? null,
-                    workerName: d.workerName ?? null,
-                    customerPhone: d.customerPhone ?? d.phone ?? "",
-                    customerName: d.customerName ?? d.name ?? "",
-                    ...archivePayload,
-                };
-                batch.set(doc.ref, minimal);
-                batchCount++;
-                deleted++;
-                processedInRun.add(doc.id);
-                if (otherIds.length > 0) {
-                    const refs = otherIds.map((id) => bookingsRef.doc(id));
-                    const snaps = await db.getAll(...refs);
-                    for (const s of snaps) {
-                        if (!s.exists || s.data()?.isArchived === true)
-                            continue;
-                        batch.update(s.ref, archivePayload);
-                        batchCount++;
-                        deleted++;
-                        processedInRun.add(s.id);
-                    }
-                }
-                if (dateStr) {
-                    if (minDate == null || dateStr < minDate)
-                        minDate = dateStr;
-                    if (maxDate == null || dateStr > maxDate)
-                        maxDate = dateStr;
-                }
-            }
-            if (batchCount > 0)
-                await batch.commit();
-            if (snapshot.docs.length < BATCH_SIZE)
-                break;
-            const last = snapshot.docs[snapshot.docs.length - 1];
-            q = bookingsRef
-                .where("date", "<=", todayYMD)
-                .orderBy("date", "asc")
-                .orderBy(admin.firestore.FieldPath.documentId())
-                .startAfter(last)
-                .limit(BATCH_SIZE);
-            snapshot = await q.get();
-        }
+        const result = await runPastBookingsCleanupForSite(siteId, siteTz);
         await cleanupRef.set({ lastExpiredCleanupRunAt: new Date().toISOString(), updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-        console.log("[expiredBookingsCleanup]", {
-            siteId,
-            setting,
-            deleted,
-            minDate: minDate ?? undefined,
-            maxDate: maxDate ?? undefined,
-        });
+        if (process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true" || result.archived > 0 || result.deletedOnly > 0) {
+            console.log("[expiredBookingsCleanup]", {
+                siteId,
+                siteTz,
+                todayYMD,
+                ...result,
+            });
+        }
     }
     return null;
+});
+/**
+ * Callable: run past bookings cleanup for a single site (dev/test). Site owner only.
+ */
+exports.runExpiredCleanupForSite = functions.https.onCall(async (data, context) => {
+    const uid = context.auth?.uid;
+    if (!uid)
+        throw new functions.https.HttpsError("unauthenticated", "חובה להתחבר");
+    const { siteId, dateOverride } = data || {};
+    if (!siteId || typeof siteId !== "string") {
+        throw new functions.https.HttpsError("invalid-argument", "חסר מזהה אתר");
+    }
+    const siteDoc = await db.collection("sites").doc(siteId).get();
+    if (!siteDoc.exists) {
+        throw new functions.https.HttpsError("not-found", "האתר לא נמצא");
+    }
+    const ownerUid = siteDoc.data()?.ownerUid;
+    if (ownerUid !== uid) {
+        throw new functions.https.HttpsError("permission-denied", "אין הרשאה");
+    }
+    const siteData = siteDoc.data();
+    const siteTz = siteData.config?.archiveRetention?.timezone ||
+        siteData.config?.timezone ||
+        TZ;
+    const result = await runPastBookingsCleanupForSite(siteId, siteTz, dateOverride);
+    if (process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
+        console.log("[runExpiredCleanupForSite]", { siteId, dateOverride, ...result });
+    }
+    return result;
 });
 /**
  * Callable: Permanently delete all archived (cancelled + expired) bookings for a site.

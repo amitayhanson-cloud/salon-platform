@@ -8,8 +8,7 @@ export default function AdminHomePage() {
   const userId = useAdminSiteId();
   const { user, loading } = useAuth();
 
-  // Build personalized welcome message
-  const welcomeMessage = user?.name 
+  const welcomeMessage = user?.name
     ? `ברוך שובך – ${user.name}`
     : "ברוך שובך";
 
@@ -37,7 +36,6 @@ export default function AdminHomePage() {
         </div>
       </div>
 
-      {/* AI Floating Widget */}
       {userId && <AIFloatingWidget siteId={userId} />}
     </div>
   );

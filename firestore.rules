@@ -87,6 +87,11 @@ service cloud.firestore {
       allow write: if request.auth != null;
     }
 
+    // Security audit events: server-only (Admin SDK writes; clients cannot read/write)
+    match /securityEvents/{eventId} {
+      allow read, write: if false;
+    }
+
     // Tenants (subdomain slug -> siteId): public read for routing; create only when ownerUid == auth; update/delete only owner; no changing ownerUid/siteId on update.
     match /tenants/{slug} {
       allow read: if true;

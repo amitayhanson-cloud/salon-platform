@@ -49,6 +49,12 @@ import { saveMultiServiceBooking } from "@/lib/booking";
 import { getSiteUrl } from "@/lib/tenant";
 import type { MultiBookingCombo, MultiBookingSelectionPayload } from "@/types/multiBookingCombo";
 import { subscribeMultiBookingCombos, findMatchingCombo } from "@/lib/firestoreMultiBookingCombos";
+import {
+  getBookingScheduleDayKey,
+  getDayConfig,
+  getJsDow,
+  jsDayToWeekdayKey,
+} from "@/lib/scheduleDayMapping";
 
 type TimestampLike = { toDate: () => Date };
 
@@ -228,51 +234,15 @@ export default function BookingPage() {
     return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
   }
 
-  // Helper: Get JavaScript weekday index (0=Sunday, 6=Saturday)
-  function getJsWeekday(date: Date): number {
-    return date.getDay(); // JavaScript: 0=Sunday, 6=Saturday
-  }
+  const siteTimezone = config?.archiveRetention?.timezone;
 
-  // Helper: Convert JavaScript day index (0=Sunday, 6=Saturday) to weekday key for worker availability
-  function getWeekdayKey(dayIndex: number): "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat" {
-    const mapping: Record<number, "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat"> = {
-      0: "sun",
-      1: "mon",
-      2: "tue",
-      3: "wed",
-      4: "thu",
-      5: "fri",
-      6: "sat",
-    };
-    return mapping[dayIndex] || "sun";
-  }
-
-  // Helper: Get weekday key for BookingSettings format ("0"=Sunday, "6"=Saturday)
-  function getBookingWeekdayKey(date: Date): "0" | "1" | "2" | "3" | "4" | "5" | "6" {
-    const dayIndex = getJsWeekday(date);
-    return String(dayIndex) as "0" | "1" | "2" | "3" | "4" | "5" | "6";
-  }
-
-  // Shared helper: Resolve business day config for a date
-  // Returns the day configuration (enabled, start, end) for the given date from BookingSettings
+  // Shared helper: Resolve business day config for a date (single source of truth).
+  // Uses date.getDay() (0=Sun..6=Sat) in LOCAL time to match Admin schedule.days["0"]..["6"].
+  // Calendar dates are built in user local time; do NOT use site timezone here or days will mismatch.
   function resolveBusinessDayConfig(date: Date): { enabled: boolean; start: string; end: string } | null {
-    const dayKey = getBookingWeekdayKey(date);
-    const dayConfig = bookingSettings.days[dayKey];
-    
-    if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
-      console.log(`[Booking] resolveBusinessDayConfig:`, {
-        date: ymdLocal(date),
-        jsDayIndex: getJsWeekday(date),
-        configDayKey: dayKey,
-        dayConfig: dayConfig ? {
-          enabled: dayConfig.enabled,
-          start: dayConfig.start,
-          end: dayConfig.end,
-        } : null,
-      });
-    }
-    
-    return dayConfig || null;
+    const jsDow = date.getDay(); // 0=Sun..6=Sat in LOCAL time
+    const dayConfig = getDayConfig(bookingSettings, jsDow);
+    return dayConfig;
   }
 
   // Shared helper: Resolve worker day config for a date
@@ -285,8 +255,8 @@ export default function BookingPage() {
       return null; // No availability config
     }
 
-    const dayIndex = getJsWeekday(date);
-    const weekdayKey = getWeekdayKey(dayIndex);
+    const dayIndex = getJsDow(date, siteTimezone);
+    const weekdayKey = jsDayToWeekdayKey(dayIndex);
     
     // Find worker's schedule for this day
     const workerDayConfig = worker.availability.find((day) => day.day === weekdayKey);
@@ -571,13 +541,9 @@ export default function BookingPage() {
     return () => unsub();
   }, [siteId]);
 
-  // Load booking settings and workers
+  // Load booking settings and workers (subscribe as soon as siteId is ready so we receive real-time updates when admin changes open days)
   useEffect(() => {
     if (!siteId || !db || typeof window === "undefined") return;
-    if (!config) {
-      setLoading(false);
-      return;
-    }
 
     // Ensure booking settings exist
     ensureBookingSettings(siteId).catch((e) => {
@@ -589,14 +555,17 @@ export default function BookingPage() {
       siteId,
       (settings) => {
         if (process.env.NODE_ENV !== "production") {
-          console.log(`[Booking] Loaded booking settings from Firestore for site ${siteId}:`, {
-            slotMinutes: settings.slotMinutes,
-            days: Object.entries(settings.days).map(([key, day]) => ({
-              dayKey: key,
-              enabled: day.enabled,
-              hours: `${day.start}-${day.end}`,
-            })),
-          });
+          const docPath = `sites/${siteId}/settings/booking`;
+          const updatedAt = (settings as { updatedAt?: { toDate?: () => Date } }).updatedAt;
+          const date = updatedAt?.toDate?.();
+          const updatedAtStr = date instanceof Date ? date.toISOString() : "n/a";
+          const daysSummary = Object.entries(settings.days ?? {}).map(([key, day]) => ({
+            key,
+            jsDay: key,
+            enabled: day?.enabled,
+            hours: `${day?.start ?? "?"}-${day?.end ?? "?"}`,
+          }));
+          console.log(`[Booking] bookingSettings doc=${docPath} updatedAt=${updatedAtStr} rawDays=`, daysSummary);
         }
         setBookingSettings(settings);
         setLoading(false);
@@ -692,7 +661,7 @@ export default function BookingPage() {
       settingsUnsubscribe();
       workersUnsubscribe();
     };
-  }, [siteId, config]);
+  }, [siteId]);
 
   // Load bookings for selected date: query by both "date" and "dateISO" so we match
   // the same set the save/conflict path uses (checkWorkerConflicts queries by dateISO).
@@ -1020,8 +989,8 @@ export default function BookingPage() {
   // Debug: Log worker availability when date is selected (dev only)
   useEffect(() => {
     if (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true" && selectedDate && selectedService) {
-      const dayIndex = selectedDate.getDay();
-      const weekdayKey = getWeekdayKey(dayIndex);
+      const dayIndex = getJsDow(selectedDate, siteTimezone);
+      const weekdayKey = jsDayToWeekdayKey(dayIndex);
       
       console.log(`[Booking] === Worker Availability Check for Date ${ymdLocal(selectedDate)} ===`);
       console.log(`[Booking] Date: ${ymdLocal(selectedDate)}, JS dayIndex: ${dayIndex}, weekdayKey: "${weekdayKey}"`);
@@ -1102,6 +1071,30 @@ export default function BookingPage() {
   const handleSubmit = async () => {
     if (!isStepValid() || selectedServices.length === 0 || !selectedDate || !selectedTime || !db) {
       if (!db) setSubmitError("Firebase לא מאותחל. אנא רענן את הדף.");
+      return;
+    }
+
+    const tz = config?.archiveRetention?.timezone || "Asia/Jerusalem";
+    const todayStr = getTodayInTimeZone(tz);
+    const bookingDateStr = (() => {
+      try {
+        const formatter = new Intl.DateTimeFormat("en-CA", {
+          timeZone: tz,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        });
+        const parts = formatter.formatToParts(selectedDate);
+        const y = parts.find((p) => p.type === "year")?.value ?? "";
+        const m = parts.find((p) => p.type === "month")?.value ?? "";
+        const d = parts.find((p) => p.type === "day")?.value ?? "";
+        return `${y}-${m}-${d}`;
+      } catch {
+        return ymdLocal(selectedDate);
+      }
+    })();
+    if (bookingDateStr < todayStr) {
+      setSubmitError("לא ניתן להזמין תור לתאריך שעבר. אנא בחרו תאריך מהיום ואילך.");
       return;
     }
 
@@ -1338,9 +1331,9 @@ export default function BookingPage() {
     const totalDuration = getChainTotalDuration(chain);
     const candidateTimes = generateTimeSlotsForDate(totalDuration);
     const preferredWorkerId = selectedWorker == null ? null : selectedWorker.id;
-    const dayKey = getBookingWeekdayKey(selectedDate);
+    const dayKey = getBookingScheduleDayKey(selectedDate, siteTimezone);
     const breaksForDay = (bookingSettings.days[dayKey] as { breaks?: { start: string; end: string }[] })?.breaks;
-    const weekdayKey = getWeekdayKey(getJsWeekday(selectedDate));
+    const weekdayKey = jsDayToWeekdayKey(getJsDow(selectedDate, siteTimezone));
     const workerBreaksByWorkerId: Record<string, { start: string; end: string }[] | undefined> = {};
     for (const w of workers) {
       const dayConfig = w.availability?.find((d) => d.day === weekdayKey);
@@ -1531,8 +1524,8 @@ export default function BookingPage() {
     
     if (!workerDayConfig) {
       if (process.env.NODE_ENV !== "production") {
-        const dayIndex = date.getDay();
-        const weekdayKey = getWeekdayKey(dayIndex);
+        const dayIndex = getJsDow(date, siteTimezone);
+        const weekdayKey = jsDayToWeekdayKey(dayIndex);
         console.log(`[Booking] Worker "${worker.name}" (${worker.id}) has no config for ${weekdayKey} (jsDayIndex=${dayIndex}), not available`);
       }
       return { available: false, reason: "no config for day" };
@@ -1542,8 +1535,8 @@ export default function BookingPage() {
     // Worker day is closed if both open and close are null
     if (!workerDayConfig.open || !workerDayConfig.close) {
       if (process.env.NODE_ENV !== "production") {
-        const dayIndex = date.getDay();
-        const weekdayKey = getWeekdayKey(dayIndex);
+        const dayIndex = getJsDow(date, siteTimezone);
+        const weekdayKey = jsDayToWeekdayKey(dayIndex);
         console.log(`[Booking] Worker "${worker.name}" (${worker.id}) not available: day ${weekdayKey} is closed (open=${workerDayConfig.open}, close=${workerDayConfig.close})`);
       }
       return { available: false, reason: "day closed" };
@@ -1582,6 +1575,28 @@ export default function BookingPage() {
   // - If no worker selected: day is available whenever business is open (time step will show "no times" if no workers)
   const isDateAvailable = (date: Date): boolean => {
     if (selectedServices.length === 0) return false;
+
+    // Rank 0: Disable past dates (in site timezone)
+    const tz = siteTimezone || "Asia/Jerusalem";
+    const todayStr = getTodayInTimeZone(tz);
+    const dateStrForTz = (() => {
+      try {
+        const formatter = new Intl.DateTimeFormat("en-CA", {
+          timeZone: tz,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        });
+        const parts = formatter.formatToParts(date);
+        const y = parts.find((p) => p.type === "year")?.value ?? "";
+        const m = parts.find((p) => p.type === "month")?.value ?? "";
+        const d = parts.find((p) => p.type === "day")?.value ?? "";
+        return `${y}-${m}-${d}`;
+      } catch {
+        return ymdLocal(date);
+      }
+    })();
+    if (dateStrForTz < todayStr) return false;
 
     // Rank 1: Business must be open on this date (from admin business open hours)
     const businessDayConfig = resolveBusinessDayConfig(date);
@@ -1638,14 +1653,14 @@ export default function BookingPage() {
 
   // Debug info for step 4 (dev only)
   const debugInfo = (process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true" && selectedDate && selectedService) ? (() => {
-    const dayIndex = getJsWeekday(selectedDate);
-    const dayKey = getBookingWeekdayKey(selectedDate);
+    const dayIndex = getJsDow(selectedDate, siteTimezone);
+    const dayKey = getBookingScheduleDayKey(selectedDate, siteTimezone);
     const businessDayConfig = resolveBusinessDayConfig(selectedDate);
     const serviceDurationMinutes = selectedPricingItem
       ? selectedPricingItem.durationMaxMinutes || selectedPricingItem.durationMinMinutes || 30
       : 30;
     const generatedSlots = generateTimeSlotsForDate(serviceDurationMinutes);
-    const weekdayKey = getWeekdayKey(dayIndex);
+    const weekdayKey = jsDayToWeekdayKey(dayIndex);
     
     // Worker availability debug info
     const workerAvailabilityInfo = eligibleWorkers.map((worker) => {
@@ -2197,7 +2212,7 @@ export default function BookingPage() {
 
               {/* Check for invalid hours */}
               {selectedDate && (() => {
-                const dayKey = getBookingWeekdayKey(selectedDate);
+                const dayKey = getBookingScheduleDayKey(selectedDate, siteTimezone);
                 const dayConfig = bookingSettings.days[dayKey];
                 if (dayConfig && dayConfig.enabled) {
                   const startMin = timeToMinutes(dayConfig.start);

@@ -8,7 +8,6 @@ export const dynamic = "force-dynamic";
 import AdminHeader from "@/components/admin/AdminHeader";
 import { HeroBackground } from "@/components/ui/HeroBackground";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { isOnTenantSubdomainClient, getAdminBasePath, getDashboardUrl } from "@/lib/url";
 
 export default function AdminLayout({
   children,
@@ -24,6 +23,8 @@ export default function AdminLayout({
   const [initializing, setInitializing] = useState(false);
   const [ownershipRepairError, setOwnershipRepairError] = useState<string | null>(null);
   const siteId = params.siteId as string;
+  const [lazyCleanupToast, setLazyCleanupToast] = useState<string | null>(null);
+  const lazyCleanupTriggeredRef = useRef(false);
 
   // Prevent redirect loops
   const redirectAttempted = useRef(false);
@@ -49,7 +50,7 @@ export default function AdminLayout({
       return;
     }
 
-    // Not logged in - redirect to login; returnTo=/dashboard so after login we resolve current user's tenant (not this host's slug)
+    // Not logged in -> redirect to /login on SAME host (preserves origin so auth persists after login)
     if (!user) {
       const loginPath = "/login?returnTo=" + encodeURIComponent("/dashboard");
       
@@ -68,7 +69,7 @@ export default function AdminLayout({
       if (!redirectAttempted.current) {
         redirectAttempted.current = true;
         if (process.env.NODE_ENV === "development") {
-          console.log("[ADMIN GUARD] Not logged in, action=redirect to /login with returnTo", {
+          console.log("[ADMIN GUARD] Not logged in, redirect to /login on same host", {
             pathname,
             targetPath: loginPath,
             authReady,
@@ -215,50 +216,29 @@ export default function AdminLayout({
               console.log(`[ADMIN GUARD] Site ownerUid=${siteOwnerUid}, user.uid=${user.id}`);
             }
 
-            // Get user's own siteId and redirect to their admin (if they have one)
-            const { getUserDocument } = await import("@/lib/firestoreUsers");
-            const userDoc = await getUserDocument(user.id);
-            
-            if (userDoc?.siteId) {
-              const dashboardUrl = getDashboardUrl({
-                slug: userDoc.primarySlug ?? null,
-                siteId: userDoc.siteId,
-              });
-              const isFullUrl = dashboardUrl.startsWith("http");
-              if (!isFullUrl && pathname === dashboardUrl) {
-                if (process.env.NODE_ENV === "development") {
-                  console.log(`[ADMIN GUARD] Already on ${dashboardUrl}, skipping redirect`);
-                }
-                setChecking(false);
-                setAuthorized(false);
-                return;
-              }
-              if (process.env.NODE_ENV === "development") {
-                console.log(`[ADMIN GUARD] Redirecting to user's own site admin`, {
-                  currentPath: pathname,
-                  dashboardUrl,
+            // Redirect to user's correct tenant (API = single source of truth, supports custom domain)
+            try {
+              const token = firebaseUser ? await firebaseUser.getIdToken(true) : null;
+              if (token) {
+                const res = await fetch("/api/dashboard-redirect", {
+                  method: "GET",
+                  headers: { Authorization: `Bearer ${token}` },
+                  cache: "no-store",
                 });
-              }
-              if (isOnTenantSubdomainClient() && userDoc.siteId !== siteId) {
-                if (isFullUrl) {
-                  window.location.href = dashboardUrl;
-                } else {
-                  const rootUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://caleno.co";
-                  window.location.href = `${rootUrl.replace(/\/$/, "")}${dashboardUrl}`;
+                const data = (await res.json().catch(() => ({}))) as { url?: string };
+                if (res.ok && typeof data.url === "string" && data.url) {
+                  if (process.env.NODE_ENV === "development") {
+                    console.log("[ADMIN GUARD] hostTenantId=%s userTenantId=mismatch redirect=%s (tenant isolation)", siteId, data.url);
+                  }
+                  window.location.assign(data.url);
+                  return;
                 }
-                return;
               }
-              if (isFullUrl) {
-                window.location.href = dashboardUrl;
-              } else {
-                router.replace(dashboardUrl);
-              }
-            } else {
-              // User has no site - show 403 error (NOT redirect to builder)
-              // The admin guard should never redirect to /builder
-              setChecking(false);
-              setAuthorized(false); // Will show 403 UI
+            } catch (e) {
+              console.error("[ADMIN GUARD] dashboard-redirect failed:", e);
             }
+            setChecking(false);
+            setAuthorized(false);
           }
           return;
         }
@@ -280,6 +260,36 @@ export default function AdminLayout({
 
     checkAuthorization();
   }, [user, firebaseUser, authLoading, authReady, siteId, router, authorized, pathname]);
+
+  // Lazy daily cleanup: trigger once per session when admin first opens app
+  useEffect(() => {
+    if (!authorized || !siteId || !firebaseUser || lazyCleanupTriggeredRef.current) return;
+    lazyCleanupTriggeredRef.current = true;
+
+    (async () => {
+      try {
+        const token = await firebaseUser.getIdToken();
+        const res = await fetch("/api/admin/ensure-daily-cleanup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ siteId }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ran === true) {
+          setLazyCleanupToast("בוצע ניקוי אוטומטי לתורים שפג תוקפם");
+        }
+      } catch {
+        // Silent – do not block UI or show error for background cleanup
+      }
+    })();
+  }, [authorized, siteId, firebaseUser]);
+
+  // Auto-dismiss lazy cleanup toast
+  useEffect(() => {
+    if (!lazyCleanupToast) return;
+    const t = setTimeout(() => setLazyCleanupToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [lazyCleanupToast]);
 
   // Show loading state
   if (authLoading || checking || initializing) {
@@ -349,6 +359,14 @@ export default function AdminLayout({
   return (
     <div className="min-h-screen relative w-full overflow-x-hidden">
       <HeroBackground />
+      {lazyCleanupToast && (
+        <div
+          role="alert"
+          className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-slate-800 text-white text-sm rounded-lg shadow-lg"
+        >
+          {lazyCleanupToast}
+        </div>
+      )}
       <div className="relative z-10 w-full overflow-x-hidden">
         <AdminHeader />
         {/* Full-width content area: no top padding on day view so calendar sits under header */}

@@ -39,6 +39,7 @@ function getMenuItems(basePath: string): MenuItem[] {
       label: "ניהול אתר",
       items: [
         { label: "הגדרות", href: `${basePath}/settings` },
+        { label: "אבטחה", href: `${basePath}/settings/security` },
         { label: "ייבוא CSV/Excel", href: `${basePath}/settings/import` },
         { label: "שירותים", href: `${basePath}/services` },
         { label: "צבעים", href: `${basePath}/colours` },

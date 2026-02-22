@@ -3,15 +3,13 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { getUserDocument } from "@/lib/firestoreUsers";
-import { getDashboardUrl } from "@/lib/url";
 
 export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { user, authReady } = useAuth();
+  const { user, firebaseUser, authReady } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -24,28 +22,30 @@ export default function AdminLayout({
 
     const redirectToAdmin = async () => {
       try {
-        const userDoc = await getUserDocument(user.id);
-        if (userDoc?.siteId) {
-          const url = getDashboardUrl({
-            slug: userDoc.primarySlug ?? null,
-            siteId: userDoc.siteId,
-          });
-          if (url.startsWith("http")) {
-            window.location.href = url;
-          } else {
-            router.replace(url);
-          }
-        } else {
-          router.replace("/builder");
+        const token = firebaseUser ? await firebaseUser.getIdToken(true) : null;
+        if (!token) {
+          router.replace("/dashboard");
+          return;
         }
+        const res = await fetch("/api/dashboard-redirect", {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        const data = (await res.json().catch(() => ({}))) as { url?: string };
+        if (res.ok && typeof data.url === "string" && data.url) {
+          window.location.assign(data.url);
+          return;
+        }
+        router.replace("/dashboard");
       } catch (error) {
-        console.error("[AdminLayout /me] Error getting user siteId:", error);
-        router.replace("/builder");
+        console.error("[AdminLayout /me] Error redirecting:", error);
+        router.replace("/dashboard");
       }
     };
 
     redirectToAdmin();
-  }, [user, authReady, router]);
+  }, [user, firebaseUser, authReady, router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">

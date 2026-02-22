@@ -1,16 +1,17 @@
 /**
- * POST /api/bookings/archive-cascade
- * Archive (soft-delete) a booking and ALL related bookings in the same multi-part set.
- * Uses resolveRelatedBookingIdsToCascadeCancel (explicit group or heuristic) then cancelBookingsCascade.
+ * POST /api/bookings/delete-booking-group
+ * Delete (archive-as-is) a single booking and its related follow-ups only.
+ * Uses getRelatedBookingIds (visitGroupId / parentBookingId - NO customer heuristic).
+ * Does NOT touch other bookings of the same customer.
  * Same permission as other booking APIs: site owner only.
  */
 
 import { NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
-import {
-  resolveRelatedBookingIdsToCascadeCancel,
-  cancelBookingsCascade,
-} from "@/lib/booking-cascade";
+import { getRelatedBookingIds } from "@/lib/whatsapp/relatedBookings";
+import { cancelBookingsCascade } from "@/lib/booking-cascade";
+
+const MAX_WITHOUT_GROUP = 10;
 
 export async function POST(request: Request) {
   try {
@@ -27,8 +28,6 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const siteId = body?.siteId as string | undefined;
     const bookingId = body?.bookingId as string | undefined;
-    const cancellationReason =
-      typeof body?.cancellationReason === "string" ? body.cancellationReason.trim() || null : null;
 
     if (!siteId || typeof siteId !== "string") {
       return NextResponse.json({ error: "missing siteId" }, { status: 400 });
@@ -47,26 +46,35 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
 
-    const ids = await resolveRelatedBookingIdsToCascadeCancel(siteId, bookingId);
-    const groupSize = ids.length;
-    const adminOptions = {
-      cancellationReason: cancellationReason ?? undefined,
-      cancelledBy: uid,
-    };
+    const { bookingIds: ids, groupKey } = await getRelatedBookingIds(siteId, bookingId);
+
+    if (ids.length > MAX_WITHOUT_GROUP && !groupKey) {
+      return NextResponse.json(
+        { error: "too_many_bookings" },
+        { status: 400 }
+      );
+    }
+
     const { successCount, failCount } = await cancelBookingsCascade(
       siteId,
       ids,
-      "manual",
-      adminOptions
+      "admin_delete"
     );
 
     if (process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
-      console.log("[archive-cascade] cancel", { siteId, bookingId, ids, successCount, failCount, statusAtArchive: "cancelled" });
+      console.log("[delete-booking-group]", {
+        siteId,
+        bookingId,
+        groupKey,
+        ids,
+        deletedCount: successCount,
+        failCount,
+      });
     }
-    console.log("[ADMIN_CANCEL]", { bookingId, groupSize, reason: cancellationReason ?? "(none)" });
+
     return NextResponse.json({ archived: successCount, failed: failCount, ids });
   } catch (e) {
-    console.error("[archive-cascade]", e);
+    console.error("[delete-booking-group]", e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "server_error" },
       { status: 500 }

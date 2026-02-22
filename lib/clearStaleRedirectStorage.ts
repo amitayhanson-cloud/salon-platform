@@ -1,6 +1,7 @@
 /**
  * Keys that might hold a previous user's tenant or redirect target.
  * Clear on login page load and logout so we never reuse another user's slug.
+ * Do NOT rely on these for tenant resolution - always use users/{uid} from Firestore.
  */
 const STALE_KEYS = [
   "returnTo",
@@ -9,6 +10,9 @@ const STALE_KEYS = [
   "tenant",
   "tenantSlug",
   "slug",
+  "siteId",
+  "currentSite",
+  "currentTenant",
 ];
 
 /**

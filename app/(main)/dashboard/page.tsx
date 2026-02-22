@@ -13,7 +13,7 @@ import { routeAfterAuth } from "@/lib/authRedirect";
  * - Logged in → GET /api/dashboard-redirect with Bearer token → redirect to that url
  */
 export default function DashboardPage() {
-  const { user, firebaseUser, authReady, loading } = useAuth();
+  const { user, firebaseUser, authReady, loading, logout } = useAuth();
   const router = useRouter();
   const didRedirect = useRef(false);
 
@@ -35,18 +35,22 @@ export default function DashboardPage() {
           headers: { Authorization: `Bearer ${token}` },
           cache: "no-store",
         });
+        const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
         if (res.status === 401) {
           didRedirect.current = true;
           router.replace("/login");
           return;
         }
-        if (res.ok) {
-          const data = (await res.json()) as { url?: string };
-          if (data?.url) {
-            didRedirect.current = true;
-            window.location.href = data.url;
-            return;
-          }
+        if (res.status === 403 && data.error === "no_tenant") {
+          didRedirect.current = true;
+          await logout();
+          router.replace("/login?error=no_tenant");
+          return;
+        }
+        if (res.ok && data?.url) {
+          didRedirect.current = true;
+          window.location.assign(data.url);
+          return;
         }
       } catch {
         // fallback below
@@ -57,14 +61,14 @@ export default function DashboardPage() {
         : result.path;
       didRedirect.current = true;
       if (url.startsWith("http")) {
-        window.location.href = url;
+        window.location.assign(url);
       } else {
         router.replace(url);
       }
     };
 
     go();
-  }, [authReady, loading, firebaseUser, user, router]);
+  }, [authReady, loading, firebaseUser, user, router, logout]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">

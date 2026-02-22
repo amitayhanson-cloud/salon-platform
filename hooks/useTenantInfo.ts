@@ -41,6 +41,7 @@ export function useTenantInfo(): {
       const token = await firebaseUser.getIdToken();
       const res = await fetch("/api/tenants/me", {
         headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {

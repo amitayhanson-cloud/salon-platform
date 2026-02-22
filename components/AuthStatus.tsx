@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { useTenantInfo } from "@/hooks/useTenantInfo";
-import { getDashboardUrl } from "@/lib/url";
 
 /**
  * Auth-aware block for the marketing header (root domain).
@@ -12,11 +10,13 @@ import { getDashboardUrl } from "@/lib/url";
  * - Authenticated: "מחובר/ת כ- {name}" + "לדשבורד" + "התנתקות" / "החלף משתמש"
  * - Authenticated + minimal: "מחובר/ת כ־…" + לדשבורד + התנתקות (no "החלף משתמש", for logged-in landing)
  * - Anonymous: "התחברות" (Connect) + "הרשמה"
+ *
+ * "לדשבורד" always links to /dashboard - the dashboard page fetches fresh tenant URL from API
+ * and redirects. Never use cached/local tenant for navigation (prevents cross-tenant leakage).
  */
 export function AuthStatus({ minimal = false }: { minimal?: boolean }) {
   const router = useRouter();
   const { user, firebaseUser, loading: authLoading, logout } = useAuth();
-  const { data: tenantInfo, loading: tenantLoading } = useTenantInfo();
 
   const handleLogout = async () => {
     await logout();
@@ -44,21 +44,6 @@ export function AuthStatus({ minimal = false }: { minimal?: boolean }) {
       user.email ||
       firebaseUser.email ||
       "משתמש";
-    const slug = tenantInfo?.slug ?? user.primarySlug ?? null;
-    const dashboardUrl =
-      tenantInfo?.dashboardUrl ??
-      (user.siteId
-        ? getDashboardUrl({ slug, siteId: user.siteId })
-        : "/dashboard");
-
-    const isFullUrl = dashboardUrl.startsWith("http");
-    const goToDashboard = () => {
-      if (isFullUrl) {
-        window.location.href = dashboardUrl;
-      } else {
-        router.push(dashboardUrl);
-      }
-    };
 
     const userControls = (
       <div className="flex items-center gap-3 md:gap-4 flex-wrap">
@@ -66,13 +51,12 @@ export function AuthStatus({ minimal = false }: { minimal?: boolean }) {
           מחובר/ת כ־{displayName}
         </span>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={goToDashboard}
-            className="px-4 py-2 bg-[#2EC4C6] hover:bg-[#22A6A8] text-white rounded-lg text-sm font-medium transition-colors"
+          <Link
+            href="/dashboard"
+            className="px-4 py-2 bg-[#2EC4C6] hover:bg-[#22A6A8] text-white rounded-lg text-sm font-medium transition-colors inline-block"
           >
-            {tenantLoading ? "..." : "לדשבורד"}
-          </button>
+            לדשבורד
+          </Link>
           {!minimal && (
             <button
               type="button"

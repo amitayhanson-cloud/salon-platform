@@ -175,9 +175,8 @@ export default function DaySchedulePage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteSuccess, setDeleteSuccess] = useState(false);
 
-  // Delete all client bookings state
-  const [deleteAllClientConfirmOpen, setDeleteAllClientConfirmOpen] = useState(false);
-  const [deleteAllClientLoading, setDeleteAllClientLoading] = useState(false);
+  // Delete single booking (group) state
+  const [deleteBookingLoading, setDeleteBookingLoading] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastError, setToastError] = useState(false);
   const { firebaseUser } = useAuth();
@@ -634,26 +633,17 @@ export default function DaySchedulePage() {
     }
   };
 
-  const onRequestDeleteAllClient = () => {
-    setDeleteAllClientConfirmOpen(true);
-  };
-
-  const onConfirmDeleteAllClient = async () => {
+  const handleDeleteBooking = async () => {
     if (!selectedBooking || !siteId || !firebaseUser) return;
-    setDeleteAllClientLoading(true);
+    setDeleteBookingLoading(true);
     setToastMessage(null);
     setToastError(false);
     try {
       const token = await firebaseUser.getIdToken();
-      const clientId = (selectedBooking as { clientId?: string | null }).clientId ?? undefined;
-      const res = await fetch("/api/bookings/archive-all-by-client", {
+      const res = await fetch("/api/bookings/delete-booking-group", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          siteId,
-          customerPhone: selectedBooking.customerPhone || selectedBooking.phone,
-          ...(clientId ? { clientId } : {}),
-        }),
+        body: JSON.stringify({ siteId, bookingId: selectedBooking.id }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -661,16 +651,15 @@ export default function DaySchedulePage() {
         setToastError(true);
         return;
       }
-      setToastMessage("כל התורים של הלקוח נמחקו מהיומן");
+      setToastMessage("התור נמחק מהיומן");
       setToastError(false);
-      setDeleteAllClientConfirmOpen(false);
       setSelectedBooking(null);
       setTimeout(() => setToastMessage(null), 3000);
     } catch (e) {
       setToastMessage(e instanceof Error ? e.message : "שגיאה במחיקה");
       setToastError(true);
     } finally {
-      setDeleteAllClientLoading(false);
+      setDeleteBookingLoading(false);
     }
   };
 
@@ -969,12 +958,6 @@ export default function DaySchedulePage() {
                 הוסף תור
               </button>
               <Link
-                href={`${adminBasePath}/bookings/day/${dateKey}/cancelled`}
-                className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm font-medium transition-colors"
-              >
-                תורים שבוטלו
-              </Link>
-              <Link
                 href={`${adminBasePath}/bookings`}
                 className="text-sm text-caleno-700 hover:text-caleno-800"
               >
@@ -1239,41 +1222,12 @@ export default function DaySchedulePage() {
               </button>
               <button
                 type="button"
-                onClick={onRequestDeleteAllClient}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium"
+                onClick={handleDeleteBooking}
+                disabled={deleteBookingLoading}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
               >
                 <Trash2 className="w-4 h-4" />
-                מחק את כל התורים של הלקוח
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete all client bookings confirmation */}
-      {deleteAllClientConfirmOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-[60]" dir="rtl">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-6 text-right">
-            <h3 className="text-lg font-bold text-slate-900">מחיקת כל התורים של הלקוח</h3>
-            <p className="mt-2 text-sm text-slate-600">
-              האם אתה בטוח שברצונך להסיר מהיומן את כל התורים של הלקוח הזה? פעולה זו תמחק/תארכב את כל השירותים והמעקבים שלו מהיומן.
-            </p>
-            <div className="mt-6 flex gap-3 justify-start">
-              <button
-                type="button"
-                onClick={() => setDeleteAllClientConfirmOpen(false)}
-                disabled={deleteAllClientLoading}
-                className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                ביטול
-              </button>
-              <button
-                type="button"
-                onClick={onConfirmDeleteAllClient}
-                disabled={deleteAllClientLoading}
-                className="px-4 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {deleteAllClientLoading ? "מוחק..." : "כן, מחק הכל"}
+                {deleteBookingLoading ? "מוחק..." : "מחק תור"}
               </button>
             </div>
           </div>

@@ -1,45 +1,48 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  subscribeCleanupSettings,
-  saveCleanupSettings,
-  type CleanupSettings,
-  type ExpiredAutoDelete,
-} from "@/lib/firestoreCleanupSettings";
+import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 
 interface AutoCleanupSettingsProps {
   siteId: string;
+  onToast?: (message: string, isError?: boolean) => void;
 }
 
+const isDev = typeof process !== "undefined" && process.env.NODE_ENV === "development";
+
 /**
- * Reusable UI for expired-bookings auto-delete frequency.
- * Subscribes to and saves cleanup settings for the given site.
+ * Shows that automatic cleanup of past bookings runs daily. No frequency selector.
+ * "Run cleanup now" button visible only in development or to admins.
  */
-export default function AutoCleanupSettings({ siteId }: AutoCleanupSettingsProps) {
-  const [cleanupSettings, setCleanupSettings] = useState<CleanupSettings>({ expiredAutoDelete: "off" });
-  const [cleanupSaving, setCleanupSaving] = useState(false);
+export default function AutoCleanupSettings({ siteId, onToast }: AutoCleanupSettingsProps) {
+  const { firebaseUser } = useAuth();
+  const [cleanupLoading, setCleanupLoading] = useState(false);
 
-  useEffect(() => {
-    if (!siteId) return;
-    const unsubscribe = subscribeCleanupSettings(
-      siteId,
-      (s) => setCleanupSettings(s),
-      (e) => console.error("[AutoCleanupSettings] cleanup settings error", e)
-    );
-    return () => unsubscribe();
-  }, [siteId]);
-
-  const onExpiredAutoDeleteChange = async (value: ExpiredAutoDelete) => {
-    if (!siteId) return;
-    setCleanupSaving(true);
+  const handleRunCleanup = async () => {
+    if (!siteId || !firebaseUser || cleanupLoading) return;
+    setCleanupLoading(true);
     try {
-      await saveCleanupSettings(siteId, { expiredAutoDelete: value });
-      setCleanupSettings((prev) => ({ ...prev, expiredAutoDelete: value }));
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch("/api/admin/run-booking-cleanup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ siteId, dryRun: false }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = data.error === "forbidden" ? "אין הרשאה" : data.error || "שגיאה";
+        onToast?.(msg, true);
+        return;
+      }
+      const { scanned, archived, skippedFollowups, errors, dryRun } = data;
+      const msg = dryRun
+        ? `סימולציה: נסרקו ${scanned}, ארכוב ${archived}, follow-ups ${skippedFollowups}`
+        : `נוקה: נסרקו ${scanned}, ארכוב ${archived}, follow-ups ${skippedFollowups}${errors > 0 ? `, שגיאות: ${errors}` : ""}`;
+      onToast?.(msg, false);
     } catch (e) {
-      console.error("[AutoCleanupSettings] save cleanup settings", e);
+      onToast?.(e instanceof Error ? e.message : "שגיאה", true);
     } finally {
-      setCleanupSaving(false);
+      setCleanupLoading(false);
     }
   };
 
@@ -47,26 +50,19 @@ export default function AutoCleanupSettings({ siteId }: AutoCleanupSettingsProps
     <div className="flex flex-col gap-3" dir="rtl">
       <h3 className="text-sm font-semibold text-slate-900">מחיקה אוטומטית של תורים שפג תוקפם</h3>
       <p className="text-xs text-slate-500">
-        תורים שפג תוקפם = תורים שהתאריך שלהם עבר
+        ניקוי תורים שפג תוקפם מתבצע אוטומטית פעם ביום בעת כניסת מנהל למערכת.
       </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor="expired-auto-delete" className="text-sm font-medium text-slate-700">
-          תדירות
-        </label>
-        <select
-          id="expired-auto-delete"
-          value={cleanupSettings.expiredAutoDelete}
-          onChange={(e) => onExpiredAutoDeleteChange(e.target.value as ExpiredAutoDelete)}
-          disabled={cleanupSaving}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 disabled:opacity-50"
+      <p className="text-xs font-medium text-green-700">פעיל</p>
+      {isDev && (
+        <button
+          type="button"
+          onClick={handleRunCleanup}
+          disabled={cleanupLoading || !firebaseUser}
+          className="mt-2 px-3 py-2 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <option value="off">כבוי</option>
-          <option value="daily">כל יום</option>
-          <option value="weekly">כל שבוע</option>
-          <option value="monthly">כל חודש</option>
-          <option value="quarterly">כל 3 חודשים</option>
-        </select>
-      </div>
+          {cleanupLoading ? "מריץ..." : "הרץ ניקוי עכשיו"}
+        </button>
+      )}
     </div>
   );
 }
