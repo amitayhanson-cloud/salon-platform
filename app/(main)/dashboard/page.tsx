@@ -21,6 +21,10 @@ export default function DashboardPage() {
     if (!authReady || loading) return;
     if (didRedirect.current) return;
 
+    if (process.env.NODE_ENV === "development") {
+      console.log("[CLIENT AUTH] dashboard", firebaseUser?.uid ?? null, { loading });
+    }
+
     if (!firebaseUser) {
       didRedirect.current = true;
       router.replace("/login?returnTo=" + encodeURIComponent("/dashboard"));

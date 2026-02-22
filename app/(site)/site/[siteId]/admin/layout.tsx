@@ -45,9 +45,13 @@ export default function AdminLayout({
     // Don't check until auth is ready
     if (!authReady || authLoading) {
       if (process.env.NODE_ENV === "development") {
-        console.log("[ADMIN GUARD] Waiting for auth", { authReady, authLoading });
+        console.log("[CLIENT AUTH]", "waiting", { authReady, authLoading });
       }
       return;
+    }
+
+    if (process.env.NODE_ENV === "development") {
+      console.log("[CLIENT AUTH]", firebaseUser?.uid ?? null, { loading: authLoading });
     }
 
     // Not logged in -> redirect to /login on SAME host (preserves origin so auth persists after login)

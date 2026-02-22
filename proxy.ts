@@ -1,3 +1,8 @@
+/**
+ * Next.js middleware (proxy): tenant resolution ONLY. No auth gating.
+ * Firebase client auth (no session cookies) - middleware CANNOT verify auth.
+ * All auth protection is client-side. NEVER redirects to /login.
+ */
 import { NextRequest, NextResponse } from "next/server";
 import { getHostKind, isPlatformHost } from "@/lib/tenant";
 
@@ -31,6 +36,12 @@ function isTenantPassthroughPath(pathname: string): boolean {
 
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const pathname = request.nextUrl.pathname;
+
+  if (process.env.NODE_ENV === "development") {
+    // eslint-disable-next-line no-console
+    console.log("[MW]", pathname);
+  }
+
   // Normalize host: strip port, lowercase, trim (used for routing and custom-domain lookup).
   const host = (request.headers.get("host") ?? "").split(":")[0].toLowerCase().trim();
 

@@ -28,10 +28,13 @@ function LoginForm() {
     }
   }, [searchParams, router]);
 
-  // Redirect if already logged in (firebaseUser is source of truth)
+  // Redirect if already logged in (firebaseUser is source of truth) - do not show login form
   useEffect(() => {
     if (authLoading) return;
     if (!firebaseUser) return;
+    if (process.env.NODE_ENV === "development") {
+      console.log("[CLIENT AUTH] login page - already logged in, redirecting");
+    }
     let cancelled = false;
     handleRedirectAfterLogin()
       .catch(() => {
@@ -123,6 +126,18 @@ function LoginForm() {
       setGoogleLoading(false);
     }
   };
+
+  // Already logged in - show spinner while redirecting
+  if (!authLoading && firebaseUser) {
+    return (
+      <div dir="rtl" className="min-h-screen bg-slate-50 py-12 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-500 mx-auto mb-4" />
+          <p className="text-slate-600">מעביר...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div dir="rtl" className="min-h-screen bg-slate-50 py-12">
