@@ -32,8 +32,10 @@ const RATE_LIMIT_PER_SITE = 50; // 50 per site per 10 min
 
 function toMillis(v: unknown): number | null {
   if (!v) return null;
-  if (typeof (v as { toMillis }).toMillis === "function") return (v as { toMillis: () => number }).toMillis();
-  if (typeof (v as { seconds }).seconds === "number") return (v as { seconds: number }).seconds * 1000;
+  const withToMillis = v as { toMillis?: () => number };
+  if (typeof withToMillis.toMillis === "function") return withToMillis.toMillis();
+  const withSeconds = v as { seconds?: number };
+  if (typeof withSeconds.seconds === "number") return withSeconds.seconds * 1000;
   if (typeof v === "number") return v;
   return null;
 }

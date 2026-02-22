@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { SiteConfig } from "@/types/siteConfig";
 import {
@@ -457,7 +457,7 @@ function HairLuxuryPreview({
   );
 }
 
-export default function PreviewPage() {
+function PreviewContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const siteId = searchParams?.get("siteId") ?? null;
@@ -590,6 +590,35 @@ export default function PreviewPage() {
       template={template}
       storageKey={bookingStorageKey}
     />
+  );
+}
+
+function PreviewFallback() {
+  return (
+    <div
+      dir="rtl"
+      className="min-h-screen flex items-center justify-center px-4"
+      style={{ backgroundColor: "#050816" }}
+    >
+      <div
+        className="border rounded-2xl shadow-sm p-6 max-w-md w-full text-right space-y-3"
+        style={{
+          backgroundColor: "#0f172a",
+          borderColor: "#1e293b",
+          color: "#f9fafb",
+        }}
+      >
+        <h1 className="text-lg font-semibold">טוען את האתר...</h1>
+      </div>
+    </div>
+  );
+}
+
+export default function PreviewPage() {
+  return (
+    <Suspense fallback={<PreviewFallback />}>
+      <PreviewContent />
+    </Suspense>
   );
 }
 
