@@ -6,21 +6,21 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { getUserDocument } from "@/lib/firestoreUsers";
 
 export default function MySitePage() {
-  const { user, authReady } = useAuth();
+  const { firebaseUser, authReady } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (!authReady) return;
 
-    if (!user) {
-      router.replace("/login");
+    if (!firebaseUser) {
+      router.replace("/login?returnTo=" + encodeURIComponent("/dashboard"));
       return;
     }
 
     // Get user's siteId and redirect to /site/{siteId}
     const redirectToSite = async () => {
       try {
-        const userDoc = await getUserDocument(user.id);
+        const userDoc = await getUserDocument(firebaseUser.uid);
         if (userDoc?.siteId) {
           router.replace(`/site/${userDoc.siteId}`);
         } else {
@@ -34,7 +34,7 @@ export default function MySitePage() {
     };
 
     redirectToSite();
-  }, [user, authReady, router]);
+  }, [firebaseUser, authReady, router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">

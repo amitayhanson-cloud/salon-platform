@@ -15,8 +15,8 @@ export default function AdminLayout({
   useEffect(() => {
     if (!authReady) return;
 
-    if (!user) {
-      router.replace("/login");
+    if (!firebaseUser) {
+      router.replace("/login?returnTo=" + encodeURIComponent("/dashboard"));
       return;
     }
 
@@ -45,7 +45,7 @@ export default function AdminLayout({
     };
 
     redirectToAdmin();
-  }, [user, firebaseUser, authReady, router]);
+  }, [firebaseUser, authReady, router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">

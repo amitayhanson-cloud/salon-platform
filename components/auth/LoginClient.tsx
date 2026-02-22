@@ -10,7 +10,7 @@ import { auth } from "@/lib/firebaseClient";
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, loginWithGoogle, user, logout, loading: authLoading } = useAuth();
+  const { login, loginWithGoogle, user, firebaseUser, logout, loading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -28,12 +28,28 @@ function LoginForm() {
     }
   }, [searchParams, router]);
 
-  // Redirect if already logged in
+  // Redirect if already logged in (firebaseUser is source of truth)
   useEffect(() => {
-    if (!authLoading && user) {
-      // Redirect logic is handled by login function's redirectPath
-    }
-  }, [user, authLoading, router]);
+    if (authLoading) return;
+    if (!firebaseUser) return;
+    let cancelled = false;
+    handleRedirectAfterLogin()
+      .catch(() => {
+        if (cancelled) return;
+        const returnTo = searchParams?.get("returnTo");
+        const safeReturnTo =
+          typeof returnTo === "string" &&
+          returnTo.startsWith("/") &&
+          !returnTo.startsWith("//") &&
+          !returnTo.includes(":")
+            ? returnTo
+            : "/dashboard";
+        router.replace(safeReturnTo);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [firebaseUser, authLoading]);
 
   const handleRedirectAfterLogin = async () => {
     // Single source of truth: fetch user's tenant URL from API (never localStorage or host).

@@ -51,7 +51,8 @@ export default function AdminLayout({
     }
 
     // Not logged in -> redirect to /login on SAME host (preserves origin so auth persists after login)
-    if (!user) {
+    // Use firebaseUser as source of truth for auth (user doc can be null if Firestore fetch failed/slow)
+    if (!firebaseUser) {
       const loginPath = "/login?returnTo=" + encodeURIComponent("/dashboard");
       
       // Prevent redirect loop: don't redirect if already on login page
@@ -81,8 +82,11 @@ export default function AdminLayout({
       return;
     }
 
+    const uid = firebaseUser.uid;
+    const userSiteId = user?.siteId;
+
     // Prevent checking the same user multiple times if already authorized
-    if (lastCheckedUid.current === user.id && authorized) {
+    if (lastCheckedUid.current === uid && authorized) {
       if (process.env.NODE_ENV === "development") {
         console.log("[ADMIN GUARD] Already authorized for this user, skipping check");
       }
@@ -91,7 +95,7 @@ export default function AdminLayout({
     }
 
     // Reset redirect flag if user changed
-    if (lastCheckedUid.current !== user.id) {
+    if (lastCheckedUid.current !== uid) {
       redirectAttempted.current = false;
     }
 
@@ -100,7 +104,7 @@ export default function AdminLayout({
       if (process.env.NODE_ENV === "development") {
         console.log("[ADMIN GUARD] Checking authorization", {
           authReady,
-          uid: user.id,
+          uid,
           routeSiteId: siteId,
         });
       }
@@ -115,11 +119,11 @@ export default function AdminLayout({
           siteId,
           errorMessage: getSiteError instanceof Error ? getSiteError.message : String(getSiteError),
           errorCode: (getSiteError as { code?: string })?.code,
-          userSiteId: user.siteId,
-          willAttemptRepair: isPermissionError(getSiteError) && user.siteId === siteId && !!firebaseUser,
+          userSiteId: userSiteId,
+          willAttemptRepair: isPermissionError(getSiteError) && userSiteId === siteId && !!firebaseUser,
         });
 
-        if (isPermissionError(getSiteError) && user.siteId === siteId && firebaseUser) {
+        if (isPermissionError(getSiteError) && userSiteId === siteId && firebaseUser) {
           const repairUrl =
             typeof window !== "undefined"
               ? `${window.location.origin}/api/repair-site-ownership`
@@ -199,21 +203,20 @@ export default function AdminLayout({
           if (process.env.NODE_ENV === "development") {
             console.log(`[ADMIN GUARD] Site ${siteId} missing ownerUid, attempting backfill`);
           }
-          // Try to backfill based on user's siteId
-          backfillSiteOwnerUid(user.id).catch((err) => {
+          backfillSiteOwnerUid(uid).catch((err) => {
             console.error("[ADMIN GUARD] Backfill failed (non-fatal):", err);
           });
         }
 
         // Verify site ownership: sites/{siteId}.ownerUid === current uid
-        const isOwner = await verifySiteOwnership(siteId, user.id);
+        const isOwner = await verifySiteOwnership(siteId, uid);
         if (!isOwner) {
           // User is not the owner of this site
           if (!redirectAttempted.current) {
             redirectAttempted.current = true;
             if (process.env.NODE_ENV === "development") {
-              console.log(`[ADMIN GUARD] Access denied: uid=${user.id} is not owner of siteId=${siteId}`);
-              console.log(`[ADMIN GUARD] Site ownerUid=${siteOwnerUid}, user.uid=${user.id}`);
+              console.log(`[ADMIN GUARD] Access denied: uid=${uid} is not owner of siteId=${siteId}`);
+              console.log(`[ADMIN GUARD] Site ownerUid=${siteOwnerUid}, user.uid=${uid}`);
             }
 
             // Redirect to user's correct tenant (API = single source of truth, supports custom domain)
@@ -244,12 +247,12 @@ export default function AdminLayout({
         }
 
         // User is authorized (verified ownership)
-        lastCheckedUid.current = user.id;
+        lastCheckedUid.current = uid;
         setAuthorized(true);
         setChecking(false);
         
         if (process.env.NODE_ENV === "development") {
-          console.log(`[ADMIN GUARD] Authorized uid=${user.id}, routeSiteId=${siteId} (verified ownership)`);
+          console.log(`[ADMIN GUARD] Authorized uid=${uid}, routeSiteId=${siteId} (verified ownership)`);
         }
       } catch (error) {
         console.error("[ADMIN GUARD] Error checking authorization:", error);

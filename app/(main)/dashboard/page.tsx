@@ -13,7 +13,7 @@ import { routeAfterAuth } from "@/lib/authRedirect";
  * - Logged in → GET /api/dashboard-redirect with Bearer token → redirect to that url
  */
 export default function DashboardPage() {
-  const { user, firebaseUser, authReady, loading, logout } = useAuth();
+  const { firebaseUser, authReady, loading, logout } = useAuth();
   const router = useRouter();
   const didRedirect = useRef(false);
 
@@ -21,9 +21,9 @@ export default function DashboardPage() {
     if (!authReady || loading) return;
     if (didRedirect.current) return;
 
-    if (!firebaseUser || !user) {
+    if (!firebaseUser) {
       didRedirect.current = true;
-      router.replace("/login");
+      router.replace("/login?returnTo=" + encodeURIComponent("/dashboard"));
       return;
     }
 
@@ -38,7 +38,7 @@ export default function DashboardPage() {
         const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
         if (res.status === 401) {
           didRedirect.current = true;
-          router.replace("/login");
+          router.replace("/login?returnTo=" + encodeURIComponent("/dashboard"));
           return;
         }
         if (res.status === 403 && data.error === "no_tenant") {
@@ -55,7 +55,7 @@ export default function DashboardPage() {
       } catch {
         // fallback below
       }
-      const result = await routeAfterAuth(user.id);
+      const result = await routeAfterAuth(firebaseUser.uid);
       const url = result.siteId
         ? getDashboardUrl({ slug: result.slug, siteId: result.siteId })
         : result.path;
@@ -68,7 +68,7 @@ export default function DashboardPage() {
     };
 
     go();
-  }, [authReady, loading, firebaseUser, user, router, logout]);
+  }, [authReady, loading, firebaseUser, router, logout]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
