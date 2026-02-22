@@ -81,6 +81,12 @@ service cloud.firestore {
             || get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUserId == request.auth.uid);
     }
 
+    // Templates: public read (used when creating new sites); write server-only (Admin SDK)
+    match /templates/{templateKey} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // Platform landing page content (CMS): public read; write by authenticated (admin gated in app)
     match /platform/{docId} {
       allow read: if true;
@@ -89,6 +95,11 @@ service cloud.firestore {
 
     // Security audit events: server-only (Admin SDK writes; clients cannot read/write)
     match /securityEvents/{eventId} {
+      allow read, write: if false;
+    }
+
+    // Rate limits: server-only (Admin SDK only)
+    match /rateLimits/{docId} {
       allow read, write: if false;
     }
 

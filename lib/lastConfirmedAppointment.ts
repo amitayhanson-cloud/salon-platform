@@ -7,6 +7,14 @@
 import { isBookingCancelled } from "./normalizeBooking";
 import { isBookingArchived } from "./normalizeBooking";
 
+/** Result for "last qualifying booking" (includes future; excludes only cancelled). */
+export interface LastQualifyingBookingResult {
+  /** Start date/time of the last qualifying booking, or null if none. */
+  lastBookingAt: Date | null;
+  /** Full days since that booking. 0 = today or future; null = no booking. */
+  daysSince: number | null;
+}
+
 /** Booking-like shape used by the resolver (date/time or timestamps). */
 export interface BookingForLastAppointment {
   date: string; // YYYY-MM-DD
@@ -35,6 +43,64 @@ function toDate(val: Date | { toDate: () => Date } | null | undefined): Date | n
   if (val instanceof Date) return val;
   if (typeof (val as { toDate: () => Date }).toDate === "function") return (val as { toDate: () => Date }).toDate();
   return null;
+}
+
+/**
+ * Compute start time of a booking (for "last booking" and days-since).
+ * Prefers start timestamp; else date+time; else date only at midnight.
+ */
+function getBookingStart(b: BookingForLastAppointment): Date | null {
+  const startTs = toDate(b.start);
+  if (startTs) return startTs;
+  if (b.date && b.time) {
+    const [y, m, d] = b.date.split("-").map(Number);
+    const [hh, mm] = (b.time || "00:00").split(":").map(Number);
+    return new Date(y ?? 0, (m ?? 1) - 1, d ?? 1, hh ?? 0, mm ?? 0, 0, 0);
+  }
+  if (b.date) {
+    const [y, m, d] = b.date.split("-").map(Number);
+    return new Date(y ?? 0, (m ?? 1) - 1, d ?? 1, 0, 0, 0, 0);
+  }
+  return null;
+}
+
+/**
+ * Returns the last qualifying booking (most recent by start time, past or future).
+ * Excludes only cancelled bookings. Includes archived bookings that are not cancelled.
+ * Used for "תור אחרון" and "ימים מאז תור אחרון" in client details.
+ */
+export function getLastQualifyingBooking(
+  bookings: BookingForLastAppointment[],
+  now: Date = new Date()
+): LastQualifyingBookingResult {
+  const qualifying = bookings
+    .filter((b) => !isBookingCancelled({ status: b.status, whatsappStatus: b.whatsappStatus }))
+    .map((b) => {
+      const startAt = getBookingStart(b);
+      return { b, startAt };
+    })
+    .filter(({ startAt }) => startAt != null) as Array<{ b: BookingForLastAppointment; startAt: Date }>;
+
+  if (qualifying.length === 0) {
+    return { lastBookingAt: null, daysSince: null };
+  }
+
+  qualifying.sort((a, b) => b.startAt.getTime() - a.startAt.getTime());
+  const last = qualifying[0]!;
+  const lastAt = last.startAt;
+
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const lastDayStart = new Date(lastAt.getFullYear(), lastAt.getMonth(), lastAt.getDate(), 0, 0, 0, 0);
+
+  const daysSince =
+    lastAt.getTime() > now.getTime()
+      ? 0
+      : Math.floor((todayStart.getTime() - lastDayStart.getTime()) / (24 * 60 * 60 * 1000));
+
+  return {
+    lastBookingAt: lastAt,
+    daysSince,
+  };
 }
 
 /**

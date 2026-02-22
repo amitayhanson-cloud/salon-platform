@@ -14,6 +14,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import AdminTabs from "@/components/ui/AdminTabs";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { deleteUserAccount } from "@/lib/deleteUserAccount";
+import { clearStaleStorageOnLogout } from "@/lib/client/storageCleanup";
 import { saveBookingSettings, convertSalonBookingStateToBookingSettings, subscribeBookingSettings } from "@/lib/firestoreBookingSettings";
 import { resetWorkersAvailabilityToBusinessHours } from "@/lib/resetWorkersAvailability";
 import { subscribeClientTypes, saveClientTypes, seedDefaultClientTypes } from "@/lib/firestoreClientSettings";
@@ -1704,19 +1705,11 @@ export default function SettingsPage() {
     try {
       // Delete account (Firestore + Auth)
       await deleteUserAccount(firebaseUser);
-      
-      // Clear localStorage
+
+      // Clear all tenant storage (siteConfig:*, bookingState:*, latestSiteConfig:*, auth redirect keys)
+      // Uses siteId-based and prefix-based cleanup to prevent stale tenant state for next user
       if (typeof window !== "undefined") {
-        // Clear all user-related localStorage items
-        const keysToRemove: string[] = [];
-        for (let i = 0; i < window.localStorage.length; i++) {
-          const key = window.localStorage.key(i);
-          if (key && (key.startsWith(`siteConfig:${firebaseUser.uid}`) || 
-                      key.startsWith(`bookingState:${firebaseUser.uid}`))) {
-            keysToRemove.push(key);
-          }
-        }
-        keysToRemove.forEach(key => window.localStorage.removeItem(key));
+        clearStaleStorageOnLogout();
       }
 
       // Sign out first (clears auth state)

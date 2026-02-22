@@ -1,11 +1,8 @@
 "use client";
 
-import AIFloatingWidget from "@/components/admin/AIFloatingWidget";
-import { useAdminSiteId } from "@/hooks/useAdminSiteId";
 import { useAuth } from "@/components/auth/AuthProvider";
 
 export default function AdminHomePage() {
-  const userId = useAdminSiteId();
   const { user, loading } = useAuth();
 
   const welcomeMessage = user?.name
@@ -35,8 +32,6 @@ export default function AdminHomePage() {
           )}
         </div>
       </div>
-
-      {userId && <AIFloatingWidget siteId={userId} />}
     </div>
   );
 }

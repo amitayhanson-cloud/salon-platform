@@ -1,53 +1,12 @@
 import { getDb } from "@/lib/firebaseClient";
-import { doc, getDoc, setDoc, collection, getDocs, Timestamp } from "firebase/firestore";
-import type { SiteConfig, FaqItem, ReviewItem } from "@/types/siteConfig";
+import { doc, getDoc, setDoc, collection, Timestamp } from "firebase/firestore";
+import type { SiteConfig } from "@/types/siteConfig";
+import type { TemplateConfigDefaults } from "@/types/template";
+import { DEFAULT_HAIR_TEMPLATE_KEY, TEMPLATES_COLLECTION } from "@/types/template";
+import { generateDemoFaqs, generateDemoReviews } from "@/lib/demoContent";
+import { mergeTemplateWithBuilderConfig } from "@/lib/mergeTemplateConfig";
 
-const TEMPLATE_SITE_ID = "amitay-hair-mk6krumy";
 const SITES_COLLECTION = "sites";
-
-/**
- * Generate demo FAQ items (2 items)
- */
-function generateDemoFaqs(): FaqItem[] {
-  return [
-    {
-      id: `faq_${Date.now()}_1`,
-      question: "מה מדיניות הביטולים?",
-      answer: "ניתן לבטל תור עד 24 שעות מראש ללא תשלום. ביטול ברגע האחרון או אי הגעה יחייבו תשלום של 50% מעלות השירות.",
-    },
-    {
-      id: `faq_${Date.now()}_2`,
-      question: "כמה זמן לוקח טיפול?",
-      answer: "משך הטיפול תלוי בסוג השירות. תספורת נשים אורכת כ-45-60 דקות, צבע שיער כ-2-3 שעות, וטיפולי פן או החלקה כ-2-4 שעות. נשמח לספק הערכה מדויקת בעת קביעת התור.",
-    },
-  ];
-}
-
-/**
- * Generate demo Review items (3 items)
- */
-function generateDemoReviews(): ReviewItem[] {
-  return [
-    {
-      id: `review_${Date.now()}_1`,
-      name: "שרה כהן",
-      rating: 5,
-      text: "חוויה מדהימה! הצוות מקצועי מאוד, האווירה נעימה והתוצאה מעבר למצופה. בהחלט אחזור שוב.",
-    },
-    {
-      id: `review_${Date.now()}_2`,
-      name: "מיכל לוי",
-      rating: 5,
-      text: "הסלון נקי ומסודר, המעצבת הקשיבה לכל הבקשות שלי והתוצאה מושלמת. ממליצה בחום!",
-    },
-    {
-      id: `review_${Date.now()}_3`,
-      name: "דני רוזן",
-      rating: 4,
-      text: "שירות מעולה ומקצועי. התור התחיל בזמן, הטיפול היה איכותי והמחיר הוגן. אמליץ לחברים.",
-    },
-  ];
-}
 
 /**
  * Site metadata type for ownership checks
@@ -104,77 +63,62 @@ export async function getSite(siteId: string): Promise<SiteDoc | null> {
 }
 
 /**
- * Create a new site from template
- * Copies data from sites/amitay-hair-mk6krumy to new sites/{siteId}
- * Returns the new siteId
+ * Create a new site from template (client-side).
+ * Reads from templates/{templateKey}, merges with builder config, creates site.
+ * Use createSiteFromTemplateServer in API routes instead.
+ *
+ * @param ownerUid - Owner user ID
+ * @param builderConfig - Config from builder (salonName, services, etc.)
+ * @param options - Optional templateKey (default: hair1)
+ * @returns The new site document ID
  */
 export async function createSiteFromTemplate(
   ownerUid: string,
-  builderConfig: SiteConfig
+  builderConfig: SiteConfig,
+  options: { templateKey?: string } = {}
 ): Promise<string> {
-  const db = getDb(); // Always get a fresh, valid Firestore instance
-  // Load template site
-  const templateSiteRef = doc(db, SITES_COLLECTION, TEMPLATE_SITE_ID);
-  const templateSiteSnap = await getDoc(templateSiteRef);
-  
-  if (!templateSiteSnap.exists()) {
-    throw new Error(`Template site ${TEMPLATE_SITE_ID} not found`);
+  const db = getDb();
+  const templateKey = options.templateKey ?? DEFAULT_HAIR_TEMPLATE_KEY;
+
+  const templateRef = doc(db, TEMPLATES_COLLECTION, templateKey);
+  const templateSnap = await getDoc(templateRef);
+
+  if (!templateSnap.exists()) {
+    throw new Error(
+      `Template "${templateKey}" not found. Run scripts/createHair1TemplateFromSite.ts to create the template.`
+    );
   }
-  
-  const templateData = templateSiteSnap.data();
-  
-  // Create new site document
+
+  const templateData = templateSnap.data() as { configDefaults?: TemplateConfigDefaults };
+  const configDefaults = (templateData?.configDefaults ?? {}) as TemplateConfigDefaults;
+
+  let finalConfig = mergeTemplateWithBuilderConfig(configDefaults, builderConfig);
+
+  if (finalConfig.extraPages?.includes("faq") && (!finalConfig.faqs || finalConfig.faqs.length === 0)) {
+    finalConfig = { ...finalConfig, faqs: generateDemoFaqs() };
+  }
+  if (finalConfig.extraPages?.includes("reviews") && (!finalConfig.reviews || finalConfig.reviews.length === 0)) {
+    finalConfig = { ...finalConfig, reviews: generateDemoReviews() };
+  }
+
   const newSiteRef = doc(collection(db, SITES_COLLECTION));
-  const newSiteId = newSiteRef.id;
   const now = Timestamp.now();
-  
-  // Copy template data, merge with builder config
-  // Remove any existing owner fields from template (ownerUid, ownerUserId, etc.)
-  const { ownerUid: _, ownerUserId: __, ...templateDataToCopy } = templateData;
-  
-  // Prepare final config with demo content if needed
-  const finalConfig: SiteConfig = { ...builderConfig };
-  
-  // Generate demo FAQs if FAQ page is selected and no FAQs exist
-  if (builderConfig.extraPages.includes("faq")) {
-    const existingFaqs = builderConfig.faqs || [];
-    if (existingFaqs.length === 0) {
-      finalConfig.faqs = generateDemoFaqs();
-      console.log(`[createSiteFromTemplate] Generated ${finalConfig.faqs.length} demo FAQs for site ${newSiteId}`);
-    } else {
-      console.log(`[createSiteFromTemplate] Site ${newSiteId} already has ${existingFaqs.length} FAQs, skipping demo generation`);
-    }
-  }
-  
-  // Generate demo Reviews if Reviews page is selected and no reviews exist
-  if (builderConfig.extraPages.includes("reviews")) {
-    const existingReviews = builderConfig.reviews || [];
-    if (existingReviews.length === 0) {
-      finalConfig.reviews = generateDemoReviews();
-      console.log(`[createSiteFromTemplate] Generated ${finalConfig.reviews.length} demo reviews for site ${newSiteId}`);
-    } else {
-      console.log(`[createSiteFromTemplate] Site ${newSiteId} already has ${existingReviews.length} reviews, skipping demo generation`);
-    }
-  }
-  
-  // Merge builder config into template data
-  // IMPORTANT: Always set ownerUid (and ownerUserId for backwards compatibility) so Firestore rules allow read/write
+
   const siteData: SiteDocCreate = {
-    ...templateDataToCopy,
     ownerUid,
     ownerUserId: ownerUid,
     config: finalConfig,
+    businessType: "hair",
+    templateKey,
+    templateSource: `templates/${templateKey}`,
     createdAt: now,
     updatedAt: now,
     initializedFromTemplate: true,
-    templateSource: TEMPLATE_SITE_ID,
   };
-  
+
   await setDoc(newSiteRef, siteData);
-  
-  console.log(`[createSiteFromTemplate] Created site ${newSiteId} for owner ${ownerUid} with ownerUid=${ownerUid}`);
-  
-  return newSiteId;
+  console.log(`[createSiteFromTemplate] Created site ${newSiteRef.id} (template: ${templateKey})`);
+  return newSiteRef.id;
 }
 
 /**

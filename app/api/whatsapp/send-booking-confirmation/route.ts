@@ -1,123 +1,108 @@
 /**
  * POST /api/whatsapp/send-booking-confirmation
- * Call after creating a booking to send the immediate confirmation WhatsApp.
- * Delegates to onBookingCreated(siteId, bookingId).
- * Correlation logs: [BOOK_CREATE] with bookingAttemptId (visible in Vercel logs).
+ * ADMIN PATH (authenticated only): Send WhatsApp confirmation for a booking.
+ * For public booking flow, use POST /api/bookings/confirm-after-create instead.
+ *
+ * Security:
+ * - 401: No/invalid Firebase ID token
+ * - 403: User does not own the site
+ * - 404: Booking or site not found
+ * - 409: Confirmation already sent (confirmationSentAt set)
+ * - 429: Rate limited
+ *
+ * Flow:
+ * - Verify token, extract uid
+ * - Load booking by siteId + bookingId; derive siteId from booking (validate match)
+ * - assertSiteOwner(uid, siteId)
+ * - Atomic: transaction checks confirmationSentAt is null, sets it
+ * - Call onBookingCreated
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { Timestamp } from "firebase-admin/firestore";
+import { getAdminDb } from "@/lib/firebaseAdmin";
 import { onBookingCreated } from "@/lib/onBookingCreated";
+import { requireAuth } from "@/lib/server/requireAuth";
+import { assertSiteOwner } from "@/lib/server/assertSiteOwner";
+import { checkRateLimit } from "@/lib/server/rateLimit";
 
-const MISSING_PHONE_MESSAGE = "Booking is missing customer phone number";
-
-function bookingAttemptId(): string {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
-  return `book-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-}
-
-function getMissingEnvVar(): string | null {
-  if (!process.env.TWILIO_ACCOUNT_SID?.trim()) return "TWILIO_ACCOUNT_SID";
-  if (!process.env.TWILIO_AUTH_TOKEN?.trim()) return "TWILIO_AUTH_TOKEN";
-  if (!process.env.TWILIO_WHATSAPP_FROM?.trim()) return "TWILIO_WHATSAPP_FROM";
-  const json = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
-  const hasSplit =
-    process.env.FIREBASE_PROJECT_ID?.trim() &&
-    process.env.FIREBASE_CLIENT_EMAIL?.trim() &&
-    process.env.FIREBASE_PRIVATE_KEY?.trim();
-  if (!json && !hasSplit) return "FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_PROJECT_ID+CLIENT_EMAIL+PRIVATE_KEY";
-  return null;
-}
+const RATE_LIMIT_PER_BOOKING = 2; // 2 attempts per booking per 10 min (retries)
+const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 
 export async function POST(request: NextRequest) {
-  const attemptId = bookingAttemptId();
-  const host = request.headers.get("host") ?? "";
-  const userAgent = request.headers.get("user-agent") ?? "";
-
-  let siteId: string | undefined;
-  let bookingId: string | undefined;
-
   try {
-    const body = await request.json().catch(() => ({}));
-    siteId = typeof body?.siteId === "string" ? body.siteId.trim() : undefined;
-    bookingId = typeof body?.bookingId === "string" ? body.bookingId.trim() : undefined;
+    const authResult = await requireAuth(request);
+    if (authResult instanceof NextResponse) return authResult;
+    const uid = authResult.uid;
 
-    console.log("[BOOK_CREATE] start", {
-      bookingAttemptId: attemptId,
-      host,
-      siteId: siteId ?? null,
-      bookingId: bookingId ?? null,
-      userAgent: userAgent.slice(0, 80),
-    });
+    const body = await request.json().catch(() => ({}));
+    const siteId = typeof body?.siteId === "string" ? body.siteId.trim() : undefined;
+    const bookingId = typeof body?.bookingId === "string" ? body.bookingId.trim() : undefined;
 
     if (!siteId || !bookingId) {
-      console.log("[BOOK_CREATE] fail", {
-        bookingAttemptId: attemptId,
-        step: "validated_payload",
-        errorMessage: "siteId and bookingId required",
-      });
       return NextResponse.json({ ok: false, error: "siteId and bookingId required" }, { status: 400 });
     }
 
-    const bookingPath = `sites/${siteId}/bookings/${bookingId}`;
-    console.log("[BOOK_CREATE] resolved_site", {
-      bookingAttemptId: attemptId,
-      siteId,
-      bookingPath,
-    });
-    console.log("[BOOK_CREATE] validated_payload", {
-      bookingAttemptId: attemptId,
-      siteId,
-      bookingId,
-    });
+    const db = getAdminDb();
+    const bookingRef = db.collection("sites").doc(siteId).collection("bookings").doc(bookingId);
 
-    const missingEnv = getMissingEnvVar();
-    if (missingEnv) {
-      const msg = `Missing env var: ${missingEnv}`;
-      console.log("[BOOK_CREATE] fail", {
-        bookingAttemptId: attemptId,
-        step: "env_check",
-        errorMessage: msg,
-      });
+    const snap = await bookingRef.get();
+    if (!snap.exists) {
+      return NextResponse.json({ ok: false, error: "Booking not found" }, { status: 404 });
+    }
+
+    const data = snap.data()!;
+    const docSiteId = typeof data.siteId === "string" ? data.siteId : null;
+    const resolvedSiteId = docSiteId ?? siteId;
+    if (docSiteId != null && docSiteId !== siteId) {
+      return NextResponse.json({ ok: false, error: "siteId does not match booking" }, { status: 400 });
+    }
+
+    const forbidden = await assertSiteOwner(uid, resolvedSiteId);
+    if (forbidden) return forbidden;
+
+    const { allowed, retryAfterMs } = await checkRateLimit(
+      `confirm_admin:${resolvedSiteId}:${bookingId}`,
+      RATE_LIMIT_PER_BOOKING,
+      RATE_LIMIT_WINDOW_MS
+    );
+    if (!allowed) {
       return NextResponse.json(
-        { ok: false, error: msg, code: null },
-        { status: 500 }
+        { ok: false, error: "Too many requests", retryAfterSeconds: Math.ceil((retryAfterMs ?? 0) / 1000) },
+        { status: 429, headers: retryAfterMs ? { "Retry-After": String(Math.ceil((retryAfterMs ?? 0) / 1000)) } : undefined }
       );
     }
 
-    console.log("[BOOK_CREATE] post_actions_start", { bookingAttemptId: attemptId });
+    const alreadySent = data.confirmationSentAt != null;
+    if (alreadySent) {
+      return NextResponse.json(
+        { ok: false, error: "Confirmation already sent" },
+        { status: 409 }
+      );
+    }
 
-    await onBookingCreated(siteId, bookingId);
+    await db.runTransaction(async (tx) => {
+      const tSnap = await tx.get(bookingRef);
+      if (!tSnap.exists) throw new Error("Booking not found");
+      const tData = tSnap.data()!;
+      if (tData.confirmationSentAt != null) {
+        throw new Error("CONFLICT"); // Will map to 409
+      }
+      tx.update(bookingRef, {
+        confirmationSentAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
+    });
 
-    console.log("[BOOK_CREATE] whatsapp_send_ok", { bookingAttemptId: attemptId, bookingId, siteId });
-    console.log("[BOOK_CREATE] done", { bookingAttemptId: attemptId, ok: true, bookingId, siteId });
+    await onBookingCreated(resolvedSiteId, bookingId);
 
-    return NextResponse.json({ ok: true, bookingId, siteId });
+    return NextResponse.json({ ok: true, bookingId, siteId: resolvedSiteId });
   } catch (err) {
-    const errObj = err as { message?: string; name?: string; code?: number | string; stack?: string };
-    const message = errObj?.message ?? "Failed to send confirmation";
-    const safeMessage = typeof message === "string" ? message : "Failed to send confirmation";
-
-    console.log("[BOOK_CREATE] fail", {
-      bookingAttemptId: attemptId,
-      step: "post_actions",
-      errorMessage: safeMessage,
-      stack: errObj?.stack ?? undefined,
-    });
-    console.log("[BOOK_CREATE] whatsapp_send_fail", {
-      bookingAttemptId: attemptId,
-      error: safeMessage,
-    });
-
-    const status =
-      safeMessage === "Booking not found"
-        ? 404
-        : safeMessage === MISSING_PHONE_MESSAGE || safeMessage === "Booking has no customer phone"
-          ? 400
-          : 500;
-
-    return NextResponse.json(
-      { ok: false, error: safeMessage, code: errObj?.code ?? null },
-      { status }
-    );
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg === "CONFLICT") {
+      return NextResponse.json({ ok: false, error: "Confirmation already sent" }, { status: 409 });
+    }
+    console.error("[send-booking-confirmation]", msg);
+    return NextResponse.json({ ok: false, error: "Failed to send confirmation" }, { status: 500 });
   }
 }

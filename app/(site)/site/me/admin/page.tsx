@@ -1,6 +1,5 @@
 "use client";
 
-import AIFloatingWidget from "@/components/admin/AIFloatingWidget";
 import { useAuth } from "@/components/auth/AuthProvider";
 
 export default function AdminHomePage() {
@@ -32,9 +31,6 @@ export default function AdminHomePage() {
           </>
         )}
       </div>
-
-      {/* AI Floating Widget */}
-      {user && <AIFloatingWidget siteId={user.id} />}
     </div>
   );
 }

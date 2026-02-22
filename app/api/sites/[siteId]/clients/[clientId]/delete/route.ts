@@ -1,8 +1,8 @@
 /**
- * POST /api/clients/delete
- * Fully delete a client + all bookings (legacy body-based route for bulk delete).
- * Body: { siteId, clientId } - mode no longer used, always full delete.
- * Prefer POST /api/sites/[siteId]/clients/[clientId]/delete for single delete.
+ * POST /api/sites/[siteId]/clients/[clientId]/delete
+ * Fully delete a client: document + all subcollections + all bookings.
+ * siteId and clientId from URL (tenant-safe).
+ * Requires Firebase ID token. Site owner only.
  */
 
 import { NextResponse } from "next/server";
@@ -32,21 +32,18 @@ async function assertSiteOwner(uid: string, siteId: string): Promise<NextRespons
   return null;
 }
 
-export async function POST(request: Request) {
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ siteId: string; clientId: string }> }
+) {
   try {
+    const { siteId, clientId } = await params;
+    if (!siteId?.trim() || !clientId?.trim()) {
+      return NextResponse.json({ ok: false, message: "siteId and clientId required" }, { status: 400 });
+    }
+
     const authHeader = request.headers.get("authorization");
     const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-
-    const body = await request.json().catch(() => ({}));
-    const siteId = body?.siteId;
-    const clientId = body?.clientId;
-
-    if (!siteId || typeof siteId !== "string") {
-      return NextResponse.json({ ok: false, message: "missing siteId" }, { status: 400 });
-    }
-    if (!clientId || typeof clientId !== "string") {
-      return NextResponse.json({ ok: false, message: "missing clientId" }, { status: 400 });
-    }
 
     const authResult = await requireAuth(token);
     if (authResult instanceof NextResponse) return authResult;
@@ -62,9 +59,10 @@ export async function POST(request: Request) {
       const status = result.message.includes("not found") ? 404 : 400;
       return NextResponse.json({ ok: false, message: result.message }, { status });
     }
+
     return NextResponse.json({ ok: true, deletedBookingsCount: result.deletedBookingsCount });
   } catch (e) {
-    console.error("[clients/delete]", e);
+    console.error("[sites/clients/delete]", e);
     return NextResponse.json(
       { ok: false, message: e instanceof Error ? e.message : "server_error" },
       { status: 500 }

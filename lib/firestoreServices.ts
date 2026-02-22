@@ -1,3 +1,10 @@
+/**
+ * @deprecated LEGACY: Uses users/{userId}/site/main/services.
+ * Canonical model is sites/{siteId}.services (see firestoreSiteServices).
+ * Only used by migrateServicesFromSubcollection for one-time migration.
+ * TODO: Remove this module once all sites have been migrated; do not use for new code.
+ */
+
 import { db } from "@/lib/firebaseClient";
 import {
   collection,
@@ -15,6 +22,7 @@ import {
 } from "firebase/firestore";
 import type { Service } from "@/types/service";
 
+/** @deprecated Legacy path users/{userId}/site/main/services */
 export function servicesCollection(userId: string) {
   if (!db) throw new Error("Firestore db not initialized");
   return collection(db, "users", userId, "site", "main", "services");

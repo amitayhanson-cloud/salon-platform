@@ -37,15 +37,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ ok: false, message: "forbidden" }, { status: 403 });
     }
 
-    const snapshot = await db
-      .collection("sites")
-      .doc(siteId)
-      .collection("bookings")
-      .where("customerPhone", "==", clientId)
-      .count()
-      .get();
-
-    const count = snapshot.data().count ?? 0;
+    const [byPhone, byClientId] = await Promise.all([
+      db.collection("sites").doc(siteId).collection("bookings").where("customerPhone", "==", clientId).count().get(),
+      db.collection("sites").doc(siteId).collection("bookings").where("clientId", "==", clientId).count().get(),
+    ]);
+    const count = Math.max(byPhone.data().count ?? 0, byClientId.data().count ?? 0);
     return NextResponse.json({ ok: true, count });
   } catch (e) {
     console.error("[clients/booking-count]", e);

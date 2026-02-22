@@ -1267,7 +1267,7 @@ export default function BookingPage() {
         setSubmitError("שגיאה: לא התקבל מזהה תור. נא לנסות שוב.");
         return;
       }
-      const confirmRes = await fetch("/api/whatsapp/send-booking-confirmation", {
+      const confirmRes = await fetch("/api/bookings/confirm-after-create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ siteId, bookingId: firstBookingId }),

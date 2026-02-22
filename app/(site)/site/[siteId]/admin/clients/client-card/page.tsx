@@ -14,7 +14,7 @@ import { createClient, checkClientExists, type ClientData } from "@/lib/firestor
 import { subscribeClientTypes } from "@/lib/firestoreClientSettings";
 import { DEFAULT_CLIENT_TYPE_ENTRIES, REGULAR_CLIENT_TYPE_ID } from "@/types/bookingSettings";
 import type { ClientTypeEntry } from "@/types/bookingSettings";
-import { getLastConfirmedPastAppointment } from "@/lib/lastConfirmedAppointment";
+import { getLastQualifyingBooking } from "@/lib/lastConfirmedAppointment";
 import { getDisplayStatus } from "@/lib/bookingRootStatus";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { MoreVertical, Pencil, Trash2, CheckSquare, Square } from "lucide-react";
@@ -32,7 +32,6 @@ interface Client {
   clientNotes?: string;
   lastVisit?: string; // ISO date string
   createdAt?: string; // ISO date string
-  totalBookings: number;
 }
 
 /** Status values for client booking history display (from live status or statusAtArchive). */
@@ -129,15 +128,12 @@ export default function ClientCardPage() {
 
   // Bulk delete modal
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-  const [bulkDeleteMode, setBulkDeleteMode] = useState<"client_only" | "client_and_bookings">("client_only");
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState("");
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
   const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
 
   // Delete modal
   const [deleteClient, setDeleteClient] = useState<Client | null>(null);
-  const [deleteMode, setDeleteMode] = useState<"client_only" | "client_and_bookings">("client_only");
-  const [deleteBookingCount, setDeleteBookingCount] = useState<number>(0);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -209,7 +205,6 @@ export default function ClientCardPage() {
             clientNotes: data.clientNotes != null ? String(data.clientNotes).trim() || undefined : (data.notes != null ? String(data.notes).trim() || undefined : undefined),
             lastVisit: undefined,
             createdAt: (data.createdAt as { toDate?: () => Date } | undefined)?.toDate?.()?.toISOString?.() ?? (typeof data.createdAt === "string" ? data.createdAt : undefined),
-            totalBookings: 0,
           };
         });
         const list = mapped.filter((c) => c !== null).sort((a, b) => a.name.localeCompare(b.name)) as Client[];
@@ -422,10 +417,10 @@ export default function ClientCardPage() {
     return clients.find((c) => c.id === selectedClientId) || null;
   }, [selectedClientId, clients]);
 
-  // Last confirmed past appointment (derived from client bookings)
-  const lastAppointment = useMemo(() => {
-    if (!selectedClientId || clientBookings.length === 0) return { lastConfirmedAt: null as Date | null, daysSince: null as number | null };
-    return getLastConfirmedPastAppointment(
+  // Last qualifying booking (most recent non-cancelled, past or future; excludes only cancelled)
+  const lastBooking = useMemo(() => {
+    if (!selectedClientId || clientBookings.length === 0) return { lastBookingAt: null as Date | null, daysSince: null as number | null };
+    return getLastQualifyingBooking(
       clientBookings.map((b) => ({
         date: b.date,
         time: b.time,
@@ -656,33 +651,12 @@ export default function ClientCardPage() {
     }
   }, [firebaseUser, siteId, editClient, editForm, clientTypes, closeEditModal, showToast]);
 
-  const openDeleteModal = useCallback(async (client: Client) => {
+  const openDeleteModal = useCallback((client: Client) => {
     closeActionsMenu();
     setDeleteClient(client);
-    setDeleteMode("client_only");
     setDeleteConfirmText("");
     setDeleteError(null);
-    if (selectedClientId === client.id) {
-      setDeleteBookingCount(clientBookings.length);
-    } else {
-      setDeleteBookingCount(0);
-      try {
-        const token = firebaseUser ? await firebaseUser.getIdToken() : null;
-        if (!token || !siteId) {
-          setDeleteBookingCount(0);
-          return;
-        }
-        const res = await fetch(
-          `/api/clients/booking-count?siteId=${encodeURIComponent(siteId)}&clientId=${encodeURIComponent(client.id)}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        const data = await res.json().catch(() => ({}));
-        setDeleteBookingCount(data.ok ? data.count ?? 0 : 0);
-      } catch {
-        setDeleteBookingCount(0);
-      }
-    }
-  }, [selectedClientId, clientBookings.length, firebaseUser, siteId, closeActionsMenu]);
+  }, [closeActionsMenu]);
 
   const closeDeleteModal = useCallback(() => {
     setDeleteClient(null);
@@ -702,10 +676,9 @@ export default function ClientCardPage() {
     setDeleteError(null);
     try {
       const token = await firebaseUser.getIdToken();
-      const res = await fetch("/api/clients/delete", {
+      const res = await fetch(`/api/sites/${encodeURIComponent(siteId)}/clients/${encodeURIComponent(deleteClient.id)}/delete`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ siteId, clientId: deleteClient.id, mode: deleteMode }),
+        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -726,7 +699,7 @@ export default function ClientCardPage() {
     } finally {
       setDeleteLoading(false);
     }
-  }, [firebaseUser, siteId, deleteClient, deleteMode, deleteConfirmText, selectedClientId, closeDeleteModal, router, showToast]);
+  }, [firebaseUser, siteId, deleteClient, deleteConfirmText, selectedClientId, closeDeleteModal, router, showToast]);
 
   const toggleSelectForDelete = useCallback((clientId: string) => {
     setSelectedForDelete((prev) => {
@@ -763,7 +736,7 @@ export default function ClientCardPage() {
       const fetchPromise = fetch("/api/clients/delete-bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ siteId, clientIds: ids, mode: bulkDeleteMode }),
+        body: JSON.stringify({ siteId, clientIds: ids }),
       });
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("המחיקה לוקחת יותר מדי זמן (15 שניות). נסה שוב.")), BULK_DELETE_TIMEOUT_MS)
@@ -776,7 +749,7 @@ export default function ClientCardPage() {
       const deleted = (data as { deleted?: number }).deleted ?? 0;
       const failed = (data as { failed?: number }).failed ?? 0;
       if (failed > 0) {
-        showToast(`נמחקו ${deleted}. ${failed} נכשלו (יש תורים?)`, true);
+        showToast(`נמחקו ${deleted}. ${failed} נכשלו.`, true);
       } else {
         showToast(`נמחקו ${deleted} לקוחות`);
       }
@@ -796,7 +769,7 @@ export default function ClientCardPage() {
       setBulkDeleteConfirm("");
       setSelectedForDelete(new Set());
     }
-  }, [firebaseUser, siteId, selectedForDelete, bulkDeleteMode, bulkDeleteConfirm, selectedClientId, router, showToast]);
+  }, [firebaseUser, siteId, selectedForDelete, bulkDeleteConfirm, selectedClientId, router, showToast]);
 
   return (
     <div dir="rtl" className="min-h-screen w-full">
@@ -836,7 +809,7 @@ export default function ClientCardPage() {
                         נקה
                       </button>
                       <button
-                        onClick={() => { setBulkDeleteOpen(true); setBulkDeleteMode("client_only"); setBulkDeleteConfirm(""); setBulkDeleteError(null); }}
+                        onClick={() => { setBulkDeleteOpen(true); setBulkDeleteConfirm(""); setBulkDeleteError(null); }}
                         className="px-3 py-1.5 text-sm text-red-700 hover:bg-red-50 border border-red-200 rounded-lg font-medium"
                       >
                         מחק {selectedForDelete.size} נבחרים
@@ -909,11 +882,6 @@ export default function ClientCardPage() {
                             <h3 className="font-semibold text-slate-900">{client.name}</h3>
                             <p className="text-xs text-slate-600 mt-1">{client.phone}</p>
                           </div>
-                          {client.totalBookings > 0 && (
-                            <span className="text-xs text-slate-400 mr-2">
-                              {client.totalBookings} תורים
-                            </span>
-                          )}
                         </div>
                       </button>
                       <div className="absolute left-2 top-1/2 -translate-y-1/2">
@@ -989,27 +957,19 @@ export default function ClientCardPage() {
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">תור אחרון</label>
                       <p className="text-base text-slate-900">
-                        {lastAppointment.lastConfirmedAt
-                          ? lastAppointment.lastConfirmedAt.toLocaleDateString("he-IL", {
-                              day: "numeric",
-                              month: "short",
+                        {lastBooking.lastBookingAt
+                          ? lastBooking.lastBookingAt.toLocaleDateString("he-IL", {
+                              day: "2-digit",
+                              month: "2-digit",
                               year: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
                             })
-                          : clientBookings.length > 0
-                            ? "אין תור עבר מאושר"
-                            : "—"}
+                          : "אין תור קיים"}
                       </p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">ימים מאז תור אחרון</label>
                       <p className="text-base text-slate-900">
-                        {lastAppointment.daysSince !== null
-                          ? String(lastAppointment.daysSince)
-                          : lastAppointment.lastConfirmedAt == null
-                            ? "—"
-                            : "0"}
+                        {lastBooking.daysSince !== null ? String(lastBooking.daysSince) : "—"}
                       </p>
                     </div>
                     {selectedClient.createdAt && (
@@ -1020,10 +980,6 @@ export default function ClientCardPage() {
                         </p>
                       </div>
                     )}
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">סה"כ תורים</label>
-                      <p className="text-base text-slate-900">{selectedClient.totalBookings}</p>
-                    </div>
                   </div>
                   <div className="mt-4">
                     <label className="block text-sm font-medium text-slate-700 mb-1">הערות לקוח</label>
@@ -1507,40 +1463,10 @@ export default function ClientCardPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" dir="rtl">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
             <div className="p-6">
-              <h2 className="text-xl font-bold text-slate-900 mb-2">למחוק לקוח?</h2>
+              <h2 className="text-xl font-bold text-slate-900 mb-2">מחיקת לקוח</h2>
               <p className="text-sm text-slate-600 mb-4">
-                הפעולה תמחק את הלקוח. מה לעשות עם התורים שלו?
+                מחיקת הלקוח תמחק גם את כל ההזמנות שלו. פעולה זו לא ניתנת לשחזור.
               </p>
-              <p className="text-sm text-slate-700 mb-4">
-                ללקוח זה יש <strong>{deleteBookingCount}</strong> תורים.
-              </p>
-              <div className="space-y-2 mb-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="deleteMode"
-                    checked={deleteMode === "client_only"}
-                    onChange={() => setDeleteMode("client_only")}
-                    className="rounded-full"
-                  />
-                  <span className="text-sm">מחק רק את הלקוח והשאר תורים</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="deleteMode"
-                    checked={deleteMode === "client_and_bookings"}
-                    onChange={() => setDeleteMode("client_and_bookings")}
-                    className="rounded-full"
-                  />
-                  <span className="text-sm">מחק לקוח + מחק את כל התורים שלו</span>
-                </label>
-              </div>
-              {deleteMode === "client_only" && deleteBookingCount > 0 && (
-                <p className="text-xs text-amber-700 mb-2">
-                  לא ניתן למחוק רק את הלקוח כאשר יש תורים. בחר למחוק גם תורים.
-                </p>
-              )}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   הקלד &quot;מחק&quot; או את מספר הטלפון לאישור
@@ -1571,12 +1497,11 @@ export default function ClientCardPage() {
                   onClick={handleConfirmDelete}
                   disabled={
                     deleteLoading ||
-                    (deleteMode === "client_only" && deleteBookingCount > 0) ||
                     (deleteConfirmText.trim() !== "מחק" && deleteConfirmText.trim() !== deleteClient.id)
                   }
                   className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {deleteLoading ? "מוחק…" : "מחק"}
+                  {deleteLoading ? "מוחק…" : "מחק לקוח"}
                 </button>
               </div>
             </div>
@@ -1591,32 +1516,7 @@ export default function ClientCardPage() {
             <div className="p-6">
               <h2 className="text-xl font-bold text-slate-900 mb-2">מחיקת {selectedForDelete.size} לקוחות</h2>
               <p className="text-sm text-slate-600 mb-4">
-                מה לעשות עם התורים של הלקוחות הנבחרים?
-              </p>
-              <div className="space-y-2 mb-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="bulkDeleteMode"
-                    checked={bulkDeleteMode === "client_only"}
-                    onChange={() => setBulkDeleteMode("client_only")}
-                    className="rounded-full"
-                  />
-                  <span className="text-sm">מחק רק את הלקוחות (השאר תורים)</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="bulkDeleteMode"
-                    checked={bulkDeleteMode === "client_and_bookings"}
-                    onChange={() => setBulkDeleteMode("client_and_bookings")}
-                    className="rounded-full"
-                  />
-                  <span className="text-sm">מחק לקוחות + מחק את כל התורים שלהם</span>
-                </label>
-              </div>
-              <p className="text-xs text-amber-700 mb-2">
-                לקוחות עם תורים יידלגו אם תבחר &quot;מחק רק לקוחות&quot;.
+                מחיקת הלקוחות תמחק גם את כל ההזמנות שלהם. פעולה זו לא ניתנת לשחזור.
               </p>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 mb-1">

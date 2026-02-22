@@ -1,59 +1,55 @@
 /**
- * Initialize user site from template
- * Copies data from sites/amitay-hair-mk6krumy to users/{uid}/site/main
+ * Initialize user site from template (LEGACY)
+ * Reads from templates/hair1 and writes to users/{uid}/site/main
+ * Note: users/{uid}/site/main is legacy; current model uses sites/{siteId} + tenants.
  */
 
 import { db } from "./firebaseClient";
 import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
-
-const TEMPLATE_SITE_ID = "amitay-hair-mk6krumy";
+import { DEFAULT_HAIR_TEMPLATE_KEY, TEMPLATES_COLLECTION } from "@/types/template";
 
 export async function initializeUserSiteFromTemplate(userId: string): Promise<void> {
   if (!db) {
     throw new Error("Firestore db not initialized");
   }
 
-  // Check if user site already exists
   const userSiteRef = doc(db, "users", userId, "site", "main");
   const userSiteSnap = await getDoc(userSiteRef);
-  
+
   if (userSiteSnap.exists()) {
-    // User site already exists, no need to initialize
     if (process.env.NODE_ENV === "development") {
-      console.log(`[initializeUserSite] User site already exists for uid=${userId}, skipping initialization`);
+      console.log(`[initializeUserSite] User site already exists for uid=${userId}, skipping`);
     }
     return;
   }
 
-  // Load template site
-  const templateSiteRef = doc(db, "sites", TEMPLATE_SITE_ID);
-  const templateSiteSnap = await getDoc(templateSiteRef);
-  
-  if (!templateSiteSnap.exists()) {
-    throw new Error(`Template site ${TEMPLATE_SITE_ID} not found`);
+  const templateRef = doc(db, TEMPLATES_COLLECTION, DEFAULT_HAIR_TEMPLATE_KEY);
+  const templateSnap = await getDoc(templateRef);
+
+  if (!templateSnap.exists()) {
+    throw new Error(
+      `Template "${DEFAULT_HAIR_TEMPLATE_KEY}" not found. Run scripts/createHair1TemplateFromSite.ts to create it.`
+    );
   }
 
-  const templateData = templateSiteSnap.data();
-  
-  // Copy template data to user site
-  // Exclude ownerUserId from template (we'll set it to the current user)
-  const { ownerUserId, ...siteDataToCopy } = templateData;
-  
+  const templateData = templateSnap.data() as { configDefaults?: Record<string, unknown> };
+  const configDefaults = templateData?.configDefaults ?? {};
+
   const now = Timestamp.now();
-  
-  // Create user site with template data
+
   await setDoc(userSiteRef, {
-    ...siteDataToCopy,
+    config: configDefaults,
     ownerUserId: userId,
+    businessType: "hair",
+    templateKey: DEFAULT_HAIR_TEMPLATE_KEY,
+    templateSource: `templates/${DEFAULT_HAIR_TEMPLATE_KEY}`,
     createdAt: now,
     updatedAt: now,
-    // Mark as initialized from template
     initializedFromTemplate: true,
-    templateSource: TEMPLATE_SITE_ID,
   });
 
   if (process.env.NODE_ENV === "development") {
-    console.log(`[initializeUserSite] Initialized user site for uid=${userId} from template ${TEMPLATE_SITE_ID}`);
+    console.log(`[initializeUserSite] Initialized user site for uid=${userId} from template ${DEFAULT_HAIR_TEMPLATE_KEY}`);
   }
 }
 

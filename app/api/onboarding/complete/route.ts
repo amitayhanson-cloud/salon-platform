@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
+import { getTemplateConfigDefaults } from "@/lib/firestoreTemplatesServer";
+import { mergeTemplateWithBuilderConfig } from "@/lib/mergeTemplateConfig";
+import { generateDemoFaqs, generateDemoReviews } from "@/lib/demoContent";
 import { validateSlug } from "@/lib/slug";
 import { getSitePublicUrl } from "@/lib/tenant";
+import { DEFAULT_HAIR_TEMPLATE_KEY } from "@/types/template";
 import type { SiteConfig } from "@/types/siteConfig";
 import type { SiteService } from "@/types/siteConfig";
 
@@ -84,15 +88,40 @@ export async function POST(request: NextRequest) {
     const userRef = db.collection(USERS_COLLECTION).doc(uid);
     const now = new Date();
 
-    const configWithSlug: SiteConfig = { ...config, slug };
+    // Merge template defaults (hair1) with builder config
+    let finalConfig: SiteConfig = { ...config, slug };
+    try {
+      const templateDefaults = await getTemplateConfigDefaults(DEFAULT_HAIR_TEMPLATE_KEY);
+      finalConfig = mergeTemplateWithBuilderConfig(templateDefaults, finalConfig);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Template not available: ${msg}. Run scripts/createHair1TemplateFromSite.ts to create the template.`,
+        },
+        { status: 500 }
+      );
+    }
+
+    // Generate demo FAQs/Reviews if extra pages selected and none exist
+    if (finalConfig.extraPages?.includes("faq") && (!finalConfig.faqs || finalConfig.faqs.length === 0)) {
+      finalConfig = { ...finalConfig, faqs: generateDemoFaqs() };
+    }
+    if (finalConfig.extraPages?.includes("reviews") && (!finalConfig.reviews || finalConfig.reviews.length === 0)) {
+      finalConfig = { ...finalConfig, reviews: generateDemoReviews() };
+    }
 
     const batch = db.batch();
     batch.set(siteRef, {
       ownerUid: uid,
       ownerUserId: uid,
-      config: configWithSlug,
+      config: finalConfig,
       slug,
       services,
+      businessType: "hair",
+      templateKey: DEFAULT_HAIR_TEMPLATE_KEY,
+      templateSource: `templates/${DEFAULT_HAIR_TEMPLATE_KEY}`,
       createdAt: now,
       updatedAt: now,
     });

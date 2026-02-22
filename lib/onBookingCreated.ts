@@ -54,6 +54,7 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
 
   // Idempotent: skip sending if we already sent (avoid duplicate WhatsApp on retries)
   const alreadySent =
+    data.confirmationSentAt != null ||
     (data.customerPhoneE164 && data.whatsappStatus) ||
     data.whatsappStatus === "booked" ||
     data.whatsappStatus === "awaiting_confirmation" ||
@@ -85,6 +86,7 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
   await bookingRef.update({
     customerPhoneE164,
     whatsappStatus: "booked",
+    confirmationSentAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
   });
 

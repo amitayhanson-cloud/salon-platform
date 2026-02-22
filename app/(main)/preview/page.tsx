@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { SiteConfig } from "@/types/siteConfig";
 import {
   getTemplateForConfig,
@@ -20,9 +20,11 @@ import {
 function HairLuxuryPreview({
   config,
   template,
+  storageKey = "salonBookingState:preview",
 }: {
   config: SiteConfig;
   template: TemplateDefinition;
+  storageKey?: string;
 }) {
   const { colors, images } = template.assets;
 
@@ -37,7 +39,7 @@ function HairLuxuryPreview({
   // Load booking state on mount
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const stored = window.localStorage.getItem("salonBookingState");
+    const stored = window.localStorage.getItem(storageKey);
     try {
       if (stored) {
         setBookingState(JSON.parse(stored));
@@ -48,12 +50,12 @@ function HairLuxuryPreview({
       console.error("Failed to parse booking state on preview", e);
       setBookingState(defaultBookingState);
     }
-  }, []);
+  }, [storageKey]);
 
   const saveBookingState = (next: SalonBookingState) => {
     setBookingState(next);
     if (typeof window !== "undefined") {
-      window.localStorage.setItem("salonBookingState", JSON.stringify(next));
+      window.localStorage.setItem(storageKey, JSON.stringify(next));
     }
   };
 
@@ -457,6 +459,8 @@ function HairLuxuryPreview({
 
 export default function PreviewPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const siteId = searchParams?.get("siteId") ?? null;
   const [siteConfig, setSiteConfig] = useState<SiteConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -467,8 +471,9 @@ export default function PreviewPage() {
 
     setLoading(true);
 
-    // Read the config the wizard saved
-    const raw = window.sessionStorage.getItem("latestSiteConfig");
+    // Read the config: keyed by siteId when available (tenant-safe), else wizard flow key
+    const storageKey = siteId ? `latestSiteConfig:${siteId}` : "latestSiteConfig";
+    const raw = window.sessionStorage.getItem(storageKey);
     if (!raw) {
       setLoading(false);
       return;
@@ -575,7 +580,17 @@ export default function PreviewPage() {
     ? getTemplateForConfig(siteConfig)
     : hairLuxuryTemplate;
 
-  return <HairLuxuryPreview config={siteConfig} template={template} />;
+  const bookingStorageKey = siteId
+    ? `salonBookingState:${siteId}`
+    : "salonBookingState:preview";
+
+  return (
+    <HairLuxuryPreview
+      config={siteConfig}
+      template={template}
+      storageKey={bookingStorageKey}
+    />
+  );
 }
 
 function BookingForm({

@@ -1,18 +1,15 @@
 /**
  * POST /api/clients/delete-bulk
- * Delete multiple clients. For each client: optionally delete their bookings, then delete client.
- * Body: { siteId, clientIds: string[], mode: "client_only" | "client_and_bookings" }
+ * Delete multiple clients. For each: full delete (bookings + client + subcollections).
+ * Body: { siteId, clientIds: string[] }
  * Requires Firebase ID token. Site owner only.
  */
 
 import { NextResponse } from "next/server";
-import admin from "firebase-admin";
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
+import { deleteClientAndArchivedBookings } from "@/lib/clients/deleteClientAndArchivedBookings";
 
-const BATCH_SIZE = 400;
-const FieldPath = admin.firestore.FieldPath;
-
-function requireSiteOwner(token: string | null, _siteId: string): Promise<{ uid: string } | NextResponse> {
+function requireAuth(token: string | null): Promise<{ uid: string } | NextResponse> {
   if (!token) {
     return Promise.resolve(NextResponse.json({ ok: false, message: "unauthenticated" }, { status: 401 }));
   }
@@ -35,74 +32,14 @@ async function assertSiteOwner(uid: string, siteId: string): Promise<NextRespons
   return null;
 }
 
-async function deleteSubcollectionDocs(
-  db: admin.firestore.Firestore,
-  siteId: string,
-  clientId: string,
-  subName: string
-): Promise<void> {
-  const ref = db.collection("sites").doc(siteId).collection("clients").doc(clientId).collection(subName);
-  let snapshot = await ref.get();
-  while (!snapshot.empty) {
-    const batch = db.batch();
-    const chunk = snapshot.docs.slice(0, BATCH_SIZE);
-    chunk.forEach((d) => batch.delete(d.ref));
-    await batch.commit();
-    if (snapshot.docs.length <= BATCH_SIZE) break;
-    snapshot = await ref.get();
-  }
-}
-
 async function deleteOneClient(
-  db: admin.firestore.Firestore,
+  db: ReturnType<typeof getAdminDb>,
   siteId: string,
-  clientId: string,
-  mode: "client_only" | "client_and_bookings"
+  clientId: string
 ): Promise<{ ok: true } | { ok: false; clientId: string; message: string }> {
-  const clientRef = db.collection("sites").doc(siteId).collection("clients").doc(clientId);
-  const clientSnap = await clientRef.get();
-  if (!clientSnap.exists) {
-    return { ok: false, clientId, message: "client not found" };
-  }
-
-  const bookingsRef = db.collection("sites").doc(siteId).collection("bookings");
-
-  if (mode === "client_and_bookings") {
-    let snapshot = await bookingsRef
-      .where("customerPhone", "==", clientId)
-      .orderBy(FieldPath.documentId())
-      .limit(BATCH_SIZE)
-      .get();
-    while (!snapshot.empty) {
-      const batch = db.batch();
-      snapshot.docs.forEach((d) => batch.delete(d.ref));
-      await batch.commit();
-      if (snapshot.docs.length < BATCH_SIZE) break;
-      const last = snapshot.docs[snapshot.docs.length - 1];
-      snapshot = await bookingsRef
-        .where("customerPhone", "==", clientId)
-        .orderBy(FieldPath.documentId())
-        .startAfter(last)
-        .limit(BATCH_SIZE)
-        .get();
-    }
-  } else {
-    const countSnap = await bookingsRef.where("customerPhone", "==", clientId).count().get();
-    if (countSnap.data().count > 0) {
-      return { ok: false, clientId, message: "client has bookings; use client_and_bookings" };
-    }
-  }
-
-  for (const subName of ["chemicalCard", "personalPricing"]) {
-    try {
-      await deleteSubcollectionDocs(db, siteId, clientId, subName);
-    } catch {
-      // subcollection may not exist
-    }
-  }
-
-  await clientRef.delete();
-  return { ok: true };
+  const result = await deleteClientAndArchivedBookings(db, siteId, clientId);
+  if (result.ok) return { ok: true };
+  return { ok: false, clientId, message: result.message };
 }
 
 export async function POST(request: Request) {
@@ -113,7 +50,6 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const siteId = body?.siteId;
     const clientIds = body?.clientIds;
-    const mode = body?.mode;
 
     if (!siteId || typeof siteId !== "string") {
       return NextResponse.json({ ok: false, message: "missing siteId" }, { status: 400 });
@@ -124,11 +60,7 @@ export async function POST(request: Request) {
     if (!clientIds.every((id) => typeof id === "string")) {
       return NextResponse.json({ ok: false, message: "clientIds must be strings" }, { status: 400 });
     }
-    if (mode !== "client_only" && mode !== "client_and_bookings") {
-      return NextResponse.json({ ok: false, message: "mode must be client_only or client_and_bookings" }, { status: 400 });
-    }
-
-    const authResult = await requireSiteOwner(token, siteId);
+    const authResult = await requireAuth(token);
     if (authResult instanceof NextResponse) return authResult;
     const uid = authResult.uid;
 
@@ -139,14 +71,14 @@ export async function POST(request: Request) {
     const results: Array<{ clientId: string; ok: boolean; message?: string }> = [];
     const total = clientIds.length;
     if (process.env.NODE_ENV === "development") {
-      console.log("[clients/delete-bulk] start", { siteId, count: total, mode });
+      console.log("[clients/delete-bulk] start", { siteId, count: total });
     }
     for (let i = 0; i < clientIds.length; i++) {
       const clientId = clientIds[i];
       if (process.env.NODE_ENV === "development" && i > 0 && i % 10 === 0) {
         console.log("[clients/delete-bulk] progress", { batch: Math.floor(i / 10) + 1, done: i, total });
       }
-      const result = await deleteOneClient(db, siteId, clientId, mode);
+      const result = await deleteOneClient(db, siteId, clientId);
       results.push(
         result.ok ? { clientId, ok: true } : { clientId, ok: false, message: result.message }
       );

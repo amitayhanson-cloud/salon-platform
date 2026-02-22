@@ -66,6 +66,14 @@ export function isPlatformHost(hostHeader: string): boolean {
 }
 
 /**
+ * Returns true if the host is a tenant subdomain (e.g. test123.caleno.co, alice.localhost).
+ * Use for UI copy (e.g. login page: "אימות זהות" on subdomain vs "התחברות לחשבון" on root).
+ */
+export function isTenantSubdomainHost(hostHeader: string): boolean {
+  return getHostKind(hostHeader).kind === "tenant";
+}
+
+/**
  * Parse host and optionally detect tenant subdomain.
  * - Strips port (e.g. alice.caleno.co:3000 -> alice.caleno.co).
  * - Lowercases.

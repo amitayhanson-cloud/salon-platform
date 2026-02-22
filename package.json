@@ -16,7 +16,12 @@
     "dedupe-client-archived-bookings": "tsx scripts/dedupe-client-archived-bookings.ts",
     "dev-reset-bookings": "tsx scripts/dev-reset-bookings.ts",
     "dev-reset-site": "tsx scripts/dev-reset-site.ts",
-    "fix-bad-booking-statuses": "tsx scripts/fix-bad-booking-statuses.ts"
+    "fix-bad-booking-statuses": "tsx scripts/fix-bad-booking-statuses.ts",
+    "clean-slate": "tsx scripts/cleanSlate.ts",
+    "clean-slate:execute": "tsx scripts/cleanSlate.ts --execute",
+    "create-hair1-template": "tsx scripts/createHair1TemplateFromSite.ts",
+    "migrate-sites-to-hair1": "tsx scripts/migrateSitesToHair1.ts",
+    "verify-template-refactor": "tsx scripts/verifyTemplateRefactor.ts"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.3.2",

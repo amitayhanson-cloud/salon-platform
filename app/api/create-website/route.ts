@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createWebsiteDocumentServer, updateUserSiteIdServer } from "@/lib/firestoreUsersServer";
 import { getAdminDb } from "@/lib/firebaseAdmin";
+import { getTemplateConfigDefaults } from "@/lib/firestoreTemplatesServer";
+import { mergeTemplateWithBuilderConfig } from "@/lib/mergeTemplateConfig";
 import { defaultSiteConfig } from "@/types/siteConfig";
+import { DEFAULT_HAIR_TEMPLATE_KEY } from "@/types/template";
 import { validateSlug } from "@/lib/slug";
 import { getSitePublicUrl } from "@/lib/tenant";
 
@@ -99,10 +102,17 @@ export async function POST(request: NextRequest) {
 
     const siteId = websiteId;
     const now = new Date();
-    const initialConfig = {
+    let initialConfig = {
       ...defaultSiteConfig,
       salonName: salonName || "הסלון שלי",
     };
+
+    try {
+      const templateDefaults = await getTemplateConfigDefaults(DEFAULT_HAIR_TEMPLATE_KEY);
+      initialConfig = mergeTemplateWithBuilderConfig(templateDefaults, initialConfig);
+    } catch (err) {
+      console.warn("[create-website] Template not found, using defaults:", err);
+    }
 
     const siteRef = db.collection("sites").doc(siteId);
     const tenantRef = db.collection(TENANTS_COLLECTION).doc(slug);
@@ -112,6 +122,9 @@ export async function POST(request: NextRequest) {
       ownerUid: userId,
       ownerUserId: userId,
       slug,
+      businessType: "hair",
+      templateKey: DEFAULT_HAIR_TEMPLATE_KEY,
+      templateSource: `templates/${DEFAULT_HAIR_TEMPLATE_KEY}`,
       createdAt: now,
       updatedAt: now,
     });

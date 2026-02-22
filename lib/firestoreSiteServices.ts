@@ -200,12 +200,14 @@ export async function migrateServicesFromSubcollection(siteId: string): Promise<
       return;
     }
     
-    // Try to load from old subcollection (legacy: users/{uid}/site/main/services)
-    // This migration is for backward compatibility only
-    // Note: This may not work if siteId is not a userId, but that's okay - migration is optional
+    // Try to load from old subcollection (legacy: users/{ownerUid}/site/main/services)
+    // Migration only works when siteId === ownerUid (legacy single-tenant); otherwise no-op
     try {
+      const siteSnap = await getDoc(doc(getDb(), "sites", siteId));
+      const ownerUid = siteSnap.data()?.ownerUid ?? siteSnap.data()?.ownerUserId;
+      if (!ownerUid) return;
       const { getServices } = await import("@/lib/firestoreServices");
-      const oldServices = await getServices(siteId);
+      const oldServices = await getServices(ownerUid);
       
       if (oldServices.length === 0) {
         console.log("[migrateServicesFromSubcollection] No old services found, skipping migration");

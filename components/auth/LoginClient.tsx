@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { clearStaleRedirectStorage } from "@/lib/clearStaleRedirectStorage";
 import { auth } from "@/lib/firebaseClient";
+import { isTenantSubdomainHost } from "@/lib/tenant";
 
 function LoginForm() {
   const router = useRouter();
@@ -16,6 +17,13 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+
+  const [isTenantLogin, setIsTenantLogin] = useState(false);
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsTenantLogin(isTenantSubdomainHost(window.location.hostname));
+    }
+  }, []);
 
   useEffect(() => {
     clearStaleRedirectStorage();
@@ -143,9 +151,16 @@ function LoginForm() {
     <div dir="rtl" className="min-h-screen bg-slate-50 py-12">
       <div className="container mx-auto px-4 max-w-md">
         <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-6 sm:p-8 text-right">
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-6">
-            התחברות לחשבון
-          </h1>
+          <div className="mb-6">
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
+              {isTenantLogin ? "אימות זהות" : "התחברות לחשבון"}
+            </h1>
+            {isTenantLogin && (
+              <p className="text-slate-600 mt-2">
+                יש לאמת את זהותך כדי להמשיך ללוח הניהול
+              </p>
+            )}
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
@@ -195,7 +210,13 @@ function LoginForm() {
               disabled={loading || googleLoading}
               className="w-full px-6 py-3 bg-sky-500 hover:bg-sky-600 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? "מתחבר..." : "התחברות"}
+              {loading
+                ? isTenantLogin
+                  ? "מאמת..."
+                  : "מתחבר..."
+                : isTenantLogin
+                  ? "אמת והמשך"
+                  : "התחברות"}
             </button>
           </form>
 
@@ -219,7 +240,7 @@ function LoginForm() {
             {googleLoading ? (
               <>
                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-slate-600"></div>
-                <span>מתחבר...</span>
+                <span>{isTenantLogin ? "מאמת..." : "מתחבר..."}</span>
               </>
             ) : (
               <>
