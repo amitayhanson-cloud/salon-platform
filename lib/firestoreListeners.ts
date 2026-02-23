@@ -8,6 +8,8 @@ import { onSnapshot, type Unsubscribe } from "firebase/firestore";
 import type { Query, DocumentReference } from "firebase/firestore";
 
 const isDev = typeof process !== "undefined" && process.env.NODE_ENV !== "production";
+/** Set to true only when debugging listener leaks; avoids log spam and Fast Refresh churn. */
+const DEV_LISTENER_LOGS = false;
 
 let activeListenerCount = 0;
 
@@ -53,7 +55,7 @@ function onSnapshotDebugImpl(
 
   const path = getPathLabel(queryOrRef);
   activeListenerCount += 1;
-  console.log(`[Firestore listener +1] ${label} | active=${activeListenerCount} | ${path}`);
+  if (DEV_LISTENER_LOGS) console.log(`[Firestore listener +1] ${label} | active=${activeListenerCount} | ${path}`);
 
   const unsubscribe = onSnapshot(
     queryOrRef as Query,
@@ -67,7 +69,7 @@ function onSnapshotDebugImpl(
 
   return () => {
     activeListenerCount -= 1;
-    console.log(`[Firestore listener -1] ${label} | active=${activeListenerCount}`);
+    if (DEV_LISTENER_LOGS) console.log(`[Firestore listener -1] ${label} | active=${activeListenerCount}`);
     unsubscribe();
   };
 }

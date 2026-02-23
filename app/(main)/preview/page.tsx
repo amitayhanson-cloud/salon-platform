@@ -16,6 +16,7 @@ import {
   HAIR_ABOUT_IMAGES,
   HAIR_WORK_IMAGES,
 } from "@/lib/hairImages";
+import { getGalleryImages } from "@/lib/getGalleryImages";
 
 function HairLuxuryPreview({
   config,
@@ -31,7 +32,7 @@ function HairLuxuryPreview({
   // Use config images if set, otherwise use defaults
   const heroImageUrl = config.heroImage || HAIR_HERO_IMAGES[0];
   const aboutImageUrl = config.aboutImage || HAIR_ABOUT_IMAGES[0];
-  const galleryImages = HAIR_WORK_IMAGES;
+  const galleryImages = getGalleryImages(config, HAIR_WORK_IMAGES);
 
   // Booking state
   const [bookingState, setBookingState] = useState<SalonBookingState | null>(null);

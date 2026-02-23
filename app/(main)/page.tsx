@@ -8,6 +8,7 @@ import { DEFAULT_LANDING_CONTENT } from "@/lib/landingContentDefaults";
 import type { LandingContent } from "@/types/landingContent";
 import { Accordion } from "@/components/admin/Accordion";
 import FeaturesSection from "@/components/landing/FeaturesSection";
+import { AdminPanelLink } from "@/components/AdminPanelLink";
 
 export default function Home() {
   const [content, setContent] = useState<LandingContent>(DEFAULT_LANDING_CONTENT);
@@ -43,9 +44,9 @@ export default function Home() {
       "inline-block w-full sm:w-auto min-h-[44px] flex items-center justify-center px-8 py-3 text-base rounded-xl bg-white border border-[#2EC4C6] text-[#2EC4C6] hover:bg-[#EEF7F9] font-medium transition-colors text-center";
     if (isLoggedIn && hasSite) {
       return (
-        <Link href="/dashboard" className={heroPrimaryClass}>
-          לדשבורד
-        </Link>
+        <AdminPanelLink className={heroPrimaryClass}>
+          לפאנל ניהול
+        </AdminPanelLink>
       );
     }
     if (isLoggedIn && !hasSite) {
@@ -60,9 +61,9 @@ export default function Home() {
         <Link href="/signup" className={heroPrimaryClass}>
           {contentLoading ? DEFAULT_LANDING_CONTENT.hero.primaryCtaLabel : hero.primaryCtaLabel}
         </Link>
-        <Link href="/dashboard" className={heroSecondaryClass}>
-          התחברות
-        </Link>
+        <AdminPanelLink className={heroSecondaryClass}>
+          לפאנל ניהול
+        </AdminPanelLink>
       </>
     );
   };

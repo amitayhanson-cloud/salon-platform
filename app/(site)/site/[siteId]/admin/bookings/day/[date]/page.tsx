@@ -19,7 +19,7 @@ import {
 } from "@/lib/firestorePaths";
 import { normalizeBooking, isBookingCancelled, isBookingArchived } from "@/lib/normalizeBooking";
 import { parseDateParamToDayKey } from "@/lib/dateLocal";
-import { fromYYYYMMDD, toYYYYMMDD, getMinutesSinceStartOfDay } from "@/lib/calendarUtils";
+import { fromYYYYMMDD, toYYYYMMDD, getMinutesSinceStartOfDay, getNextDate, getPrevDate } from "@/lib/calendarUtils";
 import type { BreakRange } from "@/types/bookingSettings";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
 import { subscribeBookingSettings } from "@/lib/firestoreBookingSettings";
@@ -39,10 +39,11 @@ import AdminBookingFormSimple from "@/components/admin/AdminBookingFormSimple";
 import AdminCreateBookingForm from "@/components/admin/AdminCreateBookingForm";
 import CancelBookingModal from "@/components/admin/CancelBookingModal";
 import { getAdminBasePathFromSiteId } from "@/lib/url";
+import CalenoLoading from "@/components/CalenoLoading";
 import { getDisplayStatus, getDisplayStatusKey } from "@/lib/bookingRootStatus";
 import StatusDot from "@/components/StatusDot";
 import { useAuth } from "@/hooks/useAuth";
-import { X, Plus, Printer, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, Plus, Printer, Trash2, ChevronLeft, ChevronRight, Calendar } from "lucide-react";
 import type { AdminBookingFormSimpleEditData } from "@/components/admin/AdminBookingFormSimple";
 
 const DAY_LABELS: Record<string, string> = {
@@ -71,17 +72,19 @@ function getDayLabel(day: string): string {
   return DAY_LABELS[day] ?? WEEKDAY_LABELS[day] ?? day;
 }
 
+/** Single-line date display for header: "יום ראשון, 23/02/2025" (RTL). */
+function formatDayDisplay(date: Date): string {
+  const dayName = DAY_LABELS[date.getDay().toString()] ?? "";
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const y = date.getFullYear();
+  return `יום ${dayName}, ${dd}/${mm}/${y}`;
+}
+
 function toWeekday(day: string): Weekday {
   const n = parseInt(day, 10);
   if (Number.isInteger(n) && n >= 0 && n < 7) return WEEKDAYS_ORDER[n];
   return (WEEKDAY_LABELS[day] !== undefined ? day : "sun") as Weekday;
-}
-
-/** Add delta days to a YYYY-MM-DD string; returns YYYY-MM-DD. */
-function adjacentDateKey(dateKey: string, delta: number): string {
-  const d = fromYYYYMMDD(dateKey);
-  d.setDate(d.getDate() + delta);
-  return toYYYYMMDD(d);
 }
 
 interface Booking {
@@ -133,6 +136,8 @@ export default function DaySchedulePage() {
 
   // Sentinel value for "All workers" mode (defined outside component to avoid dependency issues)
   const ALL_WORKERS = "all";
+
+  const dateInputRef = useRef<HTMLInputElement>(null);
 
   // Worker filter from URL query - "all" means "All workers", otherwise specific worker ID
   // Default to "all" (All workers) if no workerId in URL
@@ -846,10 +851,14 @@ export default function DaySchedulePage() {
 
   if (loading || bookingsLoading || workersLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" dir="rtl">
-        <div className="text-center">
-          <p className="text-slate-600 text-sm mb-2">טוען…</p>
-        </div>
+      <div
+        className="min-h-screen flex items-center justify-center w-full"
+        dir="rtl"
+        style={{
+          background: "linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%)",
+        }}
+      >
+        <CalenoLoading />
       </div>
     );
   }
@@ -886,24 +895,14 @@ export default function DaySchedulePage() {
         <div className="flex-shrink-0 mb-3 bg-white/95 backdrop-blur-sm -mx-4 px-4 py-3 rounded-b-lg border-b border-slate-200/80">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-slate-900">
-                לוח זמנים —
-              </h1>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  title="היום הבא"
-                  onClick={() => {
-                    if (!dateKey || !siteId) return;
-                    const query = selectedWorkerId && selectedWorkerId !== ALL_WORKERS ? `?workerId=${encodeURIComponent(selectedWorkerId)}` : "";
-                    router.push(`${adminBasePath}/bookings/day/${adjacentDateKey(dateKey, 1)}${query}`);
-                  }}
-                  className="p-2 rounded-lg text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-colors"
-                  aria-label="היום הבא"
-                >
-                  <ChevronRight className="w-5 h-5" />
-                </button>
+              {/* Date nav (RTL): [Calendar icon] [Right arrow] [DATE + DAY] [Left arrow] */}
+              <div
+                className="flex items-center gap-2"
+                role="group"
+                aria-label="ניווט תאריך"
+              >
                 <input
+                  ref={dateInputRef}
                   type="date"
                   value={dateKey}
                   onChange={(e) => {
@@ -913,41 +912,72 @@ export default function DaySchedulePage() {
                       router.push(`${adminBasePath}/bookings/day/${newKey}${query}`);
                     }
                   }}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-base font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                  className="sr-only"
+                  aria-hidden="true"
+                  tabIndex={-1}
                 />
-                <span className="text-xl font-semibold text-slate-700 min-w-[8rem]">
-                  {formatDayLabel(selectedDate)}
-                </span>
                 <button
                   type="button"
-                  title="היום הקודם"
                   onClick={() => {
-                    if (!dateKey || !siteId) return;
-                    const query = selectedWorkerId && selectedWorkerId !== ALL_WORKERS ? `?workerId=${encodeURIComponent(selectedWorkerId)}` : "";
-                    router.push(`${adminBasePath}/bookings/day/${adjacentDateKey(dateKey, -1)}${query}`);
+                    if (typeof dateInputRef.current?.showPicker === "function") {
+                      dateInputRef.current.showPicker();
+                    } else {
+                      dateInputRef.current?.click();
+                    }
                   }}
-                  className="p-2 rounded-lg text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-colors"
-                  aria-label="היום הקודם"
+                  title="בחר תאריך"
+                  aria-label="בחר תאריך"
+                  className="p-2 rounded-lg text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-colors border border-slate-300"
                 >
-                  <ChevronLeft className="w-5 h-5" />
+                  <Calendar className="w-5 h-5" />
                 </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    title="היום הקודם"
+                    onClick={() => {
+                      if (!dateKey || !siteId) return;
+                      const query = selectedWorkerId && selectedWorkerId !== ALL_WORKERS ? `?workerId=${encodeURIComponent(selectedWorkerId)}` : "";
+                      router.push(`${adminBasePath}/bookings/day/${getPrevDate(dateKey)}${query}`);
+                    }}
+                    className="p-2 rounded-lg text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-colors"
+                    aria-label="היום הקודם"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                  <span
+                    id="day-view-title"
+                    className="min-w-[10rem] text-center text-2xl font-bold text-slate-900"
+                  >
+                    {formatDayDisplay(selectedDate)}
+                  </span>
+                  <button
+                    type="button"
+                    title="היום הבא"
+                    onClick={() => {
+                      if (!dateKey || !siteId) return;
+                      const query = selectedWorkerId && selectedWorkerId !== ALL_WORKERS ? `?workerId=${encodeURIComponent(selectedWorkerId)}` : "";
+                      router.push(`${adminBasePath}/bookings/day/${getNextDate(dateKey)}${query}`);
+                    }}
+                    className="p-2 rounded-lg text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-colors"
+                    aria-label="היום הבא"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 data-testid="print-day-button"
-                title={
-                  selectedWorkerId === ALL_WORKERS
-                    ? "הדפס לוח זמנים (כל העובדים)"
-                    : "הדפס לוח זמנים"
-                }
+                title="הדפס"
+                aria-label="הדפס"
                 disabled={!selectedWorkerId}
                 onClick={handlePrint}
-                className="inline-flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
+                className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
               >
                 <Printer className="w-4 h-4" />
-                הדפס
               </button>
               <button
                 type="button"

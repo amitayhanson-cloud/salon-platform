@@ -432,35 +432,67 @@ export default function ServicesPage() {
   const handleSaveService = async () => {
     if (!editingService || !editingService.name.trim() || !siteId) return;
     try {
+      // Normalize numeric fields: never send undefined to Firestore
+      const priceRaw = editingService.price;
+      const priceNum =
+        priceRaw !== undefined && priceRaw !== null && priceRaw !== ""
+          ? Number(priceRaw)
+          : null;
+      const price = typeof priceNum === "number" && !Number.isNaN(priceNum) ? priceNum : null;
+
+      const durationRaw = editingService.duration;
+      const durationNum =
+        durationRaw !== undefined &&
+        durationRaw !== null &&
+        (typeof durationRaw !== "string" || durationRaw !== "")
+          ? Number(durationRaw)
+          : null;
+      const duration =
+        typeof durationNum === "number" && !Number.isNaN(durationNum) && durationNum >= 0
+          ? durationNum
+          : null;
+
+      const description =
+        editingService.description != null && String(editingService.description).trim() !== ""
+          ? String(editingService.description).trim()
+          : null;
+
+      const existingService = services.find((s) => s.id === editingService.id);
       const updatedService = {
         ...editingService,
         name: editingService.name.trim(),
         enabled: editingService.enabled !== false,
         color: editingService.color || "#3B82F6",
-        description: editingService.description?.trim() || undefined,
-        price: editingService.price,
-        duration: editingService.duration,
-        imageUrl: editingService.imageUrl?.trim() || null,
+        description: description ?? undefined,
+        price: price ?? undefined,
+        duration: duration ?? undefined,
+        imageUrl: existingService?.imageUrl ?? editingService.imageUrl,
       };
-      
+
       // Update local state immediately for instant UI feedback
-      setServices(prev => prev.map(s => s.id === updatedService.id ? updatedService : s));
-      
-      await updateSiteService(siteId, editingService.id, {
+      setServices((prev) =>
+        prev.map((s) => (s.id === updatedService.id ? updatedService : s))
+      );
+
+      const updates: Partial<Omit<SiteService, "id">> = {
         name: updatedService.name,
         enabled: updatedService.enabled,
         color: updatedService.color,
-        description: updatedService.description,
-        price: updatedService.price,
-        duration: updatedService.duration,
-        imageUrl: updatedService.imageUrl ?? null,
-      });
-      
+      };
+      if (description !== null) updates.description = description;
+      else updates.description = null;
+      if (price !== null) updates.price = price;
+      else updates.price = null;
+      if (duration !== null) updates.duration = duration;
+      else updates.duration = null;
+      // Service image is edited only in the Website Editor; do not write from this modal
+
+      await updateSiteService(siteId, editingService.id, updates);
+
       setEditingService(null);
     } catch (err) {
       console.error("Failed to update service", err);
       setError("שגיאה בעדכון שירות");
-      // Revert local state on error by re-fetching (subscription will handle this)
     }
   };
 
@@ -1293,24 +1325,6 @@ export default function ServicesPage() {
               <p className="text-xs text-slate-500 -mt-1">
                 אופציונלי. יוצגו בכרטיס השירות באתר.
               </p>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  תמונת שירות (כתובת URL)
-                </label>
-                <input
-                  type="url"
-                  value={editingService.imageUrl ?? ""}
-                  onChange={(e) =>
-                    setEditingService({ ...editingService, imageUrl: e.target.value.trim() || undefined })
-                  }
-                  placeholder="https://..."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
-                />
-                <p className="text-xs text-slate-500 mt-1">
-                  אופציונלי. תוצג ברשת השירותים באתר
-                </p>
-              </div>
 
               <label className="flex items-center gap-2">
                 <input

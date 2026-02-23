@@ -18,13 +18,13 @@ export default function WorkerFilter({
 }: WorkerFilterProps) {
   return (
     <div className="flex items-center gap-2">
-      <label className="text-sm text-slate-600 font-medium">בחר עובד:</label>
       <select
         value={selectedWorkerId}
         onChange={(e) => {
           onWorkerChange(e.target.value);
         }}
         className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 text-right bg-white"
+        aria-label="בחר עובד"
       >
         <option value="all">כל העובדים</option>
         {workers.map((worker) => (

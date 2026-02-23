@@ -60,7 +60,7 @@ const salonTypeLabels: Record<SiteConfig["salonType"], string> = {
 
 
 
-function AdminImagesTab({
+export function AdminImagesTab({
   siteConfig,
   siteId,
   onChange,

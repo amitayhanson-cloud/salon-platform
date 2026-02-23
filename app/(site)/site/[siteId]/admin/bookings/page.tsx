@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams } from "next/navigation";
+
+const DEV_LOGS = false; // Set to true only when debugging listener loops
 import Link from "next/link";
 import { getAdminBasePathFromSiteId } from "@/lib/url";
 import {
@@ -24,9 +26,9 @@ import { normalizeBooking, isBookingCancelled, isBookingArchived } from "@/lib/n
 import TwoWeekCalendar from "@/components/admin/TwoWeekCalendar";
 import TaskListPanel from "@/components/admin/TaskListPanel";
 import CancelBookingModal from "@/components/admin/CancelBookingModal";
-import { ChevronLeft, ChevronRight, Timer } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
-import AutoCleanupSettings from "@/components/admin/AutoCleanupSettings";
+import CalenoLoading from "@/components/CalenoLoading";
 
 interface Booking {
   id: string;
@@ -71,35 +73,34 @@ export default function BookingsAdminPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // Auto-cleanup settings popover
-  const [autoCleanupOpen, setAutoCleanupOpen] = useState(false);
-  const [cleanupToast, setCleanupToast] = useState<string | null>(null);
-  const [cleanupToastError, setCleanupToastError] = useState(false);
-
   // Store unsubscribe function reference for manual refresh
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
+  // Stable primitive for effect deps (avoids Date reference causing re-runs)
+  const rangeStartKey = toYYYYMMDD(rangeStart);
 
-  // Load site config to check if booking is enabled
+  // Ref guard: avoid re-running setup when effect runs again with same siteId+range (e.g. parent re-render)
+  const lastListenerKeyRef = useRef<{ siteId: string; rangeKey: string } | null>(null);
+
+  // Load site config to check if booking is enabled. Deps: only siteId (primitive).
   useEffect(() => {
     if (!siteId) {
-      console.log("[BookingManagement] No siteId in config effect");
+      if (DEV_LOGS) console.log("[BookingManagement] No siteId in config effect");
       return;
     }
-    
-    console.log("[BookingManagement] Loading site config for siteId:", siteId);
+
+    if (DEV_LOGS) console.log("[BookingManagement] Loading site config for siteId:", siteId);
     const unsubscribe = subscribeSiteConfig(
       siteId,
       (cfg) => {
-        console.log("[BookingManagement] Site config loaded:", cfg ? "exists" : "null");
-        setConfig(cfg);
-        // Fallback to localStorage if Firestore doc doesn't exist
+        if (DEV_LOGS) console.log("[BookingManagement] Site config loaded:", cfg ? "exists" : "null");
+        setConfig((prev) => (prev === cfg ? prev : (cfg ?? null)));
         if (!cfg && typeof window !== "undefined") {
           const raw = window.localStorage.getItem(`siteConfig:${siteId}`);
           if (raw) {
             try {
               const parsed = JSON.parse(raw);
-              console.log("[BookingManagement] Using localStorage config");
+              if (DEV_LOGS) console.log("[BookingManagement] Using localStorage config");
               setConfig(parsed);
             } catch (e) {
               console.error("Failed to parse localStorage config", e);
@@ -109,13 +110,12 @@ export default function BookingsAdminPage() {
       },
       (e) => {
         console.error("[BookingManagement] Failed to load site config", e);
-        // Fallback to localStorage
         if (typeof window !== "undefined") {
           const raw = window.localStorage.getItem(`siteConfig:${siteId}`);
           if (raw) {
             try {
               const parsed = JSON.parse(raw);
-              console.log("[BookingManagement] Using localStorage config (error fallback)");
+              if (DEV_LOGS) console.log("[BookingManagement] Using localStorage config (error fallback)");
               setConfig(parsed);
             } catch (e) {
               console.error("Failed to parse localStorage config", e);
@@ -126,39 +126,51 @@ export default function BookingsAdminPage() {
     );
 
     return () => {
-      console.log("[BookingManagement] Cleaning up site config subscription");
+      if (DEV_LOGS) console.log("[BookingManagement] Cleaning up site config subscription");
       unsubscribe?.();
     };
   }, [siteId]);
 
-  // Validate siteId and setup realtime listeners
+  // Validate siteId and setup realtime listeners. Deps: only stable primitives (siteId, rangeStartKey).
   useEffect(() => {
-    console.log("[BookingManagement] Effect running, siteId:", siteId, "db:", !!db);
-    
+    if (DEV_LOGS) console.log("[BookingManagement] Effect running, siteId:", siteId, "rangeStartKey:", rangeStartKey);
+
     if (!siteId) {
-      console.error("[BookingManagement] Missing siteId");
+      if (DEV_LOGS) console.error("[BookingManagement] Missing siteId");
       setError("siteId חסר. אנא רענן את הדף.");
       setLoading(false);
       return;
     }
 
     if (!db) {
-      console.error("[BookingManagement] Firebase not initialized");
+      if (DEV_LOGS) console.error("[BookingManagement] Firebase not initialized");
       setError("Firebase לא מאותחל. אנא רענן את הדף.");
       setLoading(false);
       return;
     }
 
-    console.log("[BookingManagement] Setting up realtime listeners for siteId:", siteId);
+    // Skip redundant setup when same siteId+range (prevents loop from parent re-renders or Strict Mode)
+    const listenerKey = { siteId, rangeKey: rangeStartKey };
+    if (
+      lastListenerKeyRef.current?.siteId === listenerKey.siteId &&
+      lastListenerKeyRef.current?.rangeKey === listenerKey.rangeKey
+    ) {
+      if (DEV_LOGS) console.log("[BookingManagement] Same key, skipping duplicate setup");
+      return;
+    }
+    lastListenerKeyRef.current = listenerKey;
+
+    if (DEV_LOGS) console.log("[BookingManagement] Setting up realtime listeners for siteId:", siteId);
     const cleanup = setupRealtimeListeners();
     unsubscribeRef.current = cleanup;
-    
+
     return () => {
-      console.log("[BookingManagement] Cleaning up realtime listeners");
+      lastListenerKeyRef.current = null;
+      if (DEV_LOGS) console.log("[BookingManagement] Cleaning up realtime listeners");
       cleanup();
       unsubscribeRef.current = null;
     };
-  }, [siteId, rangeStart]);
+  }, [siteId, rangeStartKey]);
 
   const setupRealtimeListeners = (): (() => void) => {
     if (!db || !siteId) {
@@ -191,8 +203,13 @@ export default function BookingsAdminPage() {
       (snapshot) => {
         const raw = snapshot.docs.map((d) => normalizeBooking(d as { id: string; data: () => Record<string, unknown> }));
         const normalized = raw.filter((b) => !isBookingCancelled(b) && !isBookingArchived(b));
-        setBookings(normalized);
-        setBookingsCount(normalized.length);
+        setBookings((prev) => {
+          if (prev.length !== normalized.length) return normalized;
+          if (prev.length === 0 && normalized.length === 0) return prev;
+          const same = normalized.every((b, i) => prev[i]?.id === b.id);
+          return same ? prev : normalized;
+        });
+        setBookingsCount((n) => (n === normalized.length ? n : normalized.length));
         setBookingsLoading(false);
         setBookingsError(null);
         setLoading(false);
@@ -216,8 +233,13 @@ export default function BookingsAdminPage() {
                 if (dc !== 0) return dc;
                 return (a.timeHHmm || "").localeCompare(b.timeHHmm || "");
               });
-              setBookings(normalized);
-              setBookingsCount(normalized.length);
+              setBookings((prev) => {
+                if (prev.length !== normalized.length) return normalized;
+                if (prev.length === 0 && normalized.length === 0) return prev;
+                const same = normalized.every((b, i) => prev[i]?.id === b.id);
+                return same ? prev : normalized;
+              });
+              setBookingsCount((n) => (n === normalized.length ? n : normalized.length));
               setBookingsError(null);
               setBookingsLoading(false);
               setLoading(false);
@@ -336,10 +358,13 @@ export default function BookingsAdminPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" dir="rtl">
-        <div className="text-center">
-          <p className="text-slate-600 text-sm">טוען…</p>
-        </div>
+      <div
+        className="min-h-screen flex items-center justify-center w-full"
+        style={{
+          background: "linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%)",
+        }}
+      >
+        <CalenoLoading />
       </div>
     );
   }
@@ -369,42 +394,6 @@ export default function BookingsAdminPage() {
               >
                 תורים שבוטלו
               </Link>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setAutoCleanupOpen((o) => !o)}
-                  className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-                  title="מחיקה אוטומטית"
-                  aria-expanded={autoCleanupOpen}
-                  aria-haspopup="dialog"
-                >
-                  <Timer className="w-4 h-4" />
-                  מחיקה אוטומטית
-                </button>
-                {autoCleanupOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-40"
-                      aria-hidden="true"
-                      onClick={() => setAutoCleanupOpen(false)}
-                    />
-                    <div
-                      className="absolute right-0 top-full mt-2 z-50 w-80 bg-white rounded-xl shadow-lg border border-slate-200 p-4"
-                      role="dialog"
-                      aria-label="הגדרות מחיקה אוטומטית"
-                    >
-                      <AutoCleanupSettings
-                        siteId={siteId}
-                        onToast={(msg, isError) => {
-                          setCleanupToast(msg);
-                          setCleanupToastError(!!isError);
-                          setTimeout(() => setCleanupToast(null), 4000);
-                        }}
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
               <Link
                 href={getAdminBasePathFromSiteId(siteId)}
                 className="text-sm text-caleno-700 hover:text-caleno-800"
@@ -507,17 +496,6 @@ export default function BookingsAdminPage() {
       {deleteError && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[56] px-4 py-2 rounded-lg shadow-lg text-sm font-medium bg-red-600 text-white" dir="rtl">
           {deleteError}
-        </div>
-      )}
-
-      {cleanupToast && (
-        <div
-          className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[56] px-4 py-2 rounded-lg shadow-lg text-sm font-medium ${
-            cleanupToastError ? "bg-red-600 text-white" : "bg-slate-800 text-white"
-          }`}
-          dir="rtl"
-        >
-          {cleanupToast}
         </div>
       )}
     </div>

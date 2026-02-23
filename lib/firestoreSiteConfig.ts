@@ -1,6 +1,7 @@
 import { db } from "@/lib/firebaseClient";
-import { doc, setDoc, onSnapshot } from "firebase/firestore";
+import { doc, setDoc, onSnapshot, serverTimestamp } from "firebase/firestore";
 import type { SiteConfig } from "@/types/siteConfig";
+import { sanitizeForFirestore } from "@/lib/sanitizeForFirestore";
 
 /**
  * Get Firestore document reference for site
@@ -14,18 +15,34 @@ export function siteDoc(siteId: string) {
 /**
  * Save site config to Firestore
  * Stores config as a nested field on the site document
- * Path: sites/{siteId}.config
+ * Path: sites/{siteId} with fields: config, updatedAt
  * Note: services array is stored separately at sites/{siteId}.services
+ * Sanitizes payload so undefined is never written (Firestore rejects undefined).
  */
 export async function saveSiteConfig(siteId: string, config: SiteConfig): Promise<void> {
   if (!db) throw new Error("Firestore db not initialized");
   const siteRef = doc(db, "sites", siteId);
-  
+  const docPath = `sites/${siteId}`;
+
   // Don't save services in config - they're stored separately in services array
-  const { siteServices, ...configWithoutServices } = config as any;
-  
-  await setDoc(siteRef, { config: configWithoutServices }, { merge: true });
-  console.log(`[saveSiteConfig] saved config to sites/${siteId}`);
+  const { siteServices, ...configWithoutServices } = config as SiteConfig & { siteServices?: unknown };
+  const sanitized = sanitizeForFirestore(configWithoutServices);
+
+  const payload = {
+    config: sanitized,
+    updatedAt: serverTimestamp(),
+  };
+
+  await setDoc(siteRef, payload, { merge: true });
+
+  if (process.env.NODE_ENV !== "production") {
+    const configKeys = sanitized && typeof sanitized === "object" ? Object.keys(sanitized as object) : [];
+    console.log("[saveSiteConfig] WRITE_OK", {
+      docPath,
+      payloadKeys: ["config", "updatedAt"],
+      configTopKeys: configKeys,
+    });
+  }
 }
 
 /**

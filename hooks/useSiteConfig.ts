@@ -5,56 +5,78 @@ import type { SiteConfig } from "@/types/siteConfig";
 import { defaultSiteConfig } from "@/types/siteConfig";
 import { normalizeServices } from "@/lib/normalizeServices";
 import { defaultThemeColors } from "@/types/siteConfig";
-import { saveSiteConfig } from "@/lib/firestoreSiteConfig";
+import { saveSiteConfig, subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
+
+function mergeWithDefaults(loaded: Record<string, unknown>): SiteConfig {
+  const merged = { ...defaultSiteConfig, ...loaded };
+  if (!merged.themeColors) merged.themeColors = defaultThemeColors;
+  return merged as SiteConfig;
+}
+
+function migrateAndMerge(raw: string): SiteConfig | null {
+  try {
+    const loaded = JSON.parse(raw) as Record<string, unknown>;
+    if (loaded.services && Array.isArray(loaded.services) && loaded.services.length > 0) {
+      const first = loaded.services[0];
+      if (typeof first === "object" && first && "name" in first) {
+        const serviceNames = normalizeServices(
+          (loaded.services as { name?: string }[]).map((s) => s?.name).filter(Boolean) as string[]
+        );
+        const servicePricing: Record<string, number> = { ...(loaded.servicePricing as Record<string, number>) };
+        for (const s of loaded.services as { name?: string; price?: number }[]) {
+          if (s?.name && s?.price && s.price > 0) {
+            const n = String(s.name).trim();
+            if (serviceNames.includes(n)) servicePricing[n] = s.price;
+          }
+        }
+        loaded.services = serviceNames;
+        loaded.servicePricing = servicePricing;
+      }
+    }
+    return mergeWithDefaults(loaded);
+  } catch {
+    return null;
+  }
+}
 
 export function useSiteConfig(siteId: string) {
   const [siteConfig, setSiteConfig] = useState<SiteConfig | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
 
-  // Load config
+  // Load config from Firestore (source of truth); fallback to localStorage when doc missing or error
   useEffect(() => {
     if (typeof window === "undefined" || !siteId) return;
 
-    try {
-      const raw = window.localStorage.getItem(`siteConfig:${siteId}`);
-      if (raw) {
-        const loaded = JSON.parse(raw);
-        // Migrate from old ServiceItem[] format to new string[] format
-        if (loaded.services && Array.isArray(loaded.services) && loaded.services.length > 0) {
-          const firstService = loaded.services[0];
-          if (typeof firstService === 'object' && firstService.name) {
-            // Old format: ServiceItem[]
-            const serviceNames = normalizeServices(
-              loaded.services.map((s: any) => s.name).filter(Boolean)
-            );
-            const servicePricing: Record<string, number> = {};
-            // Migrate prices from ServiceItem.price to servicePricing
-            for (const s of loaded.services) {
-              if (s.name && s.price && s.price > 0) {
-                const normalizedName = String(s.name).trim();
-                if (serviceNames.includes(normalizedName)) {
-                  servicePricing[normalizedName] = s.price;
-                }
-              }
-            }
-            loaded.services = serviceNames;
-            loaded.servicePricing = { ...(loaded.servicePricing || {}), ...servicePricing };
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[useSiteConfig] SUBSCRIBE", { docPath: `sites/${siteId}`, field: "config" });
+    }
+
+    const unsubscribe = subscribeSiteConfig(
+      siteId,
+      (cfg) => {
+        if (cfg) {
+          const withTheme = { ...cfg, themeColors: cfg.themeColors || defaultThemeColors };
+          setSiteConfig(withTheme);
+          window.localStorage.setItem(`siteConfig:${siteId}`, JSON.stringify(cfg));
+        } else {
+          const raw = window.localStorage.getItem(`siteConfig:${siteId}`);
+          const merged = raw ? migrateAndMerge(raw) : defaultSiteConfig;
+          setSiteConfig(merged ?? defaultSiteConfig);
+          if (process.env.NODE_ENV !== "production" && !raw) {
+            console.log("[useSiteConfig] No Firestore doc, using default config");
           }
         }
-        const merged = { ...defaultSiteConfig, ...loaded };
-        // Ensure themeColors has defaults
-        if (!merged.themeColors) {
-          merged.themeColors = defaultThemeColors;
-        }
-        setSiteConfig(merged);
-      } else {
-        setSiteConfig(defaultSiteConfig);
+      },
+      (e) => {
+        console.error("[useSiteConfig] Firestore error", e);
+        const raw = window.localStorage.getItem(`siteConfig:${siteId}`);
+        const merged = raw ? migrateAndMerge(raw) : defaultSiteConfig;
+        setSiteConfig(merged ?? defaultSiteConfig);
       }
-    } catch (e) {
-      console.error("Failed to parse siteConfig for admin", e);
-      setSiteConfig(defaultSiteConfig);
-    }
+    );
+
+    return () => unsubscribe();
   }, [siteId]);
 
   const handleConfigChange = (updates: Partial<SiteConfig>) => {
@@ -70,7 +92,12 @@ export function useSiteConfig(siteId: string) {
     ) {
       immediateUpdates = undefined;
     }
-    const base = siteConfig && immediateUpdates ? { ...siteConfig, ...immediateUpdates } : siteConfig;
+    const base =
+      siteConfig && immediateUpdates
+        ? { ...siteConfig, ...immediateUpdates }
+        : immediateUpdates
+          ? { ...defaultSiteConfig, ...immediateUpdates }
+          : siteConfig;
     if (!base || typeof window === "undefined" || !siteId) return;
     setIsSaving(true);
     setSaveMessage("");

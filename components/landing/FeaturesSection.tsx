@@ -9,6 +9,7 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { AdminPanelLink } from "@/components/AdminPanelLink";
 
 const FEATURES = [
   {
@@ -115,12 +116,11 @@ export default function FeaturesSection() {
             רוצים לראות איך זה נראה אצלכם בעסק? הקימו אתר והתחילו לקבל הזמנות אונליין.
           </p>
           {isLoggedInWithSite ? (
-            <Link
-              href="/dashboard"
+            <AdminPanelLink
               className="inline-block min-h-[44px] px-6 py-3 bg-[#2EC4C6] hover:bg-[#22A6A8] text-white font-semibold rounded-xl shadow-sm transition-colors flex items-center justify-center"
             >
-              כנסו לדשבורד
-            </Link>
+              לפאנל ניהול
+            </AdminPanelLink>
           ) : (
             <Link
               href="/signup"

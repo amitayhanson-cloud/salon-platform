@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 import AdminHeader from "@/components/admin/AdminHeader";
 import { HeroBackground } from "@/components/ui/HeroBackground";
 import { useAuth } from "@/components/auth/AuthProvider";
+import CalenoLoading from "@/components/CalenoLoading";
 
 export default function AdminLayout({
   children,
@@ -57,7 +58,7 @@ export default function AdminLayout({
     // Not logged in -> redirect to /login on SAME host (preserves origin so auth persists after login)
     // Use firebaseUser as source of truth for auth (user doc can be null if Firestore fetch failed/slow)
     if (!firebaseUser) {
-      const loginPath = "/login?returnTo=" + encodeURIComponent("/dashboard");
+      const loginPath = "/login?returnTo=admin";
       
       // Prevent redirect loop: don't redirect if already on login page
       if (pathname?.startsWith("/login")) {
@@ -89,12 +90,12 @@ export default function AdminLayout({
     const uid = firebaseUser.uid;
     const userSiteId = user?.siteId;
 
-    // Prevent checking the same user multiple times if already authorized
+    // Prevent checking the same user multiple times if already authorized.
+    // Do not call setState here — skipping the check should not trigger a re-render and risk a loop.
     if (lastCheckedUid.current === uid && authorized) {
       if (process.env.NODE_ENV === "development") {
         console.log("[ADMIN GUARD] Already authorized for this user, skipping check");
       }
-      setChecking(false);
       return;
     }
 
@@ -301,13 +302,13 @@ export default function AdminLayout({
   // Show loading state
   if (authLoading || checking || initializing) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-caleno-500 mx-auto mb-4"></div>
-          <p className="text-slate-600">
-            {initializing ? "מאתחל את האתר שלך..." : "בודק הרשאות..."}
-          </p>
-        </div>
+      <div
+        className="min-h-screen flex items-center justify-center w-full"
+        style={{
+          background: "linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%)",
+        }}
+      >
+        <CalenoLoading />
       </div>
     );
   }
@@ -323,10 +324,29 @@ export default function AdminLayout({
           </p>
           <div className="flex gap-3 flex-wrap">
             <button
-              onClick={() => router.push("/dashboard")}
+              onClick={async () => {
+                try {
+                  const token = firebaseUser ? await firebaseUser.getIdToken(true) : null;
+                  if (token) {
+                    const res = await fetch("/api/dashboard-redirect", {
+                      method: "GET",
+                      headers: { Authorization: `Bearer ${token}` },
+                      cache: "no-store",
+                    });
+                    const data = (await res.json().catch(() => ({}))) as { url?: string };
+                    if (res.ok && typeof data.url === "string" && data.url) {
+                      window.location.assign(data.url);
+                      return;
+                    }
+                  }
+                } catch {
+                  // fallback
+                }
+                router.push("/login?returnTo=admin");
+              }}
               className="px-4 py-2 bg-caleno-500 text-white rounded-lg hover:bg-caleno-600 transition-colors"
             >
-              לדשבורד שלי
+              לפאנל הניהול שלי
             </button>
             <button
               onClick={() => router.push("/")}

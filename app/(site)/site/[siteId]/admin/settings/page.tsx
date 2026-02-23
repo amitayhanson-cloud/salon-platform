@@ -6,22 +6,16 @@ import Link from "next/link";
 import DeleteAccountButton from "@/components/admin/DeleteAccountButton";
 import SubdomainSettingsCard from "@/components/admin/SubdomainSettingsCard";
 import CustomDomainSettingsCard from "@/components/admin/CustomDomainSettingsCard";
+import ChangePasswordCard from "@/components/security/ChangePasswordCard";
 import type { SiteConfig } from "@/types/siteConfig";
-import type { SalonBookingState } from "@/types/booking";
-import { defaultBookingState } from "@/types/booking";
 import { useSiteConfig } from "@/hooks/useSiteConfig";
 import { useAuth } from "@/components/auth/AuthProvider";
 import AdminTabs from "@/components/ui/AdminTabs";
-import ConfirmModal from "@/components/ui/ConfirmModal";
 import { deleteUserAccount } from "@/lib/deleteUserAccount";
 import { clearStaleStorageOnLogout } from "@/lib/client/storageCleanup";
-import { saveBookingSettings, convertSalonBookingStateToBookingSettings, subscribeBookingSettings } from "@/lib/firestoreBookingSettings";
-import { resetWorkersAvailabilityToBusinessHours } from "@/lib/resetWorkersAvailability";
-import { subscribeClientTypes, saveClientTypes, seedDefaultClientTypes } from "@/lib/firestoreClientSettings";
-import { REGULAR_CLIENT_TYPE_ID } from "@/types/bookingSettings";
-import type { BookingSettings, ClientTypeEntry } from "@/types/bookingSettings";
 import type { SiteBranding } from "@/types/siteConfig";
 import { validateLogoFile } from "@/lib/siteLogoStorage";
+import { ImagePickerModal } from "@/components/editor/ImagePickerModal";
 
 
 const SERVICE_OPTIONS: Record<SiteConfig["salonType"], string[]> = {
@@ -70,7 +64,7 @@ const salonTypeLabels: Record<SiteConfig["salonType"], string> = {
 
 
 
-function generateId(): string {
+export function generateId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
     return crypto.randomUUID();
   }
@@ -79,10 +73,12 @@ function generateId(): string {
 
 
 
-function AdminReviewsEditor({
+export function AdminReviewsEditor({
+  siteId,
   reviews,
   onChange,
 }: {
+  siteId: string;
   reviews: import("@/types/siteConfig").ReviewItem[];
   onChange: (reviews: import("@/types/siteConfig").ReviewItem[]) => void;
 }) {
@@ -99,9 +95,12 @@ function AdminReviewsEditor({
     text: "",
     avatarUrl: "",
   });
+  /** "new" = add form; string = review id (edit form). null = closed. */
+  const [avatarPickerFor, setAvatarPickerFor] = useState<"new" | string | null>(null);
 
   const handleAdd = () => {
     if (!newReview.name.trim() || !newReview.text.trim()) return;
+    const avatarUrl = (newReview.avatarUrl ?? "").trim() || null;
     onChange([
       ...reviews,
       {
@@ -109,7 +108,7 @@ function AdminReviewsEditor({
         name: newReview.name.trim(),
         rating: newReview.rating,
         text: newReview.text.trim(),
-        avatarUrl: newReview.avatarUrl.trim() || null,
+        avatarUrl,
       },
     ]);
     setNewReview({ name: "", rating: 5, text: "", avatarUrl: "" });
@@ -130,6 +129,7 @@ function AdminReviewsEditor({
 
   const handleSaveEdit = () => {
     if (!editingId || !editReview.name.trim() || !editReview.text.trim()) return;
+    const avatarUrl = (editReview.avatarUrl ?? "").trim() || null;
     onChange(
       reviews.map((r) =>
         r.id === editingId
@@ -138,7 +138,7 @@ function AdminReviewsEditor({
               name: editReview.name.trim(),
               rating: editReview.rating,
               text: editReview.text.trim(),
-              avatarUrl: editReview.avatarUrl.trim() || null,
+              avatarUrl,
             }
           : r
       )
@@ -149,6 +149,15 @@ function AdminReviewsEditor({
 
   const handleDelete = (id: string) => {
     onChange(reviews.filter((r) => r.id !== id));
+  };
+
+  const handleAvatarSelect = (url: string) => {
+    if (avatarPickerFor === "new") {
+      setNewReview((prev) => ({ ...prev, avatarUrl: url }));
+    } else if (avatarPickerFor && editingId === avatarPickerFor) {
+      setEditReview((prev) => ({ ...prev, avatarUrl: url }));
+    }
+    setAvatarPickerFor(null);
   };
 
   return (
@@ -200,28 +209,40 @@ function AdminReviewsEditor({
         </div>
         <div>
           <label className="block text-xs font-medium text-slate-700 mb-1">
-            תמונת פרופיל (URL)
+            תמונת פרופיל
           </label>
-          <div className="flex items-center gap-3">
-            <input
-              type="text"
-              value={newReview.avatarUrl}
-              onChange={(e) => setNewReview({ ...newReview, avatarUrl: e.target.value })}
-              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500"
-              placeholder="https://example.com/image.jpg"
-            />
-            {newReview.avatarUrl.trim() && (
-              <div className="flex-shrink-0">
-                <img
-                  src={newReview.avatarUrl.trim()}
-                  alt="Preview"
-                  className="w-12 h-12 rounded-full object-cover border border-slate-300"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = "none";
-                  }}
-                />
-              </div>
-            )}
+          <div className="flex items-center gap-3 flex-wrap">
+            {(newReview.avatarUrl ?? "").trim() ? (
+              <img
+                src={(newReview.avatarUrl ?? "").trim()}
+                alt=""
+                className="w-12 h-12 rounded-full object-cover border border-slate-300 flex-shrink-0"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = "none";
+                }}
+              />
+            ) : null}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setAvatarPickerFor("new");
+                }}
+                className="px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium"
+              >
+                בחר תמונת פרופיל
+              </button>
+              {(newReview.avatarUrl ?? "").trim() ? (
+                <button
+                  type="button"
+                  onClick={() => setNewReview({ ...newReview, avatarUrl: "" })}
+                  className="px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm"
+                >
+                  הסר תמונה
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
         <button
@@ -280,30 +301,42 @@ function AdminReviewsEditor({
                   />
                   <div>
                     <label className="block text-xs font-medium text-slate-700 mb-1">
-                      תמונת פרופיל (URL)
+                      תמונת פרופיל
                     </label>
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="text"
-                        value={editReview.avatarUrl}
-                        onChange={(e) =>
-                          setEditReview({ ...editReview, avatarUrl: e.target.value })
-                        }
-                        className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500"
-                        placeholder="https://example.com/image.jpg"
-                      />
-                      {editReview.avatarUrl.trim() && (
-                        <div className="flex-shrink-0">
-                          <img
-                            src={editReview.avatarUrl.trim()}
-                            alt="Preview"
-                            className="w-12 h-12 rounded-full object-cover border border-slate-300"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = "none";
-                            }}
-                          />
-                        </div>
-                      )}
+                    <div className="flex items-center gap-3 flex-wrap">
+                      {(editReview.avatarUrl ?? "").trim() ? (
+                        <img
+                          src={(editReview.avatarUrl ?? "").trim()}
+                          alt=""
+                          className="w-12 h-12 rounded-full object-cover border border-slate-300 flex-shrink-0"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = "none";
+                          }}
+                        />
+                      ) : null}
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            if (editingId) setAvatarPickerFor(editingId);
+                          }}
+                          className="px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium"
+                        >
+                          בחר תמונת פרופיל
+                        </button>
+                        {(editReview.avatarUrl ?? "").trim() ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditReview({ ...editReview, avatarUrl: "" })
+                            }
+                            className="px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm"
+                          >
+                            הסר תמונה
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                   <div className="flex gap-2">
@@ -372,246 +405,20 @@ function AdminReviewsEditor({
           ))}
         </div>
       )}
+      <ImagePickerModal
+        isOpen={avatarPickerFor !== null}
+        onClose={() => setAvatarPickerFor(null)}
+        siteId={siteId}
+        targetPath="reviewAvatar"
+        targetReviewId={avatarPickerFor && avatarPickerFor !== "new" ? avatarPickerFor : undefined}
+        uploadOnly
+        onSelect={handleAvatarSelect}
+      />
     </div>
   );
 }
 
-function slugFromLabel(label: string): string {
-  const t = label.trim().toLowerCase();
-  if (!t) return "custom";
-  return t.replace(/\s+/g, "-").replace(/[^\p{L}\p{N}-]/gu, "") || "custom";
-}
-
-function AdminClientsTab({ siteId }: { siteId: string }) {
-  const { firebaseUser } = useAuth();
-  const [clientTypes, setClientTypes] = useState<ClientTypeEntry[]>([]);
-  const [newName, setNewName] = useState("");
-  const [addError, setAddError] = useState<string | null>(null);
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [editValue, setEditValue] = useState("");
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [deleteToast, setDeleteToast] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
-
-  useEffect(() => {
-    if (!siteId) return;
-    const unsub = subscribeClientTypes(siteId, (list) => {
-      setClientTypes(list);
-    });
-    return () => unsub();
-  }, [siteId]);
-
-  useEffect(() => {
-    if (!siteId) return;
-    seedDefaultClientTypes(siteId).catch(() => {});
-  }, [siteId]);
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 5000);
-    return () => clearTimeout(t);
-  }, [toast]);
-
-  const handleAdd = async () => {
-    setAddError(null);
-    const trimmed = newName.trim();
-    if (!trimmed) {
-      setAddError("נא להזין שם");
-      return;
-    }
-    const lower = trimmed.toLowerCase();
-    if (clientTypes.some((t) => t.labelHe.trim().toLowerCase() === lower)) {
-      setAddError("סוג כזה כבר קיים");
-      return;
-    }
-    const maxOrder = clientTypes.length ? Math.max(...clientTypes.map((e) => e.sortOrder), 0) + 1 : 0;
-    const next = [...clientTypes, { id: slugFromLabel(trimmed), labelHe: trimmed, isSystem: false, sortOrder: maxOrder }];
-    setClientTypes(next);
-    setNewName("");
-    setSaving(true);
-    setSaveError(null);
-    try {
-      await saveClientTypes(siteId, next);
-    } catch (e) {
-      setSaveError(e instanceof Error ? e.message : "שגיאה בשמירה");
-      setClientTypes(clientTypes);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleStartEdit = (index: number) => {
-    const entry = clientTypes[index];
-    if (entry?.isSystemDefault) {
-      setToast({ message: "לא ניתן לשנות שם של סוג לקוח ברירת מחדל", error: true });
-      return;
-    }
-    setEditingIndex(index);
-    setEditValue(entry?.labelHe ?? "");
-  };
-
-  const handleSaveEdit = async () => {
-    if (editingIndex === null) return;
-    setAddError(null);
-    const trimmed = editValue.trim();
-    if (!trimmed) {
-      setAddError("שם לא יכול להיות ריק");
-      return;
-    }
-    const lower = trimmed.toLowerCase();
-    const others = clientTypes.filter((_, i) => i !== editingIndex);
-    if (others.some((t) => t.labelHe.trim().toLowerCase() === lower)) {
-      setAddError("סוג כזה כבר קיים");
-      return;
-    }
-    const next = clientTypes.map((e, i) => (i === editingIndex ? { ...e, labelHe: trimmed } : e));
-    setClientTypes(next);
-    setEditingIndex(null);
-    setEditValue("");
-    setSaving(true);
-    setSaveError(null);
-    try {
-      await saveClientTypes(siteId, next);
-    } catch (e) {
-      setSaveError(e instanceof Error ? e.message : "שגיאה בשמירה");
-      setClientTypes(clientTypes);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDelete = async (index: number) => {
-    const entry = clientTypes[index];
-    if (!entry) return;
-    if (entry.isSystemDefault) {
-      setToast({ message: "סוג לקוח ברירת מחדל לא ניתן למחיקה", error: true });
-      return;
-    }
-    setSaveError(null);
-    setDeleteToast(null);
-    setToast(null);
-    if (!firebaseUser) {
-      setSaveError("נדרשת התחברות");
-      return;
-    }
-    setSaving(true);
-    try {
-      const token = await firebaseUser.getIdToken();
-      const res = await fetch("/api/settings/client-types/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ siteId, typeId: entry.id }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const userMessage =
-          typeof data.message === "string" && data.message.trim()
-            ? data.message
-            : "שגיאה במחיקה.";
-        setToast({ message: userMessage, error: true });
-        return;
-      }
-      const count = data.reassignedCount ?? 0;
-      setClientTypes(clientTypes.filter((_, i) => i !== index));
-      setEditingIndex(null);
-      if (count > 0) {
-        setDeleteToast(`${count} לקוחות עודכנו לרגיל.`);
-      }
-    } catch (e) {
-      setToast({ message: "שגיאה במחיקה.", error: true });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-6 text-right space-y-6">
-      <h2 className="text-xl font-bold text-slate-900">סוגי לקוחות</h2>
-      <p className="text-xs text-slate-500">
-        הוסף, ערוך או מחק סוגי לקוחות. יופיעו בתפריט &quot;סוג לקוח&quot; בכרטיס הלקוח. סוגי ברירת מחדל (רגיל, VIP, פעיל, חדש, רדום) לא ניתנים למחיקה או לשינוי שם. מחיקת סוג מותאם מעבירה את הלקוחות שהיו משויכים אליו לרגיל.
-      </p>
-      {saveError && (
-        <p className="text-sm text-red-600" role="alert">{saveError}</p>
-      )}
-      {deleteToast && (
-        <p className="text-sm text-caleno-600" role="status">{deleteToast}</p>
-      )}
-      {toast && (
-        <div
-          className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] px-4 py-2 rounded-lg shadow-lg text-sm font-medium max-w-md text-center ${
-            toast.error ? "bg-red-600 text-white" : "bg-slate-800 text-white"
-          }`}
-          role="alert"
-        >
-          {toast.message}
-        </div>
-      )}
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="min-w-[160px]">
-          <label className="block text-xs font-medium text-slate-700 mb-1">סוג חדש</label>
-          <input
-            type="text"
-            value={newName}
-            onChange={(e) => { setNewName(e.target.value); setAddError(null); }}
-            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAdd())}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500"
-            placeholder="למשל: VIP"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={handleAdd}
-          disabled={saving}
-          className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
-        >
-          הוסף
-        </button>
-      </div>
-      {addError && <p className="text-xs text-red-600">{addError}</p>}
-      <ul className="space-y-2">
-        {clientTypes.map((entry, index) => (
-          <li key={entry.id} className="flex items-center gap-2 py-2 border-b border-slate-100">
-            {editingIndex === index ? (
-              <>
-                <input
-                  type="text"
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleSaveEdit())}
-                  className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500"
-                  dir="rtl"
-                />
-                <button type="button" onClick={handleSaveEdit} className="px-3 py-1 bg-caleno-500 hover:bg-caleno-600 text-white rounded text-sm">שמור</button>
-                <button type="button" onClick={() => { setEditingIndex(null); setEditValue(""); setAddError(null); }} className="px-3 py-1 bg-slate-200 text-slate-700 rounded text-sm">ביטול</button>
-              </>
-            ) : (
-              <>
-                <span className="flex-1 text-slate-800">
-                  {entry.labelHe}
-                  {entry.isSystemDefault && <span className="text-slate-500 text-xs mr-1">(ברירת מחדל)</span>}
-                </span>
-                <button type="button" onClick={() => handleStartEdit(index)} disabled={!!entry.isSystemDefault} className="p-1.5 text-slate-500 hover:text-caleno-600 hover:bg-caleno-50 rounded disabled:opacity-50 disabled:cursor-not-allowed" aria-label="ערוך">✎</button>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(index)}
-                  disabled={!!entry.isSystemDefault}
-                  className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                  aria-label="מחק"
-                  title={entry.id === REGULAR_CLIENT_TYPE_ID ? "לא ניתן למחוק" : undefined}
-                >
-                  🗑
-                </button>
-              </>
-            )}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function AdminFaqEditor({
+export function AdminFaqEditor({
   faqs,
   onChange,
 }: {
@@ -802,7 +609,7 @@ function AdminFaqEditor({
 }
 
 
-function AdminBookingTab({
+export function AdminBookingTab({
   state,
   onChange,
   onSaveRequest,
@@ -1352,7 +1159,7 @@ function AdminSiteTab({
   );
 }
 
-function BrandingLogoEditor({
+export function BrandingLogoEditor({
   siteId,
   siteConfig,
   onChange,
@@ -1542,153 +1349,34 @@ export default function SettingsPage() {
   const siteId = params?.siteId as string;
   const { siteConfig, isSaving, saveMessage, handleConfigChange, handleSaveConfig } = useSiteConfig(siteId);
   const { user, firebaseUser, logout } = useAuth();
-  const [bookingState, setBookingState] = useState<SalonBookingState | null>(null);
-  const [bookingSaveError, setBookingSaveError] = useState<string | null>(null);
-  const [bookingHoursToast, setBookingHoursToast] = useState<string | null>(null);
-  const [showHoursConfirmModal, setShowHoursConfirmModal] = useState(false);
-  const [hoursSaving, setHoursSaving] = useState(false);
-
-  useEffect(() => {
-    if (!bookingHoursToast) return;
-    const t = setTimeout(() => setBookingHoursToast(null), 5000);
-    return () => clearTimeout(t);
-  }, [bookingHoursToast]);
-
   // Tab state for settings sections - MUST be declared before any early returns
   const [activeTab, setActiveTab] = useState<SettingsTabType>("basic");
-  
   // Delete account state
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Security section toast
+  const [securityToast, setSecurityToast] = useState<{ message: string; isError?: boolean } | null>(null);
 
-
-  // Load booking state from Firestore (source of truth) and sync with localStorage
   useEffect(() => {
-    if (typeof window === "undefined" || !siteId) return;
-    
-    // Subscribe to Firestore booking settings (source of truth)
-    const unsubscribe = subscribeBookingSettings(
-      siteId,
-      (firestoreSettings) => {
-        // Convert Firestore BookingSettings to SalonBookingState for admin UI
-        const dayLabels = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"] as const;
-        const dayKeys = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
-        const openingHours = (["0", "1", "2", "3", "4", "5", "6"] as const).map((key, i) => {
-          const d = firestoreSettings.days[key];
-          const enabled = d?.enabled ?? false;
-          const breaks = (d as { breaks?: { start: string; end: string }[] })?.breaks;
-          return {
-            day: dayKeys[i],
-            label: dayLabels[i],
-            open: enabled ? (d?.start ?? null) : null,
-            close: enabled ? (d?.end ?? null) : null,
-            breaks: breaks && breaks.length > 0 ? breaks : undefined,
-          };
-        });
-        const closedDates = (firestoreSettings as { closedDates?: Array<{ date: string; label?: string }> }).closedDates;
-        const convertedState: SalonBookingState = {
-          defaultSlotMinutes: firestoreSettings.slotMinutes,
-          openingHours,
-          workers: [],
-          bookings: [],
-          closedDates: Array.isArray(closedDates) && closedDates.length > 0 ? closedDates : [],
-        };
-        
-        setBookingState(convertedState);
-        
-        // Sync to localStorage for offline access
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem(`bookingState:${siteId}`, JSON.stringify(convertedState));
-        }
-        
-        if (process.env.NODE_ENV !== "production") {
-          console.log(`[Admin] Loaded booking settings from Firestore for site ${siteId}:`, firestoreSettings);
-        }
-      },
-      (err) => {
-        console.error("[Admin] Failed to load booking settings from Firestore, falling back to localStorage", err);
-        // Fallback to localStorage if Firestore fails
-        try {
-          const bookingRaw = window.localStorage.getItem(`bookingState:${siteId}`);
-          if (bookingRaw) {
-            setBookingState(JSON.parse(bookingRaw));
-          } else {
-            setBookingState(defaultBookingState);
-          }
-        } catch (e) {
-          console.error("Failed to parse booking state from localStorage", e);
-          setBookingState(defaultBookingState);
-        }
-      }
-    );
-    
-    return () => {
-      unsubscribe();
-    };
-  }, [siteId]);
+    if (!securityToast) return;
+    const t = setTimeout(() => setSecurityToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [securityToast]);
 
-  const validateBreaks = (s: SalonBookingState): string | null => {
-    for (let i = 0; i < s.openingHours.length; i++) {
-      const day = s.openingHours[i];
-      if (!day?.open || !day?.close) continue;
-      const breaks = day.breaks ?? [];
-      const openMin = day.open.split(":").reduce((a, b, idx) => a + (idx === 0 ? parseInt(b, 10) * 60 : parseInt(b, 10)), 0);
-      const closeMin = day.close.split(":").reduce((a, b, idx) => a + (idx === 0 ? parseInt(b, 10) * 60 : parseInt(b, 10)), 0);
-      for (let bi = 0; bi < breaks.length; bi++) {
-        const b = breaks[bi]!;
-        const [sH, sM] = b.start.split(":").map(Number);
-        const [eH, eM] = b.end.split(":").map(Number);
-        const sMin = (sH ?? 0) * 60 + (sM ?? 0);
-        const eMin = (eH ?? 0) * 60 + (eM ?? 0);
-        if (sMin >= eMin) return `${day.label}: הפסקה ${bi + 1} – שעת התחלה חייבת להיות לפני שעת סיום`;
-        if (sMin < openMin || eMin > closeMin) return `${day.label}: הפסקה ${bi + 1} – חייבת להיות בתוך שעות הפתיחה`;
-        for (let j = bi + 1; j < breaks.length; j++) {
-          const o = breaks[j]!;
-          const oS = (parseInt(o.start.split(":")[0], 10) || 0) * 60 + (parseInt(o.start.split(":")[1], 10) || 0);
-          const oE = (parseInt(o.end.split(":")[0], 10) || 0) * 60 + (parseInt(o.end.split(":")[1], 10) || 0);
-          if (sMin < oE && eMin > oS) return `${day.label}: הפסקות לא יכולות לחפוף`;
-        }
-      }
-    }
-    return null;
-  };
-
-  const handleBookingStateChange = (next: SalonBookingState) => {
-    setBookingState(next);
-    const err = validateBreaks(next);
-    setBookingSaveError(err ?? null);
-    if (typeof window !== "undefined" && siteId) {
-      window.localStorage.setItem(`bookingState:${siteId}`, JSON.stringify(next));
-    }
-  };
-
-  const handleSaveHoursClick = () => {
-    if (!bookingState) return;
-    const err = validateBreaks(bookingState);
-    if (err) {
-      setBookingSaveError(err);
-      return;
-    }
-    setBookingSaveError(null);
-    setShowHoursConfirmModal(true);
-  };
-
-  const handleConfirmSaveHours = async () => {
-    if (!bookingState || !siteId) return;
-    setHoursSaving(true);
+  const logSecurityEvent = async (type: string, tenantId?: string) => {
+    if (!firebaseUser) return;
     try {
-      const bookingSettings = convertSalonBookingStateToBookingSettings(bookingState);
-      await saveBookingSettings(siteId, bookingSettings);
-      if (process.env.NODE_ENV !== "production") {
-        console.log("[Admin] Saved booking settings to Firestore for site", siteId, bookingSettings);
-      }
-      await resetWorkersAvailabilityToBusinessHours(siteId, bookingSettings);
-      setBookingHoursToast("שעות הפעילות נשמרו. זמינות העובדים אופסה בהתאם.");
-      setShowHoursConfirmModal(false);
-    } catch (error) {
-      console.error("[Admin] Failed to save booking settings to Firestore:", error);
-    } finally {
-      setHoursSaving(false);
+      const token = await firebaseUser.getIdToken();
+      await fetch("/api/security-events", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ type, tenantId: tenantId ?? siteId ?? undefined }),
+      });
+    } catch {
+      // Non-blocking; audit log failure should not affect UX
     }
   };
 
@@ -1733,7 +1421,7 @@ export default function SettingsPage() {
   };
 
   // Early return AFTER all hooks are declared
-  if (!siteConfig || !bookingState) {
+  if (!siteConfig) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p className="text-slate-600 text-sm">טוען את נתוני הסלון…</p>
@@ -1745,11 +1433,7 @@ export default function SettingsPage() {
   const settingsTabs = [
     { key: "basic", label: "מידע בסיסי" },
     { key: "contact", label: "פרטי יצירת קשר" },
-    { key: "branding", label: "לוגו ומיתוג" },
-    { key: "reviews", label: "ביקורות" },
-    { key: "faq", label: "FAQ" },
-    { key: "hours", label: "שעות פעילות" },
-    { key: "clients", label: "לקוחות" },
+    { key: "security", label: "אבטחה" },
   ] as const;
 
   // Derive type from tabs config to ensure type safety
@@ -1816,58 +1500,32 @@ export default function SettingsPage() {
               renderSections={["contact"]}
             />
           )}
-          {activeTab === "branding" && (
-            <BrandingLogoEditor
-              siteId={siteId}
-              siteConfig={siteConfig}
-              onChange={handleConfigChange}
-              onSave={handleSaveConfig}
-              isSaving={isSaving}
-              getToken={async () => (firebaseUser ? await firebaseUser.getIdToken() : null)}
-            />
-          )}
-          {activeTab === "reviews" && (
-            <AdminReviewsEditor
-              reviews={siteConfig.reviews || []}
-              onChange={(reviews) => handleConfigChange({ reviews })}
-            />
-          )}
-          {activeTab === "faq" && (
-            <AdminFaqEditor
-              faqs={siteConfig.faqs || []}
-              onChange={(faqs) => handleConfigChange({ faqs })}
-            />
-          )}
-          {activeTab === "hours" && (
-            <>
-              {bookingHoursToast && (
-                <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-800 text-right">
-                  {bookingHoursToast}
+          {activeTab === "security" && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900 mb-1">אבטחה</h2>
+                <p className="text-sm text-slate-500 mb-4">
+                  שנה את הסיסמה של החשבון שלך.
+                </p>
+                <ChangePasswordCard
+                  firebaseUser={firebaseUser}
+                  onToast={(msg, isError) => setSecurityToast({ message: msg, isError })}
+                  logSecurityEvent={logSecurityEvent}
+                  tenantId={siteId ?? undefined}
+                />
+              </div>
+              {securityToast && (
+                <div
+                  role="alert"
+                  className={`rounded-lg px-4 py-2 text-sm ${
+                    securityToast.isError ? "bg-red-50 text-red-800 border border-red-200" : "bg-slate-100 text-slate-800 border border-slate-200"
+                  }`}
+                >
+                  {securityToast.message}
                 </div>
               )}
-              {bookingSaveError && (
-                <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 text-right">
-                  {bookingSaveError}
-                </div>
-              )}
-              <AdminBookingTab
-                state={bookingState}
-                onChange={handleBookingStateChange}
-                onSaveRequest={handleSaveHoursClick}
-              />
-              <ConfirmModal
-                open={showHoursConfirmModal}
-                onConfirm={handleConfirmSaveHours}
-                onClose={() => setShowHoursConfirmModal(false)}
-                message="שמירת שעות הפעילות תאפס את זמינות כל העובדים ותתאים אותה לשעות הפעילות של העסק. האם להמשיך?"
-                messageSecondary="Saving business hours will reset all workers' availability to match the business hours. Do you want to continue?"
-                confirmLabel="אישור"
-                cancelLabel="ביטול"
-                submitting={hoursSaving}
-              />
-            </>
+            </div>
           )}
-          {activeTab === "clients" && <AdminClientsTab siteId={siteId} />}
         </div>
       </div>
     </div>

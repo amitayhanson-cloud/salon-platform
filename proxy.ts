@@ -21,8 +21,8 @@ const SKIP_PREFIXES = [
   "/not-found-tenant",
 ];
 
-/** Auth and dashboard paths: never rewritten on tenant subdomains — serve same as root so redirect uses current user */
-const TENANT_PASSTHROUGH_PREFIXES = ["/login", "/signup", "/register", "/forgot-password", "/account", "/dashboard"];
+/** Auth paths: never rewritten on tenant subdomains — serve same as root so redirect uses current user */
+const TENANT_PASSTHROUGH_PREFIXES = ["/login", "/signup", "/register", "/forgot-password", "/account"];
 
 function shouldSkipRewrite(pathname: string): boolean {
   return SKIP_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));

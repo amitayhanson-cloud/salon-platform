@@ -66,6 +66,16 @@ const defaultAvailability: OpeningHours[] = WEEKDAYS.map((w) => ({
   close: w.day === "sat" ? null : "18:00",
 }));
 
+/** Stable tab config for worker profile (avoids new array reference every render). */
+const WORKER_PROFILE_TABS = [
+  { key: "details", label: "פרטים" },
+  { key: "availability", label: "זמינות" },
+  { key: "services", label: "שירותים" },
+  { key: "commissions", label: "עמלות" },
+] as const;
+
+type WorkerTabType = (typeof WORKER_PROFILE_TABS)[number]["key"];
+
 /** Firestore does not accept undefined. Returns a copy with all undefined keys removed (recursive). */
 function deepRemoveUndefined<T>(obj: T): T {
   if (obj === null || typeof obj !== "object") return obj;
@@ -117,7 +127,6 @@ export default function WorkersPage() {
   const [saveMessage, setSaveMessage] = useState("");
   
   // Tab state for worker details
-  type WorkerTabType = "details" | "availability" | "services";
   const [activeWorkerTab, setActiveWorkerTab] = useState<WorkerTabType>("details");
   
   // Reset tab when worker changes
@@ -787,11 +796,7 @@ export default function WorkersPage() {
                   </div>
 
                   <AdminTabs
-                    tabs={[
-                      { key: "details", label: "פרטים" },
-                      { key: "availability", label: "זמינות" },
-                      { key: "services", label: "שירותים" },
-                    ]}
+                    tabs={WORKER_PROFILE_TABS}
                     activeKey={activeWorkerTab}
                     onChange={setActiveWorkerTab}
                   />
@@ -978,9 +983,13 @@ export default function WorkersPage() {
                       </div>
                     )}
 
-                    {/* Services Tab */}
-                    {activeWorkerTab === "services" && (
-                      <div className="space-y-4">
+                    {/* Commissions Tab */}
+                    {activeWorkerTab === "commissions" && (
+                      <div className="bg-white rounded-2xl border border-slate-200 p-6 text-right">
+                        <h3 className="text-lg font-bold text-slate-900 mb-1">עמלות</h3>
+                        <p className="text-sm text-slate-500 mb-4">
+                          קבע אחוז תשלום לעובד מכל הזמנה.
+                        </p>
                         <div>
                           <label className="block text-sm font-medium text-slate-700 mb-1">
                             אחוז לעובד (%)
@@ -1004,7 +1013,7 @@ export default function WorkersPage() {
                                 setFormData({ ...formData, treatmentCommissionPercent: clamped });
                               }
                             }}
-                            onBlur={(e) => {
+                            onBlur={() => {
                               const v = formData.treatmentCommissionPercent;
                               if (v != null && (v < 0 || v > 100)) {
                                 const clamped = Math.min(100, Math.max(0, v));
@@ -1015,6 +1024,12 @@ export default function WorkersPage() {
                             className="w-full max-w-[120px] rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                           />
                         </div>
+                      </div>
+                    )}
+
+                    {/* Services Tab */}
+                    {activeWorkerTab === "services" && (
+                      <div className="space-y-4">
                         {services.length === 0 ? (
                           <p className="text-sm text-slate-500">אין שירותים מוגדרים. הוסף שירותים בעמוד המחירון.</p>
                         ) : (

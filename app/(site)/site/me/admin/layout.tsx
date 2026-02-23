@@ -16,7 +16,7 @@ export default function AdminLayout({
     if (!authReady) return;
 
     if (!firebaseUser) {
-      router.replace("/login?returnTo=" + encodeURIComponent("/dashboard"));
+      router.replace("/login?returnTo=admin");
       return;
     }
 
@@ -24,7 +24,7 @@ export default function AdminLayout({
       try {
         const token = firebaseUser ? await firebaseUser.getIdToken(true) : null;
         if (!token) {
-          router.replace("/dashboard");
+          router.replace("/login?returnTo=admin");
           return;
         }
         const res = await fetch("/api/dashboard-redirect", {
@@ -37,10 +37,10 @@ export default function AdminLayout({
           window.location.assign(data.url);
           return;
         }
-        router.replace("/dashboard");
+        router.replace("/login?returnTo=admin");
       } catch (error) {
         console.error("[AdminLayout /me] Error redirecting:", error);
-        router.replace("/dashboard");
+        router.replace("/login?returnTo=admin");
       }
     };
 

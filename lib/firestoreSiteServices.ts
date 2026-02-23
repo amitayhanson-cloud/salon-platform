@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/firebaseClient";
-import { doc, getDoc, setDoc, onSnapshot, Timestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, onSnapshot, Timestamp } from "firebase/firestore";
+import { sanitizeForFirestore } from "@/lib/sanitizeForFirestore";
 import type { SiteService } from "@/types/siteConfig";
 
 /**
@@ -37,23 +38,26 @@ export async function getSiteServices(siteId: string): Promise<SiteService[]> {
 
 /**
  * Save services array to sites/{siteId}.services
+ * Sanitizes payload to remove undefined (Firestore rejects undefined).
  */
 export async function saveSiteServices(
   siteId: string,
   services: SiteService[]
 ): Promise<void> {
-  const db = getDb(); // Always get a fresh, valid Firestore instance
+  const db = getDb();
   const siteRef = doc(db, "sites", siteId);
   const path = `sites/${siteId}`;
-  
-  // Use setDoc with merge to ensure it works even if document structure changes
-  await setDoc(siteRef, {
+
+  const payload = sanitizeForFirestore({
     services,
     updatedAt: Timestamp.now(),
-  }, { merge: true });
-  
-  console.log(`[saveSiteServices] Saved ${services.length} services to PATH=${path}`);
-  console.log(`[saveSiteServices] Services data:`, services.map(s => ({ id: s.id, name: s.name, enabled: s.enabled })));
+  }) as { services: SiteService[]; updatedAt: ReturnType<typeof Timestamp.now> };
+
+  await updateDoc(siteRef, payload);
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`[saveSiteServices] Saved ${services.length} services to PATH=${path}`);
+  }
 }
 
 /**
@@ -71,15 +75,13 @@ export async function addSiteService(
   // Generate ID (simple timestamp-based, or use a more robust method)
   const newId = `svc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   
-  const newService: SiteService = {
+  const newService = sanitizeForFirestore({
     ...service,
     id: newId,
-    enabled: service.enabled !== false, // Default to true
+    enabled: service.enabled !== false,
     sortOrder: service.sortOrder ?? existingServices.length,
-  };
-  
-  console.log(`[addSiteService] PATH=${path} - Adding service:`, { id: newId, name: newService.name, enabled: newService.enabled });
-  
+  } as SiteService) as SiteService;
+
   const updatedServices = [...existingServices, newService];
   await saveSiteServices(siteId, updatedServices);
   
@@ -90,6 +92,7 @@ export async function addSiteService(
 
 /**
  * Update an existing service in the services array
+ * Merged service is sanitized so Firestore never receives undefined.
  */
 export async function updateSiteService(
   siteId: string,
@@ -98,17 +101,20 @@ export async function updateSiteService(
 ): Promise<void> {
   const existingServices = await getSiteServices(siteId);
   const serviceIndex = existingServices.findIndex((s) => s.id === serviceId);
-  
+
   if (serviceIndex === -1) {
     throw new Error(`Service with id ${serviceId} not found`);
   }
-  
-  const updatedServices = [...existingServices];
-  updatedServices[serviceIndex] = {
-    ...updatedServices[serviceIndex],
+
+  const merged = {
+    ...existingServices[serviceIndex],
     ...updates,
-  };
-  
+  } as SiteService;
+  const sanitizedService = sanitizeForFirestore(merged) as SiteService;
+
+  const updatedServices = [...existingServices];
+  updatedServices[serviceIndex] = sanitizedService;
+
   await saveSiteServices(siteId, updatedServices);
 }
 

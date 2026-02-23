@@ -83,6 +83,29 @@ export function fromYYYYMMDD(ymd: string): Date {
 }
 
 /**
+ * Add delta days to a YYYY-MM-DD string; returns YYYY-MM-DD.
+ */
+export function adjacentDateKey(dateKey: string, delta: number): string {
+  const d = fromYYYYMMDD(dateKey);
+  d.setDate(d.getDate() + delta);
+  return toYYYYMMDD(d);
+}
+
+/**
+ * Next calendar day (YYYY-MM-DD).
+ */
+export function getNextDate(dateKey: string): string {
+  return adjacentDateKey(dateKey, 1);
+}
+
+/**
+ * Previous calendar day (YYYY-MM-DD).
+ */
+export function getPrevDate(dateKey: string): string {
+  return adjacentDateKey(dateKey, -1);
+}
+
+/**
  * Get minutes since start of day from HH:mm time string
  * @param time Time string in HH:mm format (e.g., "09:30")
  * @returns Minutes since midnight (e.g., 570 for 09:30)

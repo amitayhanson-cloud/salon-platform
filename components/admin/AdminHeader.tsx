@@ -9,10 +9,16 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { isOnTenantSubdomainClient, getAdminBasePath } from "@/lib/url";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
 
+type SubMenuItem = {
+  label: string;
+  href: string;
+  items?: { label: string; href: string }[];
+};
+
 type MenuItem = {
   label: string;
   href?: string;
-  items?: { label: string; href: string }[];
+  items?: SubMenuItem[];
 };
 
 function getMenuItems(basePath: string): MenuItem[] {
@@ -26,6 +32,7 @@ function getMenuItems(basePath: string): MenuItem[] {
       label: "לקוחות",
       items: [
         { label: "כרטיס לקוח", href: `${basePath}/clients/client-card` },
+        { label: "הגדרות לקוחות", href: `${basePath}/clients/settings` },
       ],
     },
     {
@@ -38,12 +45,9 @@ function getMenuItems(basePath: string): MenuItem[] {
     {
       label: "ניהול אתר",
       items: [
+        { label: "אתר", href: `${basePath}/site` },
         { label: "הגדרות", href: `${basePath}/settings` },
-        { label: "אבטחה", href: `${basePath}/settings/security` },
-        { label: "ייבוא CSV/Excel", href: `${basePath}/settings/import` },
         { label: "שירותים", href: `${basePath}/services` },
-        { label: "צבעים", href: `${basePath}/colours` },
-        { label: "תמונות", href: `${basePath}/pictures` },
       ],
     },
   ];
@@ -140,15 +144,30 @@ export default function AdminHeader() {
     return pathname === href;
   };
 
+  const isSubItemActive = (subItem: SubMenuItem): boolean => {
+    if (isActive(subItem.href)) return true;
+    return (subItem.items ?? []).some((nested) => isActive(nested.href));
+  };
+
   const isParentActive = (item: MenuItem) => {
     if (item.href) {
       return isActive(item.href);
     }
     if (item.items) {
-      return item.items.some((subItem) => isActive(subItem.href));
+      return item.items.some((subItem) =>
+        isSubItemActive(subItem)
+      );
     }
     return false;
   };
+
+  // Close dropdown when route changes. Do NOT auto-open when path matches a dropdown item:
+  // that caused the "ניהול אתר" dropdown to be open by default after a full page refresh,
+  // because the effect ran on mount/hydration and set openDropdown to the parent label.
+  // Active section is shown via isParentActive() styling on the trigger instead.
+  useEffect(() => {
+    setOpenDropdown(null);
+  }, [pathname]);
 
   return (
     <header
@@ -223,18 +242,33 @@ export default function AdminHeader() {
                       {openDropdown === item.label && item.items && (
                         <div className="absolute top-full right-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden animate-[dropdown_0.2s_ease-out_forwards]">
                           {item.items.map((subItem) => (
-                            <Link
-                              key={subItem.href}
-                              href={subItem.href}
-                              onClick={() => setOpenDropdown(null)}
-                              className={`block px-4 py-2 text-sm transition-colors ${
-                                isActive(subItem.href)
-                                  ? "bg-caleno-50 text-caleno-700 font-medium"
-                                  : "text-slate-700 hover:bg-slate-50"
-                              }`}
-                            >
-                              {subItem.label}
-                            </Link>
+                            <div key={subItem.href}>
+                              <Link
+                                href={subItem.href}
+                                onClick={() => setOpenDropdown(null)}
+                                className={`block px-4 py-2 text-sm transition-colors ${
+                                  isActive(subItem.href)
+                                    ? "bg-caleno-50 text-caleno-700 font-medium"
+                                    : "text-slate-700 hover:bg-slate-50"
+                                }`}
+                              >
+                                {subItem.label}
+                              </Link>
+                              {subItem.items?.map((nested) => (
+                                <Link
+                                  key={nested.href}
+                                  href={nested.href}
+                                  onClick={() => setOpenDropdown(null)}
+                                  className={`block px-4 py-2 pl-6 text-sm transition-colors border-t border-slate-100 ${
+                                    isActive(nested.href)
+                                      ? "bg-caleno-50 text-caleno-700 font-medium"
+                                      : "text-slate-700 hover:bg-slate-50"
+                                  }`}
+                                >
+                                  {nested.label}
+                                </Link>
+                              ))}
+                            </div>
                           ))}
                         </div>
                       )}
@@ -317,17 +351,31 @@ export default function AdminHeader() {
                     {openDropdown === item.label && item.items && (
                       <div className="bg-slate-50">
                         {item.items.map((subItem) => (
-                          <Link
-                            key={subItem.href}
-                            href={subItem.href}
-                            className={`block px-8 py-2 text-sm transition-colors ${
-                              isActive(subItem.href)
-                                ? "bg-caleno-100 text-caleno-700 font-medium"
-                                : "text-slate-600 hover:bg-slate-100"
-                            }`}
-                          >
-                            {subItem.label}
-                          </Link>
+                          <div key={subItem.href}>
+                            <Link
+                              href={subItem.href}
+                              className={`block px-8 py-2 text-sm transition-colors ${
+                                isActive(subItem.href)
+                                  ? "bg-caleno-100 text-caleno-700 font-medium"
+                                  : "text-slate-600 hover:bg-slate-100"
+                              }`}
+                            >
+                              {subItem.label}
+                            </Link>
+                            {subItem.items?.map((nested) => (
+                              <Link
+                                key={nested.href}
+                                href={nested.href}
+                                className={`block px-12 py-2 text-sm transition-colors ${
+                                  isActive(nested.href)
+                                    ? "bg-caleno-100 text-caleno-700 font-medium"
+                                    : "text-slate-600 hover:bg-slate-100"
+                                }`}
+                              >
+                                {nested.label}
+                              </Link>
+                            ))}
+                          </div>
                         ))}
                       </div>
                     )}

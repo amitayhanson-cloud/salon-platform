@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from "react";
 import { auth, isFirebaseConfigValid, getFirebaseError, getFirebaseConfigStatus } from "@/lib/firebaseClient";
 import {
   signInWithEmailAndPassword,
@@ -262,7 +262,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [configValid]); // Only re-run if configValid changes
 
-  const login = async (
+  const login = useCallback(async (
     email: string,
     password: string
   ): Promise<{ success: boolean; error?: string; redirectPath?: string }> => {
@@ -298,11 +298,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       setUser(userDoc);
 
-      // Always send user to /dashboard; it will redirect to current user's tenant (server-computed).
+      // Send user to login with returnTo=admin; login page will redirect to tenant admin.
       if (process.env.NODE_ENV === "development") {
-        console.log(`[AuthProvider.login] uid=${userCredential.user.uid} -> redirectPath=/dashboard`);
+        console.log(`[AuthProvider.login] uid=${userCredential.user.uid} -> redirectPath=/login?returnTo=admin`);
       }
-      return { success: true, redirectPath: "/dashboard" };
+      return { success: true, redirectPath: "/login?returnTo=admin" };
     } catch (error: unknown) {
       // Log full error details for debugging
       const errorInfo = logFirebaseError("login", error);
@@ -316,9 +316,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       return { success: false, error: normalized.message };
     }
-  };
+  }, []);
 
-  const loginWithGoogle = async (): Promise<{ success: boolean; error?: string; redirectPath?: string }> => {
+  const loginWithGoogle = useCallback(async (): Promise<{ success: boolean; error?: string; redirectPath?: string }> => {
     if (!auth) {
       console.error("Firebase Auth not initialized");
       return { success: false, error: "Firebase לא מאותחל. אנא בדוק את הגדרות Firebase שלך." };
@@ -356,11 +356,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       setUser(userDoc);
 
-      // Always send user to /dashboard; it will redirect to current user's tenant (server-computed).
+      // Send user to login with returnTo=admin; login page will redirect to tenant admin.
       if (process.env.NODE_ENV === "development") {
-        console.log(`[AuthProvider.loginWithGoogle] uid=${userCredential.user.uid} -> redirectPath=/dashboard`);
+        console.log(`[AuthProvider.loginWithGoogle] uid=${userCredential.user.uid} -> redirectPath=/login?returnTo=admin`);
       }
-      return { success: true, redirectPath: "/dashboard" };
+      return { success: true, redirectPath: "/login?returnTo=admin" };
     } catch (error: unknown) {
       // Log full error details for debugging
       const errorInfo = logFirebaseError("loginWithGoogle", error);
@@ -374,9 +374,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       return { success: false, error: normalized.message };
     }
-  };
+  }, []);
 
-  const signup = async (
+  const signup = useCallback(async (
     email: string,
     password: string,
     name?: string
@@ -415,9 +415,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       return { success: false, error: normalized.message };
     }
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     if (!auth) return;
     try {
       const { clearStaleRedirectStorage } = await import("@/lib/clearStaleRedirectStorage");
@@ -428,7 +428,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error("Error signing out:", error);
     }
-  };
+  }, []);
+
+  const contextValue = useMemo(
+    () => ({ user, firebaseUser, login, loginWithGoogle, signup, logout, loading, authReady }),
+    [user, firebaseUser, login, loginWithGoogle, signup, logout, loading, authReady]
+  );
 
   // Show fallback UI if Firebase config is invalid
   if (!configValid) {
@@ -453,7 +458,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, firebaseUser, login, loginWithGoogle, signup, logout, loading, authReady }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

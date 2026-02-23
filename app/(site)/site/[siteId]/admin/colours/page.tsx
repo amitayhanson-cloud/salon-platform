@@ -57,7 +57,7 @@ const salonTypeLabels: Record<SiteConfig["salonType"], string> = {
 
 
 
-function AdminColorsTab({
+export function AdminColorsTab({
   siteConfig,
   onChange,
   onSave,

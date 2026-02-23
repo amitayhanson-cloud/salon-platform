@@ -3,14 +3,55 @@
 import { useState } from "react";
 import Link from "next/link";
 import { getSiteUrl } from "@/lib/tenant";
+import { DEFAULT_CONTENT } from "@/lib/editor/defaultContent";
+import type { SiteContent } from "@/types/siteConfig";
 
-const NAV_LINKS = [
-  { label: "אודות", id: "about-section" },
-  { label: "שירותים", id: "services-section" },
-  { label: "גלריה", id: "gallery-section" },
+const NAV_IDS = [
+  { key: "navAbout", id: "about-section" },
+  { key: "navServices", id: "services-section" },
+  { key: "navGallery", id: "gallery-section" },
 ] as const;
 
 const LOGO_HEIGHT = 44; // prominent in header (h-16)
+
+const EDITOR_ATTRS = {
+  headerBg: {
+    "data-edit-id": "headerBg",
+    "data-edit-kind": "color",
+    "data-edit-paths": '["sectionStyles.header.bg"]',
+    "data-edit-label": "רקע כותרת",
+  },
+  headerText: {
+    "data-edit-id": "headerText",
+    "data-edit-kind": "text",
+    "data-edit-paths": '["content.header.brandName","sectionStyles.header.text"]',
+    "data-edit-label": "שם הסלון בכותרת",
+  },
+  headerNavAbout: {
+    "data-edit-id": "headerNavLink",
+    "data-edit-kind": "text",
+    "data-edit-paths": '["content.header.navAbout","sectionStyles.header.link"]',
+    "data-edit-label": "קישור אודות",
+  },
+  headerNavServices: {
+    "data-edit-id": "headerNavLink",
+    "data-edit-kind": "text",
+    "data-edit-paths": '["content.header.navServices","sectionStyles.header.link"]',
+    "data-edit-label": "קישור שירותים",
+  },
+  headerNavGallery: {
+    "data-edit-id": "headerNavLink",
+    "data-edit-kind": "text",
+    "data-edit-paths": '["content.header.navGallery","sectionStyles.header.link"]',
+    "data-edit-label": "קישור גלריה",
+  },
+  headerCtaButton: {
+    "data-edit-id": "headerCtaButton",
+    "data-edit-kind": "button",
+    "data-edit-paths": '["content.header.navCtaBook","content.header.navCtaContact","sectionStyles.header.primaryBtnBg","sectionStyles.header.primaryBtnText"]',
+    "data-edit-label": "כפתור קביעת תור בכותרת",
+  },
+} as const;
 
 export default function SalonHeader({
   salonName,
@@ -20,6 +61,13 @@ export default function SalonHeader({
   scrollToSection,
   logoUrl,
   logoAlt,
+  editorMode = false,
+  headerBg,
+  headerText,
+  headerLink,
+  headerCtaBg,
+  headerCtaText,
+  contentHeader,
 }: {
   salonName: string;
   siteId: string;
@@ -28,32 +76,52 @@ export default function SalonHeader({
   scrollToSection: (id: string) => void;
   logoUrl?: string | null;
   logoAlt?: string;
+  editorMode?: boolean;
+  /** Section-scoped header colors (override themeColors for this section only) */
+  headerBg?: string;
+  headerText?: string;
+  headerLink?: string;
+  headerCtaBg?: string;
+  headerCtaText?: string;
+  /** Editable text content for header (nav labels, CTA text) */
+  contentHeader?: SiteContent["header"];
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const edit = editorMode ? (key: keyof typeof EDITOR_ATTRS) => EDITOR_ATTRS[key] : () => ({});
+
+  const navLabel = (key: keyof NonNullable<SiteContent["header"]>) =>
+    contentHeader?.[key]?.trim() ? contentHeader[key]! : DEFAULT_CONTENT.header[key];
 
   const handleNavClick = (id: string) => {
     scrollToSection(id);
     setMobileMenuOpen(false);
   };
 
+  const bgColor = headerBg ?? "rgba(0,0,0,0.5)";
+  const textColor = headerText ?? "#ffffff";
+  const linkColor = headerLink ?? "rgba(255,255,255,0.9)";
+  const ctaBg = headerCtaBg ?? "var(--primary)";
+  const ctaText = headerCtaText ?? "var(--primaryText)";
+
   return (
     <header
       dir="rtl"
       className="sticky top-0 z-20 w-full text-right transition-[background,backdrop-filter]"
       style={{
-        backgroundColor: "rgba(0,0,0,0.5)",
+        backgroundColor: bgColor,
         backdropFilter: "saturate(180%) blur(12px)",
         WebkitBackdropFilter: "saturate(180%) blur(12px)",
       }}
+      {...edit("headerBg")}
     >
       <div className="mx-auto grid h-16 max-w-6xl grid-cols-3 items-center gap-4 px-4 lg:px-8">
         {/* Col 1 in RTL = right: salon name */}
-        <div className="flex min-w-0 items-center justify-start">
+        <div className="flex min-w-0 items-center justify-start" {...edit("headerText")}>
           <span
             dir="ltr"
             lang="en"
-            className="text-xl font-semibold tracking-wide text-white"
-            style={{ unicodeBidi: "isolate" }}
+            className="text-xl font-semibold tracking-wide"
+            style={{ unicodeBidi: "isolate", color: textColor }}
           >
             {salonName}
           </span>
@@ -62,34 +130,36 @@ export default function SalonHeader({
         {/* Col 2 = center: nav (desktop) or hamburger (mobile) */}
         <div className="flex items-center justify-center">
           <nav className="hidden items-center gap-8 md:flex" aria-label="ניווט ראשי">
-            {NAV_LINKS.map(({ label, id }) => (
+            {NAV_IDS.map(({ key, id }) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => handleNavClick(id)}
-                className="text-sm font-medium text-white/90 transition hover:text-white focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-transparent"
+                className="text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-transparent"
+                style={{ color: linkColor }}
+                {...edit(key === "navAbout" ? "headerNavAbout" : key === "navServices" ? "headerNavServices" : "headerNavGallery")}
               >
-                {label}
+                {navLabel(key)}
               </button>
             ))}
             {isBookingEnabled ? (
               <Link
                 href={getSiteUrl(slug, siteId, "/book")}
-                className="rounded-full px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-transparent"
-                style={{
-                  backgroundColor: "var(--primary)",
-                  color: "var(--primaryText)",
-                }}
+                className="rounded-full px-5 py-2.5 text-sm font-semibold transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-transparent"
+                style={{ backgroundColor: ctaBg, color: ctaText }}
+                {...edit("headerCtaButton")}
               >
-                קביעת תור
+                {navLabel("navCtaBook")}
               </Link>
             ) : (
               <button
                 type="button"
                 onClick={() => handleNavClick("contact-section")}
-                className="rounded-full border border-white/30 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-transparent"
+                className="rounded-full border border-white/30 bg-white/10 px-5 py-2.5 text-sm font-semibold transition hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-transparent"
+                style={{ color: ctaText }}
+                {...edit("headerCtaButton")}
               >
-                צור קשר
+                {navLabel("navCtaContact")}
               </button>
             )}
           </nav>
@@ -157,14 +227,16 @@ export default function SalonHeader({
             </Link>
           ) : null}
           <nav className="flex flex-col gap-1" aria-label="ניווט ראשי (נייד)">
-            {NAV_LINKS.map(({ label, id }) => (
+            {NAV_IDS.map(({ key, id }) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => handleNavClick(id)}
-                className="rounded-lg py-3 text-right text-base font-medium text-white focus:outline-none focus:ring-2 focus:ring-white/50"
+                className="rounded-lg py-3 text-right text-base font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
+                style={{ color: linkColor }}
+                {...edit(key === "navAbout" ? "headerNavAbout" : key === "navServices" ? "headerNavServices" : "headerNavGallery")}
               >
-                {label}
+                {navLabel(key)}
               </button>
             ))}
             {isBookingEnabled ? (
@@ -172,20 +244,20 @@ export default function SalonHeader({
                 href={getSiteUrl(slug, siteId, "/book")}
                 onClick={() => setMobileMenuOpen(false)}
                 className="mt-2 rounded-full px-5 py-3 text-center text-sm font-semibold"
-                style={{
-                  backgroundColor: "var(--primary)",
-                  color: "var(--primaryText)",
-                }}
+                style={{ backgroundColor: ctaBg, color: ctaText }}
+                {...edit("headerCtaButton")}
               >
-                קביעת תור
+                {navLabel("navCtaBook")}
               </Link>
             ) : (
               <button
                 type="button"
                 onClick={() => handleNavClick("contact-section")}
-                className="mt-2 rounded-full border border-white/30 bg-white/10 py-3 text-center text-sm font-semibold text-white"
+                className="mt-2 rounded-full border border-white/30 bg-white/10 py-3 text-center text-sm font-semibold"
+                style={{ color: ctaText }}
+                {...edit("headerCtaButton")}
               >
-                צור קשר
+                {navLabel("navCtaContact")}
               </button>
             )}
           </nav>

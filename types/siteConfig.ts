@@ -24,6 +24,145 @@ export type ServiceItem = {
   price: number; // ILS
 };
 
+/**
+ * Editable text content per section. Single source of truth for preview.
+ * Preview reads only from config.content; inspector writes only to config.content.
+ * For FAQ items use config.faqs[i].question/answer (paths faqs.0.question etc.).
+ */
+export type SiteContent = {
+  header?: {
+    brandName?: string;
+    navAbout?: string;
+    navServices?: string;
+    navGallery?: string;
+    navCtaBook?: string;
+    navCtaContact?: string;
+  };
+  hero?: {
+    tagline?: string;
+    title?: string;
+    subtitle?: string;
+    ctaPrimaryText?: string;
+    ctaSecondaryText?: string;
+  };
+  about?: {
+    headingLabel?: string;
+    headingTitle?: string;
+    body?: string;
+    chip1?: string;
+    chip2?: string;
+    chip3?: string;
+  };
+  services?: {
+    sectionTitle?: string;
+    sectionSubtitle?: string;
+  };
+  gallery?: {
+    title?: string;
+    subtitle?: string;
+  };
+  faq?: {
+    sectionTitle?: string;
+    sectionSubtitle?: string;
+  };
+  reviews?: {
+    sectionLabel?: string;
+    sectionTitle?: string;
+  };
+  map?: {
+    title?: string;
+    placeholderText?: string;
+  };
+  footer?: {
+    copyright?: string;
+  };
+};
+
+/** Per-section color overrides. All fields optional; missing → fallback to themeColors. */
+export type SectionStyles = {
+  header?: {
+    bg?: string;
+    text?: string;
+    link?: string;
+    linkActive?: string;
+    linkHover?: string;
+    border?: string;
+    primaryBtnBg?: string;
+    primaryBtnText?: string;
+  };
+  hero?: {
+    bg?: string;
+    text?: string;
+    subtitleText?: string;
+    overlayBg?: string;
+    primaryBtnBg?: string;
+    primaryBtnText?: string;
+    secondaryBtnBg?: string;
+    secondaryBtnText?: string;
+  };
+  about?: {
+    bg?: string;
+    titleText?: string;
+    text?: string;
+    cardBg?: string;
+    cardText?: string;
+    border?: string;
+  };
+  services?: {
+    bg?: string;
+    titleText?: string;
+    text?: string;
+    cardBg?: string;
+    cardText?: string;
+    priceText?: string;
+    border?: string;
+    chipBg?: string;
+    chipText?: string;
+  };
+  gallery?: {
+    bg?: string;
+    titleText?: string;
+    text?: string;
+    cardBg?: string;
+    border?: string;
+  };
+  faq?: {
+    bg?: string;
+    titleText?: string;
+    text?: string;
+    itemBg?: string;
+    itemText?: string;
+    itemBorder?: string;
+  };
+  reviews?: {
+    bg?: string;
+    titleText?: string;
+    text?: string;
+    cardBg?: string;
+    cardText?: string;
+    starColor?: string;
+    border?: string;
+  };
+  map?: {
+    bg?: string;
+    titleText?: string;
+    text?: string;
+    cardBg?: string;
+    cardText?: string;
+    border?: string;
+    buttonBg?: string;
+    buttonText?: string;
+  };
+  footer?: {
+    bg?: string;
+    text?: string;
+    link?: string;
+    linkHover?: string;
+    border?: string;
+  };
+  booking?: { bg?: string; titleText?: string; cardBg?: string; cardText?: string };
+};
+
 // Service object stored in users/{uid}/site/main.services array
 export type SiteService = {
   id: string; // stable id (generated)
@@ -74,6 +213,8 @@ export type SiteConfig = {
   servicePricing?: Record<string, number>; // service name -> starting price (ILS)
   heroImage?: string; // path to hero image (e.g., "/templates/hair/hero/hero1.jpg")
   aboutImage?: string; // path to about image (e.g., "/templates/hair/about/about1.jpg")
+  /** Optional gallery image URLs; fallback to template default images when missing */
+  galleryImages?: string[];
   themeColors?: {
     background: string; // page background
     surface: string; // card backgrounds
@@ -84,6 +225,10 @@ export type SiteConfig = {
     accent: string; // small accents (borders, chips)
     border: string; // border color
   };
+  /** Per-section color overrides. Missing keys fall back to themeColors. */
+  sectionStyles?: SectionStyles;
+  /** Editable text content per section. Single source of truth for preview. */
+  content?: SiteContent;
   dividerStyle?: "none" | "wave" | "curve" | "angle";
   dividerHeight?: number;
   /** Automatic deletion of archived (cancelled + expired) bookings. Stored at sites/{siteId}.config.archiveRetention */

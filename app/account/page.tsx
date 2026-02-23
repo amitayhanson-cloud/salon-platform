@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthProvider";
+import CalenoLoading from "@/components/CalenoLoading";
 
 type TenantMe = { slug: string | null; publicUrl: string | null; siteId: string | null };
 
@@ -127,8 +128,14 @@ export default function AccountPage() {
 
   if (loading) {
     return (
-      <div dir="rtl" className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <p className="text-slate-600">טוען...</p>
+      <div
+        dir="rtl"
+        className="min-h-screen flex items-center justify-center w-full"
+        style={{
+          background: "linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%)",
+        }}
+      >
+        <CalenoLoading />
       </div>
     );
   }

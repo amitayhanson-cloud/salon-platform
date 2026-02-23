@@ -54,7 +54,7 @@ function LoginForm() {
           !returnTo.startsWith("//") &&
           !returnTo.includes(":")
             ? returnTo
-            : "/dashboard";
+            : "/login?returnTo=admin";
         router.replace(safeReturnTo);
       });
     return () => {
@@ -68,7 +68,7 @@ function LoginForm() {
     try {
       const currentUser = auth?.currentUser ?? null;
       if (!currentUser) {
-        router.replace("/dashboard");
+        router.replace("/login?returnTo=admin");
         return;
       }
       const token = await currentUser.getIdToken(true);
@@ -93,7 +93,7 @@ function LoginForm() {
     } catch (e) {
       console.error("[LoginForm] Redirect fetch failed:", e);
     }
-    router.replace("/dashboard");
+    router.replace("/login?returnTo=admin");
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {

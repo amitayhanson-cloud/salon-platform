@@ -64,3 +64,21 @@ export function getTemplateForConfig(
   return hairLuxuryTemplate;
 }
 
+/** Template key used in sites and preview (e.g. "hair1", "barber1"). */
+export type TemplateKey = "hair1" | "hair2" | "barber1" | "nails1";
+
+const TEMPLATE_MAP: Record<string, TemplateDefinition> = {
+  hair1: hairLuxuryTemplate,
+  // Future: hair2, barber1, nails1, etc.
+};
+
+/**
+ * Get template definition by key. Used by WebsiteRenderer for public/preview.
+ * Adding a new template = add to TEMPLATE_MAP and render branch in WebsiteRenderer.
+ */
+export function getTemplateByKey(key: string): TemplateDefinition {
+  const template = TEMPLATE_MAP[key];
+  if (template) return template;
+  return hairLuxuryTemplate;
+}
+

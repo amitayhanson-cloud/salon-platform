@@ -13,7 +13,7 @@ export default function MySitePage() {
     if (!authReady) return;
 
     if (!firebaseUser) {
-      router.replace("/login?returnTo=" + encodeURIComponent("/dashboard"));
+      router.replace("/login?returnTo=admin");
       return;
     }
 

@@ -1,0 +1,17 @@
+rules_version = '2';
+// Firebase Storage: site assets (images) and logos.
+// Multi-tenant: app enforces that only site owners can open the editor; here we require auth only.
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Site assets: hero, about, gallery, services. Only authenticated users (site owner in app).
+    match /sites/{siteId}/assets/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    // Logos: same pattern.
+    match /logos/{siteId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+  }
+}
