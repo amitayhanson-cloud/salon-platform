@@ -287,7 +287,7 @@ export function VisualSiteEditor({
         {/* Inspector */}
         <InspectorPanel
           selected={selected}
-          schemaTarget={schemaTarget}
+          schemaTarget={schemaTarget ?? null}
           draftConfig={draft}
           onPathChange={handlePathChange}
           onDraftChange={handleDraftChange}

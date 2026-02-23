@@ -97,7 +97,7 @@ export function ImagePickerModal({
       setUploadError(result.error);
     }
     setSelectedFile(null);
-    fileInputRef.current.value = "";
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }, [siteId, targetPath, targetServiceId, targetReviewId, selectedFile, onSelect, onClose]);
 
   const handleChoosePlatform = useCallback(

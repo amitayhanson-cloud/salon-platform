@@ -194,7 +194,7 @@ export function InspectorPanel({
       } else {
         setUploadError(result.error);
       }
-      fileInputRef.current.value = "";
+      if (fileInputRef.current) fileInputRef.current.value = "";
       setReplacingPath(null);
     },
     [siteId, draftConfig, onDraftChange, onPathChange, onServiceImageUpload, selected?.serviceId, getImageUploadType]

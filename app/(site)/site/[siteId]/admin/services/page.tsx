@@ -480,11 +480,11 @@ export default function ServicesPage() {
         color: updatedService.color,
       };
       if (description !== null) updates.description = description;
-      else updates.description = null;
+      else updates.description = undefined;
       if (price !== null) updates.price = price;
-      else updates.price = null;
+      else updates.price = undefined;
       if (duration !== null) updates.duration = duration;
-      else updates.duration = null;
+      else updates.duration = undefined;
       // Service image is edited only in the Website Editor; do not write from this modal
 
       await updateSiteService(siteId, editingService.id, updates);

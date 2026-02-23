@@ -14,6 +14,7 @@ import AdminTabs from "@/components/ui/AdminTabs";
 import { deleteUserAccount } from "@/lib/deleteUserAccount";
 import { clearStaleStorageOnLogout } from "@/lib/client/storageCleanup";
 import type { SiteBranding } from "@/types/siteConfig";
+import type { SalonBookingState } from "@/types/booking";
 import { validateLogoFile } from "@/lib/siteLogoStorage";
 import { ImagePickerModal } from "@/components/editor/ImagePickerModal";
 
