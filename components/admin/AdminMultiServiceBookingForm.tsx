@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { createAdminMultiServiceVisit } from "@/lib/adminBookings";
-import MinutesNumberInput from "@/components/admin/MinutesNumberInput";
+import DurationMinutesStepper from "@/components/admin/DurationMinutesStepper";
 
 const SLOT_MINUTES = 15;
 const DEFAULT_DURATION = 60;
@@ -72,6 +72,9 @@ export default function AdminMultiServiceBookingForm({
         setCustomerName(c.name);
         setCustomerPhone(c.phone);
       }
+    } else {
+      setCustomerName("");
+      setCustomerPhone("");
     }
   };
 
@@ -195,13 +198,13 @@ export default function AdminMultiServiceBookingForm({
 
         {existingClients.length > 0 && (
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">לקוח קיים</label>
             <select
               value={selectedClientId}
               onChange={(e) => handleSelectClient(e.target.value)}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right bg-white"
+              aria-label="בחר לקוח"
             >
-              <option value="">— הזן ידנית —</option>
+              <option value="">— לקוח חדש —</option>
               {existingClients.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} — {c.phone}
@@ -296,15 +299,15 @@ export default function AdminMultiServiceBookingForm({
                     <option value={slot.serviceName}>{slot.serviceName}</option>
                   )}
                 </select>
-                <div className="flex gap-2">
-                  <MinutesNumberInput
+                <div className="flex gap-2 items-center">
+                  <DurationMinutesStepper
                     value={slot.durationMin}
                     onChange={(n) => updateSlot(idx, { durationMin: n })}
                     min={0}
                     max={480}
-                    className="w-20 px-2 py-1.5 border border-slate-300 rounded text-sm text-right"
+                    className="w-20"
                   />
-                  <span className="text-sm text-slate-500 self-center">דק׳</span>
+                  <span className="text-sm text-slate-500">דק׳</span>
                   <select
                     value={slot.workerId}
                     onChange={(e) => updateSlot(idx, { workerId: e.target.value })}

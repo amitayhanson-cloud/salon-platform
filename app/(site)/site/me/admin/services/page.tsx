@@ -19,6 +19,7 @@ import {
   migrateServicesFromSubcollection,
 } from "@/lib/firestoreSiteServices";
 import { AccordionItem } from "@/components/admin/Accordion";
+import DurationMinutesStepper from "@/components/admin/DurationMinutesStepper";
 import AdminTabs from "@/components/ui/AdminTabs";
 import { parseNumberOrRange, formatNumberOrRange } from "@/lib/parseNumberOrRange";
 import { formatPriceDisplay } from "@/lib/formatPrice";
@@ -888,82 +889,18 @@ export default function ServicesPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   משך השירות (בדקות) *
                 </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={durationInputValue}
-                  onChange={(e) => {
-                    // Allow typing freely - store raw input
-                    setDurationInputValue(e.target.value);
-                    // Clear error while typing
-                    setError(null);
+                <DurationMinutesStepper
+                  value={editingItem.durationMinMinutes ?? editingItem.durationMaxMinutes ?? 30}
+                  onChange={(n) => {
+                    setEditingItem({
+                      ...editingItem,
+                      durationMinMinutes: n,
+                      durationMaxMinutes: n,
+                    });
+                    setDurationInputValue(String(n));
                   }}
-                  onBlur={(e) => {
-                    const inputValue = e.target.value.trim();
-                    // Parse the input: single number or range
-                    const rangeMatch = inputValue.match(/^(\d+)\s*-\s*(\d+)$/);
-                    const singleMatch = inputValue.match(/^(\d+)$/);
-                    
-                    if (rangeMatch) {
-                      // Range format: "30-60"
-                      const min = parseInt(rangeMatch[1], 10);
-                      const max = parseInt(rangeMatch[2], 10);
-                      if (min >= 1 && max > min) {
-                        setEditingItem({
-                          ...editingItem,
-                          durationMinMinutes: min,
-                          durationMaxMinutes: max,
-                        });
-                        setDurationInputValue(`${min}-${max}`);
-                        setError(null);
-                      } else {
-                        // Invalid range
-                        setError("טווח לא תקין: הערך המינימלי חייב להיות קטן מהמקסימלי");
-                        // Restore previous valid value
-                        if (editingItem?.durationMinMinutes && editingItem?.durationMaxMinutes) {
-                          if (editingItem.durationMinMinutes === editingItem.durationMaxMinutes) {
-                            setDurationInputValue(`${editingItem.durationMinMinutes}`);
-                          } else {
-                            setDurationInputValue(`${editingItem.durationMinMinutes}-${editingItem.durationMaxMinutes}`);
-                          }
-                        }
-                      }
-                    } else if (singleMatch) {
-                      // Single number: "30"
-                      const value = parseInt(singleMatch[1], 10);
-                      if (value >= 1) {
-                        setEditingItem({
-                          ...editingItem,
-                          durationMinMinutes: value,
-                          durationMaxMinutes: value,
-                        });
-                        setDurationInputValue(`${value}`);
-                        setError(null);
-                      } else {
-                        setError("משך השירות חייב להיות גדול או שווה ל-1 דקה");
-                        // Restore previous valid value
-                        if (editingItem?.durationMinMinutes) {
-                          setDurationInputValue(`${editingItem.durationMinMinutes}`);
-                        }
-                      }
-                    } else if (inputValue === "") {
-                      // Empty - validation will catch it on save
-                      setError(null);
-                    } else {
-                      // Invalid format
-                      setError("פורמט לא תקין: השתמש במספר (למשל: 30) או טווח (למשל: 30-60)");
-                      // Restore previous valid value
-                      if (editingItem?.durationMinMinutes && editingItem?.durationMaxMinutes) {
-                        if (editingItem.durationMinMinutes === editingItem.durationMaxMinutes) {
-                          setDurationInputValue(`${editingItem.durationMinMinutes}`);
-                        } else {
-                          setDurationInputValue(`${editingItem.durationMinMinutes}-${editingItem.durationMaxMinutes}`);
-                        }
-                      }
-                    }
-                  }}
-                  placeholder="0"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  min={15}
+                  className="w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500"
                 />
               </div>
 
@@ -1073,6 +1010,9 @@ export default function ServicesPage() {
                   placeholder="0"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
                 />
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-1">
+                  שימו לב: מחיר שאינו מספר בודד (לדוגמה 50-100) ייחשב כ-0 בדוחות שכר. אלא אם יוגדר מחיר אישי לכל לקוח
+                </p>
               </div>
 
               <div>

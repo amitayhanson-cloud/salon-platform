@@ -32,6 +32,7 @@ import { isClosedDate } from "@/lib/closedDates";
 import { defaultBookingSettings } from "@/types/bookingSettings";
 import type { SiteService } from "@/types/siteConfig";
 import type { PricingItem } from "@/types/pricingItem";
+import AdminManualBookingModal from "./AdminManualBookingModal";
 
 const SLOT_MINUTES = 15;
 const SLOT_INTERVAL = 15;
@@ -190,6 +191,7 @@ export default function AdminCreateBookingForm({
   const [recurringEndDate, setRecurringEndDate] = useState(defaultRecurringEndDate);
   const [recurringCount, setRecurringCount] = useState(10);
   const [recurringProgress, setRecurringProgress] = useState<{ current: number; total: number } | null>(null);
+  const [showManualFlowModal, setShowManualFlowModal] = useState(false);
 
   useEffect(() => {
     if (!siteId) return;
@@ -209,6 +211,9 @@ export default function AdminCreateBookingForm({
         setCustomerName(c.name);
         setCustomerPhone(c.phone);
       }
+    } else {
+      setCustomerName("");
+      setCustomerPhone("");
     }
   };
 
@@ -746,13 +751,13 @@ export default function AdminCreateBookingForm({
           <h4 className="text-sm font-semibold text-slate-700">לקוח</h4>
           {existingClients.length > 0 && (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">לקוח קיים</label>
               <select
                 value={selectedClientId}
                 onChange={(e) => handleSelectClient(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right bg-white"
+                aria-label="בחר לקוח"
               >
-                <option value="">— הזן ידנית —</option>
+                <option value="">— לקוח חדש —</option>
                 {existingClients.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name} — {c.phone}
@@ -811,21 +816,7 @@ export default function AdminCreateBookingForm({
 
         {/* Services */}
         <div className="space-y-3 border-t border-slate-200 pt-4">
-          <div className="flex justify-between items-center">
-            <h4 className="text-sm font-semibold text-slate-700">שירותים</h4>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                addService(e);
-              }}
-              className="inline-flex items-center gap-1 text-sm text-caleno-600 hover:text-caleno-700 font-medium focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:ring-offset-1 rounded px-2 py-1 -m-1 min-h-[32px]"
-            >
-              <Plus className="w-4 h-4" />
-              הוסף שירות
-            </button>
-          </div>
+          <h4 className="text-sm font-semibold text-slate-700">שירותים</h4>
           {slots.length === 0 ? (
             getFirstServicePricingPair(services, pricingItems) ? (
               <div
@@ -842,7 +833,7 @@ export default function AdminCreateBookingForm({
               >
                 <Plus className="w-6 h-6 mx-auto mb-2 text-slate-400" />
                 <p>לחץ לבחירת שירות</p>
-                <p className="text-xs mt-1 text-slate-500">או השתמש בכפתור למעלה</p>
+                <p className="text-xs mt-1 text-slate-500">או השתמש ב׳הוסף תור ידנית׳ לתור בודד</p>
               </div>
             ) : (
               <div className="p-4 rounded-lg border border-slate-200 bg-amber-50 text-center text-sm text-amber-800">
@@ -860,7 +851,7 @@ export default function AdminCreateBookingForm({
                     className="p-3 rounded-lg border border-slate-200 bg-slate-50/50 flex flex-col gap-2"
                   >
                     <div className="flex justify-between items-center">
-                      <span className="text-xs text-slate-500">שירות {idx + 1}</span>
+                      <span className="text-xs text-slate-500">בחר שירות</span>
                       <div className="flex gap-1">
                         <button
                           type="button"
@@ -1026,15 +1017,40 @@ export default function AdminCreateBookingForm({
         </div>
 
         {chain.length === 1 && (
-          <label className="flex items-center gap-2 cursor-pointer py-1">
-            <input
-              type="checkbox"
-              checked={recurringEnabled}
-              onChange={(e) => setRecurringEnabled(e.target.checked)}
-              className="w-4 h-4 rounded border-slate-300 text-caleno-500 shrink-0"
-            />
-            <span className="text-sm font-medium text-slate-700">רצף</span>
-          </label>
+          <div className="flex justify-start items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowManualFlowModal(true);
+              }}
+              className="inline-flex items-center gap-2 text-sm font-medium text-caleno-600 bg-caleno-50 border border-caleno-200 hover:bg-caleno-100 hover:border-caleno-300 focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:ring-offset-1 rounded-lg px-3 py-2 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              הוסף תור ידנית
+            </button>
+            <span className="text-xs text-slate-500">
+              תור בודד או כמה תורים — ידני, בלי שירותי המשך אוטומטיים
+            </span>
+          </div>
+        )}
+
+        {chain.length === 1 && (
+          <div className="space-y-0.5">
+            <label className="flex items-center gap-2 cursor-pointer py-1">
+              <input
+                type="checkbox"
+                checked={recurringEnabled}
+                onChange={(e) => setRecurringEnabled(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-caleno-500 shrink-0"
+              />
+              <span className="text-sm font-medium text-slate-700">רצף</span>
+            </label>
+            <p className="text-xs text-slate-500 pr-6">
+              יצירת תורים חוזרים באופן אוטומטי לפי אותו יום ושעה למשך תקופה.
+            </p>
+          </div>
         )}
 
         {chain.length === 1 && recurringEnabled && (
@@ -1143,6 +1159,23 @@ export default function AdminCreateBookingForm({
           </button>
         </div>
       </form>
+
+      {showManualFlowModal && (
+        <AdminManualBookingModal
+          siteId={siteId}
+          defaultDate={date}
+          workers={workers}
+          services={services}
+          pricingItems={pricingItems}
+          customerName={customerName}
+          customerPhone={customerPhone}
+          onSuccess={() => {
+            setShowManualFlowModal(false);
+            onSuccess();
+          }}
+          onCancel={() => setShowManualFlowModal(false)}
+        />
+      )}
     </div>
   );
 }

@@ -20,7 +20,7 @@ import {
   migrateServicesFromSubcollection,
 } from "@/lib/firestoreSiteServices";
 import { AccordionItem } from "@/components/admin/Accordion";
-import MinutesNumberInput from "@/components/admin/MinutesNumberInput";
+import DurationMinutesStepper from "@/components/admin/DurationMinutesStepper";
 import { parseNumberOrRange, formatNumberOrRange } from "@/lib/parseNumberOrRange";
 import { formatPriceDisplay } from "@/lib/formatPrice";
 import type { MultiBookingCombo, MultiBookingComboInput, MultiBookingAutoStep } from "@/types/multiBookingCombo";
@@ -68,6 +68,7 @@ export default function ServicesPage() {
     isActive: boolean;
   }>({ name: "", triggerServiceTypeIds: [], orderedServiceTypeIds: [], autoSteps: [], isActive: true });
   const [openCombos, setOpenCombos] = useState(false);
+  const [showNewServiceReminderModal, setShowNewServiceReminderModal] = useState(false);
 
   // Track first load to set loading state only once
   const didFirstLoad = useRef(false);
@@ -428,6 +429,7 @@ export default function ServicesPage() {
       console.log(`[ServicesPage] Service added successfully: id="${serviceId}", PATH=sites/${siteId}`);
       setNewServiceName("");
       setShowAddService(false);
+      setShowNewServiceReminderModal(true);
     } catch (err) {
       console.error("Failed to create service", err);
       setError("שגיאה ביצירת שירות");
@@ -1180,12 +1182,11 @@ export default function ServicesPage() {
                           <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-xs">נוסף אוטומטית</span>
                           {service ? service.name : step.serviceId}
                           <span className="text-slate-500">(override</span>
-                          <input
-                            type="number"
-                            min={1}
+                          <DurationMinutesStepper
                             value={step.durationMinutesOverride}
-                            onChange={(e) => updateAutoStepDuration(i, parseInt(e.target.value, 10) || 1)}
-                            className="w-14 px-1 py-0.5 border border-slate-300 rounded text-right text-sm"
+                            onChange={(n) => updateAutoStepDuration(i, n)}
+                            min={15}
+                            className="w-20 text-sm"
                           />
                           <span className="text-slate-500">דק׳)</span>
                         </span>
@@ -1325,11 +1326,11 @@ export default function ServicesPage() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">
                     משך (דקות)
                   </label>
-                  <MinutesNumberInput
+                  <DurationMinutesStepper
                     value={editingService.duration ?? 15}
                     onChange={(n) => setEditingService({ ...editingService, duration: n })}
                     min={0}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                    className="w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-caleno-500"
                   />
                 </div>
               </div>
@@ -1444,82 +1445,18 @@ export default function ServicesPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   משך השירות (בדקות) *
                 </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={durationInputValue}
-                  onChange={(e) => {
-                    // Allow typing freely - store raw input
-                    setDurationInputValue(e.target.value);
-                    // Clear error while typing
-                    setError(null);
+                <DurationMinutesStepper
+                  value={editingItem.durationMinMinutes ?? editingItem.durationMaxMinutes ?? 30}
+                  onChange={(n) => {
+                    setEditingItem({
+                      ...editingItem,
+                      durationMinMinutes: n,
+                      durationMaxMinutes: n,
+                    });
+                    setDurationInputValue(String(n));
                   }}
-                  onBlur={(e) => {
-                    const inputValue = e.target.value.trim();
-                    // Parse the input: single number or range
-                    const rangeMatch = inputValue.match(/^(\d+)\s*-\s*(\d+)$/);
-                    const singleMatch = inputValue.match(/^(\d+)$/);
-                    
-                    if (rangeMatch) {
-                      // Range format: "30-60"
-                      const min = parseInt(rangeMatch[1], 10);
-                      const max = parseInt(rangeMatch[2], 10);
-                      if (min >= 1 && max > min) {
-                        setEditingItem({
-                          ...editingItem,
-                          durationMinMinutes: min,
-                          durationMaxMinutes: max,
-                        });
-                        setDurationInputValue(`${min}-${max}`);
-                        setError(null);
-                      } else {
-                        // Invalid range
-                        setError("טווח לא תקין: הערך המינימלי חייב להיות קטן מהמקסימלי");
-                        // Restore previous valid value
-                        if (editingItem?.durationMinMinutes && editingItem?.durationMaxMinutes) {
-                          if (editingItem.durationMinMinutes === editingItem.durationMaxMinutes) {
-                            setDurationInputValue(`${editingItem.durationMinMinutes}`);
-                          } else {
-                            setDurationInputValue(`${editingItem.durationMinMinutes}-${editingItem.durationMaxMinutes}`);
-                          }
-                        }
-                      }
-                    } else if (singleMatch) {
-                      // Single number: "30"
-                      const value = parseInt(singleMatch[1], 10);
-                      if (value >= 1) {
-                        setEditingItem({
-                          ...editingItem,
-                          durationMinMinutes: value,
-                          durationMaxMinutes: value,
-                        });
-                        setDurationInputValue(`${value}`);
-                        setError(null);
-                      } else {
-                        setError("משך השירות חייב להיות גדול או שווה ל-1 דקה");
-                        // Restore previous valid value
-                        if (editingItem?.durationMinMinutes) {
-                          setDurationInputValue(`${editingItem.durationMinMinutes}`);
-                        }
-                      }
-                    } else if (inputValue === "") {
-                      // Empty - validation will catch it on save
-                      setError(null);
-                    } else {
-                      // Invalid format
-                      setError("פורמט לא תקין: השתמש במספר (למשל: 30) או טווח (למשל: 30-60)");
-                      // Restore previous valid value
-                      if (editingItem?.durationMinMinutes && editingItem?.durationMaxMinutes) {
-                        if (editingItem.durationMinMinutes === editingItem.durationMaxMinutes) {
-                          setDurationInputValue(`${editingItem.durationMinMinutes}`);
-                        } else {
-                          setDurationInputValue(`${editingItem.durationMinMinutes}-${editingItem.durationMaxMinutes}`);
-                        }
-                      }
-                    }
-                  }}
-                  placeholder="0"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                  min={15}
+                  className="w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-caleno-500"
                 />
               </div>
 
@@ -1579,6 +1516,9 @@ export default function ServicesPage() {
                   placeholder="0"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                 />
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-1">
+                  שימו לב: מחיר שאינו מספר בודד (לדוגמה 50-100) ייחשב כ-0 בדוחות שכר. אלא אם יוגדר מחיר אישי לכל לקוח
+                </p>
               </div>
 
               <div>
@@ -1668,7 +1608,7 @@ export default function ServicesPage() {
                       <label className="block text-sm font-medium text-slate-700 mb-1">
                         משך שלב 2 (דקות) *
                       </label>
-                      <MinutesNumberInput
+                      <DurationMinutesStepper
                         value={editingItem.followUp?.durationMinutes ?? 15}
                         onChange={(n) => {
                           setFollowUpDurationInputValue(String(n));
@@ -1680,14 +1620,14 @@ export default function ServicesPage() {
                           });
                         }}
                         min={0}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                        className="w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-caleno-500"
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">
                         המתנה אחרי שלב 1 (דקות)
                       </label>
-                      <MinutesNumberInput
+                      <DurationMinutesStepper
                         value={editingItem.followUp?.waitMinutes ?? 0}
                         onChange={(n) => {
                           setFollowUpWaitInputValue(String(n));
@@ -1699,7 +1639,7 @@ export default function ServicesPage() {
                           });
                         }}
                         min={0}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                        className="w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-caleno-500"
                       />
                     </div>
                     <div>
@@ -1821,6 +1761,34 @@ export default function ServicesPage() {
                   </button>
                 );
               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New service reminder (info only, after successful create) */}
+      {showNewServiceReminderModal && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-[55]"
+          dir="rtl"
+          onClick={() => setShowNewServiceReminderModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-6 text-right"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-slate-900 mb-3">שים לב</h3>
+            <p className="text-base text-slate-900">
+              זכור להגדיר זמינות לעובדים עבור השירות החדש, אחרת הוא לא יהיה זמין להזמנה.
+            </p>
+            <div className="mt-6 flex justify-start">
+              <button
+                type="button"
+                onClick={() => setShowNewServiceReminderModal(false)}
+                className="px-4 py-2 rounded-lg bg-caleno-500 text-white hover:bg-caleno-600"
+              >
+                סגור
+              </button>
             </div>
           </div>
         </div>

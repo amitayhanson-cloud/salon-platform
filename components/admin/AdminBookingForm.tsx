@@ -15,7 +15,7 @@ import type { SiteService } from "@/types/siteConfig";
 import type { PricingItem } from "@/types/pricingItem";
 import type { BookingSettings } from "@/types/bookingSettings";
 import type { OpeningHours } from "@/types/booking";
-import MinutesNumberInput from "@/components/admin/MinutesNumberInput";
+import DurationMinutesStepper from "@/components/admin/DurationMinutesStepper";
 
 /** Display label for a service type (pricing item): service name + optional type (e.g. "תספורת - חצי ראש"). */
 function getServiceTypeLabel(item: PricingItem, services: SiteService[]): string {
@@ -499,8 +499,8 @@ export default function AdminBookingForm({
 
         {existingClients.length > 0 && (
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">בחר לקוח קיים</label>
             <select
+              aria-label="בחר לקוח"
               value={selectedClientId}
               onChange={(e) => {
                 const id = e.target.value;
@@ -511,11 +511,14 @@ export default function AdminBookingForm({
                     setCustomerName(client.name);
                     setCustomerPhone(client.phone);
                   }
+                } else {
+                  setCustomerName("");
+                  setCustomerPhone("");
                 }
               }}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right bg-white"
             >
-              <option value="">— הזן ידנית —</option>
+              <option value="">— לקוח חדש —</option>
               {existingClients.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} — {c.phone}
@@ -625,11 +628,11 @@ export default function AdminBookingForm({
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">משך (דקות) *</label>
-              <MinutesNumberInput
+              <DurationMinutesStepper
                 value={phase1DurationMin}
                 onChange={setPhase1DurationMin}
                 min={0}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
+                className="w-full px-3 py-2"
               />
               {errors.phase1Duration && <p className="text-xs text-red-600 mt-0.5">{errors.phase1Duration}</p>}
             </div>
@@ -669,20 +672,20 @@ export default function AdminBookingForm({
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">המתנה אחרי שלב 1 (דקות)</label>
-                  <MinutesNumberInput
+                  <DurationMinutesStepper
                     value={phase2WaitMin}
                     onChange={setPhase2WaitMin}
                     min={0}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
+                    className="w-full px-3 py-2"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">משך שלב 2 (דקות) *</label>
-                  <MinutesNumberInput
+                  <DurationMinutesStepper
                     value={phase2DurationMin}
                     onChange={setPhase2DurationMin}
                     min={0}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
+                    className="w-full px-3 py-2"
                   />
                   {errors.phase2Duration && <p className="text-xs text-red-600 mt-0.5">{errors.phase2Duration}</p>}
                 </div>

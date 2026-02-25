@@ -9,7 +9,7 @@ import {
   type AdminBookingPayload,
 } from "@/lib/adminBookings";
 import { findWorkerConflictFromBookings } from "@/lib/bookingConflicts";
-import MinutesNumberInput from "@/components/admin/MinutesNumberInput";
+import DurationMinutesStepper from "@/components/admin/DurationMinutesStepper";
 import {
   computeWeeklyOccurrenceDates,
   createRecurringBookings,
@@ -361,6 +361,9 @@ export default function AdminBookingFormSimple({
         setCustomerName(c.name);
         setCustomerPhone(c.phone);
       }
+    } else {
+      setCustomerName("");
+      setCustomerPhone("");
     }
   };
 
@@ -512,12 +515,12 @@ export default function AdminBookingFormSimple({
 
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">משך (דקות) *</label>
-          <MinutesNumberInput
+          <DurationMinutesStepper
             value={durationMin}
             onChange={(n) => setDurationMin(Math.max(0, Math.min(DURATION_MIN_MAX, n)))}
             min={0}
             max={DURATION_MIN_MAX}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
+            className="w-full px-3 py-2"
           />
           {errors.duration && <p className="text-xs text-red-600 mt-0.5">{errors.duration}</p>}
         </div>
@@ -526,15 +529,13 @@ export default function AdminBookingFormSimple({
           <>
             {existingClients.length > 0 && (
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  בחר לקוח קיים
-                </label>
                 <select
                   value={selectedClientId}
                   onChange={(e) => handleSelectClient(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right bg-white"
+                  aria-label="בחר לקוח"
                 >
-                  <option value="">— הזן ידנית —</option>
+                  <option value="">— לקוח חדש —</option>
                   {existingClients.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name} — {c.phone}
