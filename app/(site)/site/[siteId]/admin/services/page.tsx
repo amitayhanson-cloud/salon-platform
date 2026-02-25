@@ -53,6 +53,9 @@ export default function ServicesPage() {
   const [followUpNameInputValue, setFollowUpNameInputValue] = useState<string>("");
   const [followUpDurationInputValue, setFollowUpDurationInputValue] = useState<string>("");
   const [followUpWaitInputValue, setFollowUpWaitInputValue] = useState<string>("0");
+  const [followUpTextInputValue, setFollowUpTextInputValue] = useState<string>("");
+
+  const FOLLOWUP_TEXT_MAX_LENGTH = 50;
 
   // Multi-booking combos (rule-based: trigger set → ordered sequence)
   const [combos, setCombos] = useState<MultiBookingCombo[]>([]);
@@ -245,6 +248,7 @@ export default function ServicesPage() {
     setFollowUpNameInputValue("");
     setFollowUpDurationInputValue("");
     setFollowUpWaitInputValue("0");
+    setFollowUpTextInputValue("");
   };
 
   const handleEditItem = (item: PricingItem) => {
@@ -257,6 +261,7 @@ export default function ServicesPage() {
     setFollowUpNameInputValue(convertedItem.followUp?.name ?? "");
     setFollowUpDurationInputValue(convertedItem.followUp?.durationMinutes != null ? String(convertedItem.followUp.durationMinutes) : "");
     setFollowUpWaitInputValue(String(convertedItem.followUp?.waitMinutes ?? 0));
+    setFollowUpTextInputValue(convertedItem.followUp?.text ?? "");
     setEditingItem(convertedItem);
   };
 
@@ -339,6 +344,8 @@ export default function ServicesPage() {
       const followUpName = (editingItem.followUp?.name ?? followUpNameInputValue).trim();
       const followUpDuration = editingItem.followUp?.durationMinutes ?? (followUpDurationInputValue ? parseInt(followUpDurationInputValue, 10) : NaN);
       const followUpWait = editingItem.followUp?.waitMinutes ?? (followUpWaitInputValue ? parseInt(followUpWaitInputValue, 10) : 0);
+      const followUpTextRaw = (editingItem.followUp?.text ?? followUpTextInputValue).trim();
+      const followUpText = followUpTextRaw.slice(0, FOLLOWUP_TEXT_MAX_LENGTH) || undefined;
       if (editingItem.hasFollowUp && followUpName && Number.isFinite(followUpDuration) && followUpDuration >= 1 && Number.isFinite(followUpWait) && followUpWait >= 0) {
         itemData.hasFollowUp = true;
         itemData.followUp = {
@@ -346,6 +353,7 @@ export default function ServicesPage() {
           ...(editingItem.followUp?.serviceId && { serviceId: editingItem.followUp.serviceId }),
           durationMinutes: followUpDuration,
           waitMinutes: followUpWait,
+          ...(followUpText && { text: followUpText }),
         };
       } else {
         itemData.hasFollowUp = false;
@@ -369,9 +377,9 @@ export default function ServicesPage() {
         itemData.priceRangeMin = undefined;
         itemData.priceRangeMax = undefined;
       }
-      if (editingItem.notes) {
-        itemData.notes = editingItem.notes;
-      }
+      // Always set notes so clearing the field persists (null/empty clears it in Firestore)
+      const trimmedNotes = (editingItem.notes ?? "").trim();
+      itemData.notes = trimmedNotes || null;
 
       const cleanItemData = removeUndefined(itemData) as Record<string, unknown>;
       console.log("[Services] service doc saved fields:", { hasFollowUp: cleanItemData.hasFollowUp, followUp: cleanItemData.followUp });
@@ -389,6 +397,7 @@ export default function ServicesPage() {
       setFollowUpNameInputValue("");
       setFollowUpDurationInputValue("");
       setFollowUpWaitInputValue("0");
+      setFollowUpTextInputValue("");
     } catch (err) {
       console.error("Failed to save pricing item", err);
       setError("שגיאה בשמירת הפריט");
@@ -831,7 +840,9 @@ export default function ServicesPage() {
                                       {item.notes && <div>{item.notes}</div>}
                                       {item.hasFollowUp && item.followUp && (
                                         <div className="text-caleno-600 font-medium">
-                                          המשך טיפול: {item.followUp.name} ({item.followUp.durationMinutes} דק׳)
+                                          המשך טיפול: {item.followUp.name}
+                                          {item.followUp.text?.trim() ? ` - ${item.followUp.text.trim()}` : ""}
+                                          {" "}({item.followUp.durationMinutes} דק׳)
                                           {item.followUp.waitMinutes ? `, המתנה ${item.followUp.waitMinutes} דק׳` : ""}
                                         </div>
                                       )}
@@ -1604,6 +1615,7 @@ export default function ServicesPage() {
                         setFollowUpNameInputValue("");
                         setFollowUpDurationInputValue("");
                         setFollowUpWaitInputValue("0");
+                        setFollowUpTextInputValue("");
                       }
                       setError(null);
                     }}
@@ -1689,6 +1701,31 @@ export default function ServicesPage() {
                         min={0}
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
                       />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        טקסט להמשך טיפול (אופציונלי)
+                      </label>
+                      <input
+                        type="text"
+                        value={editingItem.followUp?.text ?? followUpTextInputValue ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value.slice(0, FOLLOWUP_TEXT_MAX_LENGTH);
+                          setFollowUpTextInputValue(v);
+                          setEditingItem({
+                            ...editingItem,
+                            followUp: editingItem.followUp
+                              ? { ...editingItem.followUp, text: v.trim() || undefined }
+                              : { name: followUpNameInputValue || "—", durationMinutes: 15, waitMinutes: 0, text: v.trim() || undefined },
+                          });
+                        }}
+                        maxLength={FOLLOWUP_TEXT_MAX_LENGTH}
+                        placeholder="למשל: קרטין"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 bg-white"
+                      />
+                      <p className="text-xs text-slate-500 mt-1">
+                        יוצג כ: המשך טיפול: [שירות] - [טקסט]. מקסימום {FOLLOWUP_TEXT_MAX_LENGTH} תווים.
+                      </p>
                     </div>
                   </div>
                 )}

@@ -217,9 +217,10 @@ export default function PrintDayPage() {
         const data = snap.exists() ? snap.data() : null;
         const chemicalCard = data?.chemicalCard;
         if (!chemicalCard || typeof chemicalCard !== "object") return { key, card: null };
-        const colors = (chemicalCard.colors || []).map((c: { colorNumber?: string; amount?: string; notes?: string }) => ({
+        const colors = (chemicalCard.colors || []).map((c: { colorNumber?: string; amount?: string; oxygen?: string; notes?: string }) => ({
           colorNumber: c.colorNumber,
           amount: c.amount,
+          oxygen: c.oxygen,
           notes: c.notes,
         }));
         const oxygen = (chemicalCard.oxygen || []).map((o: { percentage?: string; amount?: string; notes?: string }) => ({

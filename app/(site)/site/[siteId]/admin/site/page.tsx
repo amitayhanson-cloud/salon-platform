@@ -1,68 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams } from "next/navigation";
 import type { SiteConfig } from "@/types/siteConfig";
-import type { SalonBookingState } from "@/types/booking";
-import { defaultBookingState } from "@/types/booking";
 import { useSiteConfig } from "@/hooks/useSiteConfig";
 import { useAuth } from "@/components/auth/AuthProvider";
-import ConfirmModal from "@/components/ui/ConfirmModal";
 import AdminTabs from "@/components/ui/AdminTabs";
-import {
-  saveBookingSettings,
-  convertSalonBookingStateToBookingSettings,
-  subscribeBookingSettings,
-} from "@/lib/firestoreBookingSettings";
-import { resetWorkersAvailabilityToBusinessHours } from "@/lib/resetWorkersAvailability";
 import {
   BrandingLogoEditor,
   AdminReviewsEditor,
   AdminFaqEditor,
-  AdminBookingTab,
 } from "@/app/(site)/site/[siteId]/admin/settings/page";
 import { VisualSiteEditor } from "@/components/editor/VisualSiteEditor";
-
-function validateBreaks(s: SalonBookingState): string | null {
-  for (let i = 0; i < s.openingHours.length; i++) {
-    const day = s.openingHours[i];
-    if (!day?.open || !day?.close) continue;
-    const breaks = day.breaks ?? [];
-    const openMin = day.open
-      .split(":")
-      .reduce((a, b, idx) => a + (idx === 0 ? parseInt(b, 10) * 60 : parseInt(b, 10)), 0);
-    const closeMin = day.close
-      .split(":")
-      .reduce((a, b, idx) => a + (idx === 0 ? parseInt(b, 10) * 60 : parseInt(b, 10)), 0);
-    for (let bi = 0; bi < breaks.length; bi++) {
-      const b = breaks[bi]!;
-      const [sH, sM] = b.start.split(":").map(Number);
-      const [eH, eM] = b.end.split(":").map(Number);
-      const sMin = (sH ?? 0) * 60 + (sM ?? 0);
-      const eMin = (eH ?? 0) * 60 + (eM ?? 0);
-      if (sMin >= eMin)
-        return `${day.label}: הפסקה ${bi + 1} – שעת התחלה חייבת להיות לפני שעת סיום`;
-      if (sMin < openMin || eMin > closeMin)
-        return `${day.label}: הפסקה ${bi + 1} – חייבת להיות בתוך שעות הפתיחה`;
-      for (let j = bi + 1; j < breaks.length; j++) {
-        const o = breaks[j]!;
-        const oS =
-          (parseInt(o.start.split(":")[0], 10) || 0) * 60 +
-          (parseInt(o.start.split(":")[1], 10) || 0);
-        const oE =
-          (parseInt(o.end.split(":")[0], 10) || 0) * 60 +
-          (parseInt(o.end.split(":")[1], 10) || 0);
-        if (sMin < oE && eMin > oS) return `${day.label}: הפסקות לא יכולות לחפוף`;
-      }
-    }
-  }
-  return null;
-}
 
 const SITE_PAGE_TABS = [
   { key: "branding", label: "לוגו ומיתוג" },
   { key: "reviews", label: "ביקורות" },
-  { key: "hours", label: "שעות פעילות" },
   { key: "design", label: "עיצוב האתר" },
   { key: "faq", label: "FAQ" },
 ] as const;
@@ -76,102 +29,7 @@ export default function AdminSitePage() {
   const { siteConfig, isSaving, saveMessage, handleConfigChange, handleSaveConfig } =
     useSiteConfig(siteId);
 
-  const [bookingState, setBookingState] = useState<SalonBookingState | null>(null);
-  const [showHoursConfirmModal, setShowHoursConfirmModal] = useState(false);
-  const [hoursSaving, setHoursSaving] = useState(false);
-  const [bookingHoursToast, setBookingHoursToast] = useState<string | null>(null);
-  const [bookingSaveError, setBookingSaveError] = useState<string | null>(null);
   const [activeSiteTab, setActiveSiteTab] = useState<SiteTabKey>("branding");
-
-  useEffect(() => {
-    if (!bookingHoursToast) return;
-    const t = setTimeout(() => setBookingHoursToast(null), 5000);
-    return () => clearTimeout(t);
-  }, [bookingHoursToast]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !siteId) return;
-    const dayLabels = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"] as const;
-    const dayKeys = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
-    const unsubscribe = subscribeBookingSettings(
-      siteId,
-      (firestoreSettings) => {
-        const openingHours = (["0", "1", "2", "3", "4", "5", "6"] as const).map((key, i) => {
-          const d = firestoreSettings.days[key];
-          const enabled = d?.enabled ?? false;
-          const breaks = (d as { breaks?: { start: string; end: string }[] })?.breaks;
-          return {
-            day: dayKeys[i],
-            label: dayLabels[i],
-            open: enabled ? (d?.start ?? null) : null,
-            close: enabled ? (d?.end ?? null) : null,
-            breaks: breaks && breaks.length > 0 ? breaks : undefined,
-          };
-        });
-        const closedDates = (
-          firestoreSettings as { closedDates?: Array<{ date: string; label?: string }> }
-        ).closedDates;
-        const convertedState: SalonBookingState = {
-          defaultSlotMinutes: firestoreSettings.slotMinutes,
-          openingHours,
-          workers: [],
-          bookings: [],
-          closedDates: Array.isArray(closedDates) && closedDates.length > 0 ? closedDates : [],
-        };
-        setBookingState(convertedState);
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem(`bookingState:${siteId}`, JSON.stringify(convertedState));
-        }
-      },
-      (err) => {
-        console.error("[Admin] Failed to load booking settings", err);
-        try {
-          const bookingRaw = window.localStorage.getItem(`bookingState:${siteId}`);
-          if (bookingRaw) setBookingState(JSON.parse(bookingRaw));
-          else setBookingState(defaultBookingState);
-        } catch {
-          setBookingState(defaultBookingState);
-        }
-      }
-    );
-    return () => unsubscribe();
-  }, [siteId]);
-
-  const handleBookingStateChange = (next: SalonBookingState) => {
-    setBookingState(next);
-    const err = validateBreaks(next);
-    setBookingSaveError(err ?? null);
-    if (typeof window !== "undefined" && siteId) {
-      window.localStorage.setItem(`bookingState:${siteId}`, JSON.stringify(next));
-    }
-  };
-
-  const handleSaveHoursClick = () => {
-    if (!bookingState) return;
-    const err = validateBreaks(bookingState);
-    if (err) {
-      setBookingSaveError(err);
-      return;
-    }
-    setBookingSaveError(null);
-    setShowHoursConfirmModal(true);
-  };
-
-  const handleConfirmSaveHours = async () => {
-    if (!bookingState || !siteId) return;
-    setHoursSaving(true);
-    try {
-      const bookingSettings = convertSalonBookingStateToBookingSettings(bookingState);
-      await saveBookingSettings(siteId, bookingSettings);
-      await resetWorkersAvailabilityToBusinessHours(siteId, bookingSettings);
-      setBookingHoursToast("שעות הפעילות נשמרו. זמינות העובדים אופסה בהתאם.");
-      setShowHoursConfirmModal(false);
-    } catch (error) {
-      console.error("[Admin] Failed to save booking settings:", error);
-    } finally {
-      setHoursSaving(false);
-    }
-  };
 
   if (!siteConfig) {
     return (
@@ -214,7 +72,7 @@ export default function AdminSitePage() {
           <div>
             <h1 className="text-2xl font-bold text-slate-900">אתר</h1>
             <p className="text-sm text-slate-500 mt-1">
-              לוגו, מיתוג, ביקורות, שעות פעילות, עיצוב האתר ו־FAQ
+              לוגו, מיתוג, ביקורות, עיצוב האתר ו־FAQ
             </p>
           </div>
           <div className="flex items-center gap-4">
@@ -275,34 +133,6 @@ export default function AdminSitePage() {
           </section>
         </div>
 
-        {/* שעות פעילות */}
-        <div
-          role="tabpanel"
-          aria-hidden={activeSiteTab !== "hours"}
-          className={activeSiteTab === "hours" ? "block" : "hidden"}
-        >
-          <section className={sectionCardClass}>
-            <h2 className={sectionTitleClass}>שעות פעילות</h2>
-            {bookingHoursToast && (
-              <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-800 text-right">
-                {bookingHoursToast}
-              </div>
-            )}
-            {bookingSaveError && (
-              <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 text-right">
-                {bookingSaveError}
-              </div>
-            )}
-            {bookingState && (
-              <AdminBookingTab
-                state={bookingState}
-                onChange={handleBookingStateChange}
-                onSaveRequest={handleSaveHoursClick}
-              />
-            )}
-          </section>
-        </div>
-
         {/* FAQ */}
         <div
           role="tabpanel"
@@ -319,17 +149,6 @@ export default function AdminSitePage() {
         </div>
       </div>
       </div>
-
-      <ConfirmModal
-        open={showHoursConfirmModal}
-        onConfirm={handleConfirmSaveHours}
-        onClose={() => setShowHoursConfirmModal(false)}
-        message="שמירת שעות הפעילות תאפס את זמינות כל העובדים ותתאים אותה לשעות הפעילות של העסק. האם להמשיך?"
-        messageSecondary="Saving business hours will reset all workers' availability to match the business hours. Do you want to continue?"
-        confirmLabel="אישור"
-        cancelLabel="ביטול"
-        submitting={hoursSaving}
-      />
     </div>
   );
 }

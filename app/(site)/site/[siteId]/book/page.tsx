@@ -1445,13 +1445,23 @@ export default function BookingPage() {
             </div>
 
             <div className="rounded-2xl p-6 mb-6 text-right space-y-3" style={{ backgroundColor: "var(--bg)" }}>
-              <div className="flex justify-between items-center pb-3 border-b" style={{ borderColor: "var(--border)" }}>
-                <span className="text-sm" style={{ color: "var(--muted)" }}>שירות{selectedServices.length > 1 ? "ים" : ""}:</span>
-                <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-                  {selectedServices.length === 1
-                    ? selectedService?.name
-                    : selectedServices.map((s) => s.pricingItem.type?.trim() ? `${s.service.name} — ${s.pricingItem.type}` : s.service.name).join(" → ")}
-                </span>
+              <div className="flex justify-between items-start gap-3 pb-3 border-b" style={{ borderColor: "var(--border)" }}>
+                <span className="text-sm shrink-0" style={{ color: "var(--muted)" }}>שירות{selectedServices.length > 1 ? "ים" : ""}:</span>
+                <div className="flex flex-col items-end gap-0.5 min-w-0">
+                  <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                    {selectedServices.length === 1
+                      ? selectedService?.name
+                      : selectedServices.map((s) => s.pricingItem.type?.trim() ? `${s.service.name} — ${s.pricingItem.type}` : s.service.name).join(" → ")}
+                  </span>
+                  {selectedServices.some((s) => s.pricingItem.notes?.trim()) && (
+                    <span className="text-xs" style={{ color: "var(--muted)" }}>
+                      {selectedServices
+                        .map((s) => s.pricingItem.notes?.trim())
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex justify-between items-center pb-3 border-b" style={{ borderColor: "var(--border)" }}>
                 <span className="text-sm" style={{ color: "var(--muted)" }}>מעצב:</span>
@@ -1810,15 +1820,23 @@ export default function BookingPage() {
                     {selectedServices.map((s, idx) => {
                       const dur = s.pricingItem.durationMaxMinutes ?? s.pricingItem.durationMinMinutes ?? 30;
                       const disp = s.pricingItem.type?.trim() ? `${s.service.name} — ${s.pricingItem.type}` : s.service.name;
+                      const notes = s.pricingItem.notes?.trim();
                       return (
                         <li
                           key={`${s.service.id}-${s.pricingItem.id}-${idx}`}
                           className="flex items-center justify-between gap-2 p-2 rounded-lg"
                           style={{ backgroundColor: "var(--surface)" }}
                         >
-                          <span className="text-sm font-medium" style={{ color: "var(--text)" }}>
-                            {idx + 1}. {disp} ({dur} דק׳)
-                          </span>
+                          <div className="flex flex-col items-end gap-0.5 min-w-0">
+                            <span className="text-sm font-medium" style={{ color: "var(--text)" }}>
+                              {idx + 1}. {disp} ({dur} דק׳)
+                            </span>
+                            {notes && (
+                              <span className="text-xs" style={{ color: "var(--muted)" }}>
+                                {notes}
+                              </span>
+                            )}
+                          </div>
                           <div className="flex gap-1">
                             {isMultiBooking && (
                               <>
@@ -1944,6 +1962,7 @@ export default function BookingPage() {
                               const displayDuration = item.durationMinMinutes === item.durationMaxMinutes
                                 ? `${item.durationMinMinutes} דק'`
                                 : `${item.durationMinMinutes}-${item.durationMaxMinutes} דק'`;
+                              const itemNotes = item.notes?.trim();
                               
                               return (
                                 <button
@@ -1961,7 +1980,7 @@ export default function BookingPage() {
                                   style={{ borderColor: "var(--border)", backgroundColor: "var(--surface)" }}
                                 >
                                   <div className="flex justify-between items-start">
-                                    <div className="text-right">
+                                    <div className="text-right min-w-0">
                                       <h4 className="font-medium mb-1" style={{ color: "var(--text)" }}>
                                         {displayName}
                                       </h4>
@@ -1970,8 +1989,13 @@ export default function BookingPage() {
                                         <span>•</span>
                                         <span>{displayDuration}</span>
                                       </div>
+                                      {itemNotes && (
+                                        <p className="text-xs mt-1.5" style={{ color: "var(--muted)" }}>
+                                          {itemNotes}
+                                        </p>
+                                      )}
                                     </div>
-                                    <span className="text-lg" style={{ color: "var(--primary)" }}>+</span>
+                                    <span className="text-lg shrink-0" style={{ color: "var(--primary)" }}>+</span>
                                   </div>
                                 </button>
                               );

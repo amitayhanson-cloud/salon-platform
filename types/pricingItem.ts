@@ -6,6 +6,8 @@ export interface FollowUpConfig {
   serviceId?: string;
   durationMinutes: number;
   waitMinutes: number;
+  /** Optional suffix/label for display (e.g. "קרטין"). Shown as "המשך טיפול: {name} - {text}". */
+  text?: string;
 }
 
 export interface PricingItem {

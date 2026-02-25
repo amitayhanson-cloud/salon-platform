@@ -64,10 +64,15 @@ export async function getPricingItems(siteId: string): Promise<PricingItem[]> {
         durationMaxMinutes = 30;
       }
       
-      const rawFollowUp = data.followUp as { name?: string; durationMinutes?: number; waitMinutes?: number } | undefined;
+      const rawFollowUp = data.followUp as { name?: string; durationMinutes?: number; waitMinutes?: number; text?: string } | undefined;
       const followUp: PricingItem["followUp"] =
         rawFollowUp && typeof rawFollowUp.name === "string" && rawFollowUp.name.trim() !== "" && typeof rawFollowUp.durationMinutes === "number" && typeof rawFollowUp.waitMinutes === "number"
-          ? { name: rawFollowUp.name.trim(), durationMinutes: Math.max(0, rawFollowUp.durationMinutes), waitMinutes: Math.max(0, rawFollowUp.waitMinutes) }
+          ? {
+              name: rawFollowUp.name.trim(),
+              durationMinutes: Math.max(0, rawFollowUp.durationMinutes),
+              waitMinutes: Math.max(0, rawFollowUp.waitMinutes),
+              ...(typeof rawFollowUp.text === "string" && rawFollowUp.text.trim() !== "" && { text: rawFollowUp.text.trim().slice(0, 50) }),
+            }
           : null;
 
       return {
@@ -123,10 +128,15 @@ export function subscribePricingItems(
             durationMaxMinutes = 30;
           }
           
-          const rawFollowUp = data.followUp as { name?: string; durationMinutes?: number; waitMinutes?: number } | undefined;
+          const rawFollowUp = data.followUp as { name?: string; durationMinutes?: number; waitMinutes?: number; text?: string } | undefined;
           const followUp: PricingItem["followUp"] =
             rawFollowUp && typeof rawFollowUp.name === "string" && rawFollowUp.name.trim() !== "" && typeof rawFollowUp.durationMinutes === "number" && typeof rawFollowUp.waitMinutes === "number"
-              ? { name: rawFollowUp.name.trim(), durationMinutes: Math.max(0, rawFollowUp.durationMinutes), waitMinutes: Math.max(0, rawFollowUp.waitMinutes) }
+              ? {
+                  name: rawFollowUp.name.trim(),
+                  durationMinutes: Math.max(0, rawFollowUp.durationMinutes),
+                  waitMinutes: Math.max(0, rawFollowUp.waitMinutes),
+                  ...(typeof rawFollowUp.text === "string" && rawFollowUp.text.trim() !== "" && { text: rawFollowUp.text.trim().slice(0, 50) }),
+                }
               : null;
 
           return {

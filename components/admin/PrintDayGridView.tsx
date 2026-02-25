@@ -38,7 +38,7 @@ function chemicalCardSummary(card: ChemicalCardPrintData | null | undefined): st
   const colors = card.colors ?? [];
   const oxygen = card.oxygen ?? [];
   if (colors.length === 0 && oxygen.length === 0) return "כרטיס כימי: ריק";
-  const colorParts = colors.map((c) => [c.colorNumber, c.amount].filter(Boolean).join(" "));
+  const colorParts = colors.map((c) => [c.colorNumber, c.amount, c.oxygen].filter(Boolean).join(" "));
   const oxyParts = oxygen.map((o) => [o.percentage, o.amount].filter(Boolean).join(" "));
   const parts: string[] = [];
   if (colorParts.length) parts.push(`צבע: ${colorParts.join("; ")}`);

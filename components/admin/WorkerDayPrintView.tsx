@@ -10,7 +10,7 @@ import React from "react";
 
 /** Chemical card data for print (colors + oxygen arrays from client doc). */
 export interface ChemicalCardPrintData {
-  colors: Array<{ colorNumber?: string; amount?: string; notes?: string }>;
+  colors: Array<{ colorNumber?: string; amount?: string; oxygen?: string; notes?: string }>;
   oxygen: Array<{ percentage?: string; amount?: string; notes?: string }>;
 }
 
@@ -62,7 +62,7 @@ function ChemicalCardBlock({ card }: { card: ChemicalCardPrintData | null }) {
           <span className="print-chemical-label">צבע:</span>{" "}
           {colors.map((c, i) => (
             <span key={i}>
-              {[c.colorNumber, c.amount].filter(Boolean).join(" ")}
+              {[c.colorNumber, c.amount, c.oxygen].filter(Boolean).join(" ")}
               {c.notes ? ` (${c.notes})` : ""}
               {i < colors.length - 1 ? "; " : ""}
             </span>

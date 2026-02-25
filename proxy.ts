@@ -45,6 +45,17 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   // Normalize host: strip port, lowercase, trim (used for routing and custom-domain lookup).
   const host = (request.headers.get("host") ?? "").split(":")[0].toLowerCase().trim();
 
+  // Deprecated URL: return 410 Gone so search engines drop it from results (caleno.co/dashboard).
+  if (
+    (pathname === "/dashboard" || pathname === "/dashboard/") &&
+    isPlatformHost(host)
+  ) {
+    return new NextResponse("Gone", {
+      status: 410,
+      headers: { "Cache-Control": "public, max-age=3600" },
+    });
+  }
+
   if (shouldSkipRewrite(pathname)) {
     return NextResponse.next();
   }
