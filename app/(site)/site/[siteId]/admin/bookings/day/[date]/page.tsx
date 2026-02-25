@@ -30,6 +30,7 @@ import type { SiteService } from "@/types/siteConfig";
 import type { OpeningHours, Weekday } from "@/types/booking";
 import { subscribeSiteServices } from "@/lib/firestoreSiteServices";
 import { subscribePricingItems } from "@/lib/firestorePricing";
+import { getFollowUpDisplaySuffix } from "@/lib/followupDisplaySuffix";
 import type { PricingItem } from "@/types/pricingItem";
 import { getAllClients } from "@/lib/firestoreClients";
 import DayScheduleView from "@/components/admin/DayScheduleView";
@@ -573,6 +574,24 @@ export default function DaySchedulePage() {
   );
   const filteredBookings = forSelectedDay.filter((b) => !isBookingCancelled(b) && !isBookingArchived(b));
 
+  // Add displayServiceName for phase-2 (followup) so calendar and modal show "החלקה - קרטין"
+  const bookingsForCalendar = useMemo(() => {
+    return filteredBookings.map((b) => {
+      const phase = (b as { phase?: number }).phase;
+      if (phase !== 2) return b;
+      const suffix = getFollowUpDisplaySuffix(
+        b.serviceName,
+        (b as { serviceId?: string }).serviceId,
+        pricingItems
+      );
+      if (!suffix) return b;
+      return {
+        ...b,
+        displayServiceName: `${(b.serviceName ?? "").trim()} - ${suffix}`,
+      } as Booking & { displayServiceName?: string };
+    });
+  }, [filteredBookings, pricingItems]);
+
   // Get working hours from config (default 8-20)
   const startHour = 8;
   const endHour = 20;
@@ -1031,7 +1050,7 @@ export default function DaySchedulePage() {
           <div className={`flex-1 min-h-0 flex flex-col bg-white rounded-lg shadow-sm border border-slate-200 p-6 ${bookingSettings && dateKey && isBusinessClosedAllDay({ bookingSettings, date: dateKey }) ? "opacity-75" : ""}`}>
             <MultiWorkerScheduleView
               date={dateKey}
-              bookings={filteredBookings}
+              bookings={bookingsForCalendar}
               workers={workers}
               startHour={startHour}
               endHour={endHour}
@@ -1044,7 +1063,7 @@ export default function DaySchedulePage() {
           <div className={`flex-1 min-h-0 flex flex-col bg-white rounded-lg shadow-sm border border-slate-200 p-6 ${bookingSettings && dateKey && isBusinessClosedAllDay({ bookingSettings, date: dateKey }) ? "opacity-75" : ""}`}>
             <DayScheduleView
               date={dateKey}
-              bookings={filteredBookings}
+              bookings={bookingsForCalendar}
               selectedWorkerId={selectedWorkerId}
               startHour={startHour}
               endHour={endHour}
@@ -1120,7 +1139,7 @@ export default function DaySchedulePage() {
                     שירות
                   </label>
                   <p className="text-sm text-slate-700">
-                    {selectedBooking.serviceName || "—"}
+                    {(selectedBooking as { displayServiceName?: string }).displayServiceName ?? selectedBooking.serviceName ?? "—"}
                   </p>
                 </div>
 

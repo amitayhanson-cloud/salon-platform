@@ -14,6 +14,9 @@ import { subscribeBookingSettings } from "@/lib/firestoreBookingSettings";
 import { isBusinessClosedAllDay } from "@/lib/closedDates";
 import type { BookingSettings } from "@/types/bookingSettings";
 import { normalizeBooking, isBookingCancelled, isBookingArchived, type NormalizedBooking } from "@/lib/normalizeBooking";
+import { subscribePricingItems } from "@/lib/firestorePricing";
+import { getFollowUpDisplaySuffix } from "@/lib/followupDisplaySuffix";
+import type { PricingItem } from "@/types/pricingItem";
 import PrintDayGridView from "@/components/admin/PrintDayGridView";
 import { type PrintBookingRow } from "@/components/admin/WorkerDayPrintView";
 import type { ChemicalCardPrintData } from "@/components/admin/WorkerDayPrintView";
@@ -49,6 +52,7 @@ export default function PrintDayPage() {
   const [chemicalCardsReady, setChemicalCardsReady] = useState(false);
   const [workersLoaded, setWorkersLoaded] = useState(false);
   const [bookingSettings, setBookingSettings] = useState<BookingSettings | null>(null);
+  const [pricingItems, setPricingItems] = useState<PricingItem[]>([]);
 
   const validSingleWorker = workerId && workerId !== "all";
   const validAllWorkers = !workerId || workerId === "all";
@@ -70,6 +74,16 @@ export default function PrintDayPage() {
       siteId,
       (s) => setBookingSettings(s),
       (e) => console.error("[PrintDay] booking settings error", e)
+    );
+  }, [siteId]);
+
+  // Subscribe to pricing items (for followup display suffix on phase-2 in print)
+  useEffect(() => {
+    if (!siteId) return;
+    return subscribePricingItems(
+      siteId,
+      (items) => setPricingItems(items),
+      (e) => console.error("[PrintDay] pricing items error", e)
     );
   }, [siteId]);
 
@@ -131,16 +145,32 @@ export default function PrintDayPage() {
     return () => unsubscribe();
   }, [siteId, dateKey]);
 
+  const bookingsWithDisplayNames = useMemo(() => {
+    return bookings.map((b) => {
+      const phase = b.phase;
+      if (phase !== 2) return b;
+      const serviceName = (b as { serviceName?: string }).serviceName ?? "";
+      const serviceId = (b as { serviceId?: string }).serviceId;
+      const suffix = getFollowUpDisplaySuffix(serviceName, serviceId, pricingItems);
+      if (!suffix) return b;
+      return {
+        ...b,
+        displayServiceName: `${serviceName.trim()} - ${suffix}`,
+      };
+    });
+  }, [bookings, pricingItems]);
+
   const bookingsForWorker: PrintBookingRow[] = useMemo(() => {
     if (!validSingleWorker || !workerId) return [];
-    const filtered = bookings.filter((b) => b.workerId === workerId);
+    const filtered = bookingsWithDisplayNames.filter((b) => b.workerId === workerId);
     const rows: PrintBookingRow[] = [];
     for (const b of filtered) {
       const startAt = toDate((b.start ?? b.startAt) as Date | { toDate: () => Date } | undefined);
       const endAt = toDate((b.end ?? b.endAt) as Date | { toDate: () => Date } | undefined);
       if (!startAt || !endAt) continue;
       const customerName = (b as { customerName?: string }).customerName ?? "";
-      const serviceName = (b as { serviceName?: string }).serviceName ?? "";
+      const baseName = (b as { serviceName?: string }).serviceName ?? "";
+      const displayName = (b as { displayServiceName?: string }).displayServiceName ?? baseName;
       const serviceType = (b as { serviceType?: string }).serviceType ?? "";
       const note = (b as { note?: string | null }).note ?? null;
       const clientId = (b as { clientId?: string }).clientId;
@@ -150,7 +180,7 @@ export default function PrintDayPage() {
         startAt,
         endAt,
         customerName,
-        serviceName,
+        serviceName: displayName,
         serviceType: serviceType || undefined,
         phase: b.phase,
         note,
@@ -158,20 +188,21 @@ export default function PrintDayPage() {
       });
     }
     return rows.sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
-  }, [bookings, workerId, validSingleWorker]);
+  }, [bookingsWithDisplayNames, workerId, validSingleWorker]);
 
   /** For "all workers" mode: each worker's bookings. */
   const bookingsPerWorker = useMemo(() => {
     if (!validAllWorkers || workers.length === 0) return [];
     return workers.map((w) => {
-      const filtered = bookings.filter((b) => b.workerId === w.id);
+      const filtered = bookingsWithDisplayNames.filter((b) => b.workerId === w.id);
       const rows: PrintBookingRow[] = [];
       for (const b of filtered) {
         const startAt = toDate((b.start ?? b.startAt) as Date | { toDate: () => Date } | undefined);
         const endAt = toDate((b.end ?? b.endAt) as Date | { toDate: () => Date } | undefined);
         if (!startAt || !endAt) continue;
         const customerName = (b as { customerName?: string }).customerName ?? "";
-        const serviceName = (b as { serviceName?: string }).serviceName ?? "";
+        const baseName = (b as { serviceName?: string }).serviceName ?? "";
+        const displayName = (b as { displayServiceName?: string }).displayServiceName ?? baseName;
         const serviceType = (b as { serviceType?: string }).serviceType ?? "";
         const note = (b as { note?: string | null }).note ?? null;
         const clientId = (b as { clientId?: string }).clientId;
@@ -181,7 +212,7 @@ export default function PrintDayPage() {
           startAt,
           endAt,
           customerName,
-          serviceName,
+          serviceName: displayName,
           serviceType: serviceType || undefined,
           phase: b.phase,
           note,
@@ -191,7 +222,7 @@ export default function PrintDayPage() {
       rows.sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
       return { worker: w, rows };
     });
-  }, [bookings, workers, validAllWorkers]);
+  }, [bookingsWithDisplayNames, workers, validAllWorkers]);
 
   const uniqueClientKeys = useMemo(() => {
     if (validAllWorkers) {
@@ -387,7 +418,7 @@ export default function PrintDayPage() {
             siteName={config?.salonName ?? "לוח זמנים"}
             dayISO={dateKey}
             workers={workers}
-            bookings={bookings}
+            bookings={bookingsWithDisplayNames}
             chemicalCardsMap={chemicalCardsMap}
           />
         )}
@@ -419,8 +450,8 @@ export default function PrintDayPage() {
   }
 
   const bookingsForGrid = useMemo(
-    () => bookings.filter((b) => b.workerId === workerId),
-    [bookings, workerId]
+    () => bookingsWithDisplayNames.filter((b) => b.workerId === workerId),
+    [bookingsWithDisplayNames, workerId]
   );
 
   return (

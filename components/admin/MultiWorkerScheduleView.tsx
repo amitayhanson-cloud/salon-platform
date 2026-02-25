@@ -130,9 +130,13 @@ export function bookingToBlock(
   if (!startAt) return null;
 
   const clientName = booking.customerName ?? booking.clientName ?? "—";
-  const serviceName = booking.serviceName ?? (booking as { serviceId?: string }).serviceId ?? "—";
+  const baseServiceName =
+    (booking as { displayServiceName?: string }).displayServiceName ??
+    booking.serviceName ??
+    (booking as { serviceId?: string }).serviceId ??
+    "—";
   const serviceType = booking.serviceType ?? "";
-  const displayName = serviceType ? `${serviceName} / ${serviceType}` : serviceName;
+  const displayName = serviceType ? `${baseServiceName} / ${serviceType}` : baseServiceName;
   const notes = (booking as { notes?: string }).notes ?? booking.note ?? null;
 
   if (phase === 1) {
