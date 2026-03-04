@@ -1,0 +1,46 @@
+import {
+  HOW_IT_WORKS_SECTION,
+  HOW_IT_WORKS_STEPS,
+} from "@/lib/landingContent";
+
+export function HowItWorksSection() {
+  return (
+    <section
+      dir="rtl"
+      id="how-it-works"
+      className="py-16 sm:py-20 lg:py-24"
+    >
+      <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+        <h2 className="text-center text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
+          {HOW_IT_WORKS_SECTION.title}
+        </h2>
+        <p className="mx-auto mt-3 max-w-2xl text-center text-gray-600">
+          {HOW_IT_WORKS_SECTION.subtitle}
+        </p>
+
+        <div className="mt-12 flex flex-col gap-10 sm:gap-12 md:flex-row md:items-start md:justify-between md:gap-8 lg:gap-12">
+          {HOW_IT_WORKS_STEPS.map((item, index) => (
+            <div
+              key={item.step}
+              className="relative flex flex-1 flex-col items-center text-center md:items-start md:text-right"
+            >
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-gray-900 bg-white text-lg font-bold text-gray-900">
+                {item.step}
+              </div>
+              {index < HOW_IT_WORKS_STEPS.length - 1 && (
+                <div
+                  className="absolute left-1/2 top-6 hidden h-0.5 w-full -translate-x-1/2 bg-gray-200 md:block md:left-6 md:top-6 md:w-[calc(100%-3rem)] md:translate-x-0"
+                  aria-hidden
+                />
+              )}
+              <h3 className="mt-4 text-lg font-semibold text-gray-900">
+                {item.title}
+              </h3>
+              <p className="mt-2 text-gray-600">{item.description}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}

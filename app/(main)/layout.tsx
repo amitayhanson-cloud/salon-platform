@@ -1,43 +1,9 @@
-import Link from "next/link";
-import { Header } from "@/components/Header";
-import { HeroBackground } from "@/components/ui/HeroBackground";
+import MainLayoutClient from "./MainLayoutClient";
 
 export default function MainLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const currentYear = new Date().getFullYear();
-
-  return (
-    <>
-      <HeroBackground />
-      <Header />
-      <main className="relative z-10 overflow-x-hidden">{children}</main>
-      {/* Main website footer */}
-      <footer className="bg-white border-t border-[#E2EEF2] py-8">
-        <div className="max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-right">
-            <p className="text-[#475569]">
-              © {currentYear} Caleno
-            </p>
-            <div className="flex gap-6">
-              <Link
-                href="#"
-                className="text-[#2EC4C6] hover:text-[#22A6A8] transition-colors text-sm md:text-base"
-              >
-                מדיניות פרטיות
-              </Link>
-              <Link
-                href="#"
-                className="text-[#2EC4C6] hover:text-[#22A6A8] transition-colors text-sm md:text-base"
-              >
-                תנאי שימוש
-              </Link>
-            </div>
-          </div>
-        </div>
-      </footer>
-    </>
-  );
+  return <MainLayoutClient>{children}</MainLayoutClient>;
 }

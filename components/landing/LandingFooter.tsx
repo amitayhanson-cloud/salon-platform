@@ -1,0 +1,46 @@
+import Link from "next/link";
+import { FOOTER } from "@/lib/landingContent";
+
+function FooterColumn({
+  title,
+  links,
+}: {
+  title: string;
+  links: readonly { label: string; href: string }[];
+}) {
+  return (
+    <div>
+      <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+      <ul className="mt-4 space-y-3" role="list">
+        {links.map((link) => (
+          <li key={link.href + link.label}>
+            <Link
+              href={link.href}
+              className="text-sm text-gray-600 hover:text-gray-900"
+            >
+              {link.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export function LandingFooter() {
+  return (
+    <footer dir="rtl" className="border-t border-gray-200 bg-white">
+      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+          <FooterColumn title={FOOTER.product.title} links={FOOTER.product.links} />
+          <FooterColumn title={FOOTER.company.title} links={FOOTER.company.links} />
+          <FooterColumn title={FOOTER.legal.title} links={FOOTER.legal.links} />
+          <FooterColumn title={FOOTER.social.title} links={FOOTER.social.links} />
+        </div>
+        <div className="mt-12 border-t border-gray-200 pt-8">
+          <p className="text-center text-sm text-gray-500">{FOOTER.copyright}</p>
+        </div>
+      </div>
+    </footer>
+  );
+}

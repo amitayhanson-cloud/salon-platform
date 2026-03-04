@@ -243,3 +243,104 @@ body {
     stroke-dashoffset: -380;
   }
 }
+
+/* Scale In animation (from HTML loader - recommended) */
+@keyframes caleno-scale-in {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  85%,
+  100% {
+    transform: scale(1);
+    opacity: 0.95;
+  }
+}
+
+.caleno-loading-scale-in {
+  animation: caleno-scale-in 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caleno-loading-scale-in {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* ========== CalenoLoader (animated logo + dots) ========== */
+@keyframes expandPulse {
+  0% {
+    transform: scale(0.1);
+    opacity: 0;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  90%,
+  100% {
+    transform: scale(1);
+    opacity: 0.95;
+  }
+}
+
+@keyframes gentlePulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+@keyframes dotFade {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.caleno-loader-anim-svg {
+  animation: expandPulse 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.caleno-loader-anim-path {
+  animation: gentlePulse 2s ease-in-out infinite 2.5s;
+}
+
+.caleno-loader-dots {
+  margin-top: 24px;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+
+.caleno-loader-dot {
+  width: 4px;
+  height: 4px;
+  background: #4dd4d4;
+  border-radius: 50%;
+  opacity: 0.3;
+  animation: dotFade 1.4s ease-in-out infinite;
+}
+
+.caleno-loader-dot:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.caleno-loader-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.caleno-loader-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
