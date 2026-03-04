@@ -110,6 +110,7 @@ export interface AdminCreateBookingFormProps {
     createdRecurring?: number;
     failedRecurring?: number;
     failedDetails?: Array<{ date: string; error: string }>;
+    failureMessage?: string;
   }) => void;
   onCancel: () => void;
 }
