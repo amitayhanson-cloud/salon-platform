@@ -2,12 +2,16 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { X, GripVertical, Trash2, Plus } from "lucide-react";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { createAdminBooking } from "@/lib/adminBookings";
+import { triggerBookingWhatsApp } from "@/lib/triggerBookingWhatsApp";
 import {
-  computeWeeklyOccurrenceDates,
+  computeRecurrenceOccurrenceDates,
   createRecurringBookings,
+  getRecurrenceFrequencyLabel,
   MAX_RECURRING_OCCURRENCES,
   type RecurrenceRule,
+  type RecurrenceFrequencyUnit,
 } from "@/lib/recurringBookings";
 import { saveMultiServiceBooking } from "@/lib/booking";
 import {
@@ -155,6 +159,8 @@ export default function AdminCreateBookingForm({
   onSuccess,
   onCancel,
 }: AdminCreateBookingFormProps) {
+  const { firebaseUser } = useAuth();
+  const getToken = useCallback(() => firebaseUser?.getIdToken() ?? Promise.resolve(undefined), [firebaseUser]);
   const [bookingSettings, setBookingSettings] = useState(defaultBookingSettings);
   const [date, setDate] = useState(defaultDate);
   const [time, setTime] = useState("09:00");
@@ -191,6 +197,10 @@ export default function AdminCreateBookingForm({
   const [recurringEndDate, setRecurringEndDate] = useState(defaultRecurringEndDate);
   const [recurringCount, setRecurringCount] = useState(10);
   const [recurringProgress, setRecurringProgress] = useState<{ current: number; total: number } | null>(null);
+  type RecurringFrequencyPreset = "weekly" | "every2weeks" | "every3weeks" | "monthly" | "custom";
+  const [recurringFrequency, setRecurringFrequency] = useState<RecurringFrequencyPreset>("weekly");
+  const [recurringCustomInterval, setRecurringCustomInterval] = useState(1);
+  const [recurringCustomUnit, setRecurringCustomUnit] = useState<RecurrenceFrequencyUnit>("weeks");
   const [showManualFlowModal, setShowManualFlowModal] = useState(false);
 
   useEffect(() => {
@@ -308,14 +318,36 @@ export default function AdminCreateBookingForm({
     [slots, services, pricingItems]
   );
 
+  const recurrenceUnitAndInterval = useMemo((): { unit: RecurrenceFrequencyUnit; interval: number } => {
+    switch (recurringFrequency) {
+      case "weekly":
+        return { unit: "weeks", interval: 1 };
+      case "every2weeks":
+        return { unit: "weeks", interval: 2 };
+      case "every3weeks":
+        return { unit: "weeks", interval: 3 };
+      case "monthly":
+        return { unit: "months", interval: 1 };
+      case "custom":
+        return { unit: recurringCustomUnit, interval: Math.max(1, recurringCustomInterval) };
+      default:
+        return { unit: "weeks", interval: 1 };
+    }
+  }, [recurringFrequency, recurringCustomUnit, recurringCustomInterval]);
   const occurrences = useMemo(() => {
     if (!recurringEnabled || chain.length !== 1) return [];
-    return computeWeeklyOccurrenceDates(date, time, {
+    return computeRecurrenceOccurrenceDates(date, time, {
       endDate: recurringMode === "endDate" ? recurringEndDate : undefined,
       count: recurringMode === "count" ? recurringCount : undefined,
       maxOccurrences: MAX_RECURRING_OCCURRENCES,
+      frequencyUnit: recurrenceUnitAndInterval.unit,
+      frequencyInterval: recurrenceUnitAndInterval.interval,
     });
-  }, [recurringEnabled, chain.length, date, time, recurringMode, recurringEndDate, recurringCount]);
+  }, [recurringEnabled, chain.length, date, time, recurringMode, recurringEndDate, recurringCount, recurrenceUnitAndInterval]);
+  const recurrenceFrequencyLabel = useMemo(
+    () => getRecurrenceFrequencyLabel(recurrenceUnitAndInterval.unit, recurrenceUnitAndInterval.interval),
+    [recurrenceUnitAndInterval]
+  );
   const recurringValidationError = useMemo(() => {
     if (!recurringEnabled) return null;
     if (recurringMode === "endDate" && recurringEndDate < date)
@@ -560,6 +592,7 @@ export default function AdminCreateBookingForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     if (!validate()) return;
     setSubmitError(null);
     setSaving(true);
@@ -568,7 +601,7 @@ export default function AdminCreateBookingForm({
       const [hh, mm] = time.split(":").map(Number);
       const startAt = new Date(y, m - 1, d, hh || 0, mm || 0, 0, 0);
 
-      if (chain.length === 1 && workerId) {
+      if (chain.length === 1) {
         const { service, pricingItem } = chain[0]!;
         const durationMin = pricingItem.durationMaxMinutes ?? pricingItem.durationMinMinutes ?? 30;
         const hasFollowUp =
@@ -576,74 +609,93 @@ export default function AdminCreateBookingForm({
           pricingItem.followUp?.name?.trim() &&
           (pricingItem.followUp?.durationMinutes ?? 0) >= 1;
 
-        const worker = workers.find((w) => w.id === workerId);
-        if (!worker) throw new Error("נא לבחור מטפל");
+        // Recurrence: compute from current state for BOTH "with worker" and "no worker" paths
+        const isRecurring = !!recurringEnabled;
+        const rule: RecurrenceRule = {
+          startDate: date,
+          time,
+          mode: recurringMode,
+          endDate: recurringMode === "endDate" ? recurringEndDate : undefined,
+          count: recurringMode === "count" ? recurringCount : undefined,
+          frequencyUnit: recurrenceUnitAndInterval.unit,
+          frequencyInterval: recurrenceUnitAndInterval.interval,
+        };
+        const occurrenceDatesForSubmit = isRecurring
+          ? computeRecurrenceOccurrenceDates(date, time, {
+              endDate: rule.mode === "endDate" ? rule.endDate : undefined,
+              count: rule.mode === "count" ? rule.count : undefined,
+              maxOccurrences: MAX_RECURRING_OCCURRENCES,
+              frequencyUnit: rule.frequencyUnit ?? "weeks",
+              frequencyInterval: rule.frequencyInterval ?? 1,
+            })
+          : [];
 
-        let phase2Payload: { enabled: true; serviceName: string; waitMinutes: number; durationMin: number; workerIdOverride?: string; workerNameOverride?: string; serviceColor?: string | null; serviceId?: string | null } | null = null;
-        if (hasFollowUp && pricingItem.followUp) {
-          const slotStartMin = timeToMinutes(time);
-          const phase2Worker = resolvePhase2Worker({
-            phase1Worker: { id: worker.id, name: worker.name },
-            preferredWorkerId: worker.id,
-            dateStr: date,
-            phase1StartMinutes: slotStartMin,
-            phase1DurationMin: durationMin,
-            waitMin: Math.max(0, pricingItem.followUp.waitMinutes ?? 0),
-            phase2DurationMin: pricingItem.followUp.durationMinutes,
-            phase2ServiceName: pricingItem.followUp.name.trim(),
-            phase2ServiceId: pricingItem.followUp.serviceId ?? undefined,
-            workers,
-            bookingsForDate,
-            workerWindowByWorkerId,
-            businessWindow: businessWindow ?? undefined,
-          });
-          if (!phase2Worker) {
-            throw new Error("אין עובד זמין לשירות ההמשך. נא לנסות שעה או מטפל אחר.");
-          }
-          const followUpService = services.find(
-            (s) => s.id === pricingItem.followUp?.serviceId || s.name === pricingItem.followUp?.name?.trim()
-          );
-          phase2Payload = {
-            enabled: true,
-            serviceName: pricingItem.followUp.name.trim(),
-            waitMinutes: pricingItem.followUp.waitMinutes ?? 0,
-            durationMin: pricingItem.followUp.durationMinutes,
-            workerIdOverride: phase2Worker.id,
-            workerNameOverride: phase2Worker.name,
-            serviceColor: followUpService?.color ?? null,
-            serviceId: followUpService?.id ?? null,
-          };
+        if (process.env.NODE_ENV === "development") {
+          console.log("[Recurring] enabled?", isRecurring, "mode", rule.mode, "count", rule.count, "endDate", rule.endDate);
+          console.log("[Recurring] generated dates", occurrenceDatesForSubmit.map((o) => o.date + " " + o.time), "len", occurrenceDatesForSubmit.length);
         }
 
-        const payload = {
-          customerName: customerName.trim(),
-          customerPhone: customerPhone.trim(),
-          date,
-          time,
-          phase1: {
-            serviceName: service.name,
-            serviceTypeId: pricingItem.id,
-            serviceType: pricingItem.type ?? null,
-            workerId: worker.id,
-            workerName: worker.name,
-            durationMin,
-            serviceColor: service.color ?? null,
-            serviceId: service.id ?? null,
-          },
-          phase2: phase2Payload,
-          note: null,
-          notes: notes.trim() || null,
-          status: "booked" as const,
-          price: null,
-        };
-        if (recurringEnabled && occurrences.length > 0) {
+        if (isRecurring && occurrenceDatesForSubmit.length > 0) {
+          // Recurrence requires a selected worker (createRecurringBookings uses createAdminBooking with explicit worker)
+          if (!workerId) throw new Error("למצב חזרה נא לבחור מטפל");
+          const worker = workers.find((w) => w.id === workerId);
+          if (!worker) throw new Error("נא לבחור מטפל");
           setRecurringProgress(null);
-          const rule: RecurrenceRule = {
-            startDate: date,
+          let phase2Payload: { enabled: true; serviceName: string; waitMinutes: number; durationMin: number; workerIdOverride?: string; workerNameOverride?: string; serviceColor?: string | null; serviceId?: string | null } | null = null;
+          if (hasFollowUp && pricingItem.followUp) {
+            const slotStartMin = timeToMinutes(time);
+            const phase2Worker = resolvePhase2Worker({
+              phase1Worker: { id: worker.id, name: worker.name },
+              preferredWorkerId: worker.id,
+              dateStr: date,
+              phase1StartMinutes: slotStartMin,
+              phase1DurationMin: durationMin,
+              waitMin: Math.max(0, pricingItem.followUp.waitMinutes ?? 0),
+              phase2DurationMin: pricingItem.followUp.durationMinutes,
+              phase2ServiceName: pricingItem.followUp.name.trim(),
+              phase2ServiceId: pricingItem.followUp.serviceId ?? undefined,
+              workers,
+              bookingsForDate,
+              workerWindowByWorkerId,
+              businessWindow: businessWindow ?? undefined,
+            });
+            if (!phase2Worker) {
+              throw new Error("אין עובד זמין לשירות ההמשך. נא לנסות שעה או מטפל אחר.");
+            }
+            const followUpService = services.find(
+              (s) => s.id === pricingItem.followUp?.serviceId || s.name === pricingItem.followUp?.name?.trim()
+            );
+            phase2Payload = {
+              enabled: true,
+              serviceName: pricingItem.followUp.name.trim(),
+              waitMinutes: pricingItem.followUp.waitMinutes ?? 0,
+              durationMin: pricingItem.followUp.durationMinutes,
+              workerIdOverride: phase2Worker.id,
+              workerNameOverride: phase2Worker.name,
+              serviceColor: followUpService?.color ?? null,
+              serviceId: followUpService?.id ?? null,
+            };
+          }
+          const payload = {
+            customerName: customerName.trim(),
+            customerPhone: customerPhone.trim(),
+            date,
             time,
-            mode: recurringMode,
-            endDate: recurringMode === "endDate" ? recurringEndDate : undefined,
-            count: recurringMode === "count" ? recurringCount : undefined,
+            phase1: {
+              serviceName: service.name,
+              serviceTypeId: pricingItem.id,
+              serviceType: pricingItem.type ?? null,
+              workerId: worker.id,
+              workerName: worker.name,
+              durationMin,
+              serviceColor: service.color ?? null,
+              serviceId: service.id ?? null,
+            },
+            phase2: phase2Payload,
+            note: null,
+            notes: notes.trim() || null,
+            status: "booked" as const,
+            price: null,
           };
           const { createdIds, failedDates } = await createRecurringBookings(
             siteId,
@@ -652,41 +704,125 @@ export default function AdminCreateBookingForm({
             (current, total) => setRecurringProgress({ current, total })
           );
           setRecurringProgress(null);
+          for (const bid of createdIds) {
+            await triggerBookingWhatsApp(siteId, bid, getToken);
+          }
+          const totalRequested = occurrenceDatesForSubmit.length;
+          const failureMessage =
+            failedDates.length > 0
+              ? (() => {
+                  const first = failedDates[0]!;
+                  const [y, m, d] = first.date.split("-");
+                  const dateDisplay = `${d}.${m}.${y}`;
+                  return `נוצרו ${createdIds.length} מתוך ${totalRequested}. החזרה מספר ${createdIds.length + 1} (תאריך ${dateDisplay} בשעה ${first.time}) נכשלה: ${first.error}. נא לקבוע תור לתאריך זה בשעה אחרת.`;
+                })()
+              : undefined;
+          if (failureMessage) {
+            setSubmitError(failureMessage);
+            if (process.env.NODE_ENV === "development") {
+              console.warn("[Recurring] partial failure", { created: createdIds.length, failed: failedDates.length, firstError: failedDates[0]!.error });
+            }
+          }
           onSuccess({
             createdRecurring: createdIds.length,
             failedRecurring: failedDates.length,
             failedDetails: failedDates.length > 0 ? failedDates.map((f) => ({ date: f.date, error: f.error })) : undefined,
+            failureMessage,
           });
           return;
         }
-        await createAdminBooking(siteId, payload);
-      } else if (chain.length === 1 && !workerId) {
-        // "ללא העדפה": resolve at selected time, then save multi-service (never store preferredWorkerId in DB)
-        const resolved = resolveChainWorkers({
-          chain,
-          startAt,
-          dateStr: date,
-          workers,
-          bookingsForDate,
-          preferredWorkerId: null,
-          workerWindowByWorkerId,
-          businessWindow,
-        });
-        if (!resolved) throw new Error("אין זמינות להשלמת התור. נא לנסות שעה אחרת.");
-        const repaired = repairInvalidAssignments(resolved, workers, {
-          dateStr: date,
-          bookingsForDate,
-          workerWindowByWorkerId,
-          businessWindow,
-        });
-        if (!repaired) throw new Error("אין עובד זמין לאחד השירותים. נא לנסות שעה או מטפל אחר.");
-        const validation = validateChainAssignments(repaired, workers);
-        if (!validation.valid) throw new Error(validation.errors[0] ?? "ההקצאה אינה תקינה");
-        await saveMultiServiceBooking(siteId, repaired, {
-          name: customerName.trim(),
-          phone: customerPhone.trim(),
-          note: undefined,
-        }, { workers });
+
+        // Single booking path (non-recurring or recurrence had 0 occurrences)
+        if (workerId) {
+          const worker = workers.find((w) => w.id === workerId);
+          if (!worker) throw new Error("נא לבחור מטפל");
+          let phase2Payload: { enabled: true; serviceName: string; waitMinutes: number; durationMin: number; workerIdOverride?: string; workerNameOverride?: string; serviceColor?: string | null; serviceId?: string | null } | null = null;
+          if (hasFollowUp && pricingItem.followUp) {
+            const slotStartMin = timeToMinutes(time);
+            const phase2Worker = resolvePhase2Worker({
+              phase1Worker: { id: worker.id, name: worker.name },
+              preferredWorkerId: worker.id,
+              dateStr: date,
+              phase1StartMinutes: slotStartMin,
+              phase1DurationMin: durationMin,
+              waitMin: Math.max(0, pricingItem.followUp.waitMinutes ?? 0),
+              phase2DurationMin: pricingItem.followUp.durationMinutes,
+              phase2ServiceName: pricingItem.followUp.name.trim(),
+              phase2ServiceId: pricingItem.followUp.serviceId ?? undefined,
+              workers,
+              bookingsForDate,
+              workerWindowByWorkerId,
+              businessWindow: businessWindow ?? undefined,
+            });
+            if (!phase2Worker) {
+              throw new Error("אין עובד זמין לשירות ההמשך. נא לנסות שעה או מטפל אחר.");
+            }
+            const followUpService = services.find(
+              (s) => s.id === pricingItem.followUp?.serviceId || s.name === pricingItem.followUp?.name?.trim()
+            );
+            phase2Payload = {
+              enabled: true,
+              serviceName: pricingItem.followUp.name.trim(),
+              waitMinutes: pricingItem.followUp.waitMinutes ?? 0,
+              durationMin: pricingItem.followUp.durationMinutes,
+              workerIdOverride: phase2Worker.id,
+              workerNameOverride: phase2Worker.name,
+              serviceColor: followUpService?.color ?? null,
+              serviceId: followUpService?.id ?? null,
+            };
+          }
+          const payload = {
+            customerName: customerName.trim(),
+            customerPhone: customerPhone.trim(),
+            date,
+            time,
+            phase1: {
+              serviceName: service.name,
+              serviceTypeId: pricingItem.id,
+              serviceType: pricingItem.type ?? null,
+              workerId: worker.id,
+              workerName: worker.name,
+              durationMin,
+              serviceColor: service.color ?? null,
+              serviceId: service.id ?? null,
+            },
+            phase2: phase2Payload,
+            note: null,
+            notes: notes.trim() || null,
+            status: "booked" as const,
+            price: null,
+          };
+          const { phase1Id } = await createAdminBooking(siteId, payload);
+          await triggerBookingWhatsApp(siteId, phase1Id, getToken);
+        } else {
+          // "ללא העדפה": resolve at selected time, then save multi-service (never store preferredWorkerId in DB)
+          const resolved = resolveChainWorkers({
+            chain,
+            startAt,
+            dateStr: date,
+            workers,
+            bookingsForDate,
+            preferredWorkerId: null,
+            workerWindowByWorkerId,
+            businessWindow,
+          });
+          if (!resolved) throw new Error("אין זמינות להשלמת התור. נא לנסות שעה אחרת.");
+          const repaired = repairInvalidAssignments(resolved, workers, {
+            dateStr: date,
+            bookingsForDate,
+            workerWindowByWorkerId,
+            businessWindow,
+          });
+          if (!repaired) throw new Error("אין עובד זמין לאחד השירותים. נא לנסות שעה או מטפל אחר.");
+          const validation = validateChainAssignments(repaired, workers);
+          if (!validation.valid) throw new Error(validation.errors[0] ?? "ההקצאה אינה תקינה");
+          const { firstBookingId } = await saveMultiServiceBooking(siteId, repaired, {
+            name: customerName.trim(),
+            phone: customerPhone.trim(),
+            note: undefined,
+          }, { workers });
+          if (firstBookingId) await triggerBookingWhatsApp(siteId, firstBookingId, getToken);
+        }
       } else if (previewSlots && previewSlots.length > 0) {
         const repaired = repairInvalidAssignments(previewSlots, workers, {
           dateStr: date,
@@ -701,11 +837,12 @@ export default function AdminCreateBookingForm({
         if (!validation.valid) {
           throw new Error(validation.errors[0] ?? "ההקצאה אינה תקינה");
         }
-        await saveMultiServiceBooking(siteId, repaired, {
+        const { firstBookingId } = await saveMultiServiceBooking(siteId, repaired, {
           name: customerName.trim(),
           phone: customerPhone.trim(),
           note: undefined,
         }, { workers });
+        if (firstBookingId) await triggerBookingWhatsApp(siteId, firstBookingId, getToken);
       } else {
         throw new Error("אין זמינות להשלמת התור");
       }
@@ -1055,7 +1192,46 @@ export default function AdminCreateBookingForm({
 
         {chain.length === 1 && recurringEnabled && (
           <div className="border border-slate-200 rounded-lg p-4 bg-slate-50/50 space-y-3">
-            <p className="text-xs text-slate-500">כל שבוע, יום {weekdayLabel} בשעה {time}</p>
+            {!workerId && (
+              <p className="text-amber-700 text-sm bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                למצב חזרה נא לבחור מטפל.
+              </p>
+            )}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">תדירות</label>
+              <select
+                value={recurringFrequency}
+                onChange={(e) => setRecurringFrequency(e.target.value as RecurringFrequencyPreset)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right bg-white"
+              >
+                <option value="weekly">כל שבוע</option>
+                <option value="every2weeks">כל שבועיים</option>
+                <option value="every3weeks">כל 3 שבועות</option>
+                <option value="monthly">כל חודש (אותו תאריך בחודש)</option>
+                <option value="custom">מותאם אישית…</option>
+              </select>
+              {recurringFrequency === "custom" && (
+                <div className="mt-2 flex items-center gap-2 flex-wrap">
+                  <span className="text-sm text-slate-600">כל</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={12}
+                    value={recurringCustomInterval}
+                    onChange={(e) => setRecurringCustomInterval(Math.max(1, Math.min(12, parseInt(e.target.value, 10) || 1)))}
+                    className="w-16 px-2 py-1.5 border border-slate-300 rounded-lg text-right"
+                  />
+                  <select
+                    value={recurringCustomUnit}
+                    onChange={(e) => setRecurringCustomUnit(e.target.value as RecurrenceFrequencyUnit)}
+                    className="px-2 py-1.5 border border-slate-300 rounded-lg text-right bg-white"
+                  >
+                    <option value="weeks">שבועות</option>
+                    <option value="months">חודשים</option>
+                  </select>
+                </div>
+              )}
+            </div>
             <div className="flex gap-4">
               <label className="flex items-center gap-1.5 cursor-pointer">
                 <input
@@ -1106,7 +1282,7 @@ export default function AdminCreateBookingForm({
               <div className="text-sm text-slate-700 pt-1 border-t border-slate-200">
                 <p className="font-medium">ייווצרו {occurrences.length} תורים</p>
                 <p className="text-xs text-slate-500">
-                  מ־{date} עד {recurringMode === "endDate" ? recurringEndDate : occurrences[occurrences.length - 1]?.date ?? date}, כל יום {weekdayLabel} בשעה {time}
+                  מ־{date} עד {recurringMode === "endDate" ? recurringEndDate : occurrences[occurrences.length - 1]?.date ?? date}, {recurrenceFrequencyLabel} בשעה {time}
                 </p>
               </div>
             )}

@@ -185,6 +185,8 @@ export default function DaySchedulePage() {
   const [deleteBookingLoading, setDeleteBookingLoading] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastError, setToastError] = useState(false);
+  /** When true, toast does not auto-dismiss; user must close it (e.g. recurring partial success). */
+  const [toastPersistent, setToastPersistent] = useState(false);
   const { firebaseUser } = useAuth();
 
   // Map workers to WorkerWithServices (add label + breaks so AdminCreateBookingForm can enforce worker breaks)
@@ -635,6 +637,7 @@ export default function DaySchedulePage() {
         setDeleteError(errMsg);
         setToastMessage(errMsg);
         setToastError(true);
+        setToastPersistent(false);
         setTimeout(() => setToastMessage(null), 4000);
         return;
       }
@@ -644,12 +647,14 @@ export default function DaySchedulePage() {
       setTimeout(() => setDeleteSuccess(false), 500);
       setToastMessage("התור בוטל");
       setToastError(false);
+      setToastPersistent(false);
       setTimeout(() => setToastMessage(null), 3000);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setDeleteError(msg);
       setToastMessage(msg);
       setToastError(true);
+      setToastPersistent(false);
       setTimeout(() => setToastMessage(null), 4000);
     } finally {
       setDeleting(false);
@@ -662,6 +667,7 @@ export default function DaySchedulePage() {
     setDeleteBookingLoading(true);
     setToastMessage(null);
     setToastError(false);
+    setToastPersistent(false);
     try {
       const token = await firebaseUser.getIdToken();
       const res = await fetch("/api/bookings/delete-booking-group", {
@@ -673,15 +679,19 @@ export default function DaySchedulePage() {
       if (!res.ok) {
         setToastMessage(data.error === "forbidden" ? "אין הרשאה" : data.error || "שגיאה במחיקה");
         setToastError(true);
+        setToastPersistent(false);
         return;
       }
       setToastMessage("התור נמחק מהיומן");
       setToastError(false);
+      setToastPersistent(false);
       setSelectedBooking(null);
       setTimeout(() => setToastMessage(null), 3000);
     } catch (e) {
       setToastMessage(e instanceof Error ? e.message : "שגיאה במחיקה");
       setToastError(true);
+      setToastPersistent(false);
+      setTimeout(() => setToastMessage(null), 4000);
     } finally {
       setDeleteBookingLoading(false);
     }
@@ -785,18 +795,21 @@ export default function DaySchedulePage() {
     createdRecurring?: number;
     failedRecurring?: number;
     failedDetails?: Array<{ date: string; error: string }>;
+    failureMessage?: string;
   }) => {
     setShowBookingForm(false);
     setEditInitialData(null);
     setSelectedBooking(null);
     if (meta?.createdRecurring != null) {
       const msg =
-        meta.failedRecurring && meta.failedRecurring > 0
+        meta.failureMessage ??
+        (meta.failedRecurring && meta.failedRecurring > 0
           ? `נוצרו ${meta.createdRecurring} תורים, ${meta.failedRecurring} נכשלו`
-          : `נוצרו ${meta.createdRecurring} תורים`;
+          : `נוצרו ${meta.createdRecurring} תורים`);
       setToastMessage(msg);
-      setToastError(meta.failedRecurring ? meta.failedRecurring > 0 : false);
-      setTimeout(() => setToastMessage(null), 4000);
+      setToastError(!!(meta.failedRecurring && meta.failedRecurring > 0));
+      setToastPersistent(true);
+      // No auto-dismiss: user must close so they have time to read
     }
   };
 
@@ -1286,11 +1299,22 @@ export default function DaySchedulePage() {
       {/* Toast */}
       {toastMessage && (
         <div
-          className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[70] px-4 py-2 rounded-lg shadow-lg text-sm font-medium ${
+          className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-2 max-w-[90vw] px-4 py-2 rounded-lg shadow-lg text-sm font-medium ${
             toastError ? "bg-red-600 text-white" : "bg-slate-800 text-white"
           }`}
         >
-          {toastMessage}
+          <span className="flex-1 min-w-0">{toastMessage}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setToastMessage(null);
+              setToastPersistent(false);
+            }}
+            className="shrink-0 p-1 rounded hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50"
+            aria-label="סגור"
+          >
+            ✕
+          </button>
         </div>
       )}
 

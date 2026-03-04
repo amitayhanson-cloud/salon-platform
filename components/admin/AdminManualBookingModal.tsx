@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { X, Plus, Trash2 } from "lucide-react";
+import { useAuth } from "@/components/auth/AuthProvider";
 import DurationMinutesStepper from "@/components/admin/DurationMinutesStepper";
 import { createAdminBooking } from "@/lib/adminBookings";
+import { triggerBookingWhatsApp } from "@/lib/triggerBookingWhatsApp";
 import type { SiteService } from "@/types/siteConfig";
 import type { PricingItem } from "@/types/pricingItem";
 
@@ -82,6 +84,8 @@ export default function AdminManualBookingModal({
   onSuccess,
   onCancel,
 }: AdminManualBookingModalProps) {
+  const { firebaseUser } = useAuth();
+  const getToken = useCallback(() => firebaseUser?.getIdToken() ?? Promise.resolve(undefined), [firebaseUser]);
   const options = getServiceTypeOptions(services, pricingItems);
   const rowIdRef = useRef(1);
 
@@ -156,7 +160,7 @@ export default function AdminManualBookingModal({
           setError(`תור ${i + 1}: נא לבחור שירות ומטפל.`);
           return;
         }
-        await createAdminBooking(siteId, {
+        const { phase1Id } = await createAdminBooking(siteId, {
           customerName: customerName.trim(),
           customerPhone: customerPhone.trim(),
           date: row.date,
@@ -177,6 +181,7 @@ export default function AdminManualBookingModal({
           status: "booked",
           price: null,
         });
+        await triggerBookingWhatsApp(siteId, phase1Id, getToken);
       }
       onSuccess();
     } catch (err) {

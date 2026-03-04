@@ -113,11 +113,11 @@ to the **exact** URL configured in Twilio Console. When set, the app uses this U
 
 - **GET/POST /api/cron/send-whatsapp-reminders** (used by Vercel Cron)  
   Protected by **Authorization: Bearer CRON_SECRET** or by Vercel cron User-Agent (`vercel-cron`).  
-  Window: `startAt` in **[now+24h−30min, now+24h+30min)** so reminders are not missed if cron runs late/early.  
+  Day-before morning: run once at 10:00 AM Asia/Jerusalem; sends reminders for all bookings on **tomorrow**.  
   Bookings with `whatsappStatus === "booked"` and no `reminder24hSentAt`. Idempotent.
 
 - **POST /api/cron/whatsapp-reminders**  
-  Same logic; protected by **?secret=CRON_SECRET** (query param only; no Authorization header). Use for external cron (e.g. cron-job.org). Every invocation is logged to Firestore `cron_runs` for observability.
+  Same logic; protected by **?secret=CRON_SECRET** (query param only; no Authorization header). Use for external cron (e.g. cron-job.org). Run once per day at 10:00 AM Asia/Jerusalem. Every invocation is logged to Firestore `cron_runs` for observability.
 
 - **POST /api/cron/debug-reminder**  
   Production-safe debug: pass `?secret=CRON_SECRET` and body `{ siteId, bookingId }`. Returns `nowIso`, `startAtIso`, `diffMinutesTo24h`, `whatsappStatus`, `reminder24hSentAtExists`, `wouldMatchWindow`. Use to verify why a booking did or didn’t get a reminder without waiting 24 hours.
@@ -133,18 +133,20 @@ import { onBookingCreated } from "@/lib/onBookingCreated";
 await onBookingCreated(siteId, bookingId);
 ```
 
-## 24-hour reminder scheduler (Vercel)
+## Day-before morning reminder scheduler (Vercel)
 
 ### Window and timezone
 
-- **Window:** Reminders are sent when the booking’s **startAt** is in **[now + 24h − 60min, now + 24h + 60min)** (2-hour window). The 60-minute tolerance prevents missing reminders when the external cron runs late or early (e.g. cron-job.org drift).
-- **Timezone:** Firestore stores **startAt** as UTC. The server uses UTC for the window, so “24 hours before” is correct regardless of server location. Bookings are created in the client’s (Israel) time and stored as that instant in UTC.
+- **Window:** Reminders are sent for **all bookings whose startAt falls on TOMORROW** (Asia/Jerusalem): **[tomorrow 00:00, day-after-tomorrow 00:00)** in Israel time (stored as UTC in Firestore).
+- **Schedule:** Run the cron **once per day at 10:00 AM Asia/Jerusalem**. This is the only required call frequency.
+- **Timezone:** Firestore stores **startAt** as UTC. The server computes “tomorrow” in Asia/Jerusalem and queries that UTC range. Bookings are created in the client’s (Israel) time and stored as that instant in UTC.
 - **Time field:** The system uses **startAt** (with fallback to **appointmentAt** when reading a single doc). Bookings under `sites/{siteId}/bookings/{bookingId}` use **startAt**.
 - **Idempotent:** Each booking is updated with `reminder24hSentAt` when a reminder is sent; the cron never sends twice for the same booking.
+- **Late-created tomorrow bookings:** If a booking for tomorrow is created after the 10:00 batch has run, `onBookingCreated` sends the reminder immediately (catch-up) so it is not missed.
 
 ### Using External Scheduler (cron-job.org)
 
-Vercel Hobby plan does not include built-in Cron. Use an external scheduler (e.g. [cron-job.org](https://cron-job.org)) to trigger the reminder endpoint every 5 minutes.
+Vercel Hobby plan does not include built-in Cron. Use an external scheduler (e.g. [cron-job.org](https://cron-job.org)) to trigger the reminder endpoint **once per day at 10:00 AM Asia/Jerusalem**.
 
 **Exact cron-job.org settings:**
 
@@ -152,7 +154,7 @@ Vercel Hobby plan does not include built-in Cron. Use an external scheduler (e.g
 |--------|--------|
 | **URL** | `https://YOUR_DOMAIN/api/cron/whatsapp-reminders?secret=YOUR_CRON_SECRET` |
 | **Method** | POST (do not use GET) |
-| **Schedule** | Every 5 minutes (e.g. `*/5 * * * *`) |
+| **Schedule** | Once per day at 10:00 AM (use timezone Asia/Jerusalem if the scheduler supports it; otherwise set to 07:00 or 08:00 UTC depending on Israeli DST) |
 | **Request timeout** | 60 seconds or more |
 
 - **CRON_SECRET** must be set in Vercel → Project → Settings → Environment Variables (Production). Use the **exact same value** in the URL query when configuring the cron job.
@@ -181,7 +183,7 @@ Every invocation of **POST /api/cron/whatsapp-reminders** writes a document to t
 
 - **auth: "forbidden"** → cron-job.org URL has wrong or missing `?secret=`.
 - **ok: false** and **errorMessage** set → check the message (e.g. missing env var, Firestore index required).
-- **ok: true**, **foundCount: 0** → no bookings in the 24h window; timing is correct but no appointments.
+- **ok: true**, **foundCount: 0** → no bookings for tomorrow; timing is correct but no appointments.
 - **ok: true**, **sentCount: 0**, **skippedCount: N** → bookings were in window but skipped (e.g. already had reminder, or no phone).
 
 ### Test without waiting (debug-reminder and test-whatsapp-reminder)
@@ -215,7 +217,7 @@ Response includes `now`, `startAt`, `diffHours`, `withinWindow`, `reminder24hSen
 | **500** with "TWILIO_ACCOUNT_SID..." or "TWILIO_WHATSAPP_FROM..." | Twilio env vars missing in production | Add `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_FROM` in Vercel. |
 | **500** with "Firebase Admin not available" / "FIREBASE_SERVICE_ACCOUNT_JSON" | Firebase Admin credentials missing | Add `FIREBASE_SERVICE_ACCOUNT_JSON` (or split vars) in Vercel. |
 | **500** with "Firestore index required" | Composite index not deployed | Run `firebase deploy --only firestore:indexes`. Index needed: collection group `bookings`, fields `whatsappStatus` (ASC), `startAt` (ASC). |
-| **ok: true** but **foundCount: 0** every time | No bookings in the 24h window, or query/index issue | Use **POST /api/cron/debug-reminder** with a real `siteId`/`bookingId` to see `diffMinutesTo24h` and `wouldMatchWindow`. |
+| **ok: true** but **foundCount: 0** every time | No bookings for tomorrow, or query/index issue | Use **POST /api/cron/debug-reminder** with a real `siteId`/`bookingId` to see `diffMinutesTo24h` and `wouldMatchWindow`. |
 | Reminders sent for some bookings but not others | Booking missing `customerPhoneE164`, or `whatsappStatus` not `"booked"`, or `reminder24hSentAt` already set | Check the booking doc in Firestore; confirm confirmation WhatsApp was sent so `whatsappStatus` is `"booked"`. |
 
 ### Firestore indexes for collectionGroup queries
@@ -252,12 +254,12 @@ When a booking is created with **startAt** less than 24 hours in the future (and
 **Local verification:**
 
 - **Booking 2 hours from now:** Customer should receive (1) confirmation and (2) reminder/confirmation-request within a short time. In Firestore: `whatsappStatus: "awaiting_confirmation"`, `reminder24hSentAt` and `confirmationRequestedAt` set. In `whatsapp_messages`, the reminder entry has `reminder_sent_immediately_due_to_last_minute_booking: true`.
-- **Booking 30 hours from now:** Customer receives only the confirmation. Reminder is sent later by the cron when the booking enters the 24h window. In Firestore: `whatsappStatus: "booked"`, `reminder24hSentAt` null until cron runs.
+- **Booking 30 hours from now (tomorrow):** Customer receives only the confirmation. Reminder is sent by the daily cron (10:00 AM Israel) when it runs for tomorrow’s bookings, or immediately on creation if the booking is for tomorrow and was created after 10:00 (catch-up). In Firestore: `whatsappStatus: "booked"`, `reminder24hSentAt` null until cron or catch-up runs.
 
 ### Manual testing
 
 1. **Create a booking** (public book page or admin) so it has a customer phone. After creation, the app calls `/api/whatsapp/send-booking-confirmation` (which uses `onBookingCreated`), which sets `customerPhoneE164` and `whatsappStatus: "booked"`. If the booking starts within 24h, the reminder is also sent immediately and status becomes `"awaiting_confirmation"`.
-2. **Trigger 24h reminder:** An external scheduler (e.g. cron-job.org) calls **POST /api/cron/whatsapp-reminders?secret=CRON_SECRET** every 5 minutes. For a booking whose **startAt** is in the next **[now+24h−60min, now+24h+60min)** window and still has `whatsappStatus === "booked"` and no `reminder24hSentAt`, the reminder is sent. Last-minute bookings already have `reminder24hSentAt` set, so the cron skips them. Confirm runs in production by checking the **cron_runs** collection in Firestore. To test without waiting, use **POST /api/cron/debug-reminder** with `{ siteId, bookingId }` to see if the booking would match, or **POST /api/cron/test-whatsapp-reminder** with `{ siteId, bookingId, forceSend: true }` to send now (booking must be in window and `whatsappStatus: "booked"`, no `reminder24hSentAt`).
+2. **Trigger day-before reminder:** An external scheduler (e.g. cron-job.org) calls **POST /api/cron/whatsapp-reminders?secret=CRON_SECRET** once per day at 10:00 AM Asia/Jerusalem. For every booking whose **startAt** is on **tomorrow** (Israel) and has `whatsappStatus === "booked"` and no `reminder24hSentAt`, the reminder is sent. Last-minute bookings and tomorrow catch-up already have `reminder24hSentAt` set, so the cron skips them. Confirm runs in production by checking the **cron_runs** collection in Firestore. To test without waiting, use **POST /api/cron/debug-reminder** with `{ siteId, bookingId }` to see if the booking would match, or **POST /api/cron/test-whatsapp-reminder** with `{ siteId, bookingId, forceSend: true }` to send now (booking must be in window and `whatsappStatus: "booked"`, no `reminder24hSentAt`).
 3. **Reply YES** from the customer’s WhatsApp number. The webhook finds the single `awaiting_confirmation` booking for that phone, updates it to `whatsappStatus: "confirmed"` and `confirmationReceivedAt`, and replies in Hebrew.
 4. **Reply NO** to cancel the same booking.
 5. **Reply anything else** to get the help message.

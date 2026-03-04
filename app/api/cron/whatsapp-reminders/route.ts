@@ -1,10 +1,11 @@
 /**
  * POST /api/cron/whatsapp-reminders
- * 24-hour reminder job for external scheduler (e.g. cron-job.org).
+ * Day-before morning reminder job. Run ONCE per day at 10:00 AM Asia/Jerusalem.
+ * Sends reminders for ALL bookings scheduled for TOMORROW (Asia/Jerusalem).
  * Protected by query param only: ?secret=CRON_SECRET (no Authorization header).
  *
- * Window: startAt in [now+24h-60min, now+24h+60min). Idempotent: only sends when
- * whatsappStatus === "booked" and reminder24hSentAt is null/missing.
+ * Window: startAt in [tomorrow 00:00, day-after-tomorrow 00:00) Israel time.
+ * Idempotent: only sends when whatsappStatus === "booked" and reminder24hSentAt is null/missing.
  *
  * Every invocation writes to Firestore cron_runs for observability.
  */
@@ -112,6 +113,9 @@ export async function POST(request: NextRequest) {
       auth: "ok" as const,
       env,
       route: ROUTE,
+      now: result.serverNow,
+      processed: result.sent,
+      skipped: result.skippedCount,
       windowStartIso: result.windowStart,
       windowEndIso: result.windowEnd,
       foundCount: result.bookingCount,

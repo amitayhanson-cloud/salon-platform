@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { X } from "lucide-react";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { computePhases } from "@/lib/bookingPhasesTiming";
 import { resolvePhase2Worker } from "@/lib/phase2Assignment";
 import { canWorkerPerformService, workersWhoCanPerformService } from "@/lib/workerServiceCompatibility";
@@ -11,6 +12,7 @@ import {
   updateAdminBooking,
   type AdminBookingPayload,
 } from "@/lib/adminBookings";
+import { triggerBookingWhatsApp } from "@/lib/triggerBookingWhatsApp";
 import type { SiteService } from "@/types/siteConfig";
 import type { PricingItem } from "@/types/pricingItem";
 import type { BookingSettings } from "@/types/bookingSettings";
@@ -123,6 +125,8 @@ export default function AdminBookingForm({
   onSuccess,
   onCancel,
 }: AdminBookingFormProps) {
+  const { firebaseUser } = useAuth();
+  const getToken = useCallback(() => firebaseUser?.getIdToken() ?? Promise.resolve(undefined), [firebaseUser]);
   // Service types available for phase 1: only items whose service is in the enabled services list
   const phase1ServiceTypeOptions = useMemo(() => {
     return pricingItems.filter((item) => {
@@ -458,7 +462,8 @@ export default function AdminBookingForm({
     setSaving(true);
     try {
       if (mode === "create") {
-        await createAdminBooking(siteId, payload);
+        const { phase1Id } = await createAdminBooking(siteId, payload);
+        await triggerBookingWhatsApp(siteId, phase1Id, getToken);
       } else if (initialData) {
         await updateAdminBooking(
           siteId,

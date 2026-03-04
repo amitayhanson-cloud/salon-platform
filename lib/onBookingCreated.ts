@@ -17,8 +17,25 @@ import { getAdminDb } from "@/lib/firebaseAdmin";
 import { sendWhatsApp, getBookingPhoneE164 } from "@/lib/whatsapp";
 import { buildReminderMessage } from "@/lib/whatsapp/messages";
 import { formatIsraelDateShort, formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
+import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
 
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+const ISRAEL_TZ = "Asia/Jerusalem";
+
+/** Tomorrow's date YYYY-MM-DD in Asia/Jerusalem. */
+function getTomorrowIsrael(): string {
+  const now = new Date();
+  const today = getDateYMDInTimezone(now, ISRAEL_TZ);
+  const [y, m, d] = today.split("-").map(Number);
+  const tomorrowDate = new Date(y, m - 1, d + 1);
+  return (
+    tomorrowDate.getFullYear() +
+    "-" +
+    String(tomorrowDate.getMonth() + 1).padStart(2, "0") +
+    "-" +
+    String(tomorrowDate.getDate()).padStart(2, "0")
+  );
+}
 
 async function getSiteSalonName(db: ReturnType<typeof getAdminDb>, siteId: string): Promise<string> {
   const siteSnap = await db.collection("sites").doc(siteId).get();
@@ -138,5 +155,35 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
       bookingId,
       reason: diffMs <= 0 ? "booking_in_past" : "start_more_than_24h_away",
     });
+
+    // Catch-up: booking is for TOMORROW (Israel); daily batch at 10:00 may have already run.
+    // Send reminder now so late-created tomorrow bookings are not missed. Only for tomorrow, not beyond.
+    if (diffMs > 0 && data.reminder24hSentAt == null) {
+      const tomorrowIsrael = getTomorrowIsrael();
+      const bookingDateIsrael = getDateYMDInTimezone(startAt, ISRAEL_TZ);
+      if (bookingDateIsrael === tomorrowIsrael) {
+        const timeStr = formatIsraelTime(startAt);
+        const reminderBody = buildReminderMessage(salonName, timeStr);
+        await sendWhatsApp({
+          toE164: customerPhoneE164,
+          body: reminderBody,
+          bookingId,
+          siteId,
+          bookingRef: `sites/${siteId}/bookings/${bookingId}`,
+          meta: { reminder_sent_immediately_tomorrow_catchup: true },
+        });
+        await bookingRef.update({
+          whatsappStatus: "awaiting_confirmation",
+          reminder24hSentAt: Timestamp.now(),
+          confirmationRequestedAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+        });
+        console.log("[onBookingCreated] reminder_sent_tomorrow_catchup: true", {
+          siteId,
+          bookingId,
+          bookingDateIsrael,
+        });
+      }
+    }
   }
 }

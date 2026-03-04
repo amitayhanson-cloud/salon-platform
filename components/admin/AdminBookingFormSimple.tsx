@@ -2,19 +2,23 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { X } from "lucide-react";
+import { useAuth } from "@/components/auth/AuthProvider";
 import {
   createAdminBooking,
   updatePhase1Only,
   updatePhase2Only,
   type AdminBookingPayload,
 } from "@/lib/adminBookings";
+import { triggerBookingWhatsApp } from "@/lib/triggerBookingWhatsApp";
 import { findWorkerConflictFromBookings } from "@/lib/bookingConflicts";
 import DurationMinutesStepper from "@/components/admin/DurationMinutesStepper";
 import {
-  computeWeeklyOccurrenceDates,
+  computeRecurrenceOccurrenceDates,
   createRecurringBookings,
+  getRecurrenceFrequencyLabel,
   MAX_RECURRING_OCCURRENCES,
   type RecurrenceRule,
+  type RecurrenceFrequencyUnit,
 } from "@/lib/recurringBookings";
 
 const SLOT_MINUTES = 15;
@@ -127,6 +131,8 @@ export default function AdminBookingFormSimple({
   onSuccess,
   onCancel,
 }: AdminBookingFormSimpleProps) {
+  const { firebaseUser } = useAuth();
+  const getToken = useCallback(() => firebaseUser?.getIdToken() ?? Promise.resolve(undefined), [firebaseUser]);
   const [date, setDate] = useState(initialData?.date ?? defaultDate);
   const [time, setTime] = useState(initialData?.time ?? "09:00");
   const [workerId, setWorkerId] = useState(initialData?.workerId ?? workers[0]?.id ?? "");
@@ -156,15 +162,40 @@ export default function AdminBookingFormSimple({
   const [recurringEndDate, setRecurringEndDate] = useState(defaultRecurringEndDate);
   const [recurringCount, setRecurringCount] = useState(10);
   const [recurringProgress, setRecurringProgress] = useState<{ current: number; total: number } | null>(null);
-  // Sync recurringEndDate default when date changes
+  type RecurringFrequencyPreset = "weekly" | "every2weeks" | "every3weeks" | "monthly" | "custom";
+  const [recurringFrequency, setRecurringFrequency] = useState<RecurringFrequencyPreset>("weekly");
+  const [recurringCustomInterval, setRecurringCustomInterval] = useState(1);
+  const [recurringCustomUnit, setRecurringCustomUnit] = useState<RecurrenceFrequencyUnit>("weeks");
+  const recurrenceUnitAndInterval = useMemo((): { unit: RecurrenceFrequencyUnit; interval: number } => {
+    switch (recurringFrequency) {
+      case "weekly":
+        return { unit: "weeks", interval: 1 };
+      case "every2weeks":
+        return { unit: "weeks", interval: 2 };
+      case "every3weeks":
+        return { unit: "weeks", interval: 3 };
+      case "monthly":
+        return { unit: "months", interval: 1 };
+      case "custom":
+        return { unit: recurringCustomUnit, interval: Math.max(1, recurringCustomInterval) };
+      default:
+        return { unit: "weeks", interval: 1 };
+    }
+  }, [recurringFrequency, recurringCustomUnit, recurringCustomInterval]);
   const occurrences = useMemo(() => {
     if (!recurringEnabled || mode !== "create") return [];
-    return computeWeeklyOccurrenceDates(date, time, {
+    return computeRecurrenceOccurrenceDates(date, time, {
       endDate: recurringMode === "endDate" ? recurringEndDate : undefined,
       count: recurringMode === "count" ? recurringCount : undefined,
       maxOccurrences: MAX_RECURRING_OCCURRENCES,
+      frequencyUnit: recurrenceUnitAndInterval.unit,
+      frequencyInterval: recurrenceUnitAndInterval.interval,
     });
-  }, [recurringEnabled, mode, date, time, recurringMode, recurringEndDate, recurringCount]);
+  }, [recurringEnabled, mode, date, time, recurringMode, recurringEndDate, recurringCount, recurrenceUnitAndInterval]);
+  const recurrenceFrequencyLabel = useMemo(
+    () => getRecurrenceFrequencyLabel(recurrenceUnitAndInterval.unit, recurrenceUnitAndInterval.interval),
+    [recurrenceUnitAndInterval]
+  );
   const recurringValidationError = useMemo(() => {
     if (!recurringEnabled) return null;
     if (recurringMode === "endDate" && recurringEndDate < date)
@@ -300,6 +331,7 @@ export default function AdminBookingFormSimple({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     if (!validate()) return;
     setSubmitError(null);
     setSaving(true);
@@ -313,6 +345,8 @@ export default function AdminBookingFormSimple({
             mode: recurringMode,
             endDate: recurringMode === "endDate" ? recurringEndDate : undefined,
             count: recurringMode === "count" ? recurringCount : undefined,
+            frequencyUnit: recurrenceUnitAndInterval.unit,
+            frequencyInterval: recurrenceUnitAndInterval.interval,
           };
           const { createdIds, failedDates } = await createRecurringBookings(
             siteId,
@@ -321,13 +355,17 @@ export default function AdminBookingFormSimple({
             (current, total) => setRecurringProgress({ current, total })
           );
           setRecurringProgress(null);
+          for (const bid of createdIds) {
+            await triggerBookingWhatsApp(siteId, bid, getToken);
+          }
           onSuccess({
             createdRecurring: createdIds.length,
             failedRecurring: failedDates.length,
             failedDetails: failedDates.length > 0 ? failedDates.map((f) => ({ date: f.date, error: f.error })) : undefined,
           });
         } else {
-          await createAdminBooking(siteId, buildCreatePayload());
+          const { phase1Id } = await createAdminBooking(siteId, buildCreatePayload());
+          await triggerBookingWhatsApp(siteId, phase1Id, getToken);
           onSuccess();
         }
       } else if (initialData) {
@@ -438,7 +476,41 @@ export default function AdminBookingFormSimple({
 
         {mode === "create" && recurringEnabled && (
           <div className="border border-slate-200 rounded-lg p-4 bg-slate-50/50 space-y-3">
-            <p className="text-xs text-slate-500">כל שבוע, יום {weekdayLabel} בשעה {time}</p>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">תדירות</label>
+              <select
+                value={recurringFrequency}
+                onChange={(e) => setRecurringFrequency(e.target.value as RecurringFrequencyPreset)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right bg-white"
+              >
+                <option value="weekly">כל שבוע</option>
+                <option value="every2weeks">כל שבועיים</option>
+                <option value="every3weeks">כל 3 שבועות</option>
+                <option value="monthly">כל חודש (אותו תאריך בחודש)</option>
+                <option value="custom">מותאם אישית…</option>
+              </select>
+              {recurringFrequency === "custom" && (
+                <div className="mt-2 flex items-center gap-2 flex-wrap">
+                  <span className="text-sm text-slate-600">כל</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={12}
+                    value={recurringCustomInterval}
+                    onChange={(e) => setRecurringCustomInterval(Math.max(1, Math.min(12, parseInt(e.target.value, 10) || 1)))}
+                    className="w-16 px-2 py-1.5 border border-slate-300 rounded-lg text-right"
+                  />
+                  <select
+                    value={recurringCustomUnit}
+                    onChange={(e) => setRecurringCustomUnit(e.target.value as RecurrenceFrequencyUnit)}
+                    className="px-2 py-1.5 border border-slate-300 rounded-lg text-right bg-white"
+                  >
+                    <option value="weeks">שבועות</option>
+                    <option value="months">חודשים</option>
+                  </select>
+                </div>
+              )}
+            </div>
             <div className="flex gap-4">
               <label className="flex items-center gap-1.5 cursor-pointer">
                 <input
@@ -489,7 +561,7 @@ export default function AdminBookingFormSimple({
               <div className="text-sm text-slate-700 pt-1 border-t border-slate-200">
                 <p className="font-medium">ייווצרו {occurrences.length} תורים</p>
                 <p className="text-xs text-slate-500">
-                  מ־{date} עד {recurringMode === "endDate" ? recurringEndDate : occurrences[occurrences.length - 1]?.date ?? date}, כל יום {weekdayLabel} בשעה {time}
+                  מ־{date} עד {recurringMode === "endDate" ? recurringEndDate : occurrences[occurrences.length - 1]?.date ?? date}, {recurrenceFrequencyLabel} בשעה {time}
                 </p>
               </div>
             )}

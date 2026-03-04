@@ -46,8 +46,6 @@ export default function ServicesPage() {
   const [openServices, setOpenServices] = useState<Set<string>>(new Set());
   const [editingItem, setEditingItem] = useState<PricingItem | null>(null);
   const [editingService, setEditingService] = useState<SiteService | null>(null);
-  const [showAddService, setShowAddService] = useState(false);
-  const [newServiceName, setNewServiceName] = useState("");
   const [durationInputValue, setDurationInputValue] = useState<string>("");
   const [priceInputValue, setPriceInputValue] = useState<string>("");
   const [followUpNameInputValue, setFollowUpNameInputValue] = useState<string>("");
@@ -56,6 +54,19 @@ export default function ServicesPage() {
   const [followUpTextInputValue, setFollowUpTextInputValue] = useState<string>("");
 
   const FOLLOWUP_TEXT_MAX_LENGTH = 50;
+
+  /** Draft for "add new service" — same shape as edit modal; id "new" triggers create on save. */
+  const NEW_SERVICE_DRAFT: SiteService = {
+    id: "new",
+    name: "",
+    color: "#3B82F6",
+    description: "",
+    price: 0,
+    duration: 15,
+    enabled: true,
+  };
+
+  const isServiceCreateMode = editingService?.id === "new";
 
   // Multi-booking combos (rule-based: trigger set → ordered sequence)
   const [combos, setCombos] = useState<MultiBookingCombo[]>([]);
@@ -417,25 +428,6 @@ export default function ServicesPage() {
     });
   };
 
-  const handleAddService = async () => {
-    if (!newServiceName.trim() || !siteId) return;
-    try {
-      console.log(`[ServicesPage] Adding service: name="${newServiceName.trim()}", siteId="${siteId}"`);
-      const serviceId = await addSiteService(siteId, {
-        name: newServiceName.trim(),
-        enabled: true,
-        color: "#3B82F6", // Default blue color
-      });
-      console.log(`[ServicesPage] Service added successfully: id="${serviceId}", PATH=sites/${siteId}`);
-      setNewServiceName("");
-      setShowAddService(false);
-      setShowNewServiceReminderModal(true);
-    } catch (err) {
-      console.error("Failed to create service", err);
-      setError("שגיאה ביצירת שירות");
-    }
-  };
-
   const handleEditService = (service: SiteService) => {
     setEditingService(service);
   };
@@ -449,7 +441,7 @@ export default function ServicesPage() {
         priceRaw !== undefined && priceRaw !== null && priceRaw !== ""
           ? Number(priceRaw)
           : null;
-      const price = typeof priceNum === "number" && !Number.isNaN(priceNum) ? priceNum : null;
+      const price = typeof priceNum === "number" && !Number.isNaN(priceNum) && priceNum >= 0 ? priceNum : null;
 
       const durationRaw = editingService.duration;
       const durationNum =
@@ -468,6 +460,29 @@ export default function ServicesPage() {
           ? String(editingService.description).trim()
           : null;
 
+      const isCreate = editingService.id === "new";
+
+      if (isCreate) {
+        const durationForCreate = duration != null && duration >= 1 ? duration : 15;
+        const payload: Omit<SiteService, "id"> = {
+          name: editingService.name.trim(),
+          enabled: editingService.enabled !== false,
+          color: editingService.color || "#3B82F6",
+          description: description ?? undefined,
+          price: price != null && price >= 0 ? price : undefined,
+          duration: durationForCreate,
+        };
+        const newId = await addSiteService(siteId, payload);
+        const newService: SiteService = {
+          ...payload,
+          id: newId,
+        };
+        setServices((prev) => [...prev, newService]);
+        setEditingService(null);
+        setShowNewServiceReminderModal(true);
+        return;
+      }
+
       const existingService = services.find((s) => s.id === editingService.id);
       const updatedService = {
         ...editingService,
@@ -480,7 +495,6 @@ export default function ServicesPage() {
         imageUrl: existingService?.imageUrl ?? editingService.imageUrl,
       };
 
-      // Update local state immediately for instant UI feedback
       setServices((prev) =>
         prev.map((s) => (s.id === updatedService.id ? updatedService : s))
       );
@@ -496,14 +510,13 @@ export default function ServicesPage() {
       else updates.price = undefined;
       if (duration !== null) updates.duration = duration;
       else updates.duration = undefined;
-      // Service image is edited only in the Website Editor; do not write from this modal
 
       await updateSiteService(siteId, editingService.id, updates);
 
       setEditingService(null);
     } catch (err) {
-      console.error("Failed to update service", err);
-      setError("שגיאה בעדכון שירות");
+      console.error("Failed to save service", err);
+      setError(editingService?.id === "new" ? "שגיאה ביצירת שירות" : "שגיאה בעדכון שירות");
     }
   };
 
@@ -685,50 +698,13 @@ export default function ServicesPage() {
               </p>
             </div>
             <button
-              onClick={() => setShowAddService(true)}
+              onClick={() => setEditingService({ ...NEW_SERVICE_DRAFT })}
               className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
               הוסף שירות
             </button>
           </div>
-
-          {showAddService && (
-            <div className="mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
-              <div className="flex items-center gap-3">
-                <input
-                  type="text"
-                  value={newServiceName}
-                  onChange={(e) => setNewServiceName(e.target.value)}
-                  placeholder="שם השירות"
-                  className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      handleAddService();
-                    } else if (e.key === "Escape") {
-                      setShowAddService(false);
-                      setNewServiceName("");
-                    }
-                  }}
-                />
-                <button
-                  onClick={handleAddService}
-                  className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium"
-                >
-                  שמור
-                </button>
-                <button
-                  onClick={() => {
-                    setShowAddService(false);
-                    setNewServiceName("");
-                  }}
-                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm font-medium"
-                >
-                  ביטול
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* Services with nested pricing items */}
           {services.length === 0 && unassignedItems.length === 0 ? (
@@ -1222,12 +1198,12 @@ export default function ServicesPage() {
         </div>
       )}
 
-      {/* Edit Service Modal */}
+      {/* Service Modal (create + edit) */}
       {editingService && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" dir="rtl">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md">
             <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-slate-900">ערוך שירות</h3>
+              <h3 className="text-lg font-bold text-slate-900">{isServiceCreateMode ? "הוסף שירות" : "ערוך שירות"}</h3>
               <button
                 onClick={() => setEditingService(null)}
                 className="p-1 hover:bg-slate-100 rounded"
@@ -1253,7 +1229,7 @@ export default function ServicesPage() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  צבע השירות
+                  צבע השירות ביומן
                 </label>
                 <div className="flex items-center gap-3">
                   <input
@@ -1279,7 +1255,7 @@ export default function ServicesPage() {
                   />
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  הצבע שיוצג בלוח התורים עבור שירות זה
+                  צבע זה יקבע איך השירות יופיע בלוח הזמנים (ביומן התורים).
                 </p>
               </div>
 

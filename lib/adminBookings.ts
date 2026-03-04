@@ -116,7 +116,7 @@ export async function createAdminBooking(
     excludeBookingIds: [],
   });
   if (phase1Conflict.hasConflict && phase1Conflict.conflictingBooking) {
-    throw new Error(`Worker is already booked from ${phase1Conflict.conflictingBooking.timeRange}`);
+    throw new Error(`המטפל כבר תפוס ב־${phase1Conflict.conflictingBooking.timeRange}`);
   }
   if (hasPhase2 && payload.phase2) {
     const phase2Start = phases.phase2StartAt;
@@ -137,7 +137,7 @@ export async function createAdminBooking(
       excludeBookingIds: [],
     });
     if (phase2Conflict.hasConflict && phase2Conflict.conflictingBooking) {
-      throw new Error(`Worker (phase 2) is already booked from ${phase2Conflict.conflictingBooking.timeRange}`);
+      throw new Error(`המטפל (שלב 2) כבר תפוס ב־${phase2Conflict.conflictingBooking.timeRange}`);
     }
   }
 
@@ -310,7 +310,7 @@ export async function updateAdminBooking(
     excludeBookingIds: excludeIds,
   });
   if (phase1Conflict.hasConflict && phase1Conflict.conflictingBooking) {
-    throw new Error(`Worker is already booked from ${phase1Conflict.conflictingBooking.timeRange}`);
+    throw new Error(`המטפל כבר תפוס ב־${phase1Conflict.conflictingBooking.timeRange}`);
   }
   if (hasPhase2 && payload.phase2) {
     const phase2Start = phases.phase2StartAt;
@@ -331,7 +331,7 @@ export async function updateAdminBooking(
       excludeBookingIds: excludeIds,
     });
     if (phase2Conflict.hasConflict && phase2Conflict.conflictingBooking) {
-      throw new Error(`Worker (phase 2) is already booked from ${phase2Conflict.conflictingBooking.timeRange}`);
+      throw new Error(`המטפל (שלב 2) כבר תפוס ב־${phase2Conflict.conflictingBooking.timeRange}`);
     }
   }
 
@@ -508,7 +508,7 @@ export async function updatePhase1Only(
     excludeBookingIds: [phase1Id],
   });
   if (phase1Conflict.hasConflict && phase1Conflict.conflictingBooking) {
-    throw new Error(`Worker is already booked from ${phase1Conflict.conflictingBooking.timeRange}`);
+    throw new Error(`המטפל כבר תפוס ב־${phase1Conflict.conflictingBooking.timeRange}`);
   }
 
   const phase1Ref = bookingDoc(siteId, phase1Id);
@@ -599,7 +599,7 @@ export async function updatePhase2Only(
   });
   if (phase2Conflict.hasConflict && phase2Conflict.conflictingBooking) {
     throw new Error(
-      `Worker is already booked from ${phase2Conflict.conflictingBooking.timeRange}`
+      `המטפל (שלב 2) כבר תפוס ב־${phase2Conflict.conflictingBooking.timeRange}`
     );
   }
 
@@ -691,7 +691,7 @@ export async function createAdminMultiServiceVisit(
       excludeBookingIds: [],
     });
     if (conflict.hasConflict && conflict.conflictingBooking) {
-      throw new Error(`Worker ${slot.workerName} is busy: ${conflict.conflictingBooking.timeRange}`);
+      throw new Error(`המטפל ${slot.workerName} תפוס ב־${conflict.conflictingBooking.timeRange}`);
     }
 
     const doc: Record<string, unknown> = {

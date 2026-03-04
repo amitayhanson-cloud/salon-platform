@@ -2,11 +2,13 @@
  * Twilio WhatsApp send helper. One sender number for the platform.
  * Logs every outbound message to Firestore whatsapp_messages.
  * Server-only: uses Firebase Admin and Twilio env vars.
+ * Respects global kill-switch: platformSettings/global.whatsappAutomationsEnabled.
  */
 
 import twilio from "twilio";
 import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
+import { isWhatsAppAutomationEnabled } from "@/lib/platformSettings";
 import { toWhatsAppTo } from "./e164";
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -38,7 +40,7 @@ export type SendWhatsAppParams = {
 
 /**
  * Send WhatsApp message via Twilio and log to Firestore whatsapp_messages.
- * Returns Twilio message SID.
+ * Returns Twilio message SID. If global WhatsApp automations are disabled, skips send and returns synthetic sid.
  */
 export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: string }> {
   const {
@@ -51,6 +53,24 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
     meta = null,
   } = params;
   const siteId = siteIdParam ?? salonIdParam;
+
+  const enabled = await isWhatsAppAutomationEnabled();
+  if (!enabled) {
+    const automationName = (meta && typeof meta === "object" && "automation" in meta && typeof (meta as { automation: unknown }).automation === "string")
+      ? (meta as { automation: string }).automation
+      : "outbound";
+    if (process.env.NODE_ENV !== "test") {
+      console.log("[WhatsApp] skipped (global disabled)", {
+        siteId: siteId ?? undefined,
+        bookingId: bookingId ?? undefined,
+        automation: automationName,
+        toE164: toE164.slice(-4) ? `***${toE164.slice(-4)}` : "***",
+        timestamp: new Date().toISOString(),
+      });
+    }
+    return { sid: "skipped-global-disabled" };
+  }
+
   const from = getFrom();
   const to = toWhatsAppTo(toE164);
 

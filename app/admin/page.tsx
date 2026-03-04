@@ -23,6 +23,8 @@ export default function PlatformAdminPage() {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; isError?: boolean } | null>(null);
   const [selectedSiteId, setSelectedSiteId] = useState<string>("");
+  const [whatsappEnabled, setWhatsappEnabled] = useState<boolean | null>(null);
+  const [whatsappSaving, setWhatsappSaving] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -40,20 +42,29 @@ export default function PlatformAdminPage() {
     (async () => {
       try {
         const token = await fbUser.getIdToken();
-        const res = await fetch("/api/admin/sites", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json().catch(() => ({}));
+        const headers = { Authorization: `Bearer ${token}` };
+        const [sitesRes, settingsRes] = await Promise.all([
+          fetch("/api/admin/sites", { headers }),
+          fetch("/api/admin/platform-settings", { headers }),
+        ]);
+        const data = await sitesRes.json().catch(() => ({}));
         if (cancelled) return;
-        if (res.ok && Array.isArray(data?.sites)) {
+        if (sitesRes.ok && Array.isArray(data?.sites)) {
           setSites(data.sites);
         } else {
           setSites([]);
         }
+        if (settingsRes.ok) {
+          const settingsData = await settingsRes.json().catch(() => ({}));
+          setWhatsappEnabled(typeof settingsData.whatsappAutomationsEnabled === "boolean" ? settingsData.whatsappAutomationsEnabled : true);
+        } else {
+          setWhatsappEnabled(true);
+        }
       } catch (e) {
         if (!cancelled) {
-          console.error("Failed to load sites", e);
+          console.error("Failed to load admin data", e);
           setSites([]);
+          setWhatsappEnabled(true);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -127,6 +138,68 @@ export default function PlatformAdminPage() {
           </Link>
         </div>
         </header>
+
+        {/* WhatsApp Automations kill-switch */}
+        <div className="mb-8 max-w-xl">
+          <div className="bg-white border border-slate-200 rounded-2xl p-5">
+            <h2 className="text-lg font-semibold text-slate-900 mb-1">WhatsApp Automations</h2>
+            <p className="text-xs text-slate-500 mb-4">
+              When disabled, no WhatsApp automations will be sent from any site.
+            </p>
+            <p className="text-xs text-amber-700 mb-3">
+              כשההגדרה כבויה, לא יישלחו הודעות WhatsApp אוטומטיות מאף אתר.
+            </p>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={whatsappEnabled === true}
+                disabled={whatsappEnabled === null || whatsappSaving}
+                onClick={async () => {
+                  if (whatsappEnabled === null || whatsappSaving) return;
+                  const next = !whatsappEnabled;
+                  setWhatsappSaving(true);
+                  try {
+                    const fbUser = firebaseUserRef.current;
+                    if (!fbUser) {
+                      setToast({ message: "לא מחובר", isError: true });
+                      return;
+                    }
+                    const token = await fbUser.getIdToken();
+                    const res = await fetch("/api/admin/platform-settings", {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                      body: JSON.stringify({ whatsappAutomationsEnabled: next }),
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (res.ok && data.ok) {
+                      setWhatsappEnabled(next);
+                      setToast({ message: next ? "אוטומציות WhatsApp פעילות" : "אוטומציות WhatsApp כבויות" });
+                    } else {
+                      setToast({ message: data?.message || data?.error || "שגיאה בשמירה", isError: true });
+                    }
+                  } catch (e) {
+                    setToast({ message: "שגיאה בשמירה", isError: true });
+                  } finally {
+                    setWhatsappSaving(false);
+                  }
+                }}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                  whatsappEnabled ? "bg-sky-500" : "bg-slate-300"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition ${
+                    whatsappEnabled ? "translate-x-5" : "translate-x-1"
+                  }`}
+                />
+              </button>
+              <span className="text-sm font-medium text-slate-700">
+                {whatsappEnabled === null ? "טוען…" : whatsappSaving ? "שומר…" : whatsappEnabled ? "פעיל" : "כבוי"}
+              </span>
+            </div>
+          </div>
+        </div>
 
         {sites.length > 0 && (
           <div className="mb-8 max-w-xl">

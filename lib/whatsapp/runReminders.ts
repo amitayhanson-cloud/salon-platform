@@ -1,13 +1,14 @@
 /**
- * Shared logic for 24h WhatsApp reminder cron.
- * Window: startAt in [now+24h-60min, now+24h+60min), whatsappStatus "booked", reminder24hSentAt null.
+ * Shared logic for day-before morning WhatsApp reminder cron.
+ * Window: startAt in [tomorrow 00:00, day-after-tomorrow 00:00) Asia/Jerusalem.
+ * Run once per day at 10:00 AM Asia/Jerusalem. Same eligibility: whatsappStatus "booked", reminder24hSentAt null.
  */
 
 import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { assertNoAwaitingConfirmationWithConfirmed } from "@/lib/bookingStatusForWrite";
 import { sendWhatsApp, normalizeE164 } from "@/lib/whatsapp";
-import { getReminderWindow } from "@/lib/whatsapp/reminderWindow";
+import { getTomorrowReminderWindow } from "@/lib/whatsapp/reminderWindow";
 import { buildReminderMessage } from "@/lib/whatsapp/messages";
 import { formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
 import { getRelatedBookingIds } from "@/lib/whatsapp/relatedBookings";
@@ -41,13 +42,13 @@ function getBookingStartAt(data: Record<string, unknown>): Date | null {
 
 export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<RunRemindersResult> {
   const { now, nowISO, nowIsraelISO, windowStart, windowEnd, windowStartISO, windowEndISO } =
-    getReminderWindow();
+    getTomorrowReminderWindow();
 
-  console.log("[whatsapp-reminders] run", {
-    serverNow: nowISO,
-    serverNowIsrael: nowIsraelISO,
-    windowStart: windowStartISO,
-    windowEnd: windowEndISO,
+  console.log("[whatsapp-reminders] run (tomorrow batch)", {
+    now: nowISO,
+    tomorrowStart: windowStartISO,
+    tomorrowEnd: windowEndISO,
+    nowIsrael: nowIsraelISO,
   });
 
   const startTs = Timestamp.fromDate(windowStart);
@@ -194,7 +195,15 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
   }
 
   const skippedCount = snapshot.docs.length - sent - errors;
-  console.log("[whatsapp-reminders] bookings in window", snapshot.docs.length, "sent", sent, "errors", errors, "skipped", skippedCount);
+  console.log("[whatsapp-reminders] tomorrow batch result", {
+    matched: snapshot.docs.length,
+    processed: sent,
+    skipped: skippedCount,
+    errors,
+    now: nowISO,
+    tomorrowStart: windowStartISO,
+    tomorrowEnd: windowEndISO,
+  });
 
   return {
     sent,
