@@ -7,7 +7,7 @@ export function ProductExplanationSection() {
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <div className="grid gap-12 lg:grid-cols-2 lg:items-center lg:gap-16">
           {/* RTL desktop: text left (order-2), image right (order-1) */}
-          <div className="flex justify-center lg:order-1 lg:justify-start">
+          <div className="mb-8 flex justify-center lg:order-1 lg:mb-0 lg:justify-start">
             <div
               className="h-72 w-full max-w-md rounded-2xl border border-gray-200 bg-gray-100 shadow-md sm:h-80"
               aria-hidden
