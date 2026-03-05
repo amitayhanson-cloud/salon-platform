@@ -11,10 +11,10 @@ export function HowItWorksSection() {
       className="py-16 md:py-20 lg:py-24"
     >
       <div className="mx-auto max-w-6xl px-4 md:px-6 lg:px-8">
-        <h2 className="text-center text-2xl font-bold tracking-tight text-gray-900 md:text-3xl">
+        <h2 className="text-center text-2xl font-bold tracking-tight text-caleno-ink md:text-3xl">
           {HOW_IT_WORKS_SECTION.title}
         </h2>
-        <p className="mx-auto mt-3 max-w-2xl text-center text-base text-gray-600 md:text-lg">
+        <p className="mx-auto mt-3 max-w-2xl text-center text-base text-gray-500 md:text-lg">
           {HOW_IT_WORKS_SECTION.subtitle}
         </p>
 
@@ -24,7 +24,7 @@ export function HowItWorksSection() {
               key={item.step}
               className="relative flex flex-1 flex-col items-center text-center md:items-start md:text-right"
             >
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-gray-900 bg-white text-lg font-semibold text-gray-900">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-caleno-ink bg-white text-lg font-semibold text-caleno-ink">
                 {item.step}
               </div>
               {index < HOW_IT_WORKS_STEPS.length - 1 && (
@@ -39,10 +39,10 @@ export function HowItWorksSection() {
                   />
                 </>
               )}
-              <h3 className="mt-4 text-lg font-semibold text-gray-900">
+              <h3 className="mt-4 text-lg font-semibold text-caleno-ink">
                 {item.title}
               </h3>
-              <p className="mx-auto mt-2 max-w-[60ch] text-gray-600 md:mx-0 md:max-w-none">{item.description}</p>
+              <p className="mx-auto mt-2 max-w-[60ch] text-gray-500 md:mx-0 md:max-w-none">{item.description}</p>
             </div>
           ))}
         </div>

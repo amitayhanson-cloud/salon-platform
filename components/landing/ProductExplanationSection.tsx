@@ -9,7 +9,7 @@ export function ProductExplanationSection() {
           {/* RTL desktop: text left (order-2), image right (order-1) */}
           <div className="mb-8 flex justify-center lg:order-1 lg:mb-0 lg:justify-start">
             <div
-              className="h-72 w-full max-w-md rounded-2xl border border-gray-200 bg-gray-100 shadow-md md:h-80"
+              className="h-72 w-full max-w-md rounded-2xl border border-[#E5E7EB] bg-white shadow-md md:h-80"
               aria-hidden
             >
               <div className="flex h-full items-center justify-center text-gray-400">
@@ -18,16 +18,16 @@ export function ProductExplanationSection() {
             </div>
           </div>
           <div className="text-right lg:order-2">
-            <h2 className="text-2xl font-bold tracking-tight text-gray-900 md:text-3xl">
+            <h2 className="text-2xl font-bold tracking-tight text-caleno-ink md:text-3xl">
               {PRODUCT_EXPLANATION.title}
             </h2>
             <ul className="mt-6 space-y-4" role="list">
               {PRODUCT_EXPLANATION.bullets.map((bullet, i) => (
                 <li key={i} className="flex gap-3">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-200 text-gray-700">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-caleno-mint/30 text-caleno-brand">
                     <Check className="h-3.5 w-3.5" aria-hidden />
                   </span>
-                  <span className="max-w-[60ch] text-base text-gray-600 md:text-lg">{bullet}</span>
+                  <span className="max-w-[60ch] text-base text-gray-500 md:text-lg">{bullet}</span>
                 </li>
               ))}
             </ul>

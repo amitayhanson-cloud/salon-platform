@@ -18,7 +18,7 @@ import { LandingFooter } from "./LandingFooter";
  */
 export function LandingPage() {
   return (
-    <div dir="ltr" className="min-h-screen bg-white text-gray-900">
+    <div dir="ltr" className="min-h-screen bg-white text-caleno-ink">
       <LandingHeader />
       <main>
         <LandingHero />

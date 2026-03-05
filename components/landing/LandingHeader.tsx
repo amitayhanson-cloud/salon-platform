@@ -20,7 +20,7 @@ export function LandingHeader() {
       >
         <Link
           href="/"
-          className="text-xl font-semibold text-gray-900 hover:text-gray-700"
+          className="text-xl font-semibold text-caleno-ink hover:text-caleno-deep"
         >
           Caleno
         </Link>
@@ -30,14 +30,14 @@ export function LandingHeader() {
             <Link
               key={href}
               href={href}
-              className="text-sm font-medium text-gray-600 hover:text-gray-900"
+              className="text-sm font-medium text-caleno-ink hover:text-caleno-deep"
             >
               {label}
             </Link>
           ))}
           <Link
             href="/signup"
-            className="inline-flex items-center justify-center rounded-xl bg-gray-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-gray-800"
+            className="inline-flex items-center justify-center rounded-xl bg-caleno-ink px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#1F2937] hover:-translate-y-px hover:shadow-md active:translate-y-0"
           >
             {HEADER_CTA}
           </Link>
@@ -45,7 +45,7 @@ export function LandingHeader() {
 
         <button
           type="button"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 focus-visible:ring-2 focus-visible:ring-gray-300 focus-visible:ring-offset-2 md:hidden"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-caleno-ink hover:bg-caleno-off focus-visible:ring-2 focus-visible:ring-gray-300 focus-visible:ring-offset-2 md:hidden"
           onClick={() => setMobileOpen((o) => !o)}
           aria-label={mobileOpen ? "סגור תפריט" : "פתח תפריט"}
           aria-expanded={mobileOpen}
@@ -67,7 +67,7 @@ export function LandingHeader() {
               <Link
                 key={href}
                 href={href}
-                className="rounded-lg px-3 py-3 text-sm font-medium text-gray-700 hover:bg-gray-100 focus-visible:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
+                className="rounded-lg px-3 py-3 text-sm font-medium text-caleno-ink hover:bg-caleno-off focus-visible:bg-caleno-off focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
                 onClick={() => setMobileOpen(false)}
               >
                 {label}
@@ -75,7 +75,7 @@ export function LandingHeader() {
             ))}
             <Link
               href="/signup"
-              className="mt-2 inline-flex items-center justify-center rounded-xl bg-gray-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2"
+              className="mt-2 inline-flex items-center justify-center rounded-xl bg-caleno-ink px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#1F2937] hover:-translate-y-px hover:shadow-md active:translate-y-0 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2"
               onClick={() => setMobileOpen(false)}
             >
               {HEADER_CTA}

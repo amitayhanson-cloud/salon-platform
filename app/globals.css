@@ -10,6 +10,12 @@
   --color-caleno-600: #155969;
   --color-caleno-700: #0f4550;
   --color-caleno-800: #0a3540;
+  /* Landing brand palette */
+  --color-caleno-ink: #0f172a;
+  --color-caleno-deep: #1e6f7c;
+  --color-caleno-brand: #2fb7b5;
+  --color-caleno-mint: #7eddd8;
+  --color-caleno-off: #f6fafa;
 }
 
 /* Prevent overscroll bounce (iOS rubber-band) and horizontal drag */

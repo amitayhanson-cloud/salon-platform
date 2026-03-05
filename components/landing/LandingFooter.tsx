@@ -10,13 +10,13 @@ function FooterColumn({
 }) {
   return (
     <div className="w-full text-right">
-      <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+      <h3 className="text-sm font-semibold text-caleno-ink">{title}</h3>
       <ul className="mt-4 space-y-3" role="list">
         {links.map((link) => (
           <li key={link.href + link.label}>
             <Link
               href={link.href}
-              className="text-sm text-gray-600 hover:text-gray-900"
+              className="text-sm text-gray-500 hover:text-caleno-ink"
             >
               {link.label}
             </Link>
