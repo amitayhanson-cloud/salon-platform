@@ -24,7 +24,7 @@ export function ProductDemoSection() {
 
         <div className="mt-10">
           <div
-            className="flex gap-2 overflow-x-auto rounded-xl border border-gray-200 bg-white p-1.5 shadow-sm [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            className="flex gap-2 overflow-x-auto rounded-xl border border-gray-200 bg-white p-1.5 shadow-sm scroll-smooth px-4 md:justify-center md:overflow-visible md:px-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
             role="tablist"
             aria-label="תפריט דמו מוצר"
           >
@@ -37,7 +37,7 @@ export function ProductDemoSection() {
                 aria-controls={`demo-panel-${tab.id}`}
                 id={`tab-${tab.id}`}
                 onClick={() => setActiveTab(tab.id)}
-                className={`min-h-[44px] min-w-[8rem] shrink-0 rounded-lg px-4 py-3 text-sm font-medium transition-colors md:min-w-0 md:flex-1 md:px-5 ${
+                className={`min-h-[44px] min-w-[110px] shrink-0 whitespace-nowrap rounded-lg px-4 py-3 text-sm font-medium transition-colors md:min-w-0 md:flex-1 md:px-5 ${
                   activeTab === tab.id
                     ? "bg-gray-900 text-white"
                     : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
