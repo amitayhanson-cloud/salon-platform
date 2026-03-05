@@ -5,19 +5,19 @@ export function ContactSection() {
     <section
       dir="rtl"
       id="contact"
-      className="border-t border-gray-200 py-16 sm:py-20"
+      className="border-t border-gray-200 py-12 md:py-16"
     >
-      <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <h2 className="text-center text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
+      <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
+        <h2 className="text-center text-[clamp(24px,4vw,40px)] font-bold leading-tight tracking-tight text-gray-900">
           {CONTACT_SECTION.title}
         </h2>
-        <p className="mx-auto mt-3 max-w-xl text-center text-gray-600">
+        <p className="mx-auto mt-3 max-w-2xl text-center text-[clamp(14px,2.2vw,18px)] text-slate-600">
           {CONTACT_SECTION.subtitle}
         </p>
-        <div className="mt-8 flex flex-wrap justify-center gap-4">
+        <div className="mt-8 flex justify-center">
           <a
             href="mailto:hello@caleno.co"
-            className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-6 py-3 text-base font-medium text-gray-700 hover:bg-gray-50"
+            className="inline-flex w-full items-center justify-center rounded-xl border border-gray-300 bg-white px-6 py-3 text-base font-medium text-gray-700 hover:bg-gray-50 sm:w-auto"
           >
             {CONTACT_SECTION.buttonLabel}
           </a>

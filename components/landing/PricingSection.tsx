@@ -7,21 +7,21 @@ export function PricingSection() {
     <section
       dir="rtl"
       id="pricing"
-      className="border-t border-gray-200 bg-gray-50 py-16 sm:py-20 lg:py-24"
+      className="border-t border-gray-200 bg-gray-50 py-12 md:py-20 lg:py-24"
     >
-      <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <h2 className="text-center text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
+      <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
+        <h2 className="text-center text-[clamp(24px,4vw,40px)] font-bold leading-tight tracking-tight text-gray-900">
           {PRICING_SECTION.title}
         </h2>
-        <p className="mx-auto mt-3 max-w-2xl text-center text-gray-600">
+        <p className="mx-auto mt-3 max-w-2xl text-center text-[clamp(14px,2.2vw,18px)] text-slate-600">
           {PRICING_SECTION.subtitle}
         </p>
 
-        <div className="mt-12 grid gap-8 lg:grid-cols-3 lg:gap-6">
+        <div className="mt-10 grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-6">
           {PRICING_TIERS.map((tier) => (
             <article
               key={tier.id}
-              className={`relative flex flex-col rounded-2xl border bg-white p-6 shadow-sm sm:p-8 ${
+              className={`relative mx-auto flex w-full max-w-[420px] flex-col rounded-2xl border bg-white p-6 shadow-sm md:mx-0 md:max-w-none md:p-8 ${
                 tier.highlighted
                   ? "border-gray-900 ring-2 ring-gray-900"
                   : "border-gray-200"
@@ -38,7 +38,7 @@ export function PricingSection() {
               <p className="mt-1 text-right text-sm text-gray-600">
                 {tier.description}
               </p>
-              <div className="mt-4 flex items-baseline gap-1 text-right">
+              <div className="mt-4 flex items-baseline justify-end gap-1">
                 <span className="text-3xl font-bold tracking-tight text-gray-900">
                   ${tier.price}
                 </span>
@@ -46,19 +46,19 @@ export function PricingSection() {
               </div>
               <ul className="mt-6 space-y-3 text-right" role="list">
                 {tier.features.map((feature, i) => (
-                  <li key={i} className="flex gap-3 text-sm text-gray-600">
+                  <li key={i} className="flex items-start gap-3 text-sm text-gray-600">
                     <Check className="h-5 w-5 shrink-0 text-gray-500" aria-hidden />
-                    {feature}
+                    <span>{feature}</span>
                   </li>
                 ))}
               </ul>
               <Link
                 href="/signup"
-                className={`mt-8 inline-flex w-full items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold ${
+                className={
                   tier.highlighted
-                    ? "bg-gray-900 text-white hover:bg-gray-800"
-                    : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                }`}
+                    ? "mt-8 inline-flex w-full items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold md:w-auto bg-gray-900 text-white hover:bg-gray-800"
+                    : "mt-8 inline-flex w-full items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold md:w-auto border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                }
               >
                 {PRICING_SECTION.cta}
               </Link>

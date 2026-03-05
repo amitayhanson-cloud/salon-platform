@@ -15,7 +15,7 @@ export function LandingHeader() {
       role="banner"
     >
       <nav
-        className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:h-16 sm:px-6 lg:px-8"
+        className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 md:h-16 md:px-6 lg:px-8"
         aria-label="ניווט ראשי"
       >
         <Link

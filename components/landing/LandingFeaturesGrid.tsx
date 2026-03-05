@@ -19,29 +19,29 @@ const ICON_MAP = {
 
 export function LandingFeaturesGrid() {
   return (
-    <section dir="rtl" id="features" className="py-16 sm:py-20 lg:py-24">
-      <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <h2 className="text-center text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
+    <section dir="rtl" id="features" className="py-16 md:py-20 lg:py-24">
+      <div className="mx-auto max-w-6xl px-4 md:px-6 lg:px-8">
+        <h2 className="text-center text-2xl font-bold tracking-tight text-gray-900 md:text-3xl">
           {FEATURES_SECTION.headline}
         </h2>
-        <p className="mx-auto mt-3 max-w-2xl text-center text-gray-600">
+        <p className="mx-auto mt-3 max-w-2xl text-center text-base text-gray-600 md:text-lg">
           {FEATURES_SECTION.subtitle}
         </p>
-        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-12 grid gap-4 md:grid-cols-2 md:gap-5 lg:grid-cols-3">
           {FEATURES_LIST.map((feature) => {
             const Icon = ICON_MAP[feature.icon] ?? Settings;
             return (
               <article
                 key={feature.id}
-                className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
+                className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-lg"
               >
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 text-gray-600">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gray-100 p-3 text-gray-600">
                   <Icon className="h-6 w-6" aria-hidden />
                 </div>
                 <h3 className="mt-4 text-right text-lg font-semibold text-gray-900">
                   {feature.title}
                 </h3>
-                <p className="mt-2 text-right text-gray-600">
+                <p className="mt-2 max-w-[30ch] text-right text-base text-gray-600 md:max-w-none md:text-lg">
                   {feature.description}
                 </p>
               </article>
