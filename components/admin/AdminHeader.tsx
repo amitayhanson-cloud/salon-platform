@@ -172,7 +172,7 @@ export default function AdminHeader() {
   return (
     <header
       ref={headerRef}
-      className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm"
+      className="sticky top-0 z-50 border-b border-[#E2E8F0] bg-white"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* dir=ltr so left/right zones stay fixed: left = Caleno, right = tenant+nav */}
@@ -181,7 +181,7 @@ export default function AdminHeader() {
           <div className="flex items-center shrink-0">
             <Link
               href={adminBasePath}
-              className="flex items-center h-10 md:h-12 text-[#2EC4C6] hover:text-[#22A6A8] transition-colors"
+              className="flex h-10 items-center text-[#0F172A] transition-colors hover:text-[#1E6F7C] md:h-12"
               aria-label="Caleno – פאנל ניהול"
             >
               <Image
@@ -202,7 +202,7 @@ export default function AdminHeader() {
               {canViewSite && (
                 <button
                   onClick={handleViewWebsite}
-                  className="px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400 flex items-center gap-2"
+                  className="flex items-center gap-2 rounded-lg border border-[#E2E8F0] px-4 py-2 text-sm font-medium text-[#0F172A] transition-colors hover:bg-[rgba(15,23,42,0.04)]"
                   title="צפייה באתר הציבורי"
                 >
                   <span>צפייה באתר</span>
@@ -214,10 +214,10 @@ export default function AdminHeader() {
                   {item.href ? (
                     <Link
                       href={item.href}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
                         isActive(item.href)
-                          ? "bg-caleno-100 text-caleno-700"
-                          : "text-slate-700 hover:bg-slate-100"
+                          ? "text-[#1E6F7C]"
+                          : "text-[#0F172A] hover:bg-[rgba(15,23,42,0.04)]"
                       }`}
                     >
                       {item.label}
@@ -226,10 +226,10 @@ export default function AdminHeader() {
                     <>
                       <button
                         onClick={() => toggleDropdown(item.label)}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1 ${
+                        className={`flex items-center gap-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
                           isParentActive(item)
-                            ? "bg-caleno-100 text-caleno-700"
-                            : "text-slate-700 hover:bg-slate-100"
+                            ? "text-[#1E6F7C]"
+                            : "text-[#0F172A] hover:bg-[rgba(15,23,42,0.04)]"
                         }`}
                       >
                         {item.label}
@@ -240,7 +240,7 @@ export default function AdminHeader() {
                         />
                       </button>
                       {openDropdown === item.label && item.items && (
-                        <div className="absolute top-full right-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden animate-[dropdown_0.2s_ease-out_forwards]">
+                        <div className="absolute right-0 top-full mt-1 w-48 overflow-hidden rounded-lg border border-[#E2E8F0] bg-white shadow-lg animate-[dropdown_0.2s_ease-out_forwards]">
                           {item.items.map((subItem) => (
                             <div key={subItem.href}>
                               <Link
@@ -248,8 +248,8 @@ export default function AdminHeader() {
                                 onClick={() => setOpenDropdown(null)}
                                 className={`block px-4 py-2 text-sm transition-colors ${
                                   isActive(subItem.href)
-                                    ? "bg-caleno-50 text-caleno-700 font-medium"
-                                    : "text-slate-700 hover:bg-slate-50"
+                                    ? "bg-[rgba(30,111,124,0.08)] font-medium text-[#1E6F7C]"
+                                    : "text-[#0F172A] hover:bg-[rgba(15,23,42,0.04)]"
                                 }`}
                               >
                                 {subItem.label}
@@ -259,10 +259,10 @@ export default function AdminHeader() {
                                   key={nested.href}
                                   href={nested.href}
                                   onClick={() => setOpenDropdown(null)}
-                                  className={`block px-4 py-2 pl-6 text-sm transition-colors border-t border-slate-100 ${
+                                  className={`block border-t border-[#E2E8F0] px-4 py-2 pl-6 text-sm transition-colors ${
                                     isActive(nested.href)
-                                      ? "bg-caleno-50 text-caleno-700 font-medium"
-                                      : "text-slate-700 hover:bg-slate-50"
+                                      ? "bg-[rgba(30,111,124,0.08)] font-medium text-[#1E6F7C]"
+                                      : "text-[#0F172A] hover:bg-[rgba(15,23,42,0.04)]"
                                   }`}
                                 >
                                   {nested.label}
@@ -282,7 +282,7 @@ export default function AdminHeader() {
             <div className="flex items-center gap-2 min-w-0">
               <Link
                 href={adminBasePath}
-                className="flex items-center h-9 text-slate-900 hover:text-slate-700 transition-colors"
+                className="flex h-9 items-center text-[#0F172A] transition-colors hover:text-[#1E6F7C]"
                 aria-label={siteName || "פאנל ניהול"}
               >
                 {siteLogoUrl ? (
@@ -303,7 +303,7 @@ export default function AdminHeader() {
 
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 rounded-lg text-slate-700 hover:bg-slate-100 transition-colors shrink-0"
+              className="shrink-0 rounded-lg p-2 text-[#0F172A] transition-colors hover:bg-[rgba(15,23,42,0.04)] md:hidden"
               aria-label="תפריט"
             >
               {mobileMenuOpen ? (
@@ -319,14 +319,14 @@ export default function AdminHeader() {
         {mobileMenuOpen && (
           <nav className="md:hidden pb-4 animate-[dropdown_0.2s_ease-out_forwards]">
             {menuItems.map((item) => (
-              <div key={item.label} className="border-b border-slate-100 last:border-0">
+              <div key={item.label} className="border-b border-[#E2E8F0] last:border-0">
                 {item.href ? (
                   <Link
                     href={item.href}
                     className={`block px-4 py-3 text-sm font-medium transition-colors ${
                       isActive(item.href)
-                        ? "bg-caleno-50 text-caleno-700"
-                        : "text-slate-700 hover:bg-slate-50"
+                        ? "bg-[rgba(30,111,124,0.08)] text-[#1E6F7C]"
+                        : "text-[#0F172A] hover:bg-[rgba(15,23,42,0.04)]"
                     }`}
                   >
                     {item.label}
@@ -335,10 +335,10 @@ export default function AdminHeader() {
                   <>
                     <button
                       onClick={() => toggleDropdown(item.label)}
-                      className={`w-full flex items-center justify-between px-4 py-3 text-sm font-medium transition-colors ${
+                      className={`flex w-full items-center justify-between px-4 py-3 text-sm font-medium transition-colors ${
                         isParentActive(item)
-                          ? "bg-caleno-50 text-caleno-700"
-                          : "text-slate-700 hover:bg-slate-50"
+                          ? "bg-[rgba(30,111,124,0.08)] text-[#1E6F7C]"
+                          : "text-[#0F172A] hover:bg-[rgba(15,23,42,0.04)]"
                       }`}
                     >
                       {item.label}
@@ -349,15 +349,15 @@ export default function AdminHeader() {
                       />
                     </button>
                     {openDropdown === item.label && item.items && (
-                      <div className="bg-slate-50">
+                      <div className="bg-[#F8FAFC]">
                         {item.items.map((subItem) => (
                           <div key={subItem.href}>
                             <Link
                               href={subItem.href}
                               className={`block px-8 py-2 text-sm transition-colors ${
                                 isActive(subItem.href)
-                                  ? "bg-caleno-100 text-caleno-700 font-medium"
-                                  : "text-slate-600 hover:bg-slate-100"
+                                  ? "bg-[rgba(30,111,124,0.08)] font-medium text-[#1E6F7C]"
+                                  : "text-[#64748B] hover:bg-[rgba(15,23,42,0.04)]"
                               }`}
                             >
                               {subItem.label}
@@ -368,8 +368,8 @@ export default function AdminHeader() {
                                 href={nested.href}
                                 className={`block px-12 py-2 text-sm transition-colors ${
                                   isActive(nested.href)
-                                    ? "bg-caleno-100 text-caleno-700 font-medium"
-                                    : "text-slate-600 hover:bg-slate-100"
+                                    ? "bg-[rgba(30,111,124,0.08)] font-medium text-[#1E6F7C]"
+                                    : "text-[#64748B] hover:bg-[rgba(15,23,42,0.04)]"
                                 }`}
                               >
                                 {nested.label}
@@ -384,13 +384,13 @@ export default function AdminHeader() {
               </div>
             ))}
             {canViewSite && (
-              <div className="border-b border-slate-100 pb-3 mb-3 pt-3">
+              <div className="mb-3 border-b border-[#E2E8F0] pb-3 pt-3">
                 <button
                   onClick={() => {
                     handleViewWebsite();
                     setMobileMenuOpen(false);
                   }}
-                  className="w-full px-4 py-3 text-sm font-medium transition-colors border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-lg flex items-center justify-between"
+                  className="flex w-full items-center justify-between rounded-lg border border-[#E2E8F0] px-4 py-3 text-sm font-medium text-[#0F172A] transition-colors hover:bg-[rgba(15,23,42,0.04)]"
                 >
                   <span>צפייה באתר</span>
                   <ExternalLink className="w-4 h-4" />

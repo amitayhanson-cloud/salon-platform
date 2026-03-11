@@ -106,8 +106,8 @@ export default function PreviewPage() {
 
   if (!siteId) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-right px-4">
-        <p className="text-slate-600 text-sm">siteId חסר</p>
+      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] text-right px-4">
+        <p className="text-[#64748B] text-sm">siteId חסר</p>
       </div>
     );
   }

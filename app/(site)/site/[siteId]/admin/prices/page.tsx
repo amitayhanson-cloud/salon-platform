@@ -21,8 +21,8 @@ export default function PricesRedirectPage() {
   return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-caleno-500 mx-auto mb-4"></div>
-        <p className="text-slate-600">מעביר...</p>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-caleno-deep mx-auto mb-4"></div>
+        <p className="text-[#64748B]">מעביר...</p>
       </div>
     </div>
   );

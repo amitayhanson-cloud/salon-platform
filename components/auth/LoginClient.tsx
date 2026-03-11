@@ -138,25 +138,25 @@ function LoginForm() {
   // Already logged in - show spinner while redirecting
   if (!authLoading && firebaseUser) {
     return (
-      <div dir="rtl" className="min-h-screen bg-slate-50 py-12 flex items-center justify-center">
+      <div dir="rtl" className="min-h-screen bg-[#F8FAFC] py-12 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-500 mx-auto mb-4" />
-          <p className="text-slate-600">מעביר...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1E6F7C] mx-auto mb-4" />
+          <p className="text-[#64748B]">מעביר...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div dir="rtl" className="min-h-screen bg-slate-50 py-12">
+    <div dir="rtl" className="min-h-screen bg-[#F8FAFC] py-12">
       <div className="container mx-auto px-4 max-w-md">
-        <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-6 sm:p-8 text-right">
+        <div className="bg-white rounded-2xl shadow-lg border border-[#E2E8F0] p-6 sm:p-8 text-right">
           <div className="mb-6">
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
+            <h1 className="text-2xl sm:text-3xl font-bold text-[#0F172A]">
               {isTenantLogin ? "אימות זהות" : "התחברות לחשבון"}
             </h1>
             {isTenantLogin && (
-              <p className="text-slate-600 mt-2">
+              <p className="text-[#64748B] mt-2">
                 יש לאמת את זהותך כדי להמשיך ללוח הניהול
               </p>
             )}
@@ -166,7 +166,7 @@ function LoginForm() {
             <div>
               <label
                 htmlFor="email"
-                className="block text-sm font-medium text-slate-700 mb-2"
+                className="block text-sm font-medium text-[#0F172A] mb-2"
               >
                 אימייל
               </label>
@@ -176,25 +176,33 @@ function LoginForm() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full rounded-lg border border-slate-300 px-4 py-3 text-right focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                className="w-full rounded-lg border border-[#E2E8F0] px-4 py-3 text-right focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                 placeholder="הזן את האימייל שלך"
               />
             </div>
 
             <div>
-              <label
-                htmlFor="password"
-                className="block text-sm font-medium text-slate-700 mb-2"
-              >
-                סיסמה
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label
+                  htmlFor="password"
+                  className="block text-sm font-medium text-[#0F172A]"
+                >
+                  סיסמה
+                </label>
+                <Link
+                  href="/login"
+                  className="text-sm text-[#1E6F7C] hover:text-[#155969] transition-colors"
+                >
+                  שכחתי סיסמה
+                </Link>
+              </div>
               <input
                 type="password"
                 id="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full rounded-lg border border-slate-300 px-4 py-3 text-right focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                className="w-full rounded-lg border border-[#E2E8F0] px-4 py-3 text-right focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                 placeholder="הזן את הסיסמה שלך"
               />
             </div>
@@ -208,7 +216,7 @@ function LoginForm() {
             <button
               type="submit"
               disabled={loading || googleLoading}
-              className="w-full px-6 py-3 bg-sky-500 hover:bg-sky-600 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-6 py-3 bg-[#0F172A] hover:bg-[#1E293B] text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading
                 ? isTenantLogin
@@ -223,10 +231,10 @@ function LoginForm() {
           {/* Divider */}
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-300"></div>
+              <div className="w-full border-t border-[#E2E8F0]"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white text-slate-500">או</span>
+              <span className="px-2 bg-white text-[#64748B]">או</span>
             </div>
           </div>
 
@@ -235,11 +243,11 @@ function LoginForm() {
             type="button"
             onClick={handleGoogleLogin}
             disabled={loading || googleLoading}
-            className="w-full px-6 py-3 bg-white hover:bg-slate-50 text-slate-700 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-slate-300 flex items-center justify-center gap-3"
+            className="w-full px-6 py-3 bg-white hover:bg-[rgba(15,23,42,0.04)] text-[#0F172A] rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-[#E2E8F0] flex items-center justify-center gap-3"
           >
             {googleLoading ? (
               <>
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-slate-600"></div>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#1E6F7C]"></div>
                 <span>{isTenantLogin ? "מאמת..." : "מתחבר..."}</span>
               </>
             ) : (
@@ -267,12 +275,12 @@ function LoginForm() {
             )}
           </button>
 
-          <div className="mt-6 pt-6 border-t border-slate-200 text-center">
-            <p className="text-sm text-slate-600">
+          <div className="mt-6 pt-6 border-t border-[#E2E8F0] text-center">
+            <p className="text-sm text-[#64748B]">
               אין לך חשבון?{" "}
               <Link
                 href="/signup"
-                className="text-sky-600 hover:text-sky-700 font-medium transition-colors"
+                className="text-[#1E6F7C] hover:text-[#155969] font-medium transition-colors"
               >
                 הירשם כאן
               </Link>
@@ -282,7 +290,7 @@ function LoginForm() {
           <div className="mt-4 text-center">
             <Link
               href="/"
-              className="text-sm text-sky-600 hover:text-sky-700 transition-colors"
+              className="text-sm text-[#1E6F7C] hover:text-[#155969] transition-colors"
             >
               חזרה לדף הבית
             </Link>
@@ -296,10 +304,10 @@ function LoginForm() {
 export default function LoginClient() {
   return (
     <Suspense fallback={
-      <div dir="rtl" className="min-h-screen bg-slate-50 py-12 flex items-center justify-center">
+      <div dir="rtl" className="min-h-screen bg-[#F8FAFC] py-12 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-500 mx-auto mb-4"></div>
-          <p className="text-slate-600">טוען...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1E6F7C] mx-auto mb-4"></div>
+          <p className="text-[#64748B]">טוען...</p>
         </div>
       </div>
     }>

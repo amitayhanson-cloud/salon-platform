@@ -73,20 +73,20 @@ export default function NoteIndicatorDemoPage() {
     <div className="min-h-screen p-6" dir="rtl">
       <div className="max-w-md mx-auto space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-slate-900">דמו: אינדיקטור הערות</h1>
+          <h1 className="text-xl font-bold text-[#0F172A]">דמו: אינדיקטור הערות</h1>
           <Link
             href={`${adminBasePath}/bookings`}
-            className="text-sm text-caleno-600 hover:underline"
+            className="text-sm text-caleno-deep hover:underline hover:text-caleno-ink"
           >
             ← חזרה ליומן
           </Link>
         </div>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-[#64748B]">
           גובה כל תור: 15 / 30 / 45 / 60 דקות. הנקודה האדומה אמורה להיראות באותו פרופורציה.
         </p>
         <div className="space-y-4">
           <div>
-            <p className="text-xs text-slate-500 mb-1">15 דקות (עם הערה)</p>
+            <p className="text-xs text-[#64748B] mb-1">15 דקות (עם הערה)</p>
             <MockSlot
               heightPx={1 * SLOT_HEIGHT_PX}
               label="15min"
@@ -94,7 +94,7 @@ export default function NoteIndicatorDemoPage() {
             />
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">30 דקות (ללא הערה)</p>
+            <p className="text-xs text-[#64748B] mb-1">30 דקות (ללא הערה)</p>
             <MockSlot
               heightPx={2 * SLOT_HEIGHT_PX}
               label="30min"
@@ -102,7 +102,7 @@ export default function NoteIndicatorDemoPage() {
             />
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">45 דקות (עם הערה)</p>
+            <p className="text-xs text-[#64748B] mb-1">45 דקות (עם הערה)</p>
             <MockSlot
               heightPx={3 * SLOT_HEIGHT_PX}
               label="45min"
@@ -110,7 +110,7 @@ export default function NoteIndicatorDemoPage() {
             />
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">60 דקות (ללא הערה)</p>
+            <p className="text-xs text-[#64748B] mb-1">60 דקות (ללא הערה)</p>
             <MockSlot
               heightPx={4 * SLOT_HEIGHT_PX}
               label="60min"

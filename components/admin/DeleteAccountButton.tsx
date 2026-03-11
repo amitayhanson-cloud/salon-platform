@@ -57,8 +57,8 @@ export default function DeleteAccountButton({
   return (
     <>
       {/* Default state: Only button */}
-      <div className="mt-8 pt-6 border-t border-slate-200">
-        <p className="text-sm text-slate-500 mb-3 text-right">
+      <div className="mt-8 pt-6 border-t border-[#E2E8F0]">
+        <p className="text-sm text-[#64748B] mb-3 text-right">
           פעולה זו היא לצמיתות
         </p>
         <button
@@ -81,16 +81,16 @@ export default function DeleteAccountButton({
           }}
           dir="rtl"
         >
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-xl border border-[#E2E8F0] w-full max-w-md">
             {/* Modal Header */}
-            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
-              <h3 className="text-lg font-bold text-slate-900">מחיקת חשבון</h3>
+            <div className="sticky top-0 bg-white border-b border-[#E2E8F0] px-6 py-4 flex justify-between items-center rounded-t-2xl">
+              <h3 className="text-lg font-bold text-[#0F172A]">מחיקת חשבון</h3>
               <button
                 onClick={handleClose}
-                className="p-1 hover:bg-slate-100 rounded"
+                className="p-1 hover:bg-[rgba(15,23,42,0.04)] rounded"
                 disabled={isDeleting}
               >
-                <X className="w-5 h-5 text-slate-600" />
+                <X className="w-5 h-5 text-[#64748B]" />
               </button>
             </div>
 
@@ -98,10 +98,10 @@ export default function DeleteAccountButton({
             <div className="p-6 space-y-4">
               {/* Warning content */}
               <div>
-                <p className="text-sm text-slate-600 mb-4">
+                <p className="text-sm text-[#64748B] mb-4">
                   מחיקת החשבון תמחק לצמיתות את כל הנתונים שלך, כולל:
                 </p>
-                <ul className="text-sm text-slate-600 space-y-1 mb-4 list-disc list-inside">
+                <ul className="text-sm text-[#64748B] space-y-1 mb-4 list-disc list-inside">
                   <li>חשבון המשתמש שלך</li>
                   <li>כל נתוני האתר וההגדרות</li>
                   <li>כל ההזמנות והלקוחות</li>
@@ -124,7 +124,7 @@ export default function DeleteAccountButton({
 
               {/* Confirmation input */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
+                <label className="block text-sm font-medium text-[#0F172A] mb-2">
                   הקלד "DELETE" לאישור מחיקת החשבון:
                 </label>
                 <input
@@ -132,7 +132,7 @@ export default function DeleteAccountButton({
                   value={deleteConfirmText}
                   onChange={(e) => setDeleteConfirmText(e.target.value)}
                   placeholder="DELETE"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
                   disabled={isDeleting}
                   autoFocus
                 />
@@ -147,11 +147,11 @@ export default function DeleteAccountButton({
             </div>
 
             {/* Modal Footer */}
-            <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex justify-end gap-3 rounded-b-2xl">
+            <div className="sticky bottom-0 bg-white border-t border-[#E2E8F0] px-6 py-4 flex justify-end gap-3 rounded-b-2xl">
               <button
                 onClick={handleClose}
                 disabled={isDeleting}
-                className="px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 border border-[#E2E8F0] text-[#0F172A] rounded-lg hover:bg-[rgba(15,23,42,0.04)] text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 ביטול
               </button>

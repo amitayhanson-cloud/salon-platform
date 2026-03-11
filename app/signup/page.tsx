@@ -54,13 +54,13 @@ export default function SignupPage() {
   };
 
   return (
-    <div dir="rtl" className="min-h-screen bg-slate-50 py-12">
+    <div dir="rtl" className="min-h-screen bg-[#F8FAFC] py-12">
       <div className="container mx-auto px-4 max-w-md">
-        <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-6 sm:p-8 text-right">
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">
+        <div className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-lg sm:p-8 text-right">
+          <h1 className="text-2xl sm:text-3xl font-bold text-[#0F172A] mb-2">
             הרשמה לפלטפורמה
           </h1>
-          <p className="text-slate-600 mb-6">
+          <p className="text-[#64748B] mb-6">
             צור חשבון וקבל אתר מקצועי לסלון שלך
           </p>
 
@@ -68,7 +68,7 @@ export default function SignupPage() {
             <div>
               <label
                 htmlFor="name"
-                className="block text-sm font-medium text-slate-700 mb-2"
+                className="block text-sm font-medium text-[#0F172A] mb-2"
               >
                 שם מלא / שם הסלון
               </label>
@@ -78,7 +78,7 @@ export default function SignupPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                className="w-full rounded-lg border border-slate-300 px-4 py-3 text-right focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                className="w-full rounded-lg border border-[#E2E8F0] px-4 py-3 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                 placeholder="הזן את שמך או שם הסלון"
               />
             </div>
@@ -86,7 +86,7 @@ export default function SignupPage() {
             <div>
               <label
                 htmlFor="email"
-                className="block text-sm font-medium text-slate-700 mb-2"
+                className="block text-sm font-medium text-[#0F172A] mb-2"
               >
                 אימייל
               </label>
@@ -96,7 +96,7 @@ export default function SignupPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full rounded-lg border border-slate-300 px-4 py-3 text-right focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                className="w-full rounded-lg border border-[#E2E8F0] px-4 py-3 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                 placeholder="example@email.com"
               />
             </div>
@@ -104,7 +104,7 @@ export default function SignupPage() {
             <div>
               <label
                 htmlFor="password"
-                className="block text-sm font-medium text-slate-700 mb-2"
+                className="block text-sm font-medium text-[#0F172A] mb-2"
               >
                 סיסמה
               </label>
@@ -114,7 +114,7 @@ export default function SignupPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full rounded-lg border border-slate-300 px-4 py-3 text-right focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                className="w-full rounded-lg border border-[#E2E8F0] px-4 py-3 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                 placeholder="לפחות 6 תווים"
               />
             </div>
@@ -122,7 +122,7 @@ export default function SignupPage() {
             <div>
               <label
                 htmlFor="confirmPassword"
-                className="block text-sm font-medium text-slate-700 mb-2"
+                className="block text-sm font-medium text-[#0F172A] mb-2"
               >
                 אימות סיסמה
               </label>
@@ -132,7 +132,7 @@ export default function SignupPage() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
-                className="w-full rounded-lg border border-slate-300 px-4 py-3 text-right focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
+                className="w-full rounded-lg border border-[#E2E8F0] px-4 py-3 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                 placeholder="הזן שוב את הסיסמה"
               />
             </div>
@@ -146,18 +146,18 @@ export default function SignupPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full px-6 py-3 bg-sky-500 hover:bg-sky-600 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full rounded-lg bg-caleno-ink px-6 py-3 font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? "יוצר חשבון..." : "הרשמה ויצירת אתר"}
             </button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-slate-200 text-center">
-            <p className="text-sm text-slate-600">
+          <div className="mt-6 pt-6 border-t border-[#E2E8F0] text-center">
+            <p className="text-sm text-[#64748B]">
               כבר יש לך חשבון?{" "}
               <Link
                 href="/login"
-                className="text-sky-600 hover:text-sky-700 font-medium transition-colors"
+                className="font-medium text-caleno-deep transition-colors hover:text-caleno-ink"
               >
                 התחבר כאן
               </Link>
@@ -167,7 +167,7 @@ export default function SignupPage() {
           <div className="mt-4 text-center">
             <Link
               href="/"
-              className="text-sm text-sky-600 hover:text-sky-700 transition-colors"
+              className="text-sm text-caleno-deep transition-colors hover:text-caleno-ink"
             >
               חזרה לדף הבית
             </Link>

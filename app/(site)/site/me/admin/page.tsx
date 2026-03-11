@@ -12,26 +12,21 @@ export default function AdminHomePage() {
     : "ברוך שובך";
 
   return (
-    <div dir="rtl" className="min-h-screen bg-slate-50">
-      <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+    <div dir="rtl" className="min-h-screen bg-[#F8FAFC]">
+      <div className="mx-auto max-w-4xl px-4 py-16 text-center">
         {loading ? (
-          <div
-            className="min-h-[200px] flex items-center justify-center w-full"
-            style={{
-              background: "linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%)",
-            }}
-          >
+          <div className="flex min-h-[200px] w-full items-center justify-center">
             <CalenoLoading />
           </div>
         ) : (
           <>
-            <h1 className="text-3xl font-bold text-slate-900 mb-4">
+            <h1 className="mb-4 text-3xl font-bold text-[#0F172A]">
               {welcomeMessage}
             </h1>
-            <p className="text-lg text-slate-600">
+            <p className="text-lg text-[#64748B]">
               מה תרצה לעשות היום?
             </p>
-            <p className="text-sm text-slate-500 mt-2">
+            <p className="mt-2 text-sm text-[#64748B]">
               בחר מהתפריט למעלה כדי להתחיל לנהל את האתר שלך
             </p>
           </>

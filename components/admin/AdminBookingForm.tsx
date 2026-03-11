@@ -485,13 +485,13 @@ export default function AdminBookingForm({
     `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
 
   return (
-    <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
-      <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center">
-        <h3 className="text-lg font-bold text-slate-900">
+    <div className="bg-white rounded-2xl shadow-xl border border-[#E2E8F0] w-full max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
+      <div className="sticky top-0 bg-white border-b border-[#E2E8F0] px-6 py-4 flex justify-between items-center">
+        <h3 className="text-lg font-bold text-[#0F172A]">
           {mode === "create" ? "הוספת תור" : "עריכת תור"}
         </h3>
-        <button type="button" onClick={onCancel} className="p-1 hover:bg-slate-100 rounded" aria-label="סגור">
-          <X className="w-5 h-5 text-slate-600" />
+        <button type="button" onClick={onCancel} className="p-1 hover:bg-[rgba(15,23,42,0.04)] rounded" aria-label="סגור">
+          <X className="w-5 h-5 text-[#64748B]" />
         </button>
       </div>
 
@@ -521,7 +521,7 @@ export default function AdminBookingForm({
                   setCustomerPhone("");
                 }
               }}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right bg-white"
+              className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-right bg-white focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
             >
               <option value="">— לקוח חדש —</option>
               {existingClients.map((c) => (
@@ -535,7 +535,7 @@ export default function AdminBookingForm({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">שם לקוח *</label>
+            <label className="block text-sm font-medium text-[#0F172A] mb-1">שם לקוח *</label>
             <input
               type="text"
               value={customerName}
@@ -543,12 +543,12 @@ export default function AdminBookingForm({
                 setCustomerName(e.target.value);
                 if (selectedClientId) setSelectedClientId("");
               }}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
+              className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-right focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
             />
             {errors.customerName && <p className="text-xs text-red-600 mt-0.5">{errors.customerName}</p>}
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">טלפון *</label>
+            <label className="block text-sm font-medium text-[#0F172A] mb-1">טלפון *</label>
             <input
               type="tel"
               value={customerPhone}
@@ -556,7 +556,7 @@ export default function AdminBookingForm({
                 setCustomerPhone(e.target.value);
                 if (selectedClientId) setSelectedClientId("");
               }}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
+              className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-right focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
             />
             {errors.customerPhone && <p className="text-xs text-red-600 mt-0.5">{errors.customerPhone}</p>}
           </div>
@@ -564,21 +564,21 @@ export default function AdminBookingForm({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">תאריך *</label>
+            <label className="block text-sm font-medium text-[#0F172A] mb-1">תאריך *</label>
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
+              className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-right focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
             />
             {errors.date && <p className="text-xs text-red-600 mt-0.5">{errors.date}</p>}
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">שעת התחלה (שלב 1) *</label>
+            <label className="block text-sm font-medium text-[#0F172A] mb-1">שעת התחלה (שלב 1) *</label>
             <select
               value={time}
               onChange={(e) => setTime(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
+              className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-right focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
             >
               {TIME_OPTIONS.map((t) => (
                 <option key={t} value={t}>
@@ -590,15 +590,15 @@ export default function AdminBookingForm({
           </div>
         </div>
 
-        <div className="border-t border-slate-200 pt-4">
-          <h4 className="text-sm font-semibold text-slate-800 mb-3">שלב 1</h4>
+        <div className="border-t border-[#E2E8F0] pt-4">
+          <h4 className="text-sm font-semibold text-[#0F172A] mb-3">שלב 1</h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">סוג שירות *</label>
+              <label className="block text-sm font-medium text-[#0F172A] mb-1">סוג שירות *</label>
               <select
                 value={phase1ServiceTypeId}
                 onChange={(e) => setPhase1ServiceTypeId(e.target.value)}
-                className={`w-full px-3 py-2 border rounded-lg text-right ${!phase1ServiceTypeId ? "border-red-300" : "border-slate-300"}`}
+                className={`w-full px-3 py-2 border rounded-lg text-right ${!phase1ServiceTypeId ? "border-red-300" : "border-[#E2E8F0]"}`}
               >
                 <option value="">בחר סוג שירות</option>
                 {phase1ServiceTypeOptions.map((item) => (
@@ -610,11 +610,11 @@ export default function AdminBookingForm({
               {errors.phase1Service && <p className="text-xs text-red-600 mt-0.5">{errors.phase1Service}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">מטפל *</label>
+              <label className="block text-sm font-medium text-[#0F172A] mb-1">מטפל *</label>
               <select
                 value={phase1EligibleWorkers.some((w) => w.id === phase1WorkerId) ? phase1WorkerId : (phase1EligibleWorkers[0]?.id ?? "")}
                 onChange={(e) => setPhase1WorkerId(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
+                className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-right focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
               >
                 {phase1EligibleWorkers.length === 0 ? (
                   <option value="">אין מטפלים שמבצעים שירות זה</option>
@@ -627,12 +627,12 @@ export default function AdminBookingForm({
                 )}
               </select>
               {phase1ServiceName && phase1EligibleWorkers.length < workers.length && (
-                <p className="text-xs text-slate-500 mt-0.5">מוצגים רק מטפלים שמבצעים את השירות הנבחר</p>
+                <p className="text-xs text-[#64748B] mt-0.5">מוצגים רק מטפלים שמבצעים את השירות הנבחר</p>
               )}
               {errors.phase1Worker && <p className="text-xs text-red-600 mt-0.5">{errors.phase1Worker}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">משך (דקות) *</label>
+              <label className="block text-sm font-medium text-[#0F172A] mb-1">משך (דקות) *</label>
               <DurationMinutesStepper
                 value={phase1DurationMin}
                 onChange={setPhase1DurationMin}
@@ -642,30 +642,30 @@ export default function AdminBookingForm({
               {errors.phase1Duration && <p className="text-xs text-red-600 mt-0.5">{errors.phase1Duration}</p>}
             </div>
           </div>
-          <p className="text-xs text-slate-500 mt-2">
+          <p className="text-xs text-[#64748B] mt-2">
             סיום שלב 1: {formatTime(livePreview.phase1End)}
           </p>
         </div>
 
-        <div className="border-t border-slate-200 pt-4">
+        <div className="border-t border-[#E2E8F0] pt-4">
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
               checked={phase2Enabled}
               onChange={(e) => setPhase2Enabled(e.target.checked)}
-              className="w-4 h-4 text-caleno-500 rounded"
+              className="w-4 h-4 text-caleno-deep rounded"
             />
-            <span className="text-sm font-medium text-slate-700">המשך טיפול (שלב 2)</span>
+            <span className="text-sm font-medium text-[#0F172A]">המשך טיפול (שלב 2)</span>
           </label>
           {phase2Enabled && (
             <div className="mt-3 pl-6 space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">שירות שלב 2 *</label>
+                  <label className="block text-sm font-medium text-[#0F172A] mb-1">שירות שלב 2 *</label>
                   <select
                     value={phase2ServiceName}
                     onChange={(e) => setPhase2ServiceName(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
+                    className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-right focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                   >
                     {services.map((s) => (
                       <option key={s.id} value={s.name}>
@@ -676,7 +676,7 @@ export default function AdminBookingForm({
                   {errors.phase2Service && <p className="text-xs text-red-600 mt-0.5">{errors.phase2Service}</p>}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">המתנה אחרי שלב 1 (דקות)</label>
+                  <label className="block text-sm font-medium text-[#0F172A] mb-1">המתנה אחרי שלב 1 (דקות)</label>
                   <DurationMinutesStepper
                     value={phase2WaitMin}
                     onChange={setPhase2WaitMin}
@@ -685,7 +685,7 @@ export default function AdminBookingForm({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">משך שלב 2 (דקות) *</label>
+                  <label className="block text-sm font-medium text-[#0F172A] mb-1">משך שלב 2 (דקות) *</label>
                   <DurationMinutesStepper
                     value={phase2DurationMin}
                     onChange={setPhase2DurationMin}
@@ -695,11 +695,11 @@ export default function AdminBookingForm({
                   {errors.phase2Duration && <p className="text-xs text-red-600 mt-0.5">{errors.phase2Duration}</p>}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">מטפל שלב 2 (אופציונלי)</label>
+                  <label className="block text-sm font-medium text-[#0F172A] mb-1">מטפל שלב 2 (אופציונלי)</label>
                   <select
                     value={phase2WorkerOverride ?? ""}
                     onChange={(e) => setPhase2WorkerOverride(e.target.value || null)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
+                    className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-right focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                   >
                     <option value="">אוטומטי (לפי זמינות)</option>
                     {workers.map((w) => (
@@ -709,27 +709,27 @@ export default function AdminBookingForm({
                     ))}
                   </select>
                   {phase2ResolvedWorker && !phase2WorkerOverride && (
-                    <p className="text-xs text-slate-500 mt-0.5">
+                    <p className="text-xs text-[#64748B] mt-0.5">
                       יוקצה: {phase2ResolvedWorker.name}
                     </p>
                   )}
                   {errors.phase2Worker && <p className="text-xs text-red-600 mt-0.5">{errors.phase2Worker}</p>}
                 </div>
               </div>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-[#64748B]">
                 שלב 2: {formatTime(livePreview.phase2Start)} – {formatTime(livePreview.phase2End)}
               </p>
             </div>
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-200 pt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-[#E2E8F0] pt-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">סטטוס</label>
+            <label className="block text-sm font-medium text-[#0F172A] mb-1">סטטוס</label>
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as "confirmed" | "cancelled" | "active")}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
+              className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-right focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
             >
               <option value="confirmed">מאושר</option>
               <option value="active">פעיל</option>
@@ -737,40 +737,40 @@ export default function AdminBookingForm({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">מחיר</label>
+            <label className="block text-sm font-medium text-[#0F172A] mb-1">מחיר</label>
             <input
               type="number"
               min={0}
               step={1}
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
+              className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-right focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
             />
           </div>
         </div>
 
-        <div className="border-t border-slate-200 pt-4">
-          <label className="block text-sm font-medium text-slate-700 mb-1">הערות</label>
+        <div className="border-t border-[#E2E8F0] pt-4">
+          <label className="block text-sm font-medium text-[#0F172A] mb-1">הערות</label>
           <textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
             rows={2}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
+            className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-right focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
           />
         </div>
 
-        <div className="sticky bottom-0 bg-white border-t border-slate-200 pt-4 flex justify-end gap-3">
+        <div className="sticky bottom-0 bg-white border-t border-[#E2E8F0] pt-4 flex justify-end gap-3">
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 text-sm font-medium"
+            className="px-4 py-2 border border-[#E2E8F0] text-[#0F172A] rounded-lg hover:bg-[rgba(15,23,42,0.04)] text-sm font-medium"
           >
             ביטול
           </button>
           <button
             type="submit"
             disabled={saving || hasWorkerConflict}
-            className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium"
+            className="rounded-lg bg-caleno-ink px-4 py-2 text-sm font-medium text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:opacity-50"
           >
             {saving ? "שומר..." : mode === "create" ? "הוסף תור" : "שמור שינויים"}
           </button>

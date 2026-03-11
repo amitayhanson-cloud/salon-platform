@@ -197,7 +197,7 @@ export function AdminImagesTab({
               type="button"
               onClick={handleRegenerateHero}
               disabled={savingHero}
-              className="w-full px-4 py-2 rounded-lg bg-caleno-500 hover:bg-caleno-600 disabled:bg-caleno-300 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+              className="w-full px-4 py-2 rounded-lg bg-caleno-ink hover:bg-[#1E293B] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
             >
               {savingHero ? "שומר…" : "החלף תמונת הירו"}
             </button>
@@ -241,7 +241,7 @@ export function AdminImagesTab({
               type="button"
               onClick={handleRegenerateAbout}
               disabled={savingAbout}
-              className="w-full px-4 py-2 rounded-lg bg-caleno-500 hover:bg-caleno-600 disabled:bg-caleno-300 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+              className="w-full px-4 py-2 rounded-lg bg-caleno-ink hover:bg-[#1E293B] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
             >
               {savingAbout ? "שומר…" : "החלף תמונת אודות"}
             </button>

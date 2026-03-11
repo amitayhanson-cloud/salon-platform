@@ -145,7 +145,7 @@ export function AdminColorsTab({
             type="button"
             onClick={onSave}
             disabled={isSaving || hasErrors}
-            className="px-4 py-2 rounded-lg bg-caleno-500 hover:bg-caleno-600 disabled:bg-caleno-300 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+            className="rounded-lg bg-caleno-ink px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSaving ? "שומר…" : "שמור שינויים"}
           </button>
@@ -187,7 +187,7 @@ export function AdminColorsTab({
                   className={`flex-1 rounded-lg border px-3 py-2 text-right text-sm font-mono focus:outline-none focus:ring-2 ${
                     hasError
                       ? "border-red-300 focus:ring-red-500 focus:border-red-500"
-                      : "border-slate-300 focus:ring-caleno-500 focus:border-caleno-500"
+                      : "border-slate-300 focus:ring-caleno-deep focus:border-caleno-deep"
                   }`}
                   placeholder="#RRGGBB"
                 />

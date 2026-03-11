@@ -48,10 +48,10 @@ export default function AdminLayout({
   }, [firebaseUser, authReady, router]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+    <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
       <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-500 mx-auto mb-4"></div>
-        <p className="text-slate-600">מעביר...</p>
+        <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-[#1E6F7C]"></div>
+        <p className="text-[#64748B]">מעביר...</p>
       </div>
     </div>
   );

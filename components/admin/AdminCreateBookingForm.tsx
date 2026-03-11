@@ -967,7 +967,7 @@ export default function AdminCreateBookingForm({
                     addService();
                   }
                 }}
-                className="p-4 rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 hover:bg-slate-100 hover:border-caleno-300 cursor-pointer text-center text-sm text-slate-600"
+                className="p-4 rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 hover:bg-slate-100 hover:border-caleno-deep/40 cursor-pointer text-center text-sm text-slate-600"
               >
                 <Plus className="w-6 h-6 mx-auto mb-2 text-slate-400" />
                 <p>לחץ לבחירת שירות</p>
@@ -1163,7 +1163,7 @@ export default function AdminCreateBookingForm({
                 e.stopPropagation();
                 setShowManualFlowModal(true);
               }}
-              className="inline-flex items-center gap-2 text-sm font-medium text-caleno-600 bg-caleno-50 border border-caleno-200 hover:bg-caleno-100 hover:border-caleno-300 focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:ring-offset-1 rounded-lg px-3 py-2 transition-colors"
+              className="inline-flex items-center gap-2 rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm font-medium text-[#1E6F7C] transition-colors hover:bg-[rgba(30,111,124,0.08)] focus:outline-none focus:ring-2 focus:ring-[#1E6F7C] focus:ring-[rgba(30,111,124,0.15)] focus:ring-offset-1"
             >
               <Plus className="w-4 h-4" />
               הוסף תור ידנית
@@ -1181,7 +1181,7 @@ export default function AdminCreateBookingForm({
                 type="checkbox"
                 checked={recurringEnabled}
                 onChange={(e) => setRecurringEnabled(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-300 text-caleno-500 shrink-0"
+                className="w-4 h-4 rounded border-slate-300 text-caleno-deep shrink-0"
               />
               <span className="text-sm font-medium text-slate-700">רצף</span>
             </label>
@@ -1240,7 +1240,7 @@ export default function AdminCreateBookingForm({
                   name="recurringMode"
                   checked={recurringMode === "count"}
                   onChange={() => setRecurringMode("count")}
-                  className="text-caleno-500"
+                  className="text-caleno-deep"
                 />
                 <span className="text-sm">מספר חזרות</span>
               </label>
@@ -1250,7 +1250,7 @@ export default function AdminCreateBookingForm({
                   name="recurringMode"
                   checked={recurringMode === "endDate"}
                   onChange={() => setRecurringMode("endDate")}
-                  className="text-caleno-500"
+                  className="text-caleno-deep"
                 />
                 <span className="text-sm">תאריך סיום</span>
               </label>
@@ -1326,7 +1326,7 @@ export default function AdminCreateBookingForm({
           <button
             type="submit"
             disabled={saving || (previewSlots === null && chain.length > 0)}
-            className="px-4 py-2 bg-caleno-500 text-white rounded-lg hover:bg-caleno-600 disabled:opacity-50"
+            className="rounded-lg bg-caleno-ink px-4 py-2 text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:opacity-50"
           >
             {recurringProgress
               ? `יוצר ${recurringProgress.current}/${recurringProgress.total}…`

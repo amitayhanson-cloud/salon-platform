@@ -517,8 +517,8 @@ export default function DaySchedulePage() {
     }
   }, [workers]);
 
-  // Resolve service colors and serviceId for bookings using services lookup
-  // Create lookup maps: serviceName -> color, serviceId -> color, serviceName -> serviceId (fallback when doc has no serviceId)
+  // Resolve service colors and serviceId from current services (source of truth).
+  // When a service colour is saved, calendar must show it immediately; no stale or fallback when valid color exists.
   const serviceColorLookup = useMemo(() => {
     const byName = new Map<string, string>();
     const byId = new Map<string, string>();
@@ -526,41 +526,42 @@ export default function DaySchedulePage() {
     const normalize = (s: string) => (s ?? "").trim().toLowerCase();
 
     services.forEach((service) => {
-      const color = service.color || "#3B82F6"; // Default blue
+      const raw = (service.color ?? "").trim();
+      const color = /^#[0-9A-Fa-f]{6}$/.test(raw) ? raw : "#3B82F6";
       if (service.name) {
+        const name = service.name.trim();
         byName.set(service.name, color);
+        if (name) byName.set(name, color);
+        byName.set(normalize(service.name), color);
         nameToId.set(service.name, service.id ?? service.name);
         nameToId.set(normalize(service.name), service.id ?? service.name);
       }
-      if (service.id) {
-        byId.set(service.id, color);
-      }
+      if (service.id) byId.set(service.id, color);
     });
 
     return { byName, byId, nameToId, normalize };
   }, [services]);
 
-  // Resolve colors and serviceId for bookings. Phase-2 uses THAT item's service. Fallback: resolve serviceId from serviceName when missing.
+  // Resolve color from current services first (main + follow-up). Fallback to stored booking.serviceColor only when service not found.
   const bookingsWithColors = useMemo(() => {
-    const DEFAULT_COLOR = "#3B82F6"; // Default blue
+    const DEFAULT_COLOR = "#3B82F6";
 
     return bookings.map((booking) => {
+      const serviceName = (booking.serviceName ?? "").trim();
       let serviceId = (booking as { serviceId?: string }).serviceId;
-      if (serviceId == null && booking.serviceName) {
-        const resolved = serviceColorLookup.nameToId.get(booking.serviceName) ?? serviceColorLookup.nameToId.get(serviceColorLookup.normalize(booking.serviceName));
+      if (serviceId == null && serviceName) {
+        const resolved =
+          serviceColorLookup.nameToId.get(booking.serviceName ?? "") ??
+          serviceColorLookup.nameToId.get(serviceColorLookup.normalize(booking.serviceName ?? ""));
         if (resolved) serviceId = resolved;
       }
-      const phase = (booking as { phase?: number }).phase;
       const resolvedColor =
-        phase === 2
-          ? serviceColorLookup.byName.get(booking.serviceName) ??
-            (serviceId ? serviceColorLookup.byId.get(serviceId) : null) ??
-            booking.serviceColor ??
-            DEFAULT_COLOR
-          : booking.serviceColor ||
-            serviceColorLookup.byName.get(booking.serviceName) ||
-            (serviceId ? serviceColorLookup.byId.get(serviceId) : null) ||
-            DEFAULT_COLOR;
+        serviceColorLookup.byName.get(booking.serviceName ?? "") ??
+        (serviceName ? serviceColorLookup.byName.get(serviceName) : null) ??
+        serviceColorLookup.byName.get(serviceColorLookup.normalize(booking.serviceName ?? "")) ??
+        (serviceId ? serviceColorLookup.byId.get(serviceId) : null) ??
+        (booking.serviceColor && /^#[0-9A-Fa-f]{6}$/.test(String(booking.serviceColor).trim()) ? String(booking.serviceColor).trim() : null) ??
+        DEFAULT_COLOR;
 
       return {
         ...booking,
@@ -1014,7 +1015,7 @@ export default function DaySchedulePage() {
               <button
                 type="button"
                 onClick={handleAddBooking}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium transition-colors"
               >
                 <Plus className="w-4 h-4" />
                 הוסף תור
@@ -1263,7 +1264,7 @@ export default function DaySchedulePage() {
               <button
                 type="button"
                 onClick={() => selectedBooking && handleEditBooking(selectedBooking)}
-                className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium"
+                className="px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium"
               >
                 ערוך תור
               </button>

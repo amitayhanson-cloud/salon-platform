@@ -6,7 +6,6 @@ import { useParams, useRouter, usePathname } from "next/navigation";
 // Admin routes are dynamic - they require authentication and load user data
 export const dynamic = "force-dynamic";
 import AdminHeader from "@/components/admin/AdminHeader";
-import { HeroBackground } from "@/components/ui/HeroBackground";
 import { useAuth } from "@/components/auth/AuthProvider";
 import CalenoLoading from "@/components/CalenoLoading";
 
@@ -302,12 +301,7 @@ export default function AdminLayout({
   // Show loading state
   if (authLoading || checking || initializing) {
     return (
-      <div
-        className="min-h-screen flex items-center justify-center w-full"
-        style={{
-          background: "linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%)",
-        }}
-      >
+      <div className="min-h-screen flex w-full items-center justify-center bg-[#F8FAFC]">
         <CalenoLoading />
       </div>
     );
@@ -316,13 +310,13 @@ export default function AdminLayout({
   // Show error UI if not authorized (instead of redirecting to builder)
   if (!authorized && !checking) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50" dir="rtl">
-        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-8 max-w-md text-right">
-          <h1 className="text-2xl font-bold text-slate-900 mb-4">גישה נדחתה</h1>
-          <p className="text-slate-600 mb-6">
+      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]" dir="rtl">
+        <div className="max-w-md rounded-xl border border-[#E2E8F0] bg-white p-8 text-right shadow-sm">
+          <h1 className="text-2xl font-bold text-[#0F172A] mb-4">גישה נדחתה</h1>
+          <p className="text-[#64748B] mb-6">
             {ownershipRepairError || "אין לך הרשאה לגשת לפאנל הניהול של אתר זה."}
           </p>
-          <div className="flex gap-3 flex-wrap">
+          <div className="flex flex-wrap gap-3">
             <button
               onClick={async () => {
                 try {
@@ -344,13 +338,13 @@ export default function AdminLayout({
                 }
                 router.push("/login?returnTo=admin");
               }}
-              className="px-4 py-2 bg-caleno-500 text-white rounded-lg hover:bg-caleno-600 transition-colors"
+              className="rounded-lg bg-[#0F172A] px-4 py-2 text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md"
             >
               לפאנל הניהול שלי
             </button>
             <button
               onClick={() => router.push("/")}
-              className="px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
+              className="rounded-lg border border-[#E2E8F0] px-4 py-2 text-[#0F172A] transition-colors hover:bg-[rgba(15,23,42,0.04)]"
             >
               חזרה לדף הבית
             </button>
@@ -384,12 +378,11 @@ export default function AdminLayout({
   const isDayView = typeof pathname === "string" && pathname.includes("/bookings/day");
 
   return (
-    <div className="min-h-screen relative w-full overflow-x-hidden">
-      <HeroBackground />
+    <div className="min-h-screen w-full overflow-x-hidden bg-[#F8FAFC]">
       {lazyCleanupToast && (
         <div
           role="alert"
-          className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-slate-800 text-white text-sm rounded-lg shadow-lg"
+          className="fixed top-4 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-[#0F172A] px-4 py-2 text-sm text-white shadow-lg"
         >
           {lazyCleanupToast}
         </div>

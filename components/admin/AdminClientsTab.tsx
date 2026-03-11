@@ -165,7 +165,7 @@ export default function AdminClientsTab({ siteId }: { siteId: string }) {
         <p className="text-sm text-red-600" role="alert">{saveError}</p>
       )}
       {deleteToast && (
-        <p className="text-sm text-caleno-600" role="status">{deleteToast}</p>
+        <p className="text-sm text-caleno-deep" role="status">{deleteToast}</p>
       )}
       {toast && (
         <div
@@ -185,7 +185,7 @@ export default function AdminClientsTab({ siteId }: { siteId: string }) {
             value={newName}
             onChange={(e) => { setNewName(e.target.value); setAddError(null); }}
             onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAdd())}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep"
             placeholder="למשל: VIP"
           />
         </div>
@@ -193,7 +193,7 @@ export default function AdminClientsTab({ siteId }: { siteId: string }) {
           type="button"
           onClick={handleAdd}
           disabled={saving}
-          className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+          className="rounded-lg bg-caleno-ink px-4 py-2 text-sm font-medium text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:opacity-50"
         >
           הוסף
         </button>
@@ -209,10 +209,10 @@ export default function AdminClientsTab({ siteId }: { siteId: string }) {
                   value={editValue}
                   onChange={(e) => setEditValue(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleSaveEdit())}
-                  className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                  className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                   dir="rtl"
                 />
-                <button type="button" onClick={handleSaveEdit} className="px-3 py-1 bg-caleno-500 hover:bg-caleno-600 text-white rounded text-sm">שמור</button>
+                <button type="button" onClick={handleSaveEdit} className="rounded bg-caleno-ink px-3 py-1 text-sm text-white shadow-sm hover:bg-[#1E293B]">שמור</button>
                 <button type="button" onClick={() => { setEditingIndex(null); setEditValue(""); setAddError(null); }} className="px-3 py-1 bg-slate-200 text-slate-700 rounded text-sm">ביטול</button>
               </>
             ) : (
@@ -221,7 +221,7 @@ export default function AdminClientsTab({ siteId }: { siteId: string }) {
                   {entry.labelHe}
                   {entry.isSystemDefault && <span className="text-slate-500 text-xs mr-1">(ברירת מחדל)</span>}
                 </span>
-                <button type="button" onClick={() => handleStartEdit(index)} disabled={!!entry.isSystemDefault} className="p-1.5 text-slate-500 hover:text-caleno-600 hover:bg-caleno-50 rounded disabled:opacity-50 disabled:cursor-not-allowed" aria-label="ערוך">✎</button>
+                <button type="button" onClick={() => handleStartEdit(index)} disabled={!!entry.isSystemDefault} className="rounded p-1.5 text-[#64748B] hover:bg-[rgba(15,23,42,0.04)] hover:text-[#1E6F7C] disabled:cursor-not-allowed disabled:opacity-50" aria-label="ערוך">✎</button>
                 <button
                   type="button"
                   onClick={() => handleDelete(index)}

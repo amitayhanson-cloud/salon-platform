@@ -321,7 +321,7 @@ export function InspectorPanel({
               onClick={() => setActiveTab(tab.id)}
               className={`flex-1 px-3 py-2 text-sm font-medium rounded-t transition-colors ${
                 activeTab === tab.id
-                  ? "bg-white text-caleno-600 border-b-2 border-caleno-500 -mb-px"
+                  ? "bg-white text-caleno-deep border-b-2 border-caleno-deep -mb-px"
                   : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
               }`}
             >

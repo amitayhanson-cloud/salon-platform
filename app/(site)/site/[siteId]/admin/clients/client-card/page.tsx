@@ -818,7 +818,7 @@ export default function ClientCardPage() {
                   )}
                   <button
                     onClick={handleOpenAddClientModal}
-                    className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white text-sm font-medium rounded-lg transition-colors"
+                    className="px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white text-sm font-medium rounded-lg transition-colors"
                   >
                     הוסף/י לקוח
                   </button>
@@ -832,7 +832,7 @@ export default function ClientCardPage() {
                   placeholder="חפש לפי שם או טלפון..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 text-sm"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep text-sm"
                 />
               </div>
 
@@ -856,7 +856,7 @@ export default function ClientCardPage() {
                       key={client.id}
                       className={`relative w-full text-right p-3 rounded-lg border transition-colors ${
                         selectedClientId === client.id
-                          ? "border-caleno-500 bg-caleno-50"
+                          ? "border-[#1E6F7C] bg-[rgba(30,111,124,0.08)]"
                           : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
                       }`}
                     >
@@ -867,7 +867,7 @@ export default function ClientCardPage() {
                         aria-label={selectedForDelete.has(client.id) ? "בטל בחירה" : "בחר למחיקה"}
                       >
                         {selectedForDelete.has(client.id) ? (
-                          <CheckSquare className="w-5 h-5 text-caleno-600" />
+                          <CheckSquare className="w-5 h-5 text-caleno-deep" />
                         ) : (
                           <Square className="w-5 h-5" />
                         )}
@@ -993,7 +993,7 @@ export default function ClientCardPage() {
                   <button
                     type="button"
                     onClick={() => openEditModal(selectedClient)}
-                    className="flex items-center gap-2 px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white text-sm font-medium rounded-lg"
+                    className="flex items-center gap-2 px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white text-sm font-medium rounded-lg"
                   >
                     <Pencil className="w-4 h-4" />
                     ערוך לקוח
@@ -1213,7 +1213,7 @@ export default function ClientCardPage() {
                         handleCloseAddClientModal();
                         handleClientSelect(existingClientData.phone.replace(/\s|-|\(|\)/g, ""));
                       }}
-                      className="mt-2 text-sm text-caleno-600 hover:text-caleno-700 underline"
+                      className="mt-2 text-sm text-caleno-deep hover:text-caleno-ink underline"
                     >
                       פתח לקוח קיים
                     </button>
@@ -1233,7 +1233,7 @@ export default function ClientCardPage() {
                     value={newClientForm.name}
                     onChange={handleClientFormChange}
                     required
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 text-sm"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep text-sm"
                     placeholder="לדוגמה: יוסי כהן"
                   />
                 </div>
@@ -1249,7 +1249,7 @@ export default function ClientCardPage() {
                     value={newClientForm.phone}
                     onChange={handleClientFormChange}
                     required
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 text-sm"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep text-sm"
                     placeholder="לדוגמה: 050-1234567"
                   />
                 </div>
@@ -1264,7 +1264,7 @@ export default function ClientCardPage() {
                     name="email"
                     value={newClientForm.email}
                     onChange={handleClientFormChange}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 text-sm"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep text-sm"
                     placeholder="לדוגמה: client@example.com"
                   />
                 </div>
@@ -1278,7 +1278,7 @@ export default function ClientCardPage() {
                     name="clientTypeId"
                     value={newClientForm.clientTypeId || REGULAR_CLIENT_TYPE_ID}
                     onChange={(e) => setNewClientForm((p) => ({ ...p, clientTypeId: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 text-sm"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep text-sm"
                   >
                     {clientTypes.map((t) => (
                       <option key={t.id} value={t.id}>{t.labelHe}</option>
@@ -1296,7 +1296,7 @@ export default function ClientCardPage() {
                     value={newClientForm.clientNotes}
                     onChange={handleClientFormChange}
                     rows={3}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 text-sm resize-none"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep text-sm resize-none"
                     placeholder="הערות פנימיות (אופציונלי)"
                   />
                 </div>
@@ -1312,7 +1312,7 @@ export default function ClientCardPage() {
                   <button
                     type="submit"
                     disabled={isSubmittingClient}
-                    className="flex-1 px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isSubmittingClient ? "שומר..." : "שמור"}
                   </button>
@@ -1448,7 +1448,7 @@ export default function ClientCardPage() {
                   type="button"
                   onClick={handleSaveEdit}
                   disabled={editSaving}
-                  className="flex-1 px-4 py-2 bg-caleno-500 text-white rounded-lg hover:bg-caleno-600 disabled:opacity-50"
+                  className="flex-1 px-4 py-2 bg-caleno-ink text-white rounded-lg shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:opacity-50"
                 >
                   {editSaving ? "שומר…" : "שמור"}
                 </button>

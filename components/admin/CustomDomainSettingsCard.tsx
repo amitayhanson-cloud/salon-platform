@@ -211,7 +211,7 @@ export default function CustomDomainSettingsCard({ siteId, firebaseUser }: Custo
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               placeholder="example.com"
-              className="w-full max-w-md rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-caleno-500 font-mono"
+              className="w-full max-w-md rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep focus:border-caleno-deep font-mono"
               dir="ltr"
             />
           </div>
@@ -219,7 +219,7 @@ export default function CustomDomainSettingsCard({ siteId, firebaseUser }: Custo
             type="button"
             onClick={handleConnect}
             disabled={connectLoading || !inputValue.trim()}
-            className="px-4 py-2 rounded-lg bg-caleno-500 hover:bg-caleno-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold"
+            className="rounded-lg bg-caleno-ink px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
           >
             {connectLoading ? "מתחבר…" : "חבר דומיין"}
           </button>
@@ -246,7 +246,7 @@ export default function CustomDomainSettingsCard({ siteId, firebaseUser }: Custo
                 href={`https://${domain}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-caleno-600 hover:underline text-sm"
+                className="text-caleno-deep hover:underline hover:text-caleno-ink text-sm"
               >
                 פתח את האתר
               </a>

@@ -1,5 +1,6 @@
 "use client";
 
+import { Inter } from "next/font/google";
 import { LandingHeader } from "./LandingHeader";
 import { LandingHero } from "./LandingHero";
 import { TrustSection } from "./TrustSection";
@@ -12,13 +13,23 @@ import { ContactSection } from "./ContactSection";
 import { FinalCtaSection } from "./FinalCtaSection";
 import { LandingFooter } from "./LandingFooter";
 
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  display: "swap",
+  variable: "--font-landing-inter",
+});
+
 /**
  * Full Caleno SaaS landing page: header, all sections in order, footer.
- * Uses neutral gray theme; section ids match nav anchors.
+ * Typography: Inter (weights 400/500/600), clean SaaS rhythm.
  */
 export function LandingPage() {
   return (
-    <div dir="ltr" className="min-h-screen bg-white text-caleno-ink">
+    <div
+      dir="ltr"
+      className={`${inter.variable} ${inter.className} min-h-screen bg-white text-caleno-ink antialiased`}
+    >
       <LandingHeader />
       <main>
         <LandingHero />

@@ -485,7 +485,7 @@ export default function TeamPerformancePage() {
                 onClick={() => setPeriodType("daily")}
                 className={`px-4 py-2 text-sm font-medium transition-colors ${
                   periodType === "daily"
-                    ? "bg-caleno-500 text-white"
+                    ? "bg-caleno-ink text-white"
                     : "bg-white text-slate-700 hover:bg-slate-50"
                 }`}
               >
@@ -495,7 +495,7 @@ export default function TeamPerformancePage() {
                 onClick={() => setPeriodType("monthly")}
                 className={`px-4 py-2 text-sm font-medium transition-colors ${
                   periodType === "monthly"
-                    ? "bg-caleno-500 text-white"
+                    ? "bg-caleno-ink text-white"
                     : "bg-white text-slate-700 hover:bg-slate-50"
                 }`}
               >
@@ -514,7 +514,7 @@ export default function TeamPerformancePage() {
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                 dir="ltr"
               />
             ) : (
@@ -522,7 +522,7 @@ export default function TeamPerformancePage() {
                 type="month"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                 dir="ltr"
               />
             )}

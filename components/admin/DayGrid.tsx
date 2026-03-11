@@ -16,7 +16,7 @@ import {
 } from "@/lib/calendarUtils";
 import { getBookingDisplayInfo } from "@/lib/bookingDisplay";
 import { isBookingCancelled } from "@/lib/normalizeBooking";
-import { getTextColorHex } from "@/lib/colorUtils";
+import { getServiceCalendarColors } from "@/lib/colorUtils";
 import { getDisplayStatus, getDisplayStatusKey } from "@/lib/bookingRootStatus";
 import StatusDot from "@/components/StatusDot";
 import { bookingToBlock, type RenderBlock } from "./MultiWorkerScheduleView";
@@ -317,8 +317,7 @@ export default function DayGrid({
         {/* Booking blocks: grid-row placed, same coordinate system */}
         {blocksWithGrid.map((block) => {
           const booking = bookings.find((b) => b.id === block.bookingId);
-          const backgroundColor = block.color ?? "#3B82F6";
-          const textColor = getTextColorHex(backgroundColor);
+          const { background: backgroundColor, text: textColor } = getServiceCalendarColors(block.color);
           const displayLabel = `${block.clientName} — ${block.serviceName}`;
           const statusKey = booking ? getDisplayStatusKey(booking, bookings) : null;
           const statusLabel = booking ? getDisplayStatus(booking, bookings).label : null;

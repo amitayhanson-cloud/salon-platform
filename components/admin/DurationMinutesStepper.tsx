@@ -60,7 +60,7 @@ export default function DurationMinutesStepper({
 
   return (
     <div
-      className={`inline-flex items-stretch rounded-lg border border-slate-300 bg-white overflow-hidden ${className ?? ""}`}
+      className={`inline-flex items-stretch rounded-lg border border-[#E2E8F0] bg-white overflow-hidden ${className ?? ""}`}
     >
       <input
         type="text"
@@ -71,15 +71,15 @@ export default function DurationMinutesStepper({
         aria-label={ariaLabel}
         onKeyDown={handleKeyDown}
         onPaste={(e) => e.preventDefault()}
-        className={`min-w-[3rem] flex-1 text-right px-2 py-2 border-0 bg-transparent text-slate-900 focus:outline-none focus:ring-0 ${inputClassName ?? ""}`}
+        className={`min-w-[3rem] flex-1 text-right px-2 py-2 border-0 bg-transparent text-[#0F172A] focus:outline-none focus:ring-0 ${inputClassName ?? ""}`}
         tabIndex={0}
       />
-      <div className="flex flex-col border-r border-slate-200">
+      <div className="flex flex-col border-r border-[#E2E8F0]">
         <button
           type="button"
           disabled={disabled || (max != null && displayValue >= max)}
           onClick={() => handleStep(STEP)}
-          className="flex items-center justify-center p-0.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40 disabled:pointer-events-none border-b border-slate-200"
+          className="flex items-center justify-center p-0.5 text-[#64748B] hover:bg-[rgba(15,23,42,0.04)] hover:text-[#0F172A] disabled:opacity-40 disabled:pointer-events-none border-b border-[#E2E8F0]"
           aria-label="הגדל ב-15 דקות"
         >
           <ChevronUp className="w-4 h-4" />
@@ -88,7 +88,7 @@ export default function DurationMinutesStepper({
           type="button"
           disabled={disabled || displayValue <= min}
           onClick={() => handleStep(-STEP)}
-          className="flex items-center justify-center p-0.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40 disabled:pointer-events-none"
+          className="flex items-center justify-center p-0.5 text-[#64748B] hover:bg-[rgba(15,23,42,0.04)] hover:text-[#0F172A] disabled:opacity-40 disabled:pointer-events-none"
           aria-label="הקטן ב-15 דקות"
         >
           <ChevronDown className="w-4 h-4" />

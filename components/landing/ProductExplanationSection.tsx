@@ -18,7 +18,7 @@ export function ProductExplanationSection() {
             </div>
           </div>
           <div className="text-right lg:order-2">
-            <h2 className="text-2xl font-bold tracking-tight text-caleno-ink md:text-3xl">
+            <h2 className="text-2xl font-semibold leading-tight tracking-tight text-caleno-ink md:text-3xl">
               {PRODUCT_EXPLANATION.title}
             </h2>
             <ul className="mt-6 space-y-4" role="list">
@@ -27,7 +27,7 @@ export function ProductExplanationSection() {
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-caleno-mint/30 text-caleno-brand">
                     <Check className="h-3.5 w-3.5" aria-hidden />
                   </span>
-                  <span className="max-w-[60ch] text-base text-gray-500 md:text-lg">{bullet}</span>
+                  <span className="max-w-[60ch] text-base font-normal leading-relaxed text-gray-500 md:text-lg">{bullet}</span>
                 </li>
               ))}
             </ul>

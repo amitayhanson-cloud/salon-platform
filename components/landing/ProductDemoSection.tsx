@@ -15,10 +15,10 @@ export function ProductDemoSection() {
       className="border-t border-gray-200 bg-caleno-off py-16 md:py-20 lg:py-24"
     >
       <div className="mx-auto max-w-6xl px-4 md:px-6 lg:px-8">
-        <h2 className="text-center text-2xl font-bold tracking-tight text-caleno-ink md:text-3xl">
+        <h2 className="text-center text-2xl font-semibold leading-tight tracking-tight text-caleno-ink md:text-3xl">
           {DEMO_SECTION.headline}
         </h2>
-        <p className="mx-auto mt-3 max-w-2xl text-center text-base text-gray-500 md:text-lg">
+        <p className="mx-auto mt-3 max-w-2xl text-center text-base font-medium leading-relaxed text-gray-500 md:text-lg">
           {DEMO_SECTION.subtitle}
         </p>
 
@@ -37,9 +37,9 @@ export function ProductDemoSection() {
                 aria-controls={`demo-panel-${tab.id}`}
                 id={`tab-${tab.id}`}
                 onClick={() => setActiveTab(tab.id)}
-                className={`min-h-[44px] min-w-[110px] shrink-0 whitespace-nowrap rounded-lg px-4 py-3 text-sm font-medium md:min-w-0 md:flex-1 md:px-5 ${
+                className={`min-h-[44px] min-w-[110px] shrink-0 whitespace-nowrap rounded-lg px-4 py-3 text-sm font-medium leading-normal md:min-w-0 md:flex-1 md:px-5 ${
                   activeTab === tab.id
-                    ? "bg-caleno-ink text-white shadow-sm transition-all duration-200 hover:bg-[#1F2937] hover:-translate-y-px hover:shadow-md active:translate-y-0"
+                    ? "bg-caleno-deep text-white shadow-sm transition-all duration-200 hover:bg-[#155969] hover:-translate-y-px hover:shadow-md active:translate-y-0"
                     : "text-gray-500 transition-colors hover:bg-caleno-off hover:text-caleno-ink"
                 }`}
               >
@@ -48,7 +48,7 @@ export function ProductDemoSection() {
             ))}
           </div>
 
-          <p className="mt-4 text-center text-sm text-gray-500" dir="rtl">
+          <p className="mt-4 text-center text-sm font-normal leading-relaxed text-gray-500" dir="rtl">
             תצוגה לדוגמה
           </p>
           <div

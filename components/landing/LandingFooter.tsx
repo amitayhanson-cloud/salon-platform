@@ -10,13 +10,13 @@ function FooterColumn({
 }) {
   return (
     <div className="w-full text-right">
-      <h3 className="text-sm font-semibold text-caleno-ink">{title}</h3>
+      <h3 className="text-sm font-semibold leading-tight text-caleno-ink">{title}</h3>
       <ul className="mt-4 space-y-3" role="list">
         {links.map((link) => (
           <li key={link.href + link.label}>
             <Link
               href={link.href}
-              className="text-sm text-gray-500 hover:text-caleno-ink"
+              className="text-sm font-normal leading-relaxed text-gray-500 hover:text-caleno-ink"
             >
               {link.label}
             </Link>
@@ -38,7 +38,7 @@ export function LandingFooter() {
           <FooterColumn title={FOOTER.social.title} links={FOOTER.social.links} />
         </div>
         <div className="mt-10 border-t border-gray-200 pt-8">
-          <p className="text-center text-sm text-gray-500">{FOOTER.copyright}</p>
+          <p className="text-center text-sm font-normal leading-relaxed text-gray-500">{FOOTER.copyright}</p>
         </div>
       </div>
     </footer>

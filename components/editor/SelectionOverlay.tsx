@@ -55,13 +55,13 @@ function OverlayBox({
         className={`absolute inset-0 rounded ${
           isHover
             ? "border-2 border-dashed border-caleno-400 bg-caleno-400/5"
-            : "border-2 border-caleno-500 bg-caleno-500/10"
+            : "border-2 border-caleno-deep bg-[rgba(30,111,124,0.1)]"
         }`}
         style={{ boxShadow: isHover ? "none" : "0 0 0 1px rgba(255,255,255,0.5)" }}
       />
       <div
         className={`absolute -top-7 right-0 px-2 py-1 rounded text-xs font-medium whitespace-nowrap ${
-          isHover ? "bg-slate-600 text-white" : "bg-caleno-500 text-white"
+          isHover ? "bg-slate-600 text-white" : "bg-caleno-deep text-white"
         }`}
         data-selection-badge
       >

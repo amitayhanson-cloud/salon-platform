@@ -43,18 +43,18 @@ export default function CancelBookingModal({
       }}
     >
       <div
-        className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-6 text-right"
+        className="bg-white rounded-2xl shadow-xl border border-[#E2E8F0] w-full max-w-md p-6 text-right"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-lg font-bold text-slate-900">ביטול תור</h3>
-        <p className="mt-2 text-sm text-slate-600">
+        <h3 className="text-lg font-bold text-[#0F172A]">ביטול תור</h3>
+        <p className="mt-2 text-sm text-[#64748B]">
           סיבת הביטול (אופציונלי). תישמר בתור ותוצג בדף התורים המבוטלים.
         </p>
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="הזן סיבת ביטול..."
-          className="mt-3 w-full min-h-[80px] px-3 py-2 border border-slate-200 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-transparent"
+          className="mt-3 w-full min-h-[80px] px-3 py-2 border border-[#E2E8F0] rounded-lg text-[#0F172A] placeholder:text-[#64748B] focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
           dir="rtl"
           disabled={submitting}
         />
@@ -63,7 +63,7 @@ export default function CancelBookingModal({
             type="button"
             onClick={onClose}
             disabled={submitting}
-            className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 rounded-lg border border-[#E2E8F0] text-[#0F172A] hover:bg-[rgba(15,23,42,0.04)] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             ביטול
           </button>

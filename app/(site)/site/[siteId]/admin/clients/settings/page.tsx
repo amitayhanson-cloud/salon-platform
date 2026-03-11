@@ -137,11 +137,11 @@ export default function ClientSettingsPage() {
         <div className="mb-6 flex items-center justify-between">
           <h2 className="text-xl font-bold text-slate-900">ייבוא לקוחות (CSV / Excel)</h2>
           {step === 0 ? (
-            <Link href={`${basePath}/clients/client-card`} className="text-sm text-caleno-600 hover:text-caleno-800">
+            <Link href={`${basePath}/clients/client-card`} className="text-sm text-caleno-deep hover:text-caleno-ink">
               ← כרטיס לקוח
             </Link>
           ) : (
-            <button type="button" onClick={() => setStep((s) => (s - 1) as Step)} className="text-sm text-caleno-600 hover:text-caleno-800">
+            <button type="button" onClick={() => setStep((s) => (s - 1) as Step)} className="text-sm text-caleno-deep hover:text-caleno-ink">
               ← חזרה
             </button>
           )}
@@ -156,7 +156,7 @@ export default function ClientSettingsPage() {
 
         <div className="flex gap-2 mb-8">
           {([0, 1, 2] as Step[]).map((s) => (
-            <div key={s} className={`h-2 flex-1 rounded ${step >= s ? "bg-caleno-500" : "bg-slate-200"}`} />
+            <div key={s} className={`h-2 flex-1 rounded ${step >= s ? "bg-caleno-deep" : "bg-[#E2E8F0]"}`} />
           ))}
         </div>
 
@@ -173,7 +173,7 @@ export default function ClientSettingsPage() {
               <span className="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-sm">הערות</span>
               <span className="inline-flex items-center px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-sm">סוג לקוח</span>
             </div>
-            <label className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium cursor-pointer">
+            <label className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium cursor-pointer">
               <Upload className="w-5 h-5" />
               העלה קובץ לייבוא
               <input type="file" className="hidden" accept=".csv,.xlsx,.xls" onChange={handleUpload} disabled={loading} />
@@ -206,7 +206,7 @@ export default function ClientSettingsPage() {
 
             {loading && (
               <div className="mt-4 flex items-center gap-2">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-caleno-500 border-t-transparent" />
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-caleno-deep border-t-transparent" />
                 <span className="text-sm text-slate-500">טוען קובץ…</span>
               </div>
             )}
@@ -278,7 +278,7 @@ export default function ClientSettingsPage() {
                     type="button"
                     onClick={handleExecute}
                     disabled={loading || parsedRows.length === 0}
-                    className="px-4 py-2 bg-caleno-500 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                    className="px-4 py-2 bg-caleno-ink text-white rounded-lg text-sm font-medium disabled:opacity-50"
                   >
                     {loading ? (
                       <>
@@ -339,7 +339,7 @@ export default function ClientSettingsPage() {
               </div>
             )}
             <div className="flex gap-3">
-              <Link href={`${basePath}/clients/settings`} className="px-4 py-2 bg-caleno-500 text-white rounded-lg text-sm font-medium">
+              <Link href={`${basePath}/clients/settings`} className="px-4 py-2 bg-caleno-ink text-white rounded-lg text-sm font-medium">
                 סיום
               </Link>
               <button

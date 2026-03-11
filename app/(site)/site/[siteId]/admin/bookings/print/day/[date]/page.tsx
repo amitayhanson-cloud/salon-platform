@@ -11,6 +11,8 @@ import { onSnapshotDebug } from "@/lib/firestoreListeners";
 import { clientDocRef } from "@/lib/firestoreClientRefs";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
 import { subscribeBookingSettings } from "@/lib/firestoreBookingSettings";
+import { subscribeSiteServices } from "@/lib/firestoreSiteServices";
+import type { SiteService } from "@/types/siteConfig";
 import { isBusinessClosedAllDay } from "@/lib/closedDates";
 import type { BookingSettings } from "@/types/bookingSettings";
 import { normalizeBooking, isBookingCancelled, isBookingArchived, type NormalizedBooking } from "@/lib/normalizeBooking";
@@ -53,6 +55,7 @@ export default function PrintDayPage() {
   const [workersLoaded, setWorkersLoaded] = useState(false);
   const [bookingSettings, setBookingSettings] = useState<BookingSettings | null>(null);
   const [pricingItems, setPricingItems] = useState<PricingItem[]>([]);
+  const [services, setServices] = useState<SiteService[]>([]);
 
   const validSingleWorker = workerId && workerId !== "all";
   const validAllWorkers = !workerId || workerId === "all";
@@ -84,6 +87,16 @@ export default function PrintDayPage() {
       siteId,
       (items) => setPricingItems(items),
       (e) => console.error("[PrintDay] pricing items error", e)
+    );
+  }, [siteId]);
+
+  // Subscribe to services so print view uses current service colors (same source of truth as day view)
+  useEffect(() => {
+    if (!siteId) return;
+    return subscribeSiteServices(
+      siteId,
+      (svcs) => setServices((svcs ?? []).filter((s) => s.enabled !== false)),
+      (e) => console.error("[PrintDay] services error", e)
     );
   }, [siteId]);
 
@@ -159,6 +172,42 @@ export default function PrintDayPage() {
       };
     });
   }, [bookings, pricingItems]);
+
+  const serviceColorLookup = useMemo(() => {
+    const byName = new Map<string, string>();
+    const byId = new Map<string, string>();
+    const normalize = (s: string) => (s ?? "").trim().toLowerCase();
+    services.forEach((service) => {
+      const raw = (service.color ?? "").trim();
+      const color = /^#[0-9A-Fa-f]{6}$/.test(raw) ? raw : "#3B82F6";
+      if (service.name) {
+        const name = service.name.trim();
+        byName.set(service.name, color);
+        if (name) byName.set(name, color);
+        byName.set(normalize(service.name), color);
+      }
+      if (service.id) byId.set(service.id, color);
+    });
+    return { byName, byId, normalize };
+  }, [services]);
+
+  const bookingsWithColors = useMemo(() => {
+    const DEFAULT_COLOR = "#3B82F6";
+    return bookingsWithDisplayNames.map((b) => {
+      const serviceName = ((b as { serviceName?: string }).serviceName ?? "").trim();
+      const serviceId = (b as { serviceId?: string }).serviceId;
+      const resolvedColor =
+        serviceColorLookup.byName.get((b as { serviceName?: string }).serviceName ?? "") ??
+        (serviceName ? serviceColorLookup.byName.get(serviceName) : null) ??
+        serviceColorLookup.byName.get(serviceColorLookup.normalize((b as { serviceName?: string }).serviceName ?? "")) ??
+        (serviceId ? serviceColorLookup.byId.get(serviceId) : null) ??
+        ((b as { serviceColor?: string }).serviceColor && /^#[0-9A-Fa-f]{6}$/.test(String((b as { serviceColor?: string }).serviceColor).trim())
+          ? String((b as { serviceColor?: string }).serviceColor).trim()
+          : null) ??
+        DEFAULT_COLOR;
+      return { ...b, serviceColor: resolvedColor };
+    });
+  }, [bookingsWithDisplayNames, serviceColorLookup]);
 
   const bookingsForWorker: PrintBookingRow[] = useMemo(() => {
     if (!validSingleWorker || !workerId) return [];
@@ -418,7 +467,7 @@ export default function PrintDayPage() {
             siteName={config?.salonName ?? "לוח זמנים"}
             dayISO={dateKey}
             workers={workers}
-            bookings={bookingsWithDisplayNames}
+            bookings={bookingsWithColors}
             chemicalCardsMap={chemicalCardsMap}
           />
         )}
@@ -450,8 +499,8 @@ export default function PrintDayPage() {
   }
 
   const bookingsForGrid = useMemo(
-    () => bookingsWithDisplayNames.filter((b) => b.workerId === workerId),
-    [bookingsWithDisplayNames, workerId]
+    () => bookingsWithColors.filter((b) => b.workerId === workerId),
+    [bookingsWithColors, workerId]
   );
 
   return (

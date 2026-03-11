@@ -15,23 +15,23 @@ export function LandingHero() {
         <div className="grid grid-cols-1 gap-10 lg:grid-cols-2 lg:items-center lg:gap-16">
           {/* Mobile: text first (order-1), image second (order-2). Desktop: RTL layout unchanged via lg:order-* */}
           <div className="order-1 flex flex-col items-center text-center md:items-end md:text-right lg:order-1">
-            <h1 className="mx-auto max-w-[20ch] text-3xl font-bold tracking-tight text-caleno-ink md:mx-0 md:max-w-none md:text-5xl">
+            <h1 className="mx-auto max-w-[20ch] text-3xl font-semibold leading-tight tracking-tight text-caleno-ink md:mx-0 md:max-w-none md:text-5xl">
               {headlineRest}
               {headlineHighlight && <span className="text-caleno-brand">{headlineHighlight}</span>}
             </h1>
-            <p className="mx-auto mt-4 max-w-[60ch] text-base text-gray-500 md:mt-6 md:text-lg">
+            <p className="mx-auto mt-4 max-w-[60ch] text-base font-normal leading-relaxed text-gray-500 md:mt-6 md:text-lg">
               {HERO.subheadline}
             </p>
             <div className="mt-6 flex flex-wrap justify-center gap-3 md:justify-start md:gap-4">
               <Link
                 href="/signup"
-                className="inline-flex items-center justify-center rounded-xl bg-caleno-ink px-6 py-3.5 text-base font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#1F2937] hover:-translate-y-px hover:shadow-md active:translate-y-0"
+                className="inline-flex items-center justify-center rounded-xl bg-caleno-ink px-6 py-3.5 text-base font-medium leading-normal text-white shadow-sm transition-all duration-200 hover:bg-[#1F2937] hover:-translate-y-px hover:shadow-md active:translate-y-0"
               >
                 {HERO.primaryCta}
               </Link>
               <a
                 href="#how-it-works"
-                className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-6 py-3.5 text-base font-semibold text-caleno-ink hover:bg-caleno-off"
+                className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-6 py-3.5 text-base font-medium leading-normal text-caleno-ink hover:bg-caleno-off"
               >
                 {HERO.secondaryCta}
               </a>

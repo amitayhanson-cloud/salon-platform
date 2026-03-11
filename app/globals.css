@@ -16,6 +16,9 @@
   --color-caleno-brand: #2fb7b5;
   --color-caleno-mint: #7eddd8;
   --color-caleno-off: #f6fafa;
+  /* Platform UI (signup, admin, builder) */
+  --color-caleno-bg: #f8fafc;
+  --color-caleno-border: #e2e8f0;
 }
 
 /* Prevent overscroll bounce (iOS rubber-band) and horizontal drag */

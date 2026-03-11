@@ -149,7 +149,7 @@ export default function SubdomainSettingsCard({ firebaseUser }: SubdomainSetting
           value={newSlug}
           onChange={handleInputChange}
           placeholder="example"
-          className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-caleno-500 font-mono"
+          className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep focus:border-caleno-deep font-mono"
           dir="ltr"
           maxLength={30}
         />
@@ -169,7 +169,7 @@ export default function SubdomainSettingsCard({ firebaseUser }: SubdomainSetting
           type="button"
           onClick={handleChange}
           disabled={!canChange}
-          className="px-4 py-2 rounded-lg bg-caleno-500 hover:bg-caleno-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+          className="rounded-lg bg-caleno-ink px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
         >
           {changeLoading ? "מחליף…" : "החלף תת-דומיין"}
         </button>
@@ -199,13 +199,13 @@ export default function SubdomainSettingsCard({ firebaseUser }: SubdomainSetting
 
       {/* Success + link */}
       {successUrl && (
-        <div className="p-3 bg-caleno-50 border border-caleno-200 rounded-lg text-sm">
+        <div className="rounded-lg border border-[#E2E8F0] bg-[rgba(30,111,124,0.04)] p-3 text-sm">
           <p className="font-medium text-slate-800 mb-1">התת-דומיין עודכן בהצלחה</p>
           <a
             href={`${successUrl.replace(/\/$/, "")}/admin`}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-caleno-600 hover:underline break-all"
+            className="text-caleno-deep hover:underline hover:text-caleno-ink break-all"
             dir="ltr"
           >
             {successUrl}/admin

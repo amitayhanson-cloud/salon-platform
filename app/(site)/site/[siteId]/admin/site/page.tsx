@@ -82,7 +82,7 @@ export default function AdminSitePage() {
             <button
               onClick={() => void handleSaveConfig()}
               disabled={isSaving}
-              className="px-4 py-2 rounded-lg bg-caleno-500 hover:bg-caleno-600 disabled:bg-caleno-300 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+              className="rounded-lg bg-caleno-ink px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isSaving ? "שומר…" : "שמור שינויים"}
             </button>

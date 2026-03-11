@@ -314,7 +314,7 @@ export default function AdminManualBookingModal({
           <button
             type="button"
             onClick={addRow}
-            className="w-full inline-flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-slate-300 text-slate-600 hover:border-caleno-400 hover:text-caleno-600 rounded-lg text-sm font-medium transition-colors"
+            className="w-full inline-flex items-center justify-center gap-2 py-2.5 border-2 border-dashed border-slate-300 text-slate-600 hover:border-caleno-deep/60 hover:text-caleno-deep rounded-lg text-sm font-medium transition-colors"
           >
             <Plus className="w-4 h-4" />
             הוסף עוד
@@ -335,7 +335,7 @@ export default function AdminManualBookingModal({
                 !hasClient ||
                 rows.some((r) => !r.serviceTypeKey.trim() || !r.workerId.trim())
               }
-              className="px-4 py-2 bg-caleno-500 text-white rounded-lg hover:bg-caleno-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-lg bg-caleno-ink px-4 py-2 text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saving ? "שומר…" : rows.length === 1 ? "שמור תור" : `שמור ${rows.length} תורים`}
             </button>

@@ -23,7 +23,7 @@ export default function WorkerFilter({
         onChange={(e) => {
           onWorkerChange(e.target.value);
         }}
-        className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 text-right bg-white"
+        className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep text-right bg-white"
         aria-label="בחר עובד"
       >
         <option value="all">כל העובדים</option>

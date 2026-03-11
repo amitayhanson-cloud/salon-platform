@@ -249,7 +249,7 @@ export function VisualSiteEditor({
             type="button"
             onClick={handleSave}
             disabled={isSaving}
-            className="px-4 py-2 rounded-lg bg-caleno-500 hover:bg-caleno-600 disabled:bg-caleno-300 disabled:cursor-not-allowed text-white text-sm font-semibold"
+            className="px-4 py-2 rounded-lg bg-caleno-ink text-white text-sm font-semibold shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSaving ? "שומר…" : "שמור שינויים"}
           </button>

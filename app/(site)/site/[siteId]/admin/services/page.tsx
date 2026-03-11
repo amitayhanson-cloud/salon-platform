@@ -665,7 +665,7 @@ export default function ServicesPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-slate-600 text-sm">טוען מחירים…</p>
+        <p className="text-[#64748B] text-sm">טוען מחירים…</p>
       </div>
     );
   }
@@ -676,7 +676,7 @@ export default function ServicesPage() {
         <div className="mb-6">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">שירותים</h1>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-sm text-[#64748B] mt-1">
               ניהול שירותים ומחיריהם
             </p>
           </div>
@@ -693,13 +693,13 @@ export default function ServicesPage() {
           <div className="flex justify-between items-center mb-6">
             <div>
               <h2 className="text-lg font-bold text-slate-900">שירותים ומחירים</h2>
-              <p className="text-sm text-slate-500 mt-1">
+              <p className="text-sm text-[#64748B] mt-1">
                 ניהול שירותים וסוגי המחירים שלהם
               </p>
             </div>
             <button
               onClick={() => setEditingService({ ...NEW_SERVICE_DRAFT })}
-              className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+              className="px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
               הוסף שירות
@@ -709,7 +709,7 @@ export default function ServicesPage() {
           {/* Services with nested pricing items */}
           {services.length === 0 && unassignedItems.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-slate-500 mb-4">אין שירותים עדיין</p>
+              <p className="text-[#64748B] mb-4">אין שירותים עדיין</p>
               <p className="text-sm text-slate-400">
                 לחץ על "הוסף שירות" כדי להתחיל
               </p>
@@ -728,7 +728,7 @@ export default function ServicesPage() {
                       <div className="flex items-center justify-between w-full pr-2">
                         <span className="font-semibold text-slate-900">{service.name}</span>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-slate-500">
+                          <span className="text-xs text-[#64748B]">
                             {items.length} סוגי מחיר
                           </span>
                           <button
@@ -736,7 +736,7 @@ export default function ServicesPage() {
                               e.stopPropagation();
                               handleEditService(service);
                             }}
-                            className="p-1.5 hover:bg-caleno-50 rounded text-caleno-600"
+                            className="p-1.5 hover:bg-[rgba(30,111,124,0.08)] rounded text-caleno-deep"
                             title="ערוך שירות"
                           >
                             <Pencil className="w-4 h-4" />
@@ -758,12 +758,12 @@ export default function ServicesPage() {
                     onToggle={() => toggleService(service.name)}
                   >
                     <div className="mb-4 flex justify-between items-center">
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-[#64748B]">
                         {items.length === 0 ? "אין סוגי מחיר עדיין" : `${items.length} סוגי מחיר`}
                       </span>
                       <button
                         onClick={() => handleAddItem(service.name)}
-                        className="px-3 py-1.5 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+                        className="px-3 py-1.5 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium flex items-center gap-2"
                       >
                         <Plus className="w-4 h-4" />
                         הוסף סוג שירות / מחיר
@@ -771,7 +771,7 @@ export default function ServicesPage() {
                     </div>
                     <div className="space-y-4">
                       {items.length === 0 ? (
-                        <p className="text-sm text-slate-500 text-center py-4">
+                        <p className="text-sm text-[#64748B] text-center py-4">
                           אין סוגי מחיר בשירות זה. לחץ על "הוסף סוג שירות / מחיר" כדי להתחיל.
                         </p>
                       ) : (
@@ -802,10 +802,10 @@ export default function ServicesPage() {
                                   key={item.id}
                                   className="border-b border-slate-100 hover:bg-slate-50"
                                 >
-                                  <td className="px-3 py-2 text-slate-600">
+                                  <td className="px-3 py-2 text-[#64748B]">
                                     {item.type || "-"}
                                   </td>
-                                  <td className="px-3 py-2 text-slate-600">
+                                  <td className="px-3 py-2 text-[#64748B]">
                                     {item.durationMinMinutes === item.durationMaxMinutes
                                       ? `${item.durationMinMinutes}`
                                       : `${item.durationMinMinutes}-${item.durationMaxMinutes}`}
@@ -813,11 +813,11 @@ export default function ServicesPage() {
                                   <td className="px-3 py-2 text-slate-900 font-medium">
                                     {formatPriceDisplay(item)}
                                   </td>
-                                  <td className="px-3 py-2 text-slate-600 text-xs">
+                                  <td className="px-3 py-2 text-[#64748B] text-xs">
                                     <div className="space-y-1">
                                       {item.notes && <div>{item.notes}</div>}
                                       {item.hasFollowUp && item.followUp && (
-                                        <div className="text-caleno-600 font-medium">
+                                        <div className="text-caleno-deep font-medium">
                                           המשך טיפול: {item.followUp.name}
                                           {item.followUp.text?.trim() ? ` - ${item.followUp.text.trim()}` : ""}
                                           {" "}({item.followUp.durationMinutes} דק׳)
@@ -830,7 +830,7 @@ export default function ServicesPage() {
                                     <div className="flex items-center gap-2 justify-end">
                                       <button
                                         onClick={() => handleEditItem(item)}
-                                        className="p-1.5 hover:bg-caleno-50 rounded text-caleno-600"
+                                        className="p-1.5 hover:bg-[rgba(30,111,124,0.08)] rounded text-caleno-deep"
                                         title="ערוך"
                                       >
                                         <Pencil className="w-4 h-4" />
@@ -862,7 +862,7 @@ export default function ServicesPage() {
                   title={
                     <div className="flex items-center justify-between w-full pr-2">
                       <span className="font-semibold text-slate-900">לא משויך</span>
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-[#64748B]">
                         {unassignedItems.length} פריטים
                       </span>
                     </div>
@@ -871,7 +871,7 @@ export default function ServicesPage() {
                   onToggle={() => toggleService("__UNASSIGNED__")}
                 >
                   <div className="mb-4">
-                    <p className="text-xs text-slate-500 mb-3">
+                    <p className="text-xs text-[#64748B] mb-3">
                       פריטי מחיר שלא משויכים לשירות. בחר שירות כדי לשייך אותם.
                     </p>
                   </div>
@@ -903,13 +903,13 @@ export default function ServicesPage() {
                               key={item.id}
                               className="border-b border-slate-100 hover:bg-slate-50"
                             >
-                              <td className="px-3 py-2 text-slate-600">
+                              <td className="px-3 py-2 text-[#64748B]">
                                 {item.serviceId || item.service || "-"}
                               </td>
-                              <td className="px-3 py-2 text-slate-600">
+                              <td className="px-3 py-2 text-[#64748B]">
                                 {item.type || "-"}
                               </td>
-                              <td className="px-3 py-2 text-slate-600">
+                              <td className="px-3 py-2 text-[#64748B]">
                                 {item.durationMinMinutes === item.durationMaxMinutes
                                   ? `${item.durationMinMinutes}`
                                   : `${item.durationMinMinutes}-${item.durationMaxMinutes}`}
@@ -921,7 +921,7 @@ export default function ServicesPage() {
                                 <div className="flex items-center gap-2 justify-end">
                                   <button
                                     onClick={() => handleEditItem(item)}
-                                    className="p-1.5 hover:bg-caleno-50 rounded text-caleno-600"
+                                    className="p-1.5 hover:bg-[rgba(30,111,124,0.08)] rounded text-caleno-deep"
                                     title="ערוך ושייך לשירות"
                                   >
                                     <Pencil className="w-4 h-4" />
@@ -952,14 +952,14 @@ export default function ServicesPage() {
           <div className="flex justify-between items-center mb-4">
             <div>
               <h2 className="text-lg font-bold text-slate-900">כללי Multi-Booking (קומבו)</h2>
-              <p className="text-sm text-slate-500 mt-1">
+              <p className="text-sm text-[#64748B] mt-1">
                 אם הלקוח בוחר סוגי שירותים (מחירון) → מתזמן לפי הסדר + משך והמתנה כמו ב follow-up
               </p>
             </div>
             <button
               type="button"
               onClick={() => setOpenCombos((v) => !v)}
-              className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-sm"
+              className="px-3 py-1.5 text-[#64748B] hover:bg-slate-100 rounded-lg text-sm"
             >
               {openCombos ? "הסתר" : "הצג"}
             </button>
@@ -970,14 +970,14 @@ export default function ServicesPage() {
                 <button
                   type="button"
                   onClick={openComboCreate}
-                  className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+                  className="px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium flex items-center gap-2"
                 >
                   <Plus className="w-4 h-4" />
                   הוסף קומבו
                 </button>
               </div>
               {combos.length === 0 ? (
-                <p className="text-sm text-slate-500 text-center py-6">אין קומבו. לחץ על &quot;הוסף קומבו&quot; כדי ליצור.</p>
+                <p className="text-sm text-[#64748B] text-center py-6">אין קומבו. לחץ על &quot;הוסף קומבו&quot; כדי ליצור.</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm border-collapse">
@@ -994,13 +994,13 @@ export default function ServicesPage() {
                       {combos.map((combo) => (
                         <tr key={combo.id} className="border-b border-slate-100 hover:bg-slate-50">
                           <td className="px-3 py-2 font-medium text-slate-900">{combo.name}</td>
-                          <td className="px-3 py-2 text-slate-600">
+                          <td className="px-3 py-2 text-[#64748B]">
                             {combo.triggerServiceTypeIds.map((typeId) => {
                             const p = getPricingItemById(typeId);
                             return p ? getServiceTypeLabel(p) : typeId;
                           }).join(", ")}
                           </td>
-                          <td className="px-3 py-2 text-slate-600">
+                          <td className="px-3 py-2 text-[#64748B]">
                             {combo.orderedServiceTypeIds.map((typeId) => {
                               const p = getPricingItemById(typeId);
                               return p ? getServiceTypeLabel(p) : typeId;
@@ -1012,7 +1012,7 @@ export default function ServicesPage() {
                               <button
                                 type="button"
                                 onClick={() => openComboEdit(combo)}
-                                className="p-1.5 hover:bg-caleno-50 rounded text-caleno-600"
+                                className="p-1.5 hover:bg-[rgba(30,111,124,0.08)] rounded text-caleno-deep"
                                 title="ערוך"
                               >
                                 <Pencil className="w-4 h-4" />
@@ -1047,7 +1047,7 @@ export default function ServicesPage() {
                 {comboModal.type === "create" ? "הוסף כלל Multi-Booking" : "ערוך כלל"}
               </h3>
               <button type="button" onClick={closeComboModal} className="p-1 hover:bg-slate-100 rounded">
-                <X className="w-5 h-5 text-slate-600" />
+                <X className="w-5 h-5 text-[#64748B]" />
               </button>
             </div>
             <div className="p-6 space-y-5 overflow-y-auto">
@@ -1057,7 +1057,7 @@ export default function ServicesPage() {
                   type="text"
                   value={comboForm.name}
                   onChange={(e) => setComboForm((prev) => ({ ...prev, name: e.target.value }))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                 />
               </div>
               <div>
@@ -1068,7 +1068,7 @@ export default function ServicesPage() {
                     const v = e.target.value;
                     if (v) addTriggerServiceType(v);
                   }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 mb-2"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep mb-2"
                 >
                   <option value="">הוסף סוג שירות לתנאי...</option>
                   {validPricingItemsForCombo.filter((p) => !comboForm.triggerServiceTypeIds.includes(p.id)).map((p) => (
@@ -1097,7 +1097,7 @@ export default function ServicesPage() {
                     const v = e.target.value;
                     if (v) addOrderedServiceType(v);
                   }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 mb-2"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep mb-2"
                 >
                   <option value="">הוסף סוג שירות לרצף...</option>
                   {validPricingItemsForCombo.map((p) => (
@@ -1119,11 +1119,11 @@ export default function ServicesPage() {
                           {isAutoAdded && (
                             <span className="mr-2 text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">נוסף אוטומטית</span>
                           )}
-                          <span className="mr-2 text-xs text-slate-500">({durationMin} דק׳ {waitMin > 0 ? `+ המתנה ${waitMin} דק׳` : ""})</span>
+                          <span className="mr-2 text-xs text-[#64748B]">({durationMin} דק׳ {waitMin > 0 ? `+ המתנה ${waitMin} דק׳` : ""})</span>
                         </span>
                         <div className="flex items-center gap-1">
-                          <button type="button" onClick={() => moveOrderedServiceType(i, "up")} disabled={i === 0} className="p-1 rounded text-slate-500 disabled:opacity-40" aria-label="למעלה">↑</button>
-                          <button type="button" onClick={() => moveOrderedServiceType(i, "down")} disabled={i === comboForm.orderedServiceTypeIds.length - 1} className="p-1 rounded text-slate-500 disabled:opacity-40" aria-label="למטה">↓</button>
+                          <button type="button" onClick={() => moveOrderedServiceType(i, "up")} disabled={i === 0} className="p-1 rounded text-[#64748B] disabled:opacity-40" aria-label="למעלה">↑</button>
+                          <button type="button" onClick={() => moveOrderedServiceType(i, "down")} disabled={i === comboForm.orderedServiceTypeIds.length - 1} className="p-1 rounded text-[#64748B] disabled:opacity-40" aria-label="למטה">↓</button>
                           <button type="button" onClick={() => removeOrderedServiceTypeAt(i)} className="p-1 hover:bg-red-50 rounded text-red-600" aria-label="הסר"><Trash2 className="w-4 h-4" /></button>
                         </div>
                       </li>
@@ -1133,7 +1133,7 @@ export default function ServicesPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">שלב אוטומטי בסוף (לפי שירות + משך ידני)</label>
-                <p className="text-xs text-slate-500 mb-2">בחר שירות מהרשימה והזן משך בדקות (כמו follow-up ב single booking)</p>
+                <p className="text-xs text-[#64748B] mb-2">בחר שירות מהרשימה והזן משך בדקות (כמו follow-up ב single booking)</p>
                 <div className="flex gap-2 mb-2">
                   <select
                     value=""
@@ -1141,7 +1141,7 @@ export default function ServicesPage() {
                       const v = e.target.value;
                       if (v) addAutoStep(v, 30);
                     }}
-                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                   >
                     <option value="">הוסף שירות אוטומטי...</option>
                     {services.map((s) => (
@@ -1157,14 +1157,14 @@ export default function ServicesPage() {
                         <span className="text-sm font-medium text-slate-800 flex items-center gap-2 flex-wrap">
                           <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-xs">נוסף אוטומטית</span>
                           {service ? service.name : step.serviceId}
-                          <span className="text-slate-500">(override</span>
+                          <span className="text-[#64748B]">(override</span>
                           <DurationMinutesStepper
                             value={step.durationMinutesOverride}
                             onChange={(n) => updateAutoStepDuration(i, n)}
                             min={15}
                             className="w-20 text-sm"
                           />
-                          <span className="text-slate-500">דק׳)</span>
+                          <span className="text-[#64748B]">דק׳)</span>
                         </span>
                         <button type="button" onClick={() => removeAutoStepAt(i)} className="p-1 hover:bg-red-50 rounded text-red-600" aria-label="הסר"><Trash2 className="w-4 h-4" /></button>
                       </li>
@@ -1188,7 +1188,7 @@ export default function ServicesPage() {
                   type="button"
                   onClick={saveCombo}
                   disabled={!comboForm.name.trim() || comboForm.triggerServiceTypeIds.length === 0 || comboForm.orderedServiceTypeIds.length === 0}
-                  className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   שמור
                 </button>
@@ -1208,7 +1208,7 @@ export default function ServicesPage() {
                 onClick={() => setEditingService(null)}
                 className="p-1 hover:bg-slate-100 rounded"
               >
-                <X className="w-5 h-5 text-slate-600" />
+                <X className="w-5 h-5 text-[#64748B]" />
               </button>
             </div>
 
@@ -1223,7 +1223,7 @@ export default function ServicesPage() {
                   onChange={(e) =>
                     setEditingService({ ...editingService, name: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                 />
               </div>
 
@@ -1251,10 +1251,10 @@ export default function ServicesPage() {
                       }
                     }}
                     placeholder="#3B82F6"
-                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 font-mono text-sm"
+                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep font-mono text-sm"
                   />
                 </div>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-[#64748B] mt-1">
                   צבע זה יקבע איך השירות יופיע בלוח הזמנים (ביומן התורים).
                 </p>
               </div>
@@ -1270,7 +1270,7 @@ export default function ServicesPage() {
                     setEditingService({ ...editingService, description: e.target.value.trim() || undefined })
                   }
                   placeholder="תיאור אופציונלי לשירות..."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 resize-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep resize-none"
                 />
               </div>
 
@@ -1295,7 +1295,7 @@ export default function ServicesPage() {
                       });
                     }}
                     placeholder="—"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                   />
                 </div>
                 <div>
@@ -1306,11 +1306,11 @@ export default function ServicesPage() {
                     value={editingService.duration ?? 15}
                     onChange={(n) => setEditingService({ ...editingService, duration: n })}
                     min={0}
-                    className="w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                    className="w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                   />
                 </div>
               </div>
-              <p className="text-xs text-slate-500 -mt-1">
+              <p className="text-xs text-[#64748B] -mt-1">
                 אופציונלי. יוצגו בכרטיס השירות באתר.
               </p>
 
@@ -1321,7 +1321,7 @@ export default function ServicesPage() {
                   onChange={(e) =>
                     setEditingService({ ...editingService, enabled: e.target.checked })
                   }
-                  className="w-4 h-4 text-caleno-500 rounded focus:ring-caleno-500"
+                  className="w-4 h-4 text-caleno-deep rounded focus:ring-caleno-deep"
                 />
                 <span className="text-sm text-slate-700">פעיל</span>
               </label>
@@ -1337,7 +1337,7 @@ export default function ServicesPage() {
               <button
                 onClick={handleSaveService}
                 disabled={!editingService.name.trim()}
-                className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 disabled:bg-caleno-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
+                className="px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
               >
                 שמור
               </button>
@@ -1358,7 +1358,7 @@ export default function ServicesPage() {
                 onClick={() => setEditingItem(null)}
                 className="p-1 hover:bg-slate-100 rounded"
               >
-                <X className="w-5 h-5 text-slate-600" />
+                <X className="w-5 h-5 text-[#64748B]" />
               </button>
             </div>
 
@@ -1376,7 +1376,7 @@ export default function ServicesPage() {
                       service: e.target.value, // Set service for backward compatibility
                     })
                   }
-                  className={`w-full px-3 py-2 border rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 ${
+                  className={`w-full px-3 py-2 border rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep ${
                     !editingItem.serviceId && !editingItem.service ? "border-red-300" : "border-slate-300"
                   }`}
                   required
@@ -1413,7 +1413,7 @@ export default function ServicesPage() {
                     setEditingItem({ ...editingItem, type: e.target.value || null })
                   }
                   placeholder="למשל: רבע ראש, חצי ראש"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                 />
               </div>
 
@@ -1432,7 +1432,7 @@ export default function ServicesPage() {
                     setDurationInputValue(String(n));
                   }}
                   min={15}
-                  className="w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                  className="w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                 />
               </div>
 
@@ -1490,7 +1490,7 @@ export default function ServicesPage() {
                     }
                   }}
                   placeholder="0"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                 />
                 <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-1">
                   שימו לב: מחיר שאינו מספר בודד (לדוגמה 50-100) ייחשב כ-0 בדוחות שכר. אלא אם יוגדר מחיר אישי לכל לקוח
@@ -1508,7 +1508,7 @@ export default function ServicesPage() {
                   }
                   rows={3}
                   placeholder="הערות נוספות..."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 resize-none"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep resize-none"
                 />
               </div>
 
@@ -1535,7 +1535,7 @@ export default function ServicesPage() {
                       }
                       setError(null);
                     }}
-                    className="w-4 h-4 text-caleno-500 rounded focus:ring-caleno-500"
+                    className="w-4 h-4 text-caleno-deep rounded focus:ring-caleno-deep"
                   />
                   <span className="text-sm font-medium text-slate-700">המשך טיפול</span>
                 </label>
@@ -1559,7 +1559,7 @@ export default function ServicesPage() {
                               : { name: v, serviceId: svc?.id, durationMinutes: 15, waitMinutes: 0 },
                           });
                         }}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 bg-white"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep bg-white"
                       >
                         <option value="">בחר שירות...</option>
                         {(() => {
@@ -1596,7 +1596,7 @@ export default function ServicesPage() {
                           });
                         }}
                         min={0}
-                        className="w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                        className="w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                       />
                     </div>
                     <div>
@@ -1615,7 +1615,7 @@ export default function ServicesPage() {
                           });
                         }}
                         min={0}
-                        className="w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                        className="w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                       />
                     </div>
                     <div>
@@ -1637,9 +1637,9 @@ export default function ServicesPage() {
                         }}
                         maxLength={FOLLOWUP_TEXT_MAX_LENGTH}
                         placeholder="למשל: קרטין"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-500 bg-white"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep bg-white"
                       />
-                      <p className="text-xs text-slate-500 mt-1">
+                      <p className="text-xs text-[#64748B] mt-1">
                         יוצג כ: המשך טיפול: [שירות] - [טקסט]. מקסימום {FOLLOWUP_TEXT_MAX_LENGTH} תווים.
                       </p>
                     </div>
@@ -1692,8 +1692,8 @@ export default function ServicesPage() {
                 
                 // Explicit button classes - no conditional logic in className
                 const buttonClasses = isSaveDisabled
-                  ? "px-4 py-2 bg-caleno-300 text-white rounded-lg text-sm font-medium cursor-not-allowed opacity-75"
-                  : "px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium cursor-pointer opacity-100 transition-colors";
+                  ? "px-4 py-2 bg-caleno-ink/60 text-white rounded-lg text-sm font-medium cursor-not-allowed opacity-75"
+                  : "px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium cursor-pointer opacity-100 transition-colors";
                 
                 // Create a safe click handler that double-checks disabled state using current editingItem
                 const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -1761,7 +1761,7 @@ export default function ServicesPage() {
               <button
                 type="button"
                 onClick={() => setShowNewServiceReminderModal(false)}
-                className="px-4 py-2 rounded-lg bg-caleno-500 text-white hover:bg-caleno-600"
+                className="px-4 py-2 rounded-lg bg-caleno-ink text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md"
               >
                 סגור
               </button>

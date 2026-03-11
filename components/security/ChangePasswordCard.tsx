@@ -308,7 +308,7 @@ export default function ChangePasswordCard({
         <button
           type="submit"
           disabled={!canSubmit}
-          className="px-4 py-2 rounded-lg bg-caleno-500 hover:bg-caleno-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
+          className="px-4 py-2 rounded-lg bg-caleno-ink text-white text-sm font-medium shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:bg-slate-300 disabled:cursor-not-allowed"
         >
           {loading ? "מעדכן…" : "עדכן סיסמה"}
         </button>

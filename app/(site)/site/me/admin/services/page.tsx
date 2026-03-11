@@ -479,8 +479,8 @@ export default function ServicesPage() {
   // Wait for auth to be ready before rendering
   if (!authReady || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <p className="text-slate-600 text-sm">טוען מחירים…</p>
+      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
+        <p className="text-[#64748B] text-sm">טוען מחירים…</p>
       </div>
     );
   }
@@ -488,22 +488,22 @@ export default function ServicesPage() {
   // If no user after auth is ready, show error
   if (!userId) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
         <div className="text-center">
-          <p className="text-slate-900 font-semibold mb-2">יש להתחבר מחדש</p>
-          <p className="text-sm text-slate-600">נדרשת התחברות כדי לגשת לדף זה</p>
+          <p className="text-[#0F172A] font-semibold mb-2">יש להתחבר מחדש</p>
+          <p className="text-sm text-[#64748B]">נדרשת התחברות כדי לגשת לדף זה</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div dir="rtl" className="min-h-screen bg-slate-50">
+    <div dir="rtl" className="min-h-screen bg-[#F8FAFC]">
       <div className="max-w-7xl mx-auto px-4 py-6">
         <div className="mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">שירותים</h1>
-            <p className="text-sm text-slate-500 mt-1">
+            <h1 className="text-2xl font-bold text-[#0F172A]">שירותים</h1>
+            <p className="text-sm text-[#64748B] mt-1">
               ניהול שירותים ומחיריהם
             </p>
           </div>
@@ -515,7 +515,7 @@ export default function ServicesPage() {
           </div>
         )}
 
-        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
+        <div className="bg-white rounded-lg shadow-sm border border-[#E2E8F0] p-6">
           <AdminTabs
             tabs={[
               { key: "services", label: "שירותים" },
@@ -531,10 +531,10 @@ export default function ServicesPage() {
             {activeTab === "services" && (
               <div>
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-bold text-slate-900">שירותים</h2>
+            <h2 className="text-lg font-bold text-[#0F172A]">שירותים</h2>
             <button
               onClick={() => setShowAddService(true)}
-              className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+              className="px-4 py-2 bg-[#0F172A] hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
               הוסף שירות
@@ -542,14 +542,14 @@ export default function ServicesPage() {
           </div>
 
           {showAddService && (
-            <div className="mb-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <div className="mb-4 p-4 bg-[#F8FAFC] rounded-lg border border-[#E2E8F0]">
               <div className="flex items-center gap-3">
                 <input
                   type="text"
                   value={newServiceName}
                   onChange={(e) => setNewServiceName(e.target.value)}
                   placeholder="שם השירות"
-                  className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className="flex-1 px-3 py-2 border border-[#E2E8F0] rounded-lg text-right focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       handleAddService();
@@ -561,7 +561,7 @@ export default function ServicesPage() {
                 />
                 <button
                   onClick={handleAddService}
-                  className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium"
+                  className="px-4 py-2 bg-[#0F172A] hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium"
                 >
                   שמור
                 </button>
@@ -570,7 +570,7 @@ export default function ServicesPage() {
                     setShowAddService(false);
                     setNewServiceName("");
                   }}
-                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm font-medium"
+                  className="px-4 py-2 bg-[#E2E8F0] hover:bg-[#CBD5E1] text-[#0F172A] rounded-lg text-sm font-medium"
                 >
                   ביטול
                 </button>
@@ -580,8 +580,8 @@ export default function ServicesPage() {
 
           {services.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-slate-500 mb-4">אין שירותים עדיין</p>
-              <p className="text-sm text-slate-400">
+              <p className="text-[#64748B] mb-4">אין שירותים עדיין</p>
+              <p className="text-sm text-[#64748B]">
                 לחץ על "הוסף שירות" כדי להתחיל
               </p>
             </div>
@@ -590,13 +590,13 @@ export default function ServicesPage() {
               {services.map((service) => (
                 <div
                   key={service.id}
-                  className="flex items-center justify-between p-3 border border-slate-200 rounded-lg hover:border-slate-300 transition-colors"
+                  className="flex items-center justify-between p-3 border border-[#E2E8F0] rounded-lg hover:border-[#E2E8F0] transition-colors"
                 >
-                  <span className="text-sm font-medium text-slate-900">{service.name}</span>
+                  <span className="text-sm font-medium text-[#0F172A]">{service.name}</span>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handleEditService(service)}
-                      className="p-1.5 hover:bg-sky-50 rounded text-sky-600"
+                      className="p-1.5 hover:bg-[rgba(30,111,124,0.08)] rounded text-[#1E6F7C]"
                       title="ערוך"
                     >
                       <Pencil className="w-4 h-4" />
@@ -621,8 +621,8 @@ export default function ServicesPage() {
               <div>
           {activeServiceIds.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-slate-500 mb-4">אין פריטי מחיר עדיין</p>
-              <p className="text-sm text-slate-400">
+              <p className="text-[#64748B] mb-4">אין פריטי מחיר עדיין</p>
+              <p className="text-sm text-[#64748B]">
                 בחר שירות מהרשימה למעלה כדי להוסיף פריט מחיר
               </p>
             </div>
@@ -640,13 +640,13 @@ export default function ServicesPage() {
                     onToggle={() => toggleService(serviceId)}
                   >
                     <div className="mb-4 flex justify-between items-center">
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-[#64748B]">
                         {items.length} פריטים
                       </span>
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleAddItem(serviceId)}
-                          className="px-3 py-1.5 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+                          className="px-3 py-1.5 bg-[#0F172A] hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium flex items-center gap-2"
                         >
                           <Plus className="w-4 h-4" />
                           הוסף פריט
@@ -655,30 +655,30 @@ export default function ServicesPage() {
                     </div>
                     <div className="space-y-4">
                       {items.length === 0 ? (
-                        <p className="text-sm text-slate-500 text-center py-4">
+                        <p className="text-sm text-[#64748B] text-center py-4">
                           אין פריטים בשירות זה
                         </p>
                       ) : (
                         <div className="overflow-x-auto">
                           <table className="w-full text-sm border-collapse">
                             <thead>
-                              <tr className="bg-slate-50 border-b border-slate-200">
-                                <th className="px-3 py-2 text-right font-semibold text-slate-700">
+                              <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
+                                <th className="px-3 py-2 text-right font-semibold text-[#0F172A]">
                                   סוג
                                 </th>
-                                <th className="px-3 py-2 text-right font-semibold text-slate-700">
+                                <th className="px-3 py-2 text-right font-semibold text-[#0F172A]">
                                   משך (דקות)
                                 </th>
-                                <th className="px-3 py-2 text-right font-semibold text-slate-700">
+                                <th className="px-3 py-2 text-right font-semibold text-[#0F172A]">
                                   המתנה (דקות)
                                 </th>
-                                <th className="px-3 py-2 text-right font-semibold text-slate-700">
+                                <th className="px-3 py-2 text-right font-semibold text-[#0F172A]">
                                   מחיר
                                 </th>
-                                <th className="px-3 py-2 text-right font-semibold text-slate-700">
+                                <th className="px-3 py-2 text-right font-semibold text-[#0F172A]">
                                   הערות
                                 </th>
-                                <th className="px-3 py-2 text-right font-semibold text-slate-700">
+                                <th className="px-3 py-2 text-right font-semibold text-[#0F172A]">
                                   פעולות
                                 </th>
                               </tr>
@@ -687,31 +687,31 @@ export default function ServicesPage() {
                               {items.map((item) => (
                                 <tr
                                   key={item.id}
-                                  className="border-b border-slate-100 hover:bg-slate-50"
+                                  className="border-b border-[#E2E8F0] hover:bg-[#F8FAFC]"
                                 >
-                                  <td className="px-3 py-2 text-slate-600">
+                                  <td className="px-3 py-2 text-[#64748B]">
                                     {item.type || "-"}
                                   </td>
-                                  <td className="px-3 py-2 text-slate-600">
+                                  <td className="px-3 py-2 text-[#64748B]">
                                     {item.durationMinMinutes === item.durationMaxMinutes
                                       ? `${item.durationMinMinutes}`
                                       : `${item.durationMinMinutes}-${item.durationMaxMinutes}`}
                                   </td>
-                                  <td className="px-3 py-2 text-slate-600">
+                                  <td className="px-3 py-2 text-[#64748B]">
                                     {/* Backwards compatibility: convert range to single for display */}
                                     {(() => {
                                       const waitTime = item.waitMinutes ?? item.waitTimeMin ?? item.waitTimeMax;
                                       return waitTime !== undefined && waitTime !== null ? `${waitTime}` : "-";
                                     })()}
                                   </td>
-                                  <td className="px-3 py-2 text-slate-900 font-medium">
+                                  <td className="px-3 py-2 text-[#0F172A] font-medium">
                                     {formatPriceDisplay(item)}
                                   </td>
-                                  <td className="px-3 py-2 text-slate-600 text-xs">
+                                  <td className="px-3 py-2 text-[#64748B] text-xs">
                                     <div className="space-y-1">
                                       {item.notes && <div>{item.notes}</div>}
                                       {item.hasFollowUp && item.followUpServiceId && item.followUpDurationMinutes && (
-                                        <div className="text-sky-600 font-medium">
+                                        <div className="text-[#1E6F7C] font-medium">
                                           המשך טיפול: {item.followUpServiceId} ({item.followUpDurationMinutes} דק׳)
                                         </div>
                                       )}
@@ -721,7 +721,7 @@ export default function ServicesPage() {
                                     <div className="flex items-center gap-2 justify-end">
                                       <button
                                         onClick={() => handleEditItem(item)}
-                                        className="p-1.5 hover:bg-sky-50 rounded text-sky-600"
+                                        className="p-1.5 hover:bg-[rgba(30,111,124,0.08)] rounded text-[#1E6F7C]"
                                         title="ערוך"
                                       >
                                         <Pencil className="w-4 h-4" />
@@ -756,20 +756,20 @@ export default function ServicesPage() {
       {/* Edit Service Modal */}
       {editingService && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" dir="rtl">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md">
-            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-slate-900">ערוך שירות</h3>
+          <div className="bg-white rounded-2xl shadow-xl border border-[#E2E8F0] w-full max-w-md">
+            <div className="sticky top-0 bg-white border-b border-[#E2E8F0] px-6 py-4 flex justify-between items-center">
+              <h3 className="text-lg font-bold text-[#0F172A]">ערוך שירות</h3>
               <button
                 onClick={() => setEditingService(null)}
                 className="p-1 hover:bg-slate-100 rounded"
               >
-                <X className="w-5 h-5 text-slate-600" />
+                <X className="w-5 h-5 text-[#64748B]" />
               </button>
             </div>
 
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-[#0F172A] mb-1">
                   שם השירות *
                 </label>
                 <input
@@ -778,7 +778,7 @@ export default function ServicesPage() {
                   onChange={(e) =>
                     setEditingService({ ...editingService, name: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-right focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                 />
               </div>
 
@@ -789,23 +789,23 @@ export default function ServicesPage() {
                   onChange={(e) =>
                     setEditingService({ ...editingService, enabled: e.target.checked })
                   }
-                  className="w-4 h-4 text-sky-500 rounded focus:ring-sky-500"
+                  className="w-4 h-4 text-[#1E6F7C] rounded focus:ring-[#1E6F7C] focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                 />
-                <span className="text-sm text-slate-700">פעיל</span>
+                <span className="text-sm text-[#0F172A]">פעיל</span>
               </label>
             </div>
 
-            <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex justify-end gap-3">
+            <div className="sticky bottom-0 bg-white border-t border-[#E2E8F0] px-6 py-4 flex justify-end gap-3">
               <button
                 onClick={() => setEditingService(null)}
-                className="px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 text-sm font-medium"
+                className="px-4 py-2 border border-[#E2E8F0] text-[#0F172A] rounded-lg hover:bg-[#F8FAFC] text-sm font-medium"
               >
                 ביטול
               </button>
               <button
                 onClick={handleSaveService}
                 disabled={!editingService.name.trim()}
-                className="px-4 py-2 bg-sky-500 hover:bg-sky-600 disabled:bg-sky-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
+                className="px-4 py-2 bg-[#0F172A] hover:bg-[#1E293B] disabled:bg-[#1E6F7C]/50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
               >
                 שמור
               </button>
@@ -817,22 +817,22 @@ export default function ServicesPage() {
       {/* Edit Item Modal */}
       {editingItem && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" dir="rtl">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-slate-900">
+          <div className="bg-white rounded-2xl shadow-xl border border-[#E2E8F0] w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-[#E2E8F0] px-6 py-4 flex justify-between items-center">
+              <h3 className="text-lg font-bold text-[#0F172A]">
                 {editingItem.id === "new" ? "הוסף פריט מחיר" : "ערוך פריט מחיר"}
               </h3>
               <button
                 onClick={() => setEditingItem(null)}
                 className="p-1 hover:bg-slate-100 rounded"
               >
-                <X className="w-5 h-5 text-slate-600" />
+                <X className="w-5 h-5 text-[#64748B]" />
               </button>
             </div>
 
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-[#0F172A] mb-1">
                   שירות *
                 </label>
                   <select
@@ -844,8 +844,8 @@ export default function ServicesPage() {
                       service: e.target.value, // Set service for backward compatibility
                     })
                   }
-                  className={`w-full px-3 py-2 border rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500 ${
-                    !editingItem.serviceId && !editingItem.service ? "border-red-300" : "border-slate-300"
+                  className={`w-full px-3 py-2 border rounded-lg text-right focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)] ${
+                    !editingItem.serviceId && !editingItem.service ? "border-red-300" : "border-[#E2E8F0]"
                   }`}
                   required
                 >
@@ -871,7 +871,7 @@ export default function ServicesPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-[#0F172A] mb-1">
                   סוג (אופציונלי)
                 </label>
                 <input
@@ -881,12 +881,12 @@ export default function ServicesPage() {
                     setEditingItem({ ...editingItem, type: e.target.value || null })
                   }
                   placeholder="למשל: רבע ראש, חצי ראש"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-right focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-[#0F172A] mb-1">
                   משך השירות (בדקות) *
                 </label>
                 <DurationMinutesStepper
@@ -900,12 +900,12 @@ export default function ServicesPage() {
                     setDurationInputValue(String(n));
                   }}
                   min={15}
-                  className="w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className="w-full px-3 py-2 focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-[#0F172A] mb-1">
                   זמן המתנה (דקות)
                 </label>
                 <input
@@ -950,12 +950,12 @@ export default function ServicesPage() {
                     }
                   }}
                   placeholder="0"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-right focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-[#0F172A] mb-1">
                   מחיר
                 </label>
                 <input
@@ -1008,7 +1008,7 @@ export default function ServicesPage() {
                     }
                   }}
                   placeholder="0"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-right focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                 />
                 <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-1">
                   שימו לב: מחיר שאינו מספר בודד (לדוגמה 50-100) ייחשב כ-0 בדוחות שכר. אלא אם יוגדר מחיר אישי לכל לקוח
@@ -1016,7 +1016,7 @@ export default function ServicesPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-[#0F172A] mb-1">
                   הערות (אופציונלי)
                 </label>
                 <textarea
@@ -1026,12 +1026,12 @@ export default function ServicesPage() {
                   }
                   rows={3}
                   placeholder="הערות נוספות..."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500 resize-none"
+                  className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-right focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)] resize-none"
                 />
               </div>
 
               {/* Follow-up Service Section */}
-              <div className="border-t border-slate-200 pt-4">
+              <div className="border-t border-[#E2E8F0] pt-4">
                 <label className="flex items-center gap-2 mb-4">
                   <input
                     type="checkbox"
@@ -1071,15 +1071,15 @@ export default function ServicesPage() {
                       // This ensures the Save button state is recalculated immediately
                       setError(null);
                     }}
-                    className="w-4 h-4 text-sky-500 rounded focus:ring-sky-500"
+                    className="w-4 h-4 text-[#1E6F7C] rounded focus:ring-[#1E6F7C] focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                   />
-                  <span className="text-sm font-medium text-slate-700">המשך טיפול</span>
+                  <span className="text-sm font-medium text-[#0F172A]">המשך טיפול</span>
                 </label>
 
                 {editingItem.hasFollowUp && (
-                  <div className="space-y-4 pr-6 bg-slate-50 p-4 rounded-lg">
+                  <div className="space-y-4 pr-6 bg-[#F8FAFC] p-4 rounded-lg">
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                      <label className="block text-sm font-medium text-[#0F172A] mb-1">
                         שירות המשך *
                       </label>
                       <select
@@ -1090,7 +1090,7 @@ export default function ServicesPage() {
                             followUpServiceId: e.target.value || null,
                           })
                         }
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-right focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                       >
                         <option value="">בחר שירות</option>
                         {activeServiceIds.map((serviceName) => (
@@ -1102,7 +1102,7 @@ export default function ServicesPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                      <label className="block text-sm font-medium text-[#0F172A] mb-1">
                         משך המשך (דקות) *
                       </label>
                       <input
@@ -1152,7 +1152,7 @@ export default function ServicesPage() {
                           }
                         }}
                         placeholder="0"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-right focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                       />
                     </div>
                   </div>
@@ -1160,10 +1160,10 @@ export default function ServicesPage() {
               </div>
             </div>
 
-            <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex justify-end gap-3">
+            <div className="sticky bottom-0 bg-white border-t border-[#E2E8F0] px-6 py-4 flex justify-end gap-3">
               <button
                 onClick={() => setEditingItem(null)}
-                className="px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 text-sm font-medium"
+                className="px-4 py-2 border border-[#E2E8F0] text-[#0F172A] rounded-lg hover:bg-[#F8FAFC] text-sm font-medium"
               >
                 ביטול
               </button>
@@ -1207,8 +1207,8 @@ export default function ServicesPage() {
                 
                 // Explicit button classes - no conditional logic in className
                 const buttonClasses = isSaveDisabled
-                  ? "px-4 py-2 bg-sky-300 text-white rounded-lg text-sm font-medium cursor-not-allowed opacity-75"
-                  : "px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-medium cursor-pointer opacity-100 transition-colors";
+                  ? "px-4 py-2 bg-[#1E6F7C]/50 text-white rounded-lg text-sm font-medium cursor-not-allowed opacity-75"
+                  : "px-4 py-2 bg-[#0F172A] hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium cursor-pointer opacity-100 transition-colors";
                 
                 // Create a safe click handler that double-checks disabled state using current editingItem
                 const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {

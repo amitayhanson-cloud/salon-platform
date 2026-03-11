@@ -151,7 +151,7 @@ export function ImagePickerModal({
               onClick={() => setActiveTab("upload")}
               className={`flex-1 min-w-0 px-2 py-2.5 text-sm font-medium rounded-t-lg transition-colors ${
                 activeTab === "upload"
-                  ? "bg-white text-caleno-600 border-b-2 border-caleno-500 -mb-px"
+                  ? "bg-white text-caleno-deep border-b-2 border-caleno-deep -mb-px"
                   : "text-slate-500 hover:bg-slate-50"
               }`}
             >
@@ -162,7 +162,7 @@ export function ImagePickerModal({
               onClick={() => setActiveTab("platform")}
               className={`flex-1 min-w-0 px-2 py-2.5 text-sm font-medium rounded-t-lg transition-colors ${
                 activeTab === "platform"
-                  ? "bg-white text-caleno-600 border-b-2 border-caleno-500 -mb-px"
+                  ? "bg-white text-caleno-deep border-b-2 border-caleno-deep -mb-px"
                   : "text-slate-500 hover:bg-slate-50"
               }`}
             >
@@ -197,7 +197,7 @@ export function ImagePickerModal({
                 type="button"
                 onClick={handleUpload}
                 disabled={uploading || !selectedFile}
-                className="w-full px-4 py-2.5 rounded-lg bg-caleno-600 hover:bg-caleno-700 text-white font-medium disabled:opacity-50 disabled:pointer-events-none"
+                className="w-full px-4 py-2.5 rounded-lg bg-caleno-ink text-white font-medium shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:opacity-50 disabled:pointer-events-none"
               >
                 {uploading ? "מעלה…" : "העלה והשתמש"}
               </button>
@@ -216,7 +216,7 @@ export function ImagePickerModal({
                       key={item.url}
                       type="button"
                       onClick={() => !failed && handleChoosePlatform(item.url)}
-                      className="relative aspect-square rounded-lg overflow-hidden border-2 border-slate-200 hover:border-caleno-500 hover:ring-2 hover:ring-caleno-200 focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                      className="relative aspect-square rounded-lg overflow-hidden border-2 border-slate-200 hover:border-caleno-deep hover:ring-2 hover:ring-caleno-deep/20 focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                     >
                       {failed ? (
                         <div

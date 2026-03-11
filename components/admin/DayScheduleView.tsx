@@ -11,7 +11,7 @@ import { useElementSize } from "@/hooks/useElementSize";
 import { getBookingDisplayInfo } from "@/lib/bookingDisplay";
 import { getDisplayStatus, getDisplayStatusKey } from "@/lib/bookingRootStatus";
 import { isBookingCancelled } from "@/lib/normalizeBooking";
-import { getTextColorHex } from "@/lib/colorUtils";
+import { getServiceCalendarColors } from "@/lib/colorUtils";
 import StatusDot from "@/components/StatusDot";
 import DayScheduleLayout from "./DayScheduleLayout";
 import { bookingToBlock, type RenderBlock } from "./MultiWorkerScheduleView";
@@ -239,8 +239,7 @@ export default function DayScheduleView({
 
   const renderBookingBlock = (block: PhaseBlock) => {
     const booking = bookings.find((b) => b.id === block.bookingId);
-    const backgroundColor = block.color ?? "#3B82F6";
-    const textColor = getTextColorHex(backgroundColor);
+    const { background: backgroundColor, text: textColor } = getServiceCalendarColors(block.color);
     const phaseLabel = block.isSecondary ? " — שלב 2" : " — שלב 1";
     const displayLabel = `${block.clientName} — ${block.serviceName}`;
     const statusKey = booking ? getDisplayStatusKey(booking as Parameters<typeof getDisplayStatusKey>[0], bookings as Parameters<typeof getDisplayStatusKey>[1]) : null;

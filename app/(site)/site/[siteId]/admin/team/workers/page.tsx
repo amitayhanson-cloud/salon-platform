@@ -669,8 +669,8 @@ export default function WorkersPage() {
     <div dir="rtl" className="min-h-screen w-full">
       <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 min-w-0">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">עובדים</h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <h1 className="text-2xl font-bold text-[#0F172A]">עובדים</h1>
+          <p className="text-sm text-[#64748B] mt-1">
             ניהול עובדים, שירותים וזמינות
           </p>
         </div>
@@ -690,21 +690,21 @@ export default function WorkersPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full min-w-0">
           {/* Workers List */}
           <div className="lg:col-span-1 min-w-0">
-            <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
+            <div className="bg-white rounded-lg shadow-sm border border-[#E2E8F0] p-4">
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-bold text-slate-900">רשימת עובדים</h2>
+                <h2 className="text-lg font-bold text-[#0F172A]">רשימת עובדים</h2>
                 <button
                   onClick={() => setSelectedWorkerId(null)}
-                  className="px-3 py-1.5 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium transition-colors"
+                  className="px-3 py-1.5 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium transition-colors"
                 >
                   + הוסף עובד
                 </button>
               </div>
 
               {workersLoading ? (
-                <p className="text-sm text-slate-500 text-center py-8">טוען עובדים…</p>
+                <p className="text-sm text-[#64748B] text-center py-8">טוען עובדים…</p>
               ) : workers.length === 0 ? (
-                <p className="text-sm text-slate-500 text-center py-8">אין עובדים רשומים</p>
+                <p className="text-sm text-[#64748B] text-center py-8">אין עובדים רשומים</p>
               ) : (
                 <div className="space-y-2">
                   {workers.map((worker) => (
@@ -713,19 +713,19 @@ export default function WorkersPage() {
                       onClick={() => setSelectedWorkerId(worker.id)}
                       className={`w-full text-right p-3 rounded-lg border transition-colors ${
                         selectedWorkerId === worker.id
-                          ? "border-caleno-500 bg-caleno-50"
-                          : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                          ? "border-[#1E6F7C] bg-[rgba(30,111,124,0.08)]"
+                          : "border-[#E2E8F0] hover:border-[#E2E8F0]/80 hover:bg-[rgba(15,23,42,0.04)]"
                       }`}
                     >
                       <div className="flex justify-between items-center">
                         <div className="flex-1">
-                          <h3 className="font-semibold text-slate-900">{worker.name}</h3>
+                          <h3 className="font-semibold text-[#0F172A]">{worker.name}</h3>
                           {worker.role && (
-                            <p className="text-xs text-slate-600">{worker.role}</p>
+                            <p className="text-xs text-[#64748B]">{worker.role}</p>
                           )}
                         </div>
                         {!worker.active && (
-                          <span className="text-xs text-slate-400">לא פעיל</span>
+                          <span className="text-xs text-[#64748B]">לא פעיל</span>
                         )}
                       </div>
                     </button>
@@ -737,32 +737,32 @@ export default function WorkersPage() {
 
           {/* Worker Details Card */}
           <div className="lg:col-span-2 min-w-0">
-            <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
+            <div className="bg-white rounded-lg shadow-sm border border-[#E2E8F0] p-6">
               {!selectedWorkerId ? (
                 <div>
-                  <h2 className="text-xl font-bold text-slate-900 mb-4">עובד חדש</h2>
+                  <h2 className="text-xl font-bold text-[#0F172A] mb-4">עובד חדש</h2>
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                      <label className="block text-sm font-medium text-[#0F172A] mb-1">
                         שם עובד *
                       </label>
                       <input
                         type="text"
                         value={formData.name || ""}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                        className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                         placeholder="הזן שם עובד"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                      <label className="block text-sm font-medium text-[#0F172A] mb-1">
                         תפקיד (אופציונלי)
                       </label>
                       <input
                         type="text"
                         value={formData.role || ""}
                         onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                        className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                         placeholder="למשל: מעצב ראשי"
                       />
                     </div>
@@ -770,13 +770,13 @@ export default function WorkersPage() {
                       <button
                         onClick={handleAddWorker}
                         disabled={saving || !formData.name?.trim()}
-                        className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 disabled:bg-caleno-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
+                        className="px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
                       >
                         {saving ? "שומר..." : "שמור עובד"}
                       </button>
                       <button
                         onClick={() => setFormData({ name: "", role: "", phone: "", email: "", services: [], availability: defaultAvailability, active: true, treatmentCommissionPercent: 0 })}
-                        className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm font-medium"
+                        className="px-4 py-2 bg-[#E2E8F0] hover:bg-[#CBD5E1] text-[#0F172A] rounded-lg text-sm font-medium"
                       >
                         נקה
                       </button>
@@ -786,7 +786,7 @@ export default function WorkersPage() {
               ) : (
                 <div className="space-y-6">
                   <div className="flex justify-between items-center">
-                    <h2 className="text-xl font-bold text-slate-900">פרטי עובד</h2>
+                    <h2 className="text-xl font-bold text-[#0F172A]">פרטי עובד</h2>
                     <button
                       onClick={handleDeleteWorker}
                       className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium"
@@ -807,48 +807,48 @@ export default function WorkersPage() {
                     {activeWorkerTab === "details" && (
                       <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                      <label className="block text-sm font-medium text-[#0F172A] mb-1">
                         שם עובד *
                       </label>
                       <input
                         type="text"
                         value={formData.name || ""}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                        className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                      <label className="block text-sm font-medium text-[#0F172A] mb-1">
                         תפקיד
                       </label>
                       <input
                         type="text"
                         value={formData.role || ""}
                         onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                        className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                      <label className="block text-sm font-medium text-[#0F172A] mb-1">
                         טלפון
                       </label>
                       <input
                         type="tel"
                         value={formData.phone || ""}
                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                        className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                         placeholder="050-1234567"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                      <label className="block text-sm font-medium text-[#0F172A] mb-1">
                         אימייל
                       </label>
                       <input
                         type="email"
                         value={formData.email || ""}
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                        className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                         placeholder="worker@example.com"
                       />
                     </div>
@@ -857,9 +857,9 @@ export default function WorkersPage() {
                         type="checkbox"
                         checked={formData.active !== false}
                         onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
-                        className="w-4 h-4 text-caleno-500 rounded focus:ring-caleno-500"
+                        className="w-4 h-4 text-caleno-deep rounded focus:ring-caleno-deep"
                       />
-                      <label className="text-sm font-medium text-slate-700">פעיל</label>
+                      <label className="text-sm font-medium text-[#0F172A]">פעיל</label>
                     </div>
                       </div>
                     )}
@@ -867,7 +867,7 @@ export default function WorkersPage() {
                     {/* Availability Tab */}
                     {activeWorkerTab === "availability" && (
                       <div>
-                        <p className="text-xs text-slate-500 mb-4 text-right">
+                        <p className="text-xs text-[#64748B] mb-4 text-right">
                           שעות העובד חייבות להיות בתוך שעות הפתיחה של העסק. ימים שהעסק סגור בהם לא ניתן להגדיר.
                         </p>
                         <div className="space-y-3">
@@ -881,15 +881,15 @@ export default function WorkersPage() {
                                 key={day.day}
                                 className={`p-3 border rounded-lg ${
                                   isBusinessClosed 
-                                    ? "border-slate-200 bg-slate-50 opacity-60" 
-                                    : "border-slate-200"
+                                    ? "border-[#E2E8F0] bg-[rgba(15,23,42,0.04)] opacity-60" 
+                                    : "border-[#E2E8F0]"
                                 }`}
                               >
                                 <div className="flex items-center gap-3 flex-wrap">
-                                  <div className={`w-20 text-sm font-medium ${isBusinessClosed ? "text-slate-400" : "text-slate-700"}`}>
+                                  <div className={`w-20 text-sm font-medium ${isBusinessClosed ? "text-[#64748B]" : "text-[#0F172A]"}`}>
                                     {day.label}
                                     {isBusinessClosed && (
-                                      <span className="block text-xs text-slate-400 mt-1">(סגור)</span>
+                                      <span className="block text-xs text-[#64748B] mt-1">(סגור)</span>
                                     )}
                                   </div>
                                   <label className="flex items-center gap-2">
@@ -898,9 +898,9 @@ export default function WorkersPage() {
                                       checked={!isClosed}
                                       onChange={() => toggleDayAvailability(index)}
                                       disabled={isBusinessClosed}
-                                      className="w-4 h-4 text-caleno-500 rounded focus:ring-caleno-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                      className="w-4 h-4 text-caleno-deep rounded focus:ring-caleno-deep disabled:opacity-50 disabled:cursor-not-allowed"
                                     />
-                                    <span className={`text-xs ${isBusinessClosed ? "text-slate-400" : "text-slate-600"}`}>פעיל</span>
+                                    <span className={`text-xs ${isBusinessClosed ? "text-[#64748B]" : "text-[#64748B]"}`}>פעיל</span>
                                   </label>
                                   {!isClosed && !isBusinessClosed && (
                                     <>
@@ -910,31 +910,31 @@ export default function WorkersPage() {
                                         onChange={(e) => updateAvailability(index, "open", e.target.value)}
                                         min={businessDay.start}
                                         max={businessDay.end}
-                                        className="px-2 py-1 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                                        className="px-2 py-1 border border-[#E2E8F0] rounded text-sm text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                                       />
-                                      <span className="text-xs text-slate-600">עד</span>
+                                      <span className="text-xs text-[#64748B]">עד</span>
                                       <input
                                         type="time"
                                         value={day.close || ""}
                                         onChange={(e) => updateAvailability(index, "close", e.target.value)}
                                         min={businessDay.start}
                                         max={businessDay.end}
-                                        className="px-2 py-1 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                                        className="px-2 py-1 border border-[#E2E8F0] rounded text-sm text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                                       />
                                       {businessDay.enabled && (
-                                        <span className="text-xs text-slate-400">
+                                        <span className="text-xs text-[#64748B]">
                                           (עסק: {businessDay.start}-{businessDay.end})
                                         </span>
                                       )}
                                     </>
                                   )}
                                   {!isClosed && isBusinessClosed && (
-                                    <span className="text-xs text-slate-400">העסק סגור ביום זה</span>
+                                    <span className="text-xs text-[#64748B]">העסק סגור ביום זה</span>
                                   )}
                                 </div>
                                 {!isClosed && !isBusinessClosed && day.open && day.close && (
-                                  <div className="mt-2 mr-0 pr-2 border-t border-slate-100 pt-2">
-                                    <p className="text-xs font-medium text-slate-600 mb-1">הפסקות</p>
+                                  <div className="mt-2 mr-0 pr-2 border-t border-[#E2E8F0] pt-2">
+                                    <p className="text-xs font-medium text-[#64748B] mb-1">הפסקות</p>
                                     {(day.breaks ?? []).map((b, bi) => (
                                       <div key={bi} className="flex items-center gap-2 mb-1">
                                         <input
@@ -943,21 +943,21 @@ export default function WorkersPage() {
                                           onChange={(e) => updateWorkerBreak(index, bi, "start", e.target.value)}
                                           min={day.open!}
                                           max={day.close!}
-                                          className="px-2 py-1 border border-slate-300 rounded text-sm text-right w-24"
+                                          className="px-2 py-1 border border-[#E2E8F0] rounded text-sm text-right w-24"
                                         />
-                                        <span className="text-xs text-slate-500">עד</span>
+                                        <span className="text-xs text-[#64748B]">עד</span>
                                         <input
                                           type="time"
                                           value={b.end}
                                           onChange={(e) => updateWorkerBreak(index, bi, "end", e.target.value)}
                                           min={day.open!}
                                           max={day.close!}
-                                          className="px-2 py-1 border border-slate-300 rounded text-sm text-right w-24"
+                                          className="px-2 py-1 border border-[#E2E8F0] rounded text-sm text-right w-24"
                                         />
                                         <button
                                           type="button"
                                           onClick={() => removeWorkerBreak(index, bi)}
-                                          className="p-1 text-slate-400 hover:text-red-600 rounded"
+                                          className="p-1 text-[#64748B] hover:text-red-600 rounded"
                                           aria-label="הסר הפסקה"
                                         >
                                           ×
@@ -967,7 +967,7 @@ export default function WorkersPage() {
                                     <button
                                       type="button"
                                       onClick={() => addWorkerBreak(index)}
-                                      className="text-xs text-caleno-600 hover:text-caleno-700 font-medium"
+                                      className="text-xs text-caleno-deep hover:text-caleno-ink font-medium"
                                     >
                                       הוסף הפסקה
                                     </button>
@@ -985,16 +985,16 @@ export default function WorkersPage() {
 
                     {/* Commissions Tab */}
                     {activeWorkerTab === "commissions" && (
-                      <div className="bg-white rounded-2xl border border-slate-200 p-6 text-right">
-                        <h3 className="text-lg font-bold text-slate-900 mb-1">עמלות</h3>
-                        <p className="text-sm text-slate-500 mb-4">
+                      <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 text-right">
+                        <h3 className="text-lg font-bold text-[#0F172A] mb-1">עמלות</h3>
+                        <p className="text-sm text-[#64748B] mb-4">
                           קבע אחוז תשלום לעובד מכל הזמנה.
                         </p>
                         <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">
+                          <label className="block text-sm font-medium text-[#0F172A] mb-1">
                             אחוז לעובד (%)
                           </label>
-                          <p className="text-xs text-slate-500 mb-1">חלק העובד מההכנסה (העסק מקבל את השאר)</p>
+                          <p className="text-xs text-[#64748B] mb-1">חלק העובד מההכנסה (העסק מקבל את השאר)</p>
                           <input
                             type="number"
                             min={0}
@@ -1021,7 +1021,7 @@ export default function WorkersPage() {
                               }
                             }}
                             placeholder="0"
-                            className="w-full max-w-[120px] rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                            className="w-full max-w-[120px] rounded-lg border border-[#E2E8F0] px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                           />
                         </div>
                       </div>
@@ -1031,7 +1031,7 @@ export default function WorkersPage() {
                     {activeWorkerTab === "services" && (
                       <div className="space-y-4">
                         {services.length === 0 ? (
-                          <p className="text-sm text-slate-500">אין שירותים מוגדרים. הוסף שירותים בעמוד המחירון.</p>
+                          <p className="text-sm text-[#64748B]">אין שירותים מוגדרים. הוסף שירותים בעמוד המחירון.</p>
                         ) : (
                           <div className="space-y-2">
                             {(formData.services || []).length === 0 && (
@@ -1047,15 +1047,15 @@ export default function WorkersPage() {
                               return (
                                 <label
                                   key={service.id}
-                                  className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 cursor-pointer"
+                                  className="flex items-center gap-2 p-2 rounded-lg hover:bg-[rgba(15,23,42,0.04)] cursor-pointer"
                                 >
                                   <input
                                     type="checkbox"
                                     checked={isChecked}
                                     onChange={() => toggleService(serviceId)}
-                                    className="w-4 h-4 text-caleno-500 rounded focus:ring-caleno-500"
+                                    className="w-4 h-4 text-caleno-deep rounded focus:ring-caleno-deep"
                                   />
-                                  <span className="text-sm text-slate-700">{service.name}</span>
+                                  <span className="text-sm text-[#0F172A]">{service.name}</span>
                                 </label>
                               );
                             })}
@@ -1066,11 +1066,11 @@ export default function WorkersPage() {
                   </div>
 
                   {/* Save Button */}
-                  <div className="border-t border-slate-200 pt-4">
+                  <div className="border-t border-[#E2E8F0] pt-4">
                     <button
                       onClick={handleSaveWorker}
                       disabled={saving || !formData.name?.trim() || (formData.availability || defaultAvailability).some((_, idx) => getWorkerBreaksError(idx) != null)}
-                      className="w-full px-4 py-2 bg-caleno-500 hover:bg-caleno-600 disabled:bg-caleno-300 disabled:cursor-not-allowed text-white rounded-lg font-medium"
+                      className="w-full px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium"
                     >
                       {saving ? "שומר..." : "שמור שינויים"}
                     </button>

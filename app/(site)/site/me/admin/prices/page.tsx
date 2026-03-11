@@ -16,10 +16,10 @@ export default function PricesRedirectPage() {
   }, [router]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+    <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
       <div className="text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-500 mx-auto mb-4"></div>
-        <p className="text-slate-600">מעביר...</p>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1E6F7C] mx-auto mb-4"></div>
+        <p className="text-[#64748B]">מעביר...</p>
       </div>
     </div>
   );

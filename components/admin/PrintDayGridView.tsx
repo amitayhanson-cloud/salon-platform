@@ -12,7 +12,7 @@ import {
   SLOT_MINUTES,
   type BookingBlockPosition,
 } from "@/lib/calendarUtils";
-import { getTextColorHex } from "@/lib/colorUtils";
+import { getServiceCalendarColors } from "@/lib/colorUtils";
 import { bookingToBlock, type RenderBlock } from "./MultiWorkerScheduleView";
 import type { ChemicalCardPrintData } from "./WorkerDayPrintView";
 
@@ -240,8 +240,7 @@ export default function PrintDayGridView({
             {blocksWithPosition
               .filter((b) => b.workerColumnIndex === colIndex)
               .map((block) => {
-                const backgroundColor = block.color ?? "#3B82F6";
-                const textColor = getTextColorHex(backgroundColor);
+                const { background: backgroundColor, text: textColor } = getServiceCalendarColors(block.color);
                 const chemicalSummary = chemicalCardSummary(chemicalCardsMap[block.clientKey] ?? null);
                 return (
                   <div

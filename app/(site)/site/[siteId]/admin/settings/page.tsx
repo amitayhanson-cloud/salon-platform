@@ -216,7 +216,7 @@ export function AdminReviewsEditor({
             type="text"
             value={newReview.name}
             onChange={(e) => setNewReview({ ...newReview, name: e.target.value })}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep"
             placeholder="הזן שם לקוח"
           />
         </div>
@@ -229,7 +229,7 @@ export function AdminReviewsEditor({
             onChange={(e) =>
               setNewReview({ ...newReview, rating: Number(e.target.value) })
             }
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 bg-white"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep bg-white"
           >
             {[1, 2, 3, 4, 5].map((n) => (
               <option key={n} value={n}>
@@ -246,7 +246,7 @@ export function AdminReviewsEditor({
             value={newReview.text}
             onChange={(e) => setNewReview({ ...newReview, text: e.target.value })}
             rows={3}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 resize-none"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep resize-none"
             placeholder="הזן את טקסט הביקורת"
           />
         </div>
@@ -291,7 +291,7 @@ export function AdminReviewsEditor({
         <button
           type="button"
           onClick={handleAdd}
-          className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium"
+          className="px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium"
         >
           הוסף ביקורת
         </button>
@@ -317,7 +317,7 @@ export function AdminReviewsEditor({
                     onChange={(e) =>
                       setEditReview({ ...editReview, name: e.target.value })
                     }
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                     placeholder="שם הלקוח"
                   />
                   <select
@@ -325,7 +325,7 @@ export function AdminReviewsEditor({
                     onChange={(e) =>
                       setEditReview({ ...editReview, rating: Number(e.target.value) })
                     }
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 bg-white"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep bg-white"
                   >
                     {[1, 2, 3, 4, 5].map((n) => (
                       <option key={n} value={n}>
@@ -339,7 +339,7 @@ export function AdminReviewsEditor({
                       setEditReview({ ...editReview, text: e.target.value })
                     }
                     rows={3}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 resize-none"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep resize-none"
                     placeholder="טקסט הביקורת"
                   />
                   <div>
@@ -386,7 +386,7 @@ export function AdminReviewsEditor({
                     <button
                       type="button"
                       onClick={handleSaveEdit}
-                      className="px-3 py-1 bg-caleno-500 hover:bg-caleno-600 text-white rounded text-sm"
+                      className="px-3 py-1 bg-caleno-ink hover:bg-[#1E293B] text-white rounded text-sm"
                     >
                       שמור
                     </button>
@@ -536,7 +536,7 @@ export function AdminFaqEditor({
             type="text"
             value={newFaq.question}
             onChange={(e) => setNewFaq({ ...newFaq, question: e.target.value })}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep"
             placeholder="הזן שאלה"
           />
         </div>
@@ -548,14 +548,14 @@ export function AdminFaqEditor({
             value={newFaq.answer}
             onChange={(e) => setNewFaq({ ...newFaq, answer: e.target.value })}
             rows={3}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 resize-none"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep resize-none"
             placeholder="הזן תשובה"
           />
         </div>
         <button
           type="button"
           onClick={handleAdd}
-          className="px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white rounded-lg text-sm font-medium"
+          className="px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium"
         >
           הוסף שאלה
         </button>
@@ -581,7 +581,7 @@ export function AdminFaqEditor({
                     onChange={(e) =>
                       setEditFaq({ ...editFaq, question: e.target.value })
                     }
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                     placeholder="שאלה"
                   />
                   <textarea
@@ -590,14 +590,14 @@ export function AdminFaqEditor({
                       setEditFaq({ ...editFaq, answer: e.target.value })
                     }
                     rows={3}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 resize-none"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep resize-none"
                     placeholder="תשובה"
                   />
                   <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={handleSaveEdit}
-                      className="px-3 py-1 bg-caleno-500 hover:bg-caleno-600 text-white rounded text-sm"
+                      className="px-3 py-1 bg-caleno-ink hover:bg-[#1E293B] text-white rounded text-sm"
                     >
                       שמור
                     </button>
@@ -765,7 +765,7 @@ export function AdminBookingTab({
           <button
             type="button"
             onClick={onSaveRequest}
-            className="px-4 py-2 rounded-lg bg-caleno-500 hover:bg-caleno-600 text-white text-sm font-semibold transition-colors"
+            className="px-4 py-2 rounded-lg bg-caleno-ink hover:bg-[#1E293B] text-white text-sm font-semibold transition-colors"
           >
             שמור שעות פעילות
           </button>
@@ -871,7 +871,7 @@ export function AdminBookingTab({
                           <button
                             type="button"
                             onClick={() => addBreak(index)}
-                            className="mt-1 text-caleno-600 hover:underline"
+                            className="mt-1 text-caleno-deep hover:underline hover:text-caleno-ink"
                           >
                             הוסף הפסקה
                           </button>
@@ -977,7 +977,7 @@ function ClosedDatesEditor({
         <button
           type="button"
           onClick={addDate}
-          className="px-3 py-1.5 rounded-lg bg-caleno-600 text-white text-xs hover:bg-caleno-700"
+          className="px-3 py-1.5 rounded-lg bg-caleno-ink text-white text-xs shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md"
         >
           הוסף תאריך
         </button>
@@ -1036,7 +1036,7 @@ function AdminSiteTab({
               type="text"
               value={siteConfig.salonName}
               onChange={(e) => onChange({ salonName: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-caleno-500"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-2 focus:ring-caleno-deep focus:border-caleno-deep"
               placeholder="הקלד את שם הסלון"
             />
           </div>
@@ -1049,7 +1049,7 @@ function AdminSiteTab({
               onChange={(e) =>
                 onChange({ salonType: e.target.value as SiteConfig["salonType"] })
               }
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-caleno-500 bg-white"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-2 focus:ring-caleno-deep focus:border-caleno-deep bg-white"
             >
               {Object.entries(salonTypeLabels).map(([key, label]) => (
                 <option key={key} value={key}>
@@ -1074,7 +1074,7 @@ function AdminSiteTab({
             type="text"
             value={siteConfig.address || ""}
             onChange={(e) => onChange({ address: e.target.value })}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-caleno-500"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-2 focus:ring-caleno-deep focus:border-caleno-deep"
             placeholder="למשל: רחוב בן יהודה 10, תל אביב"
           />
           <p className="text-xs text-slate-500 mt-1 text-right">
@@ -1103,7 +1103,7 @@ function AdminSiteTab({
               type="text"
               value={siteConfig.phoneNumber || ""}
               onChange={(e) => onChange({ phoneNumber: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-caleno-500"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-2 focus:ring-caleno-deep focus:border-caleno-deep"
               placeholder="למשל: 050-1234567"
             />
           </div>
@@ -1120,7 +1120,7 @@ function AdminSiteTab({
               type="text"
               value={siteConfig.whatsappNumber || ""}
               onChange={(e) => onChange({ whatsappNumber: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-caleno-500"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-2 focus:ring-caleno-deep focus:border-caleno-deep"
               placeholder="למשל: 050-1234567"
             />
           </div>
@@ -1137,7 +1137,7 @@ function AdminSiteTab({
               type="text"
               value={siteConfig.instagramHandle || ""}
               onChange={(e) => onChange({ instagramHandle: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-caleno-500"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-2 focus:ring-caleno-deep focus:border-caleno-deep"
               placeholder="למשל: salon_beauty"
             />
           </div>
@@ -1154,7 +1154,7 @@ function AdminSiteTab({
               type="text"
               value={siteConfig.facebookPage || ""}
               onChange={(e) => onChange({ facebookPage: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-caleno-500"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-2 focus:ring-caleno-deep focus:border-caleno-deep"
               placeholder="למשל: https://facebook.com/your-salon"
             />
           </div>
@@ -1171,7 +1171,7 @@ function AdminSiteTab({
               type="email"
               value={siteConfig.contactEmail || ""}
               onChange={(e) => onChange({ contactEmail: e.target.value })}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-caleno-500"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-2 focus:ring-caleno-deep focus:border-caleno-deep"
               placeholder="name@example.com"
             />
           </div>
@@ -1191,7 +1191,7 @@ function AdminSiteTab({
             value={siteConfig.specialNote || ""}
             onChange={(e) => onChange({ specialNote: e.target.value })}
             rows={4}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-500 focus:border-caleno-500 resize-none"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-2 focus:ring-caleno-deep focus:border-caleno-deep resize-none"
             placeholder="כתוב כאן הערות או פרטים מיוחדים..."
           />
         </div>
@@ -1338,7 +1338,7 @@ export function BrandingLogoEditor({
               />
             </div>
             <div className="flex gap-2">
-              <label className="cursor-pointer px-3 py-1.5 text-sm font-medium text-caleno-600 hover:text-caleno-700 border border-caleno-300 rounded-lg">
+              <label className="cursor-pointer px-3 py-1.5 text-sm font-medium text-caleno-deep hover:text-caleno-ink border border-[#E2E8F0] hover:border-caleno-deep/40 rounded-lg">
                 החלף
                 <input
                   type="file"
@@ -1360,7 +1360,7 @@ export function BrandingLogoEditor({
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-caleno-500 hover:bg-caleno-600 text-white text-sm font-medium rounded-lg w-fit disabled:opacity-50">
+            <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white text-sm font-medium rounded-lg w-fit disabled:opacity-50">
               {uploading ? "מעלה…" : "העלה לוגו"}
               <input
                 type="file"
@@ -1596,7 +1596,7 @@ export default function SettingsPage() {
           <button
             onClick={() => { void handleSaveConfig(); }}
             disabled={isSaving}
-            className="px-4 py-2 rounded-lg bg-caleno-500 hover:bg-caleno-600 disabled:bg-caleno-300 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+            className="px-4 py-2 rounded-lg bg-caleno-ink hover:bg-[#1E293B] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
           >
             {isSaving ? "שומר…" : "שמור שינויים"}
           </button>
