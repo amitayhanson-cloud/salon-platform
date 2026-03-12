@@ -19,7 +19,7 @@ export function HowItWorksSection() {
         </p>
 
         <div className="mt-12 flex flex-col gap-8 md:flex-row md:items-start md:justify-between md:gap-8 lg:gap-12">
-          {HOW_IT_WORKS_STEPS.map((item, index) => (
+          {HOW_IT_WORKS_STEPS.map((item) => (
             <div
               key={item.step}
               className="relative flex flex-1 flex-col items-center text-center md:items-start md:text-right"
@@ -27,18 +27,6 @@ export function HowItWorksSection() {
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-caleno-ink bg-white text-lg font-semibold leading-tight text-caleno-ink">
                 {item.step}
               </div>
-              {index < HOW_IT_WORKS_STEPS.length - 1 && (
-                <>
-                  <div
-                    className="mt-2 h-8 w-0.5 flex-shrink-0 bg-gray-200 md:hidden"
-                    aria-hidden
-                  />
-                  <div
-                    className="absolute left-1/2 top-6 hidden h-0.5 w-full -translate-x-1/2 bg-gray-200 md:block md:left-6 md:top-6 md:w-[calc(100%-3rem)] md:translate-x-0"
-                    aria-hidden
-                  />
-                </>
-              )}
               <h3 className="mt-4 text-lg font-semibold leading-tight text-caleno-ink">
                 {item.title}
               </h3>

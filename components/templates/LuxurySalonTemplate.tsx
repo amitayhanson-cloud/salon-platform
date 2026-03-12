@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import type { SiteConfig } from "@/types/siteConfig";
+import { DEFAULT_CONTENT } from "@/lib/editor/defaultContent";
 
 interface LuxurySalonTemplateProps {
   config: SiteConfig;
@@ -216,7 +217,7 @@ export function LuxurySalonTemplate({ config }: LuxurySalonTemplateProps) {
               <h1 className="text-5xl sm:text-6xl lg:text-7xl font-serif font-light leading-tight tracking-wide">
                 {config.salonName || "הסלון שלך"}
                 <br />
-                <span className="text-amber-400">חוויית שיער ברמת לוקס</span>
+                <span className="text-amber-400">{DEFAULT_CONTENT.hero.title}</span>
               </h1>
               <p className="text-lg sm:text-xl text-slate-300 leading-relaxed max-w-2xl">
                 חוויה ייחודית המשלבת מקצועיות ברמה הגבוהה ביותר, חומרים

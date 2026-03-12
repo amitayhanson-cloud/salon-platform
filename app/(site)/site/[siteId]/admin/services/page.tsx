@@ -32,6 +32,8 @@ import {
   deleteMultiBookingCombo,
 } from "@/lib/firestoreMultiBookingCombos";
 
+// Module-level guard: only one create can run at a time (survives Strict Mode remount / duplicate triggers).
+let createServiceInProgress = false;
 
 export default function ServicesPage() {
   const params = useParams();
@@ -45,6 +47,8 @@ export default function ServicesPage() {
   const [error, setError] = useState<string | null>(null);
   const [openServices, setOpenServices] = useState<Set<string>>(new Set());
   const [editingItem, setEditingItem] = useState<PricingItem | null>(null);
+  /** When set, the "Add service type" modal was opened from a specific service card; hide service dropdown and show parent as read-only. */
+  const [editingItemParentService, setEditingItemParentService] = useState<{ id: string; name: string } | null>(null);
   const [editingService, setEditingService] = useState<SiteService | null>(null);
   const [durationInputValue, setDurationInputValue] = useState<string>("");
   const [priceInputValue, setPriceInputValue] = useState<string>("");
@@ -62,7 +66,6 @@ export default function ServicesPage() {
     color: "#3B82F6",
     description: "",
     price: 0,
-    duration: 15,
     enabled: true,
   };
 
@@ -80,6 +83,10 @@ export default function ServicesPage() {
   }>({ name: "", triggerServiceTypeIds: [], orderedServiceTypeIds: [], autoSteps: [], isActive: true });
   const [openCombos, setOpenCombos] = useState(false);
   const [showNewServiceReminderModal, setShowNewServiceReminderModal] = useState(false);
+  const [isSavingService, setSavingService] = useState(false);
+
+  // Prevent double submission: only one create/update at a time (e.g. double-click or duplicate trigger)
+  const savingServiceRef = useRef(false);
 
   // Track first load to set loading state only once
   const didFirstLoad = useRef(false);
@@ -104,8 +111,14 @@ export default function ServicesPage() {
     // Define callbacks inside useEffect to avoid stale closures
     // Use refs to track previous state and prevent unnecessary updates
     const handleServicesUpdate = (svcs: SiteService[]) => {
+      // Dedupe by id so we never show two rows for the same service (e.g. from duplicate create or subscription glitch)
+      const byId = new Map<string, SiteService>();
+      svcs.forEach((s) => {
+        if (s?.id && !byId.has(s.id)) byId.set(s.id, s);
+      });
+      const deduped = Array.from(byId.values());
       // Only show enabled services, sorted by sortOrder then name
-      const enabledServices = svcs
+      const enabledServices = deduped
         .filter((s) => s.enabled !== false)
         .sort((a, b) => {
           if (a.sortOrder !== undefined && b.sortOrder !== undefined) {
@@ -226,26 +239,39 @@ export default function ServicesPage() {
     return acc;
   }, {} as Record<string, PricingItem[]>);
 
-  // Get unassigned items (items without serviceId or items whose serviceId doesn't match any service)
+  // Get unassigned items: only those without serviceId OR whose serviceId matches no service (by id or name).
+  // Must match by both s.id and s.name so items saved with service.id (e.g. from service card) are not treated as unassigned.
   const unassignedItems = (() => {
     const itemsWithoutServiceId = itemsByService["__UNASSIGNED__"] || [];
     const itemsWithUnmatchedService = pricingItems.filter((item) => {
       const serviceId = item.serviceId || item.service;
       if (!serviceId) return false; // Already in __UNASSIGNED__
-      // Check if serviceId doesn't match any existing service name
-      return !services.some((s) => s.name === serviceId);
+      const matchesSomeService = services.some((s) => s.id === serviceId || s.name === serviceId);
+      return !matchesSomeService;
     });
     return [...itemsWithoutServiceId, ...itemsWithUnmatchedService];
   })();
 
-  const handleAddItem = (serviceId: string) => {
+  const handleAddItem = (serviceOrId: SiteService | string) => {
+    const serviceId = typeof serviceOrId === "string" ? serviceOrId : serviceOrId.id;
+    const itemsForService = typeof serviceOrId === "string"
+      ? (itemsByService[serviceId] || [])
+      : (itemsByService[serviceOrId.id] || itemsByService[serviceOrId.name] || []);
+    const parentService =
+      typeof serviceOrId === "string"
+        ? (() => {
+            const svc = services.find((s) => s.id === serviceOrId || s.name === serviceOrId);
+            return svc ? { id: svc.id, name: svc.name } : null;
+          })()
+        : { id: serviceOrId.id, name: serviceOrId.name };
+    setEditingItemParentService(parentService);
     const newItem: Omit<PricingItem, "id" | "createdAt" | "updatedAt"> = {
-      serviceId: serviceId,
+      serviceId,
       service: serviceId,
       durationMinMinutes: 30,
       durationMaxMinutes: 30,
       price: 0,
-      order: itemsByService[serviceId]?.length || 0,
+      order: itemsForService.length,
       hasFollowUp: false,
       followUp: null,
     };
@@ -264,6 +290,7 @@ export default function ServicesPage() {
   };
 
   const handleEditItem = (item: PricingItem) => {
+    setEditingItemParentService(null);
     const convertedItem = { ...item };
     setDurationInputValue(formatNumberOrRange(convertedItem.durationMinMinutes, convertedItem.durationMaxMinutes));
     setPriceInputValue(formatNumberOrRange(
@@ -308,7 +335,7 @@ export default function ServicesPage() {
       return;
     }
     if (editingItem.hasFollowUp) {
-      const name = (editingItem.followUp?.name ?? followUpNameInputValue).trim();
+      const name = (editingItem.followUp?.name ?? followUpNameInputValue ?? editingItemParentService?.name ?? "").trim();
       const durationMinutes = editingItem.followUp?.durationMinutes ?? (followUpDurationInputValue ? parseInt(followUpDurationInputValue, 10) : NaN);
       const waitMinutes = editingItem.followUp?.waitMinutes ?? (followUpWaitInputValue ? parseInt(followUpWaitInputValue, 10) : 0);
       if (!name) {
@@ -321,6 +348,11 @@ export default function ServicesPage() {
       }
       if (!Number.isFinite(waitMinutes) || waitMinutes < 0) {
         setError("המתנה אחרי שלב 1 חייבת להיות 0 ומעלה");
+        return;
+      }
+      const followUpTextTrimmed = (editingItem.followUp?.text ?? followUpTextInputValue ?? "").trim();
+      if (!followUpTextTrimmed) {
+        setError("נא להזין שם המשך טיפול");
         return;
       }
     }
@@ -353,19 +385,20 @@ export default function ServicesPage() {
       }
 
       // Follow-up: hasFollowUp + followUp { name, durationMinutes, waitMinutes } | null
-      const followUpName = (editingItem.followUp?.name ?? followUpNameInputValue).trim();
+      const followUpName = (editingItem.followUp?.name ?? followUpNameInputValue ?? editingItemParentService?.name ?? "").trim();
+      const followUpServiceId = editingItemParentService?.id ?? editingItem.followUp?.serviceId;
       const followUpDuration = editingItem.followUp?.durationMinutes ?? (followUpDurationInputValue ? parseInt(followUpDurationInputValue, 10) : NaN);
       const followUpWait = editingItem.followUp?.waitMinutes ?? (followUpWaitInputValue ? parseInt(followUpWaitInputValue, 10) : 0);
       const followUpTextRaw = (editingItem.followUp?.text ?? followUpTextInputValue).trim();
       const followUpText = followUpTextRaw.slice(0, FOLLOWUP_TEXT_MAX_LENGTH) || undefined;
-      if (editingItem.hasFollowUp && followUpName && Number.isFinite(followUpDuration) && followUpDuration >= 1 && Number.isFinite(followUpWait) && followUpWait >= 0) {
+      if (editingItem.hasFollowUp && followUpName && followUpText && Number.isFinite(followUpDuration) && followUpDuration >= 1 && Number.isFinite(followUpWait) && followUpWait >= 0) {
         itemData.hasFollowUp = true;
         itemData.followUp = {
           name: followUpName,
-          ...(editingItem.followUp?.serviceId && { serviceId: editingItem.followUp.serviceId }),
+          ...(followUpServiceId && { serviceId: followUpServiceId }),
           durationMinutes: followUpDuration,
           waitMinutes: followUpWait,
-          ...(followUpText && { text: followUpText }),
+          text: followUpText,
         };
       } else {
         itemData.hasFollowUp = false;
@@ -404,6 +437,7 @@ export default function ServicesPage() {
         await updatePricingItem(siteId, editingItem.id, cleanItemData as Partial<Omit<PricingItem, "id" | "createdAt">> & Record<string, unknown>, { deleteFields: deleteLegacyFollowUpFields });
       }
       setEditingItem(null);
+      setEditingItemParentService(null);
       setDurationInputValue("");
       setPriceInputValue("");
       setFollowUpNameInputValue("");
@@ -434,6 +468,21 @@ export default function ServicesPage() {
 
   const handleSaveService = async () => {
     if (!editingService || !editingService.name.trim() || !siteId) return;
+    if (savingServiceRef.current || createServiceInProgress) {
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[handleSaveService] blocked duplicate call (already saving)", {
+          savingRef: savingServiceRef.current,
+          moduleGuard: createServiceInProgress,
+        });
+      }
+      return;
+    }
+    savingServiceRef.current = true;
+    createServiceInProgress = true;
+    setSavingService(true);
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[handleSaveService] invoked once", { name: editingService.name.trim(), id: editingService.id });
+    }
     try {
       // Normalize numeric fields: never send undefined to Firestore
       const priceRaw = editingService.price;
@@ -443,18 +492,7 @@ export default function ServicesPage() {
           : null;
       const price = typeof priceNum === "number" && !Number.isNaN(priceNum) && priceNum >= 0 ? priceNum : null;
 
-      const durationRaw = editingService.duration;
-      const durationNum =
-        durationRaw !== undefined &&
-        durationRaw !== null &&
-        (typeof durationRaw !== "string" || durationRaw !== "")
-          ? Number(durationRaw)
-          : null;
-      const duration =
-        typeof durationNum === "number" && !Number.isNaN(durationNum) && durationNum >= 0
-          ? durationNum
-          : null;
-
+      // Parent service has no duration in our data model; duration belongs to service types only.
       const description =
         editingService.description != null && String(editingService.description).trim() !== ""
           ? String(editingService.description).trim()
@@ -463,21 +501,17 @@ export default function ServicesPage() {
       const isCreate = editingService.id === "new";
 
       if (isCreate) {
-        const durationForCreate = duration != null && duration >= 1 ? duration : 15;
         const payload: Omit<SiteService, "id"> = {
           name: editingService.name.trim(),
           enabled: editingService.enabled !== false,
           color: editingService.color || "#3B82F6",
           description: description ?? undefined,
           price: price != null && price >= 0 ? price : undefined,
-          duration: durationForCreate,
         };
-        const newId = await addSiteService(siteId, payload);
-        const newService: SiteService = {
-          ...payload,
-          id: newId,
-        };
-        setServices((prev) => [...prev, newService]);
+        await addSiteService(siteId, payload);
+        // Do not optimistically setServices here: the Firestore subscription will update
+        // the list once. Adding optimistically would race with the subscription and
+        // can result in the new service appearing twice (duplicate/mirrored rows).
         setEditingService(null);
         setShowNewServiceReminderModal(true);
         return;
@@ -491,7 +525,6 @@ export default function ServicesPage() {
         color: editingService.color || "#3B82F6",
         description: description ?? undefined,
         price: price ?? undefined,
-        duration: duration ?? undefined,
         imageUrl: existingService?.imageUrl ?? editingService.imageUrl,
       };
 
@@ -508,8 +541,6 @@ export default function ServicesPage() {
       else updates.description = undefined;
       if (price !== null) updates.price = price;
       else updates.price = undefined;
-      if (duration !== null) updates.duration = duration;
-      else updates.duration = undefined;
 
       await updateSiteService(siteId, editingService.id, updates);
 
@@ -517,6 +548,10 @@ export default function ServicesPage() {
     } catch (err) {
       console.error("Failed to save service", err);
       setError(editingService?.id === "new" ? "שגיאה ביצירת שירות" : "שגיאה בעדכון שירות");
+    } finally {
+      savingServiceRef.current = false;
+      createServiceInProgress = false;
+      setSavingService(false);
     }
   };
 
@@ -528,7 +563,7 @@ export default function ServicesPage() {
     
     try {
       // Delete all pricing items for this service
-      const itemsToDelete = itemsByService[service.name] || [];
+      const itemsToDelete = itemsByService[service.id] || itemsByService[service.name] || [];
       await Promise.all(itemsToDelete.map((item) => deletePricingItem(siteId, item.id)));
       
       // Delete service
@@ -698,6 +733,7 @@ export default function ServicesPage() {
               </p>
             </div>
             <button
+              type="button"
               onClick={() => setEditingService({ ...NEW_SERVICE_DRAFT })}
               className="px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
             >
@@ -718,8 +754,9 @@ export default function ServicesPage() {
             <div className="space-y-4">
               {/* Services with pricing items */}
               {services.map((service) => {
-                const items = itemsByService[service.name] || [];
-                const isOpen = openServices.has(service.name);
+                // Items may be keyed by service id or name (backward compat)
+                const items = itemsByService[service.id] || itemsByService[service.name] || [];
+                const isOpen = openServices.has(service.id);
 
                 return (
                   <AccordionItem
@@ -755,14 +792,14 @@ export default function ServicesPage() {
                       </div>
                     }
                     isOpen={isOpen}
-                    onToggle={() => toggleService(service.name)}
+                    onToggle={() => toggleService(service.id)}
                   >
                     <div className="mb-4 flex justify-between items-center">
                       <span className="text-xs text-[#64748B]">
                         {items.length === 0 ? "אין סוגי מחיר עדיין" : `${items.length} סוגי מחיר`}
                       </span>
                       <button
-                        onClick={() => handleAddItem(service.name)}
+                        onClick={() => handleAddItem(service)}
                         className="px-3 py-1.5 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium flex items-center gap-2"
                       >
                         <Plus className="w-4 h-4" />
@@ -1298,17 +1335,6 @@ export default function ServicesPage() {
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    משך (דקות)
-                  </label>
-                  <DurationMinutesStepper
-                    value={editingService.duration ?? 15}
-                    onChange={(n) => setEditingService({ ...editingService, duration: n })}
-                    min={0}
-                    className="w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-caleno-deep"
-                  />
-                </div>
               </div>
               <p className="text-xs text-[#64748B] -mt-1">
                 אופציונלי. יוצגו בכרטיס השירות באתר.
@@ -1329,17 +1355,19 @@ export default function ServicesPage() {
 
             <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex justify-end gap-3">
               <button
+                type="button"
                 onClick={() => setEditingService(null)}
                 className="px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 text-sm font-medium"
               >
                 ביטול
               </button>
               <button
+                type="button"
                 onClick={handleSaveService}
-                disabled={!editingService.name.trim()}
+                disabled={!editingService.name.trim() || isSavingService}
                 className="px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
               >
-                שמור
+                {isSavingService ? "שומר..." : "שמור"}
               </button>
             </div>
           </div>
@@ -1355,7 +1383,7 @@ export default function ServicesPage() {
                 {editingItem.id === "new" ? "הוסף פריט מחיר" : "ערוך פריט מחיר"}
               </h3>
               <button
-                onClick={() => setEditingItem(null)}
+                onClick={() => { setEditingItem(null); setEditingItemParentService(null); }}
                 className="p-1 hover:bg-slate-100 rounded"
               >
                 <X className="w-5 h-5 text-[#64748B]" />
@@ -1363,44 +1391,54 @@ export default function ServicesPage() {
             </div>
 
             <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  שירות *
-                </label>
+              {/* When opened from a service card, parent is known: show read-only. Otherwise show dropdown. */}
+              {editingItem.id === "new" && editingItemParentService ? (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">שירות</label>
+                  <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 text-right">
+                    {editingItemParentService.name}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    שירות *
+                  </label>
                   <select
-                  value={editingItem.serviceId || editingItem.service || ""}
-                  onChange={(e) =>
-                    setEditingItem({ 
-                      ...editingItem, 
-                      serviceId: e.target.value,
-                      service: e.target.value, // Set service for backward compatibility
-                    })
-                  }
-                  className={`w-full px-3 py-2 border rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep ${
-                    !editingItem.serviceId && !editingItem.service ? "border-red-300" : "border-slate-300"
-                  }`}
-                  required
-                >
-                  <option value="">בחר שירות</option>
-                  {activeServiceIds.length === 0 ? (
-                    <option value="" disabled>אין שירותים זמינים</option>
-                  ) : (
-                    activeServiceIds.map((serviceName) => (
-                      <option key={serviceName} value={serviceName}>
-                        {serviceName}
-                      </option>
-                    ))
+                    value={editingItem.serviceId || editingItem.service || ""}
+                    onChange={(e) =>
+                      setEditingItem({
+                        ...editingItem,
+                        serviceId: e.target.value,
+                        service: e.target.value,
+                      })
+                    }
+                    className={`w-full px-3 py-2 border rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep ${
+                      !editingItem.serviceId && !editingItem.service ? "border-red-300" : "border-slate-300"
+                    }`}
+                    required
+                  >
+                    <option value="">בחר שירות</option>
+                    {activeServiceIds.length === 0 ? (
+                      <option value="" disabled>אין שירותים זמינים</option>
+                    ) : (
+                      activeServiceIds.map((serviceName) => (
+                        <option key={serviceName} value={serviceName}>
+                          {serviceName}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  {!editingItem.serviceId && !editingItem.service && (
+                    <p className="text-xs text-red-600 mt-1">בחר שירות</p>
                   )}
-                </select>
-                {!editingItem.serviceId && !editingItem.service && (
-                  <p className="text-xs text-red-600 mt-1">בחר שירות</p>
-                )}
-                {activeServiceIds.length === 0 && (
-                  <p className="text-xs text-red-600 mt-1">
-                    הוסף שירות תחילה מהרשימה למעלה
-                  </p>
-                )}
-              </div>
+                  {activeServiceIds.length === 0 && (
+                    <p className="text-xs text-red-600 mt-1">
+                      הוסף שירות תחילה מהרשימה למעלה
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -1520,11 +1558,14 @@ export default function ServicesPage() {
                     checked={editingItem.hasFollowUp || false}
                     onChange={(e) => {
                       const newHasFollowUp = e.target.checked;
+                      const defaultFollowUp = editingItemParentService
+                        ? { name: editingItemParentService.name, serviceId: editingItemParentService.id, durationMinutes: 15, waitMinutes: 0 }
+                        : { name: "", durationMinutes: 15, waitMinutes: 0 };
                       setEditingItem({
                         ...editingItem,
                         hasFollowUp: newHasFollowUp,
                         followUp: newHasFollowUp
-                          ? (editingItem.followUp ?? { name: "", durationMinutes: 15, waitMinutes: 0 })
+                          ? (editingItem.followUp ?? defaultFollowUp)
                           : null,
                       });
                       if (!newHasFollowUp) {
@@ -1532,6 +1573,8 @@ export default function ServicesPage() {
                         setFollowUpDurationInputValue("");
                         setFollowUpWaitInputValue("0");
                         setFollowUpTextInputValue("");
+                      } else if (editingItemParentService) {
+                        setFollowUpNameInputValue(editingItemParentService.name);
                       }
                       setError(null);
                     }}
@@ -1542,44 +1585,64 @@ export default function ServicesPage() {
 
                 {editingItem.hasFollowUp && (
                   <div className="space-y-4 pr-6 bg-slate-50 p-4 rounded-lg">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
-                        שלב 2 – שירות *
-                      </label>
-                      <select
-                        value={editingItem.followUp?.name ?? followUpNameInputValue ?? ""}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          const svc = services.find((s) => s.name === v);
-                          setFollowUpNameInputValue(v);
-                          setEditingItem({
-                            ...editingItem,
-                            followUp: editingItem.followUp
-                              ? { ...editingItem.followUp, name: v, serviceId: svc?.id }
-                              : { name: v, serviceId: svc?.id, durationMinutes: 15, waitMinutes: 0 },
-                          });
-                        }}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep bg-white"
-                      >
-                        <option value="">בחר שירות...</option>
-                        {(() => {
-                          const currentName = (editingItem.followUp?.name ?? followUpNameInputValue ?? "").trim();
-                          const inList = currentName && services.some((s) => s.name === currentName);
-                          return (
-                            <>
-                              {currentName && !inList && (
-                                <option value={currentName}>{currentName} (לא ברשימה)</option>
-                              )}
-                              {services.map((s) => (
-                                <option key={s.id} value={s.name}>
-                                  {s.name}
-                                </option>
-                              ))}
-                            </>
-                          );
-                        })()}
-                      </select>
-                    </div>
+                    {/* When parent service is known (opened from a service card), show read-only; otherwise show dropdown. */}
+                    {editingItemParentService ? (
+                      <div className="space-y-2">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">שירות</label>
+                          <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-slate-700 text-right">
+                            {editingItemParentService.name}
+                          </div>
+                        </div>
+                        {editingItem.type != null && editingItem.type.trim() !== "" && (
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">סוג שירות ראשי</label>
+                            <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-slate-700 text-right">
+                              {editingItem.type.trim()}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          שלב 2 – שירות *
+                        </label>
+                        <select
+                          value={editingItem.followUp?.name ?? followUpNameInputValue ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            const svc = services.find((s) => s.name === v);
+                            setFollowUpNameInputValue(v);
+                            setEditingItem({
+                              ...editingItem,
+                              followUp: editingItem.followUp
+                                ? { ...editingItem.followUp, name: v, serviceId: svc?.id }
+                                : { name: v, serviceId: svc?.id, durationMinutes: 15, waitMinutes: 0 },
+                            });
+                          }}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep bg-white"
+                        >
+                          <option value="">בחר שירות...</option>
+                          {(() => {
+                            const currentName = (editingItem.followUp?.name ?? followUpNameInputValue ?? "").trim();
+                            const inList = currentName && services.some((s) => s.name === currentName);
+                            return (
+                              <>
+                                {currentName && !inList && (
+                                  <option value={currentName}>{currentName} (לא ברשימה)</option>
+                                )}
+                                {services.map((s) => (
+                                  <option key={s.id} value={s.name}>
+                                    {s.name}
+                                  </option>
+                                ))}
+                              </>
+                            );
+                          })()}
+                        </select>
+                      </div>
+                    )}
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">
                         משך שלב 2 (דקות) *
@@ -1620,7 +1683,7 @@ export default function ServicesPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">
-                        טקסט להמשך טיפול (אופציונלי)
+                        שם המשך טיפול *
                       </label>
                       <input
                         type="text"
@@ -1636,11 +1699,26 @@ export default function ServicesPage() {
                           });
                         }}
                         maxLength={FOLLOWUP_TEXT_MAX_LENGTH}
-                        placeholder="למשל: קרטין"
+                        placeholder="למשל: פן"
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep bg-white"
                       />
-                      <p className="text-xs text-[#64748B] mt-1">
-                        יוצג כ: המשך טיפול: [שירות] - [טקסט]. מקסימום {FOLLOWUP_TEXT_MAX_LENGTH} תווים.
+                      <p className="text-xs text-[#64748B] mt-1" dir="rtl">
+                        {(() => {
+                          const serviceName = editingItemParentService?.name ?? editingItem.followUp?.name ?? followUpNameInputValue ?? "—";
+                          const text = (editingItem.followUp?.text ?? followUpTextInputValue ?? "").trim();
+                          const duration = editingItem.followUp?.durationMinutes ?? (followUpDurationInputValue ? parseInt(followUpDurationInputValue, 10) : 15);
+                          const wait = editingItem.followUp?.waitMinutes ?? (followUpWaitInputValue ? parseInt(followUpWaitInputValue, 10) : 0);
+                          const numDuration = Number.isFinite(duration) ? duration : 15;
+                          const numWait = Number.isFinite(wait) ? wait : 0;
+                          const preview = `המשך טיפול: ${serviceName}${text ? ` - ${text}` : ""} (${numDuration} דק׳)${numWait ? `, המתנה ${numWait} דק׳` : ""}`;
+                          return (
+                            <>
+                              <span className="font-medium text-slate-600">תצוגה: </span>
+                              {preview}
+                              <span className="block mt-0.5 text-[#94A3B8]">מקסימום {FOLLOWUP_TEXT_MAX_LENGTH} תווים בשדה הטקסט.</span>
+                            </>
+                          );
+                        })()}
                       </p>
                     </div>
                   </div>
@@ -1648,95 +1726,105 @@ export default function ServicesPage() {
               </div>
             </div>
 
-            <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex justify-end gap-3">
-              <button
-                onClick={() => setEditingItem(null)}
-                className="px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 text-sm font-medium"
-              >
-                ביטול
-              </button>
+            <div className="sticky bottom-0 z-10 bg-white border-t border-slate-200 px-6 py-4 flex flex-col gap-2">
               {(() => {
-                // Single source of truth for disabled state - computed from current editingItem
-                // This IIFE runs on every render, so it always uses the latest editingItem state
                 const serviceId = editingItem?.serviceId || editingItem?.service;
                 const hasService = !!serviceId && serviceId.trim().length > 0;
-                const hasValidDuration = editingItem?.durationMinMinutes !== undefined && 
-                                         editingItem.durationMinMinutes !== null && 
+                const hasValidDuration = editingItem?.durationMinMinutes !== undefined &&
+                                         editingItem.durationMinMinutes !== null &&
                                          editingItem.durationMinMinutes >= 1;
-                
                 const hasFollowUp = editingItem?.hasFollowUp === true;
                 const followUp = editingItem?.followUp;
+                const followUpText = (editingItem?.followUp?.text ?? followUpTextInputValue ?? "").trim();
                 const hasValidFollowUp = !hasFollowUp ||
                                         (hasFollowUp &&
                                          !!followUp?.name?.trim() &&
+                                         !!followUpText &&
                                          typeof followUp.durationMinutes === "number" && followUp.durationMinutes >= 1 &&
                                          typeof followUp.waitMinutes === "number" && followUp.waitMinutes >= 0);
-                
                 const isSaveDisabled = !hasService || !hasValidDuration || !hasValidFollowUp;
-                
-                // Debug logging (dev only) - log after toggle to verify state updates
-                if (process.env.NODE_ENV === 'development') {
-                  console.log('[Save Button Debug]', {
-                    serviceId,
-                    hasService,
-                    durationMinMinutes: editingItem?.durationMinMinutes,
-                    hasValidDuration,
-                    hasFollowUp,
-                    followUp: editingItem?.followUp,
-                    hasValidFollowUp,
-                    isSaveDisabled,
-                    editingItemState: editingItem ? 'exists' : 'null',
-                    timestamp: Date.now(),
-                  });
-                }
-                
-                // Explicit button classes - no conditional logic in className
-                const buttonClasses = isSaveDisabled
-                  ? "px-4 py-2 bg-caleno-ink/60 text-white rounded-lg text-sm font-medium cursor-not-allowed opacity-75"
-                  : "px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium cursor-pointer opacity-100 transition-colors";
-                
-                // Create a safe click handler that double-checks disabled state using current editingItem
-                const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-                  // Re-check disabled state at click time to prevent stale closures
-                  const currentServiceId = editingItem?.serviceId || editingItem?.service;
-                  const currentHasService = !!currentServiceId && currentServiceId.trim().length > 0;
-                  const currentHasValidDuration = editingItem?.durationMinMinutes !== undefined && 
-                                                  editingItem.durationMinMinutes !== null && 
-                                                  editingItem.durationMinMinutes >= 1;
-                  const currentHasFollowUp = editingItem?.hasFollowUp === true;
-                  const currentFollowUp = editingItem?.followUp;
-                  const currentHasValidFollowUp = !currentHasFollowUp ||
-                                                  (currentHasFollowUp &&
-                                                  !!currentFollowUp?.name?.trim() &&
-                                                  typeof currentFollowUp.durationMinutes === "number" && currentFollowUp.durationMinutes >= 1 &&
-                                                  typeof currentFollowUp.waitMinutes === "number" && currentFollowUp.waitMinutes >= 0);
-                  const currentIsSaveDisabled = !currentHasService || !currentHasValidDuration || !currentHasValidFollowUp;
-                  
-                  if (currentIsSaveDisabled) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    return;
-                  }
-                  handleSaveItem();
-                };
-                
-                return (
-                  <button
-                    key={`save-btn-${editingItem?.id || 'new'}-${editingItem?.hasFollowUp ? 'followup' : 'no-followup'}`}
-                    type="button"
-                    onClick={handleClick}
-                    disabled={isSaveDisabled}
-                    className={buttonClasses}
-                    style={{
-                      pointerEvents: isSaveDisabled ? 'none' : 'auto',
-                      cursor: isSaveDisabled ? 'not-allowed' : 'pointer',
-                    }}
-                    aria-disabled={isSaveDisabled}
-                  >
-                    שמור
-                  </button>
-                );
+                const missingFollowUpName = hasFollowUp && !followUpText;
+                return isSaveDisabled && missingFollowUpName ? (
+                  <p className="text-xs text-amber-600 text-right" role="alert">
+                    נא למלא את שם המשך טיפול כדי לשמור.
+                  </p>
+                ) : null;
               })()}
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setEditingItem(null); setEditingItemParentService(null); }}
+                  className="px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 text-sm font-medium"
+                >
+                  ביטול
+                </button>
+                {(() => {
+                  const serviceId = editingItem?.serviceId || editingItem?.service;
+                  const hasService = !!serviceId && serviceId.trim().length > 0;
+                  const hasValidDuration = editingItem?.durationMinMinutes !== undefined &&
+                                           editingItem.durationMinMinutes !== null &&
+                                           editingItem.durationMinMinutes >= 1;
+                  const hasFollowUp = editingItem?.hasFollowUp === true;
+                  const followUp = editingItem?.followUp;
+                  const followUpText = (editingItem?.followUp?.text ?? followUpTextInputValue ?? "").trim();
+                  const hasValidFollowUp = !hasFollowUp ||
+                                          (hasFollowUp &&
+                                           !!followUp?.name?.trim() &&
+                                           !!followUpText &&
+                                           typeof followUp.durationMinutes === "number" && followUp.durationMinutes >= 1 &&
+                                           typeof followUp.waitMinutes === "number" && followUp.waitMinutes >= 0);
+                  const isSaveDisabled = !hasService || !hasValidDuration || !hasValidFollowUp;
+
+                  const buttonClasses = isSaveDisabled
+                    ? "px-4 py-2 bg-caleno-ink/60 text-white rounded-lg text-sm font-medium cursor-not-allowed opacity-75"
+                    : "px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium cursor-pointer opacity-100 transition-colors";
+
+                  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+                    e.preventDefault();
+                    const currentServiceId = editingItem?.serviceId || editingItem?.service;
+                    const currentHasService = !!currentServiceId && currentServiceId.trim().length > 0;
+                    const currentHasValidDuration = editingItem?.durationMinMinutes !== undefined &&
+                                                    editingItem.durationMinMinutes !== null &&
+                                                    editingItem.durationMinMinutes >= 1;
+                    const currentHasFollowUp = editingItem?.hasFollowUp === true;
+                    const currentFollowUp = editingItem?.followUp;
+                    const currentFollowUpText = (editingItem?.followUp?.text ?? followUpTextInputValue ?? "").trim();
+                    const currentHasValidFollowUp = !currentHasFollowUp ||
+                                                    (currentHasFollowUp &&
+                                                     !!currentFollowUp?.name?.trim() &&
+                                                     !!currentFollowUpText &&
+                                                     typeof currentFollowUp.durationMinutes === "number" && currentFollowUp.durationMinutes >= 1 &&
+                                                     typeof currentFollowUp.waitMinutes === "number" && currentFollowUp.waitMinutes >= 0);
+                    const currentIsSaveDisabled = !currentHasService || !currentHasValidDuration || !currentHasValidFollowUp;
+
+                    if (currentIsSaveDisabled) {
+                      if (currentHasFollowUp && !currentFollowUpText) {
+                        setError("נא למלא את שם המשך טיפול");
+                      } else if (!currentHasService) {
+                        setError("נא לבחור שירות");
+                      } else if (!currentHasValidDuration) {
+                        setError("משך השירות חייב להיות גדול או שווה ל-1 דקה");
+                      } else {
+                        setError("נא למלא את כל השדות הנדרשים");
+                      }
+                      return;
+                    }
+                    handleSaveItem();
+                  };
+
+                  return (
+                    <button
+                      key={`save-btn-${editingItem?.id ?? "new"}-${editingItem?.hasFollowUp ? "followup" : "no-followup"}`}
+                      type="button"
+                      onClick={handleClick}
+                      aria-disabled={isSaveDisabled}
+                      className={buttonClasses}
+                    >
+                      שמור
+                    </button>
+                  );
+                })()}
+              </div>
             </div>
           </div>
         </div>

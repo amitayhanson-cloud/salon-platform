@@ -20,11 +20,6 @@ export const HERO = {
   secondaryCta: "איך זה עובד",
 } as const;
 
-export const TRUST = {
-  line: "עסקים בתחום השירות כבר עובדים עם קלינו",
-  logos: ["Partner 1", "Partner 2", "Partner 3", "Partner 4", "Partner 5"],
-} as const;
-
 export const PRODUCT_EXPLANATION = {
   title: "פלטפורמה אחת לכל העסק שלך",
   bullets: [
@@ -91,14 +86,16 @@ export const FEATURES_LIST = [
 export const DEMO_SECTION = {
   headline: "תראו את קלינו בפעולה",
   subtitle:
-    "יומן תורים, ניהול לקוחות ואוטומציות WhatsApp — הכל מפאנל ניהול אחד.",
+    "יומן תורים, ניהול לקוחות ואתר עסקי — הכל מפאנל ניהול אחד.",
   placeholderSuffix: "— תצוגת המערכת",
+  /** Caption under tabs when the website tab is active. */
+  websiteTabCaption: "תצוגה לדוגמה של אתר העסק שנבנה אוטומטית עם קלינו",
 } as const;
 
 export const DEMO_TABS = [
-  { id: "calendar", label: "יומן תורים" },
   { id: "clients", label: "לקוחות" },
-  { id: "whatsapp", label: "אוטומציות WhatsApp" },
+  { id: "whatsapp", label: "האתר שלכם" },
+  { id: "calendar", label: "יומן תורים" },
 ] as const;
 
 export const HOW_IT_WORKS_SECTION = {

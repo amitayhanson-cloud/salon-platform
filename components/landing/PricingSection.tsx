@@ -38,12 +38,6 @@ export function PricingSection() {
               <p className="mt-1 text-right text-sm font-normal leading-relaxed text-gray-500">
                 {tier.description}
               </p>
-              <div className="mt-4 flex items-baseline justify-end gap-1">
-                <span className="text-3xl font-semibold leading-tight tracking-tight text-caleno-ink">
-                  ${tier.price}
-                </span>
-                <span className="font-normal text-gray-500">{tier.period}</span>
-              </div>
               <ul className="mt-6 space-y-3 text-right" role="list">
                 {tier.features.map((feature, i) => (
                   <li key={i} className="flex items-start gap-3 text-sm font-normal leading-relaxed text-gray-500">

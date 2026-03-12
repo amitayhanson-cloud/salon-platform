@@ -3,6 +3,7 @@ import type { LandingContent } from "@/types/landingContent";
 export const DEFAULT_LANDING_CONTENT: LandingContent = {
   hero: {
     headline: "כל מה שהעסק שלכם צריך,\nבמקום אחד",
+    imageUrl: undefined,
     subheadline:
       "בונים אתר, מנהלים תורים, עוקבים אחרי לקוחות, שולטים ביומן ומנהלים את כל הפעילות העסקית שלכם דרך מערכת אחת חכמה ופשוטה לשימוש.",
     primaryCtaLabel: "צרו אתר עכשיו",
@@ -78,4 +79,5 @@ Caleno היא לא עוד אתר.
       answer: "כן, דרך פאנל הניהול.",
     },
   ],
+  features: {},
 };

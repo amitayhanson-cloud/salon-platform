@@ -17,6 +17,7 @@ import {
   HAIR_WORK_IMAGES,
 } from "@/lib/hairImages";
 import { getGalleryImages } from "@/lib/getGalleryImages";
+import { DEFAULT_CONTENT } from "@/lib/editor/defaultContent";
 
 function HairLuxuryPreview({
   config,
@@ -102,46 +103,45 @@ function HairLuxuryPreview({
           className="absolute inset-0 bg-cover bg-center"
           style={{ backgroundImage: `url(${heroImageUrl})` }}
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/75 to-black/90" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/70 to-black/88" />
 
-        <div className="relative z-10 w-full max-w-4xl mx-auto text-center text-white space-y-6">
-          <p className="text-sm tracking-[0.2em] text-slate-200">
-            סלון יופי | עיצוב שיער
+        <div className="relative z-10 w-full max-w-3xl mx-auto text-center text-white px-4 py-12 sm:py-16">
+          <p className="text-xs sm:text-sm tracking-[0.22em] uppercase font-medium text-slate-200 opacity-90">
+            {DEFAULT_CONTENT.hero.tagline}
           </p>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight">
-            {config.salonName || "שם הסלון"} – חוויית שיער ברמת לוקס
+          <h1 dir="rtl" className="mt-3 sm:mt-4 text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold leading-[1.15] tracking-tight text-white">
+            {DEFAULT_CONTENT.hero.title}
           </h1>
-          <p className="text-lg sm:text-xl text-slate-200 max-w-2xl mx-auto">
-            צוות מקצועי, חומרים פרימיום ואווירה פרטית ומפנקת – לכל לקוחה שמחפשת
-            טיפול שיער מדויק ברמה הגבוהה ביותר.
+          <p className="mt-5 sm:mt-6 text-base sm:text-lg md:text-xl max-w-xl mx-auto leading-relaxed text-slate-200 opacity-95">
+            {DEFAULT_CONTENT.hero.subtitle}
           </p>
 
-          <div className="flex flex-wrap justify-center gap-4 pt-4">
+          <div className="flex flex-wrap justify-center gap-3 sm:gap-4 mt-8 sm:mt-10">
             <button
               onClick={() => scrollToSection("booking-section")}
-              className="px-8 py-3 rounded-full font-semibold shadow-lg transition"
+              className="inline-flex items-center justify-center min-h-[48px] px-8 sm:px-10 py-3.5 sm:py-4 rounded-full text-base sm:text-lg font-semibold shadow-xl transition"
               style={{
                 backgroundColor: colors.primary,
                 color: colors.textOnLight,
-                boxShadow: "0 8px 24px rgba(226, 184, 87, 0.3)",
+                boxShadow: "0 10px 32px rgba(0, 0, 0, 0.35)",
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.boxShadow =
-                  "0 8px 24px rgba(226, 184, 87, 0.5)";
+                  "0 10px 32px rgba(0, 0, 0, 0.4)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.boxShadow =
-                  "0 8px 24px rgba(226, 184, 87, 0.3)";
+                  "0 10px 32px rgba(0, 0, 0, 0.35)";
               }}
             >
-              קבעי תור אונליין
+              {DEFAULT_CONTENT.hero.ctaPrimaryText}
             </button>
             {config.contactOptions.includes("whatsapp") && (
               <button
                 onClick={() => scrollToSection("contact-section")}
-                className="px-8 py-3 rounded-full font-semibold border border-slate-300/60 bg-white/5 hover:bg-white/10 text-slate-50 transition"
+                className="inline-flex items-center justify-center min-h-[48px] px-6 sm:px-8 py-3 sm:py-3.5 rounded-full text-base font-medium border-2 border-white/40 bg-white/5 hover:bg-white/10 text-slate-50 transition"
               >
-                דברי איתנו בוואטסאפ
+                {DEFAULT_CONTENT.hero.ctaSecondaryText}
               </button>
             )}
           </div>

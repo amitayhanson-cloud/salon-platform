@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useRouter } from "next/navigation";
 import { getLandingContent, saveLandingContent } from "@/lib/firestoreLanding";
@@ -9,13 +10,19 @@ import { DEFAULT_LANDING_CONTENT } from "@/lib/landingContentDefaults";
 import { isPlatformAdmin } from "@/lib/platformAdmin";
 import type { LandingContent, LandingFaqItem } from "@/types/landingContent";
 
+const LANDING_IMAGE_ACCEPT = "image/jpeg,image/jpg,image/png,image/webp";
+const LANDING_IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5MB
+
 export default function AdminLandingPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, firebaseUser, loading: authLoading } = useAuth();
   const router = useRouter();
   const [content, setContent] = useState<LandingContent>(DEFAULT_LANDING_CONTENT);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<"success" | "error" | null>(null);
+  const [uploadingSection, setUploadingSection] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const heroFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -54,12 +61,73 @@ export default function AdminLandingPage() {
         about: content.about,
         how: content.how,
         faq: content.faq,
+        features: content.features ?? {},
       });
       showToast("success");
     } catch {
       showToast("error");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const uploadLandingImage = async (section: string, file: File) => {
+    if (!firebaseUser) return;
+    const err =
+      !LANDING_IMAGE_ACCEPT.split(",").some((t) => file.type === t.trim())
+        ? "סוג קובץ לא נתמך. השתמש ב-PNG, JPG או WEBP."
+        : file.size > LANDING_IMAGE_MAX_BYTES
+          ? "גודל הקובץ חורג מ-5MB."
+          : null;
+    if (err) {
+      setUploadError(err);
+      return;
+    }
+    setUploadError(null);
+    setUploadingSection(section);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const form = new FormData();
+      form.append("file", file);
+      form.append("section", section);
+      const res = await fetch("/api/upload-landing-image", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setUploadError(data.error || "העלאת התמונה נכשלה.");
+        return;
+      }
+      const url = data.url as string;
+      // API already persisted the URL to Firestore; just update local state for admin UI
+      if (section === "hero") {
+        updateHero({ imageUrl: url });
+      } else if (section === "features-calendar") {
+        setContent((c) => ({
+          ...c,
+          features: { ...(c.features ?? {}), calendarImageUrl: url },
+        }));
+      } else if (section === "features-clients") {
+        setContent((c) => ({
+          ...c,
+          features: { ...(c.features ?? {}), clientsImageUrl: url },
+        }));
+      } else if (section === "features-whatsapp") {
+        setContent((c) => ({
+          ...c,
+          features: { ...(c.features ?? {}), whatsappImageUrl: url },
+        }));
+      } else if (section === "features-website") {
+        setContent((c) => ({
+          ...c,
+          features: { ...(c.features ?? {}), websitePreviewImageUrl: url },
+        }));
+      }
+      setUploadError(null);
+    } finally {
+      setUploadingSection(null);
     }
   };
 
@@ -143,6 +211,11 @@ export default function AdminLandingPage() {
             נכשל. וודא שכותרת ה-Hero ותגית הכפתור הראשי מלאים.
           </div>
         )}
+        {uploadError && (
+          <div className="mb-4 p-3 bg-amber-100 border border-amber-300 text-amber-800 rounded-lg text-sm">
+            {uploadError}
+          </div>
+        )}
 
         <div className="space-y-8">
           {/* Hero */}
@@ -185,6 +258,42 @@ export default function AdminLandingPage() {
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-600 mb-1">תמונת Hero</label>
+                {content.hero.imageUrl ? (
+                  <div className="mb-2 rounded-lg border border-slate-200 overflow-hidden bg-slate-50 max-w-sm">
+                    <Image
+                      src={content.hero.imageUrl}
+                      alt="Hero"
+                      width={400}
+                      height={240}
+                      className="w-full h-auto object-contain"
+                      unoptimized
+                    />
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500 mb-2">אין תמונה. העלה תמונה להצגה באזור Hero.</p>
+                )}
+                <input
+                  ref={heroFileRef}
+                  type="file"
+                  accept={LANDING_IMAGE_ACCEPT}
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) uploadLandingImage("hero", f);
+                    e.target.value = "";
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={!!uploadingSection}
+                  onClick={() => heroFileRef.current?.click()}
+                  className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  {uploadingSection === "hero" ? "מעלה…" : "העלה תמונה חדשה"}
+                </button>
+              </div>
             </div>
           </section>
 
@@ -220,6 +329,71 @@ export default function AdminLandingPage() {
                 />
               </div>
             </div>
+          </section>
+
+          {/* Features / Product images */}
+          <section className="bg-white rounded-xl p-6 border border-slate-200">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">תמונות סקציות (פיצ׳רים / דמו)</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-600 mb-1">תמונת תצוגת אתר (סקציה שנייה)</label>
+                {content.features?.websitePreviewImageUrl ? (
+                  <div className="mb-2 rounded-lg border border-slate-200 overflow-hidden bg-slate-50 max-w-sm">
+                    <Image src={content.features.websitePreviewImageUrl} alt="Website preview" width={400} height={240} className="w-full h-auto object-contain" unoptimized />
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500 mb-2">אין תמונה.</p>
+                )}
+                <input type="file" accept={LANDING_IMAGE_ACCEPT} className="hidden" id="feat-website-input" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLandingImage("features-website", f); e.target.value = ""; }} />
+                <button type="button" disabled={!!uploadingSection} onClick={() => document.getElementById("feat-website-input")?.click()} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                  {uploadingSection === "features-website" ? "מעלה…" : "העלה תמונה"}
+                </button>
+              </div>
+              <p className="text-sm font-medium text-slate-700 pt-2">תראו את קלינו בפעולה — 3 טאבים</p>
+              <div>
+                <label className="block text-sm font-medium text-slate-600 mb-1">טאב 1: יומן תורים</label>
+                {content.features?.calendarImageUrl ? (
+                  <div className="mb-2 rounded-lg border border-slate-200 overflow-hidden bg-slate-50 max-w-sm">
+                    <Image src={content.features.calendarImageUrl} alt="Calendar" width={400} height={240} className="w-full h-auto object-contain" unoptimized />
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500 mb-2">אין תמונה.</p>
+                )}
+                <input type="file" accept={LANDING_IMAGE_ACCEPT} className="hidden" id="feat-calendar-input" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLandingImage("features-calendar", f); e.target.value = ""; }} />
+                <button type="button" disabled={!!uploadingSection} onClick={() => document.getElementById("feat-calendar-input")?.click()} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                  {uploadingSection === "features-calendar" ? "מעלה…" : "העלה תמונה"}
+                </button>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-600 mb-1">טאב 2: לקוחות</label>
+                {content.features?.clientsImageUrl ? (
+                  <div className="mb-2 rounded-lg border border-slate-200 overflow-hidden bg-slate-50 max-w-sm">
+                    <Image src={content.features.clientsImageUrl} alt="Clients" width={400} height={240} className="w-full h-auto object-contain" unoptimized />
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500 mb-2">אין תמונה.</p>
+                )}
+                <input type="file" accept={LANDING_IMAGE_ACCEPT} className="hidden" id="feat-clients-input" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLandingImage("features-clients", f); e.target.value = ""; }} />
+                <button type="button" disabled={!!uploadingSection} onClick={() => document.getElementById("feat-clients-input")?.click()} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                  {uploadingSection === "features-clients" ? "מעלה…" : "העלה תמונה"}
+                </button>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-600 mb-1">טאב 3: האתר שלכם</label>
+                {content.features?.whatsappImageUrl ? (
+                  <div className="mb-2 rounded-lg border border-slate-200 overflow-hidden bg-slate-50 max-w-sm">
+                    <Image src={content.features.whatsappImageUrl} alt="תצוגת אתר עסק" width={400} height={240} className="w-full h-auto object-contain" unoptimized />
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500 mb-2">אין תמונה.</p>
+                )}
+                <input type="file" accept={LANDING_IMAGE_ACCEPT} className="hidden" id="feat-whatsapp-input" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLandingImage("features-whatsapp", f); e.target.value = ""; }} />
+                <button type="button" disabled={!!uploadingSection} onClick={() => document.getElementById("feat-whatsapp-input")?.click()} className="px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                  {uploadingSection === "features-whatsapp" ? "מעלה…" : "העלה תמונה"}
+                </button>
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 mt-2">JPG, PNG או WEBP. מקסימום 5MB.</p>
           </section>
 
           {/* How it works */}

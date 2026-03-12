@@ -15,12 +15,12 @@ export const DEFAULT_CONTENT: Required<SiteContent> = {
     navCtaContact: "צור קשר",
   },
   hero: {
-    tagline: "סלון יופי | עיצוב שיער",
-    title: "חוויית שיער ברמת לוקס",
+    tagline: "סלון יופי • עיצוב שיער",
+    title: "עיצוב שיער ברמה אחרת",
     subtitle:
-      "צוות מקצועי, חומרים פרימיום ואווירה פרטית ומפנקת – לכל לקוחה שמחפשת טיפול שיער מדויק ברמה הגבוהה ביותר.",
-    ctaPrimaryText: "קבעי תור אונליין",
-    ctaSecondaryText: "צור קשר",
+      "צוות מקצועי עם ניסיון רב, התאמה אישית לכל לקוחה ותוצאה שמחזיקה לאורך זמן.",
+    ctaPrimaryText: "קביעת תור",
+    ctaSecondaryText: "יצירת קשר",
   },
   about: {
     headingLabel: "על הסלון",

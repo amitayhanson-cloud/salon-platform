@@ -23,6 +23,10 @@ function mergeWithDefaults(data: Partial<LandingContent> | null): LandingContent
       Array.isArray(data.faq) && data.faq.length > 0
         ? data.faq
         : DEFAULT_LANDING_CONTENT.faq,
+    features: {
+      ...(DEFAULT_LANDING_CONTENT.features ?? {}),
+      ...(data.features ?? {}),
+    },
     updatedAt: data.updatedAt,
   };
 }

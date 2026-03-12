@@ -1,9 +1,15 @@
 import Link from "next/link";
+import Image from "next/image";
 import { HERO } from "@/lib/landingContent";
 
 const HERO_HEADLINE_END = "במקום אחד";
 
-export function LandingHero() {
+type LandingHeroProps = {
+  /** When set, shown as hero image instead of placeholder. */
+  heroImageUrl?: string | null;
+};
+
+export function LandingHero({ heroImageUrl }: LandingHeroProps) {
   const headline = HERO.headline;
   const highlightEnd = headline.endsWith(HERO_HEADLINE_END);
   const headlineRest = highlightEnd ? headline.slice(0, -HERO_HEADLINE_END.length) : headline;
@@ -13,7 +19,6 @@ export function LandingHero() {
     <section dir="rtl" className="relative bg-white py-16 md:py-20 lg:py-24">
       <div className="mx-auto max-w-6xl px-4 md:px-6 lg:px-8">
         <div className="grid grid-cols-1 gap-10 lg:grid-cols-2 lg:items-center lg:gap-16">
-          {/* Mobile: text first (order-1), image second (order-2). Desktop: RTL layout unchanged via lg:order-* */}
           <div className="order-1 flex flex-col items-center text-center md:items-end md:text-right lg:order-1">
             <h1 className="mx-auto max-w-[20ch] text-3xl font-semibold leading-tight tracking-tight text-caleno-ink md:mx-0 md:max-w-none md:text-5xl">
               {headlineRest}
@@ -39,12 +44,23 @@ export function LandingHero() {
           </div>
           <div className="order-2 relative flex justify-center lg:order-2 lg:justify-end">
             <div
-              className="h-64 w-full max-w-md rounded-2xl border border-[#E5E7EB] bg-white shadow-lg md:h-80 lg:h-96"
+              className="h-64 w-full max-w-md rounded-2xl border border-[#E5E7EB] bg-white shadow-lg overflow-hidden md:h-80 lg:h-96"
               aria-hidden
             >
-              <div className="flex h-full items-center justify-center text-gray-400">
-                Product screenshot / mock
-              </div>
+              {heroImageUrl ? (
+                <Image
+                  src={heroImageUrl}
+                  alt=""
+                  width={600}
+                  height={400}
+                  className="h-full w-full object-cover object-center"
+                  unoptimized
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center text-gray-400">
+                  Product screenshot / mock
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -18,11 +18,6 @@ function formatStartingPrice(price: number | string | undefined): string | null 
   return formatted ? `החל מ־${formatted}` : null;
 }
 
-function formatDuration(minutes: number | undefined): string | null {
-  if (minutes === undefined || minutes === null || minutes < 1) return null;
-  return `${minutes} דק׳`;
-}
-
 export default function ServiceCard({
   service,
   siteId,
@@ -40,10 +35,9 @@ export default function ServiceCard({
   /** When true, wrap image in click-to-edit target for preview editor */
   editorMode?: boolean;
 }) {
+  // Parent services are category-only; duration belongs to service types. Do not show service.duration.
   const priceStr = formatStartingPrice(service.price);
-  const durationStr = formatDuration(service.duration);
-  const metaParts = [priceStr, durationStr].filter(Boolean);
-  const metaRow = metaParts.length > 0 ? metaParts.join(" • ") : null;
+  const metaRow = priceStr;
 
   const imageSrc = service.imageUrl || libraryImage;
 

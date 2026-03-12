@@ -1,13 +1,38 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { DEMO_SECTION, DEMO_TABS } from "@/lib/landingContent";
 
 type DemoTabId = (typeof DEMO_TABS)[number]["id"];
 
-export function ProductDemoSection() {
+/** Per-tab image URLs for the 3 demo tabs (calendar, clients, website). */
+type ProductDemoSectionProps = {
+  calendarImageUrl?: string | null;
+  clientsImageUrl?: string | null;
+  /** Tab 3: "האתר שלכם" — client website preview image. */
+  whatsappImageUrl?: string | null;
+};
+
+export function ProductDemoSection({
+  calendarImageUrl,
+  clientsImageUrl,
+  whatsappImageUrl,
+}: ProductDemoSectionProps) {
   const [activeTab, setActiveTab] = useState<DemoTabId>(DEMO_TABS[0].id);
   const activeLabel = DEMO_TABS.find((t) => t.id === activeTab)?.label ?? "";
+  const activeImageUrl =
+    activeTab === "calendar"
+      ? calendarImageUrl
+      : activeTab === "clients"
+        ? clientsImageUrl
+        : whatsappImageUrl;
+  const isWebsiteTab = activeTab === "whatsapp";
+  const panelCaption = isWebsiteTab
+    ? DEMO_SECTION.websiteTabCaption
+    : "תצוגה לדוגמה";
+  const imageAlt =
+    isWebsiteTab ? "דוגמה לאתר עסק שנוצר עם קלינו" : "";
 
   return (
     <section
@@ -49,18 +74,30 @@ export function ProductDemoSection() {
           </div>
 
           <p className="mt-4 text-center text-sm font-normal leading-relaxed text-gray-500" dir="rtl">
-            תצוגה לדוגמה
+            {panelCaption}
           </p>
           <div
             id={`demo-panel-${activeTab}`}
             role="tabpanel"
             aria-labelledby={`tab-${activeTab}`}
-            className="mt-2 rounded-2xl border border-gray-200 bg-white shadow-md"
+            className="mt-2 rounded-2xl border border-gray-200 bg-white shadow-md overflow-hidden"
           >
-            <div className="flex h-[240px] items-center justify-center md:h-[360px]">
-              <span className="text-right text-gray-400">
-                {activeLabel} {DEMO_SECTION.placeholderSuffix}
-              </span>
+            <div className="relative h-[450px] w-full bg-gray-50/50 md:h-[650px]">
+              {activeImageUrl ? (
+                <Image
+                  src={activeImageUrl}
+                  alt={imageAlt}
+                  fill
+                  className="object-contain object-center"
+                  unoptimized
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center">
+                  <span className="text-right text-gray-400">
+                    {activeLabel} {DEMO_SECTION.placeholderSuffix}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>

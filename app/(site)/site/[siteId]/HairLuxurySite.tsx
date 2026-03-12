@@ -297,17 +297,20 @@ export default function HairLuxurySite({
           ["--hero-secondaryBtnText" as string]: getSectionColorResolved(config, "hero", "secondaryBtnText"),
         }}
       >
-        <div className="absolute inset-0 pointer-events-none" aria-hidden>
-          <img
-            src={heroImageUrl}
-            alt=""
-            className="absolute inset-0 w-full h-full object-cover"
-            loading="eager"
-            fetchPriority="high"
-          />
+        <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-4" aria-hidden>
+          <div className="w-full max-w-[500px] h-full max-h-[80vh] flex items-center justify-center">
+            <img
+              src={heroImageUrl}
+              alt=""
+              className="w-full h-full object-contain object-center"
+              loading="eager"
+              fetchPriority="high"
+            />
+          </div>
         </div>
+        {/* Dark overlay for text readability */}
         <div
-          className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/75 to-black/90 pointer-events-auto cursor-pointer"
+          className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/70 to-black/88 pointer-events-auto cursor-pointer"
           data-edit-id="heroImage"
           data-edit-kind="image"
           data-edit-scope="hero"
@@ -317,17 +320,46 @@ export default function HairLuxurySite({
         />
 
         <motion.div
-          className="relative z-10 w-full max-w-4xl mx-auto text-center text-white space-y-6"
+          className="relative z-10 w-full max-w-3xl mx-auto text-center px-4 sm:px-6 py-12 sm:py-16"
           initial="hidden"
           animate="visible"
           variants={{
             visible: {
-              transition: { staggerChildren: 0.14, delayChildren: 0.1 },
+              transition: { staggerChildren: 0.12, delayChildren: 0.08 },
             },
             hidden: {},
           }}
         >
-          <motion.div
+          {/* Eyebrow */}
+          <motion.p
+            className="text-xs sm:text-sm tracking-[0.22em] uppercase font-medium opacity-90"
+            style={{ color: "var(--hero-subtitleText)" }}
+            data-edit-id="heroTagline"
+            data-edit-kind="text"
+            data-edit-paths='["content.hero.tagline","sectionStyles.hero.subtitleText"]'
+            data-edit-label="תגית הירו"
+            variants={{
+              hidden: { opacity: 0, y: 14 },
+              visible: {
+                opacity: 1,
+                y: 0,
+                transition: { duration: 0.45, ease: [0.25, 0.46, 0.45, 0.94] },
+              },
+            }}
+          >
+            {c("hero", "tagline")}
+          </motion.p>
+
+          {/* Main headline */}
+          <motion.h1
+            dir="rtl"
+            lang="he"
+            className="mt-3 sm:mt-4 text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold leading-[1.15] tracking-tight max-w-3xl mx-auto"
+            style={{ unicodeBidi: "plaintext", color: "var(--hero-text)" }}
+            data-edit-id="heroTitle"
+            data-edit-kind="text"
+            data-edit-paths='["content.hero.title","sectionStyles.hero.text"]'
+            data-edit-label="כותרת הירו"
             variants={{
               hidden: { opacity: 0, y: 18 },
               visible: {
@@ -337,36 +369,13 @@ export default function HairLuxurySite({
               },
             }}
           >
-            <p className="text-sm tracking-[0.2em]" style={{ color: "var(--hero-subtitleText)", opacity: 0.9 }} data-edit-id="heroTagline" data-edit-kind="text" data-edit-paths='["content.hero.tagline","sectionStyles.hero.subtitleText"]' data-edit-label="תגית הירו">
-              {c("hero", "tagline")}
-            </p>
-            <div className="space-y-2">
-              <p
-                dir="ltr"
-                lang="en"
-                className="text-2xl sm:text-3xl font-medium tracking-wide"
-                style={{ unicodeBidi: "isolate", color: "var(--hero-text)" }}
-              >
-                {config.salonName || "שם הסלון"}
-              </p>
-              <h1
-                dir="rtl"
-                lang="he"
-                className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight"
-                style={{ unicodeBidi: "plaintext", color: "var(--hero-text)" }}
-                data-edit-id="heroTitle"
-                data-edit-kind="text"
-                data-edit-paths='["content.hero.title","sectionStyles.hero.text"]'
-                data-edit-label="כותרת הירו"
-              >
-                {c("hero", "title")}
-              </h1>
-            </div>
-          </motion.div>
+            {c("hero", "title")}
+          </motion.h1>
 
+          {/* Supporting line */}
           <motion.p
-            className="text-lg sm:text-xl max-w-2xl mx-auto"
-            style={{ color: "var(--hero-subtitleText)", opacity: 0.9 }}
+            className="mt-5 sm:mt-6 text-base sm:text-lg md:text-xl max-w-xl mx-auto leading-relaxed opacity-95"
+            style={{ color: "var(--hero-subtitleText)" }}
             data-edit-id="heroSubtitle"
             data-edit-kind="text"
             data-edit-paths='["content.hero.subtitle","sectionStyles.hero.subtitleText"]'
@@ -383,8 +392,9 @@ export default function HairLuxurySite({
             {c("hero", "subtitle")}
           </motion.p>
 
+          {/* CTAs: primary stands out, secondary subtle */}
           <motion.div
-            className="flex flex-wrap justify-center gap-4 pt-4"
+            className="flex flex-wrap justify-center gap-3 sm:gap-4 mt-8 sm:mt-10"
             variants={{
               hidden: { opacity: 0, y: 18 },
               visible: {
@@ -397,32 +407,33 @@ export default function HairLuxurySite({
             {bookingEnabled(config) && (
               <Link
                 href={getSiteUrl(config?.slug, siteId, "/book")}
-                className="px-8 py-3 rounded-full font-semibold shadow-lg transition hover:opacity-90"
+                className="inline-flex items-center justify-center min-h-[48px] px-8 sm:px-10 py-3.5 sm:py-4 rounded-full text-base sm:text-lg font-semibold shadow-xl transition-all duration-200 hover:opacity-95 hover:scale-[1.02] active:scale-[0.98]"
                 style={{
                   backgroundColor: "var(--hero-primaryBtnBg)",
                   color: "var(--hero-primaryBtnText)",
-                  boxShadow: "0 8px 24px rgba(0, 0, 0, 0.2)",
+                  boxShadow: "0 10px 32px rgba(0, 0, 0, 0.35)",
                 }}
                 data-edit-id="heroButtonPrimary"
                 data-edit-kind="button"
                 data-edit-paths='["content.hero.ctaPrimaryText","sectionStyles.hero.primaryBtnBg","sectionStyles.hero.primaryBtnText"]'
-                data-edit-label="כפתור ראשי (קבעי תור)"
+                data-edit-label="כפתור ראשי (קביעת תור)"
               >
                 {c("hero", "ctaPrimaryText")}
               </Link>
             )}
             <button
+              type="button"
               onClick={() => scrollToSection("contact-section")}
-              className="px-8 py-3 rounded-full font-semibold border transition hover:opacity-90"
+              className="inline-flex items-center justify-center min-h-[48px] px-6 sm:px-8 py-3 sm:py-3.5 rounded-full text-base font-medium border-2 transition-all duration-200 hover:opacity-95"
               style={{
-                borderColor: "rgba(255, 255, 255, 0.3)",
-                backgroundColor: "rgba(255, 255, 255, 0.1)",
+                borderColor: "rgba(255, 255, 255, 0.4)",
+                backgroundColor: "rgba(255, 255, 255, 0.08)",
                 color: "var(--hero-secondaryBtnText)",
               }}
               data-edit-id="heroButtonSecondary"
               data-edit-kind="button"
               data-edit-paths='["content.hero.ctaSecondaryText","sectionStyles.hero.secondaryBtnBg","sectionStyles.hero.secondaryBtnText"]'
-              data-edit-label="כפתור משני (צור קשר)"
+              data-edit-label="כפתור משני (יצירת קשר)"
             >
               {c("hero", "ctaSecondaryText")}
             </button>
