@@ -15,13 +15,13 @@ export function LandingHeader() {
       className="sticky top-0 z-50 border-b border-gray-200 bg-white backdrop-blur-sm md:bg-white/95"
       role="banner"
     >
-      {/* Mobile: flex (logo right, hamburger left). Desktop: 3-column grid. */}
+      {/* Mobile: flex — logo left, hamburger right (order-2, order-1). Desktop: 3-column grid. */}
       <nav
         aria-label="ניווט ראשי"
         className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 md:grid md:h-16 md:px-6 md:[grid-template-columns:auto_1fr_auto] lg:px-8"
       >
-        {/* A. Logo — right in RTL (first in flow); no overlap on mobile */}
-        <div className="flex shrink-0 md:justify-self-start">
+        {/* A. Logo — left on mobile (order-2), right on desktop */}
+        <div className="order-2 flex shrink-0 md:order-none md:justify-self-start">
           <Link
             href="/"
             className="relative flex shrink-0 items-center py-1 transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-caleno-deep focus-visible:ring-offset-2 rounded"
@@ -53,8 +53,8 @@ export function LandingHeader() {
           ))}
         </div>
 
-        {/* C. Actions — hamburger on mobile (left in RTL), login+CTA on desktop */}
-        <div className="flex shrink-0 items-center gap-4 md:justify-self-end">
+        {/* C. Actions — hamburger on mobile (right via order-1), login+CTA on desktop */}
+        <div className="order-1 flex shrink-0 items-center gap-4 md:order-none md:justify-self-end">
           <div className="hidden md:flex md:items-center md:gap-4">
             <Link
               href="/login"

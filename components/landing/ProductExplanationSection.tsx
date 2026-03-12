@@ -11,8 +11,9 @@ export function ProductExplanationSection({ productImageUrl }: ProductExplanatio
   return (
     <section dir="rtl" id="product" className="bg-caleno-off py-16 md:py-20 lg:py-24">
       <div className="mx-auto max-w-6xl px-4 md:px-6 lg:px-8">
-        <div className="grid gap-12 lg:grid-cols-2 lg:items-center lg:gap-16">
-          <div className="mb-8 flex justify-center lg:order-1 lg:mb-0 lg:justify-start">
+        <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:items-center lg:gap-16">
+          {/* Image: second on mobile (order-2), first column on desktop (lg:order-1) */}
+          <div className="order-2 mb-8 flex justify-center lg:order-1 lg:mb-0 lg:justify-start">
             <div
               className="h-72 w-full max-w-md rounded-2xl border border-[#E5E7EB] bg-white shadow-md overflow-hidden md:h-80"
               aria-hidden
@@ -33,7 +34,8 @@ export function ProductExplanationSection({ productImageUrl }: ProductExplanatio
               )}
             </div>
           </div>
-          <div className="text-right lg:order-2">
+          {/* Text: first on mobile (order-1), second column on desktop (lg:order-2) */}
+          <div className="order-1 text-right lg:order-2">
             <h2 className="text-2xl font-semibold leading-tight tracking-tight text-caleno-ink md:text-3xl">
               {PRODUCT_EXPLANATION.title}
             </h2>
