@@ -790,7 +790,7 @@ export default function ClientCardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full min-w-0">
           {/* Clients List */}
           <div className="lg:col-span-1 min-w-0">
-            <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
+            <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 md:p-4">
               <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
                 <h2 className="text-lg font-bold text-slate-900">רשימת לקוחות</h2>
                 <div className="flex gap-2">
@@ -850,41 +850,18 @@ export default function ClientCardPage() {
                   )}
                 </div>
               ) : (
-                <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                <div className="space-y-1 md:space-y-2 max-h-[600px] overflow-y-auto">
                   {filteredClients.map((client) => (
                     <div
                       key={client.id}
-                      className={`relative w-full text-right p-3 rounded-lg border transition-colors ${
+                      className={`relative w-full text-right rounded-lg border transition-colors flex items-center gap-2 md:block md:py-3 py-2.5 px-2.5 md:px-3 md:gap-0 ${
                         selectedClientId === client.id
                           ? "border-[#1E6F7C] bg-[rgba(30,111,124,0.08)]"
-                          : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                          : "border-slate-200 hover:border-slate-300 hover:bg-slate-50 active:bg-slate-100"
                       }`}
                     >
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); toggleSelectForDelete(client.id); }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-slate-200 text-slate-500"
-                        aria-label={selectedForDelete.has(client.id) ? "בטל בחירה" : "בחר למחיקה"}
-                      >
-                        {selectedForDelete.has(client.id) ? (
-                          <CheckSquare className="w-5 h-5 text-caleno-deep" />
-                        ) : (
-                          <Square className="w-5 h-5" />
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleClientSelect(client.id)}
-                        className="w-full text-right block pr-10"
-                      >
-                        <div className="flex justify-between items-center">
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-slate-900">{client.name}</h3>
-                            <p className="text-xs text-slate-600 mt-1">{client.phone}</p>
-                          </div>
-                        </div>
-                      </button>
-                      <div className="absolute left-2 top-1/2 -translate-y-1/2">
+                      {/* Drag / actions handle — start in RTL (⋮) */}
+                      <div className="flex-shrink-0 md:absolute md:left-2 md:top-1/2 md:-translate-y-1/2 order-1 md:order-none">
                         <button
                           type="button"
                           onClick={(e) => {
@@ -901,13 +878,35 @@ export default function ClientCardPage() {
                               setActionsOpenForId(client.id);
                             }
                           }}
-                          className="p-1 rounded hover:bg-slate-200 text-slate-500"
+                          className="p-1.5 md:p-1 rounded touch-manipulation hover:bg-slate-200 text-slate-500"
                           aria-label="פעולות"
                           aria-expanded={actionsOpenForId === client.id}
                         >
                           <MoreVertical className="w-5 h-5" />
                         </button>
                       </div>
+                      {/* Tappable main area: Name + Phone */}
+                      <button
+                        type="button"
+                        onClick={() => handleClientSelect(client.id)}
+                        className="flex-1 min-w-0 text-right block py-0.5 pr-1 md:pr-10 md:py-0 order-2 touch-manipulation"
+                      >
+                        <h3 className="font-bold text-slate-900 text-base md:font-semibold md:text-[inherit] truncate">{client.name || "—"}</h3>
+                        <p className="text-xs text-slate-500 mt-0.5 md:mt-1">{client.phone}</p>
+                      </button>
+                      {/* Checkbox — right in RTL (✓) */}
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); toggleSelectForDelete(client.id); }}
+                        className="flex-shrink-0 p-1.5 md:p-1 rounded touch-manipulation hover:bg-slate-200 text-slate-500 md:absolute md:right-2 md:top-1/2 md:-translate-y-1/2 order-3 md:order-none"
+                        aria-label={selectedForDelete.has(client.id) ? "בטל בחירה" : "בחר למחיקה"}
+                      >
+                        {selectedForDelete.has(client.id) ? (
+                          <CheckSquare className="w-5 h-5 text-caleno-deep" />
+                        ) : (
+                          <Square className="w-5 h-5" />
+                        )}
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -918,45 +917,49 @@ export default function ClientCardPage() {
           {/* Client Details Card */}
           <div className="lg:col-span-2 min-w-0">
             {selectedClient ? (
-              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-                <h2 className="text-xl font-bold text-slate-900 mb-6">פרטי לקוח</h2>
+              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 md:p-6">
+                <h2 className="text-lg font-bold text-slate-900 mb-1 md:text-xl md:mb-6">פרטי לקוח</h2>
+                <div className="mb-4 md:mb-0">
+                  <p className="text-lg md:text-base font-bold text-slate-900 md:font-normal">{selectedClient.name || "—"}</p>
+                  <p className="text-sm text-slate-500 mt-0.5">{selectedClient.phone}</p>
+                </div>
 
-                {/* Client Details */}
-                <div className="border-b border-slate-200 pb-6 mb-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">שם</label>
-                      <p className="text-base text-slate-900">{selectedClient.name}</p>
+                {/* Client Details — compact 2-line key/value on mobile */}
+                <div className="border-b border-slate-200 pb-4 md:pb-6 mb-4 md:mb-6 space-y-3 md:space-y-0">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-y-3 md:gap-4">
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-slate-500 font-medium md:text-sm md:text-slate-700">שם</p>
+                      <p className="text-sm font-semibold text-slate-900 md:font-normal md:text-base">{selectedClient.name || "—"}</p>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">טלפון</label>
-                      <p className="text-base text-slate-900">{selectedClient.phone}</p>
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-slate-500 font-medium md:text-sm md:text-slate-700">טלפון</p>
+                      <p className="text-sm font-semibold text-slate-900 md:font-normal md:text-base">{selectedClient.phone}</p>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">סוג לקוח</label>
-                      <p className="text-base text-slate-900">
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-slate-500 font-medium md:text-sm md:text-slate-700">סוג לקוח</p>
+                      <p className="text-sm font-semibold text-slate-900 md:font-normal md:text-base">
                         <span className="inline-block px-2 py-0.5 rounded text-sm font-medium bg-slate-100 text-slate-800">
                           {clientTypes.some((t) => t.id === (selectedClient.clientTypeId || REGULAR_CLIENT_TYPE_ID)) ? getTypeLabel(selectedClient) : "רגיל"}
                         </span>
                       </p>
                     </div>
                     {selectedClient.email && (
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">אימייל</label>
-                        <p className="text-base text-slate-900">{selectedClient.email}</p>
+                      <div className="space-y-0.5">
+                        <p className="text-xs text-slate-500 font-medium md:text-sm md:text-slate-700">אימייל</p>
+                        <p className="text-sm font-semibold text-slate-900 md:font-normal md:text-base">{selectedClient.email}</p>
                       </div>
                     )}
                     {selectedClient.lastVisit && (
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">ביקור אחרון</label>
-                        <p className="text-base text-slate-900">
+                      <div className="space-y-0.5">
+                        <p className="text-xs text-slate-500 font-medium md:text-sm md:text-slate-700">ביקור אחרון</p>
+                        <p className="text-sm font-semibold text-slate-900 md:font-normal md:text-base">
                           {new Date(selectedClient.lastVisit + "T00:00:00").toLocaleDateString("he-IL")}
                         </p>
                       </div>
                     )}
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">תור אחרון</label>
-                      <p className="text-base text-slate-900">
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-slate-500 font-medium md:text-sm md:text-slate-700">תור אחרון</p>
+                      <p className="text-sm font-semibold text-slate-900 md:font-normal md:text-base">
                         {lastBooking.lastBookingAt
                           ? lastBooking.lastBookingAt.toLocaleDateString("he-IL", {
                               day: "2-digit",
@@ -966,54 +969,58 @@ export default function ClientCardPage() {
                           : "אין תור קיים"}
                       </p>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">ימים מאז תור אחרון</label>
-                      <p className="text-base text-slate-900">
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-slate-500 font-medium md:text-sm md:text-slate-700">ימים מאז תור אחרון</p>
+                      <p className="text-sm font-semibold text-slate-900 md:font-normal md:text-base">
                         {lastBooking.daysSince !== null ? String(lastBooking.daysSince) : "—"}
                       </p>
                     </div>
                     {selectedClient.createdAt && (
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">לקוח מאז</label>
-                        <p className="text-base text-slate-900">
+                      <div className="space-y-0.5">
+                        <p className="text-xs text-slate-500 font-medium md:text-sm md:text-slate-700">לקוח מאז</p>
+                        <p className="text-sm font-semibold text-slate-900 md:font-normal md:text-base">
                           {new Date(selectedClient.createdAt).toLocaleDateString("he-IL")}
                         </p>
                       </div>
                     )}
                   </div>
-                  <div className="mt-4">
-                    <label className="block text-sm font-medium text-slate-700 mb-1">הערות לקוח</label>
-                    <p className="text-base text-slate-900 whitespace-pre-wrap" dir="rtl">
+                  <div className="mt-3 md:mt-4 space-y-0.5">
+                    <p className="text-xs text-slate-500 font-medium md:text-sm md:text-slate-700">הערות לקוח</p>
+                    <p className="text-sm font-semibold text-slate-900 whitespace-pre-wrap md:font-normal md:text-base" dir="rtl">
                       {(selectedClient.notes ?? selectedClient.clientNotes)?.trim() ? (selectedClient.notes ?? selectedClient.clientNotes)!.trim() : "—"}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex gap-3 mb-6">
-                  <button
-                    type="button"
-                    onClick={() => openEditModal(selectedClient)}
-                    className="flex items-center gap-2 px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white text-sm font-medium rounded-lg"
-                  >
-                    <Pencil className="w-4 h-4" />
-                    ערוך לקוח
-                  </button>
+                {/* Action buttons — same height, side by side, Delete (red outline) | Edit (primary) */}
+                <div className="flex gap-3 mt-6 pt-4 border-t border-slate-100">
                   <button
                     type="button"
                     onClick={() => openDeleteModal(selectedClient)}
-                    className="flex items-center gap-2 px-4 py-2 border border-red-300 text-red-700 hover:bg-red-50 text-sm font-medium rounded-lg"
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 border-2 border-red-300 text-red-700 hover:bg-red-50 text-sm font-medium rounded-lg touch-manipulation"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-4 h-4 flex-shrink-0" />
                     מחק לקוח
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(selectedClient)}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-caleno-ink hover:bg-[#1E293B] text-white text-sm font-medium rounded-lg touch-manipulation"
+                  >
+                    <Pencil className="w-4 h-4 flex-shrink-0" />
+                    ערוך לקוח
                   </button>
                 </div>
 
-                {/* Tabs Navigation */}
-                <AdminTabs<TabType>
-                  tabs={clientTabs}
-                  activeKey={activeTab}
-                  onChange={setActiveTab}
-                />
+                {/* Tabs Navigation — scrollable on mobile */}
+                <div className="mt-6 overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
+                  <AdminTabs<TabType>
+                    tabs={clientTabs}
+                    activeKey={activeTab}
+                    onChange={setActiveTab}
+                    className="mb-4 md:mb-6"
+                  />
+                </div>
 
                 {/* Tab Content */}
                 <div>

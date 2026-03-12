@@ -2,7 +2,7 @@
 
 import { ReactNode } from "react";
 
-const TIME_COL_W = 80; // Fixed width for time column in pixels
+const TIME_COL_W = 60; // Fixed width for time column (hour + minute labels, compact)
 
 interface DayScheduleLayoutProps {
   timeColumn: ReactNode;

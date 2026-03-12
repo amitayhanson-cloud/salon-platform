@@ -35,6 +35,7 @@ import type { PricingItem } from "@/types/pricingItem";
 import { getAllClients } from "@/lib/firestoreClients";
 import DayScheduleView from "@/components/admin/DayScheduleView";
 import MultiWorkerScheduleView from "@/components/admin/MultiWorkerScheduleView";
+import MobileDayCalendarView from "@/components/admin/MobileDayCalendarView";
 import WorkerFilter from "@/components/admin/WorkerFilter";
 import AdminBookingFormSimple from "@/components/admin/AdminBookingFormSimple";
 import AdminCreateBookingForm from "@/components/admin/AdminCreateBookingForm";
@@ -923,7 +924,27 @@ export default function DaySchedulePage() {
       style={{ height: "calc(100vh - 4rem)" }}
       dir="rtl"
     >
-      <div className="max-w-7xl mx-auto w-full px-4 flex flex-col flex-1 min-h-0">
+      {/* Mobile: compact header, 7-day strip, single-worker timeline */}
+      <div className="flex flex-1 flex-col min-h-0 md:hidden">
+        <MobileDayCalendarView
+          dateKey={dateKey}
+          workers={workers}
+          selectedWorkerId={selectedWorkerId}
+          onWorkerChange={setSelectedWorkerId}
+          bookings={bookingsForCalendar}
+          startHour={startHour}
+          endHour={endHour}
+          dayBreaks={dayBreaks ?? []}
+          workerBreaksByWorkerId={workerBreaksByWorkerId ?? {}}
+          onBookingClick={handleBookingClick}
+          onAddBooking={handleAddBooking}
+          adminBasePath={adminBasePath}
+          isClosed={!!(bookingSettings && dateKey && isBusinessClosedAllDay({ bookingSettings, date: dateKey }))}
+        />
+      </div>
+
+      {/* Desktop: toolbar + multi/single worker calendar */}
+      <div className="hidden md:flex flex-col flex-1 min-h-0 w-full max-w-7xl mx-auto px-4">
         {/* Calendar toolbar + filters (fixed; no page padding so calendar sits under header) */}
         <div className="flex-shrink-0 mb-3 bg-white/95 backdrop-blur-sm -mx-4 px-4 py-3 rounded-b-lg border-b border-slate-200/80">
           <div className="flex items-center justify-between mb-4">

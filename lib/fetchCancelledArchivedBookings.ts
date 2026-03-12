@@ -42,6 +42,8 @@ function isDocCancelled(data: Record<string, unknown>): boolean {
 export interface CancelledArchiveItem {
   id: string;
   source: "bookings" | "archivedServiceTypes";
+  /** Required when source === "archivedServiceTypes" for delete path. */
+  clientId?: string;
   customerName: string;
   customerPhone: string;
   phone?: string;
@@ -210,7 +212,7 @@ export async function fetchCancelledArchivedBookings(
     archivedScanned += archSnap.docs.length;
     for (const d of archSnap.docs) {
       const mapped = mapArchivedDoc({ id: d.id, data: () => d.data() });
-      if (mapped) items.push(mapped);
+      if (mapped) items.push({ ...mapped, clientId });
     }
   }
 

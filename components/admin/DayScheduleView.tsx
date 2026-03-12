@@ -198,7 +198,7 @@ export default function DayScheduleView({
         const labels = [
           <div
             key={hourLabel}
-            className="absolute text-xs text-slate-600 pr-2"
+            className="absolute right-0 text-right text-xs text-slate-600 pr-1"
             style={{
               top: `${hourTop}px`,
               lineHeight: "1",
@@ -217,7 +217,7 @@ export default function DayScheduleView({
           labels.push(
             <div
               key={`${hour}-${minute}`}
-              className="absolute text-xs text-slate-500 pr-2"
+              className="absolute right-0 text-right text-xs text-slate-500 pr-1"
               style={{
                 top: `${top}px`,
                 lineHeight: "1",
@@ -367,7 +367,7 @@ export default function DayScheduleView({
 
         {/* Bookings layer - above grid lines (z-index: 10) */}
         {columns.length === 0 ? (
-          <div className="absolute inset-0 flex items-center justify-center" style={{ zIndex: 10 }}>
+          <div className="absolute inset-0 flex justify-center pt-24" style={{ zIndex: 10 }}>
             <p className="text-sm text-slate-500">אין תורים ליום זה</p>
           </div>
         ) : (

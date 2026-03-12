@@ -396,7 +396,7 @@ export default function BookingsAdminPage() {
               </Link>
               <Link
                 href={getAdminBasePathFromSiteId(siteId)}
-                className="text-sm text-caleno-700 hover:text-caleno-800"
+                className="hidden md:inline-flex text-sm text-caleno-700 hover:text-caleno-800"
               >
                 ← חזרה לפאנל ניהול
               </Link>
@@ -414,46 +414,50 @@ export default function BookingsAdminPage() {
 
         {/* Calendar */}
         <div className="mb-6">
-        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-slate-900">יומן תורים (14 יום)</h2>
-              <div className="flex gap-2">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6">
+            {/* Header: compact on mobile, clear date range + nav */}
+            <div className="flex flex-col gap-3 md:flex-row md:justify-between md:items-center mb-4 md:mb-6">
+              <div className="flex items-center justify-between gap-2 md:block">
+                <h2 className="hidden md:block text-base font-semibold text-slate-900 md:text-xl md:font-bold">
+                  יומן תורים
+                </h2>
+                <p className="hidden md:block text-xs text-slate-500" aria-hidden>
+                  {dateRange[0]?.getDate()}.{dateRange[0]?.getMonth() != null ? dateRange[0].getMonth() + 1 : ""} – {dateRange[13]?.getDate()}.{dateRange[13]?.getMonth() != null ? dateRange[13].getMonth() + 1 : ""}
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 md:gap-2">
                 <button
+                  type="button"
                   onClick={() => {
-                    // Move back by 14 days (maintains Sunday anchor)
                     const newStart = new Date(rangeStart);
                     newStart.setDate(rangeStart.getDate() - 14);
                     setRangeStart(newStart);
                   }}
-                  className="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-sm flex items-center gap-1"
+                  className="p-2 rounded-lg border border-[#E2E8F0] bg-white text-slate-600 hover:bg-[#F8FAFC] hover:border-[#CBD5E1] transition-colors md:px-3 md:py-1.5 md:text-sm"
+                  aria-label="שבועות קודמים"
                 >
-                  <ChevronRight className="w-4 h-4" />
-                  Previous
+                  <ChevronRight className="w-4 h-4 md:w-4 md:h-4" />
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
-                    // Navigate to today's day schedule page
-                    const today = new Date();
-                    const todayKey = toYYYYMMDD(today);
-                    // Get current workerId from URL if available, or use first worker
-                    // For now, navigate without workerId - the day page will handle default selection
-                    router.push(`${getAdminBasePathFromSiteId(siteId)}/bookings/day/${todayKey}`);
+                    router.push(`${getAdminBasePathFromSiteId(siteId)}/bookings/day/${toYYYYMMDD(new Date())}`);
                   }}
-                  className="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-sm"
+                  className="px-2.5 py-1.5 rounded-lg border border-[#E2E8F0] bg-white text-slate-700 text-xs font-medium hover:bg-[#F8FAFC] md:px-3 md:py-1 md:text-sm"
                 >
-                  Today
+                  היום
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
-                    // Move forward by 14 days (maintains Sunday anchor)
                     const newStart = new Date(rangeStart);
                     newStart.setDate(rangeStart.getDate() + 14);
                     setRangeStart(newStart);
                   }}
-                  className="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-sm flex items-center gap-1"
+                  className="p-2 rounded-lg border border-[#E2E8F0] bg-white text-slate-600 hover:bg-[#F8FAFC] hover:border-[#CBD5E1] transition-colors md:px-3 md:py-1.5 md:text-sm"
+                  aria-label="שבועות הבאים"
                 >
-                  Next
-                  <ChevronLeft className="w-4 h-4" />
+                  <ChevronLeft className="w-4 h-4 md:w-4 md:h-4" />
                 </button>
               </div>
             </div>
