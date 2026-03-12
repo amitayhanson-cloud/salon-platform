@@ -82,17 +82,18 @@ export function ProductDemoSection({
             aria-labelledby={`tab-${activeTab}`}
             className="mt-2 rounded-2xl border border-gray-200 bg-white shadow-md overflow-hidden"
           >
-            <div className="relative h-[450px] w-full bg-gray-50/50 md:h-[650px]">
+            <div className="relative w-full overflow-hidden bg-gray-50/50 max-h-[360px] md:max-h-none md:h-[650px]">
               {activeImageUrl ? (
                 <Image
                   src={activeImageUrl}
                   alt={imageAlt}
-                  fill
-                  className="object-contain object-center"
+                  width={1200}
+                  height={800}
                   unoptimized
+                  className="w-full h-auto max-h-[360px] object-contain object-center md:max-h-none md:absolute md:inset-0 md:h-full md:w-full"
                 />
               ) : (
-                <div className="flex h-full items-center justify-center">
+                <div className="flex min-h-[220px] items-center justify-center md:min-h-0 md:h-full">
                   <span className="text-right text-gray-400">
                     {activeLabel} {DEMO_SECTION.placeholderSuffix}
                   </span>
