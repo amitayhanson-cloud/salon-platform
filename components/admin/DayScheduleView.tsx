@@ -31,7 +31,7 @@ interface Booking {
   serviceCategory?: string;
   serviceColor?: string | null;
   customerName: string;
-  customerPhone: string;
+  customerPhone?: string;
   clientName?: string;
   phone?: string;
   workerId: string | null;

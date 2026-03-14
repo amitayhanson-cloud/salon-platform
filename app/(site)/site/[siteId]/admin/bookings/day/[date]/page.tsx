@@ -98,7 +98,7 @@ interface Booking {
   serviceColor?: string | null;
   workerId: string | null;
   customerName: string;
-  customerPhone: string;
+  customerPhone?: string;
   phone?: string;
   date: string;
   time: string;
