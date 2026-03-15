@@ -21,7 +21,8 @@ export function HoverBorderGradient({
     className?: string;
     duration?: number;
     clockwise?: boolean;
-  } & React.HTMLAttributes<HTMLElement>
+    type?: "button" | "submit" | "reset";
+  } & Omit<React.HTMLAttributes<HTMLElement>, "type">
 >) {
   const [hovered, setHovered] = useState<boolean>(false);
   const [direction, setDirection] = useState<Direction>("TOP");
