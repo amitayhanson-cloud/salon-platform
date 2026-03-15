@@ -967,7 +967,7 @@ export default function WorkersPage() {
                                     <button
                                       type="button"
                                       onClick={() => addWorkerBreak(index)}
-                                      className="text-xs text-caleno-deep hover:text-caleno-ink font-medium"
+                                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs font-medium text-caleno-deep shadow-sm transition-colors hover:border-caleno-deep/40 hover:bg-[#F8FAFC] hover:text-caleno-ink"
                                     >
                                       הוסף הפסקה
                                     </button>
