@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useParams, useRouter } from "next/navigation";
-import { ChevronDown, Menu, X, ExternalLink, HelpCircle } from "lucide-react";
+import { ChevronDown, Menu, X, ExternalLink, Sparkles } from "lucide-react";
+import { HoverBorderGradient } from "@/components/ui/hover-border-gradient";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { isOnTenantSubdomainClient, getAdminBasePath } from "@/lib/url";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
@@ -204,15 +205,17 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
             {/* Navbar */}
             <nav className="hidden md:flex items-center gap-4 whitespace-nowrap">
               {onOpenHelp && (
-                <button
+                <HoverBorderGradient
+                  as="button"
                   type="button"
                   onClick={onOpenHelp}
-                  className="flex items-center gap-2 rounded-lg border border-[#E2E8F0] px-4 py-2 text-sm font-medium text-[#0F172A] transition-colors hover:bg-[rgba(15,23,42,0.04)]"
-                  title="עזרה בפאנל"
+                  containerClassName="rounded-full"
+                  className="flex items-center gap-2 text-sm font-medium"
+                  title="עזרה בפאנל (AI)"
                 >
-                  <HelpCircle className="w-4 h-4" />
+                  <Sparkles className="w-4 h-4 shrink-0" />
                   <span>עזרה</span>
-                </button>
+                </HoverBorderGradient>
               )}
               {canViewSite && (
                 <button
@@ -400,17 +403,19 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
             ))}
             {onOpenHelp && (
               <div className="mb-3 border-b border-[#E2E8F0] pb-3 pt-3">
-                <button
+                <HoverBorderGradient
+                  as="button"
                   type="button"
                   onClick={() => {
                     onOpenHelp();
                     setMobileMenuOpen(false);
                   }}
-                  className="flex w-full items-center justify-between rounded-lg border border-[#E2E8F0] px-4 py-3 text-sm font-medium text-[#0F172A] transition-colors hover:bg-[rgba(15,23,42,0.04)]"
+                  containerClassName="rounded-full w-full"
+                  className="flex w-full items-center justify-between gap-2 text-sm font-medium"
                 >
                   <span>עזרה</span>
-                  <HelpCircle className="w-4 h-4" />
-                </button>
+                  <Sparkles className="w-4 h-4 shrink-0" />
+                </HoverBorderGradient>
               </div>
             )}
             {canViewSite && (

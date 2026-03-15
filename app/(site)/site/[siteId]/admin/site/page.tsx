@@ -45,59 +45,62 @@ export default function AdminSitePage() {
 
   const isDesignTab = activeSiteTab === "design";
 
-  // עיצוב האתר: full-screen visual editor (colors + images)
-  if (isDesignTab && siteConfig) {
-    return (
-      <div dir="rtl" className="h-[calc(100vh-8rem)] min-h-[480px] flex flex-col">
-        <VisualSiteEditor
-          siteId={siteId}
-          baselineConfig={siteConfig}
-          onSave={(config) => {
-            handleConfigChange(config);
-            void handleSaveConfig(config);
-          }}
-          onBack={() => setActiveSiteTab("branding")}
-          isSaving={isSaving}
-          saveMessage={saveMessage ?? undefined}
-        />
-      </div>
-    );
-  }
-
   return (
-    <div dir="rtl" className="flex flex-col h-full min-h-0">
-      {/* Form only — no preview on non-design tabs */}
-      <div className="flex-1 min-w-0 overflow-y-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">אתר</h1>
-            <p className="text-sm text-slate-500 mt-1">
-              לוגו, מיתוג, ביקורות, עיצוב האתר ו־FAQ
-            </p>
-          </div>
-          <div className="flex items-center gap-4">
-            {saveMessage && (
-              <span className="text-xs text-emerald-600">{saveMessage}</span>
-            )}
-            <button
-              onClick={() => void handleSaveConfig()}
-              disabled={isSaving}
-              className="rounded-lg bg-caleno-ink px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isSaving ? "שומר…" : "שמור שינויים"}
-            </button>
-          </div>
+    <div
+      dir="rtl"
+      className={`flex flex-col min-h-0 ${isDesignTab ? "h-[calc(100vh-8rem)] min-h-[520px]" : "h-full"}`}
+    >
+      {/* Header row: title + save — always visible under navbar */}
+      <div className="shrink-0 flex items-center justify-between mb-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">אתר</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            לוגו, מיתוג, ביקורות, עיצוב האתר ו־FAQ
+          </p>
         </div>
+        <div className="flex items-center gap-4">
+          {saveMessage && (
+            <span className="text-xs text-emerald-600">{saveMessage}</span>
+          )}
+          <button
+            onClick={() => void handleSaveConfig()}
+            disabled={isSaving}
+            className="rounded-lg bg-caleno-ink px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isSaving ? "שומר…" : "שמור שינויים"}
+          </button>
+        </div>
+      </div>
 
+      {/* Site tabs: always visible under header so user can switch without going back */}
+      <div className="shrink-0 mb-4">
         <AdminTabs
           tabs={SITE_PAGE_TABS}
           activeKey={activeSiteTab}
           onChange={setActiveSiteTab}
           className="flex-wrap"
         />
+      </div>
 
-        {/* Tab panels: all mounted so Firestore listeners and state stay alive; only one visible */}
-        <div className="min-h-[320px]">
+      {/* Content: editor when design tab, form panels otherwise */}
+      {isDesignTab ? (
+        <div className="flex-1 min-h-0 flex flex-col rounded-xl border border-slate-200 overflow-hidden bg-white">
+          <VisualSiteEditor
+            siteId={siteId}
+            baselineConfig={siteConfig}
+            onSave={(config) => {
+              handleConfigChange(config);
+              void handleSaveConfig(config);
+            }}
+            onBack={() => setActiveSiteTab("branding")}
+            isSaving={isSaving}
+            saveMessage={saveMessage ?? undefined}
+          />
+        </div>
+      ) : (
+        <div className="flex-1 min-w-0 overflow-y-auto space-y-6">
+          {/* Tab panels: all mounted so Firestore listeners and state stay alive; only one visible */}
+          <div className="min-h-[320px]">
         {/* לוגו ומיתוג */}
         <div
           role="tabpanel"
@@ -147,8 +150,9 @@ export default function AdminSitePage() {
             />
           </section>
         </div>
-      </div>
-      </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

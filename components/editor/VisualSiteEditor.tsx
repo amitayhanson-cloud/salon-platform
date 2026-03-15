@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import type { SiteConfig, SiteService } from "@/types/siteConfig";
 import { defaultThemeColors } from "@/types/siteConfig";
 import WebsiteRenderer from "@/components/site/WebsiteRenderer";
@@ -80,6 +80,14 @@ export function VisualSiteEditor({
     });
     setSelected(null);
   }, [baselineConfig]);
+
+  const hasUnsavedChanges = useMemo(() => {
+    const base = {
+      ...baselineConfig,
+      themeColors: baselineConfig.themeColors ?? defaultThemeColors,
+    };
+    return JSON.stringify(draft) !== JSON.stringify(base);
+  }, [draft, baselineConfig]);
 
   const handleSave = useCallback(() => {
     onSave(draft);
@@ -233,13 +241,15 @@ export function VisualSiteEditor({
           >
             חזרה
           </button>
-          <button
-            type="button"
-            onClick={handleDiscard}
-            className="px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg"
-          >
-            איפוס לשמור האחרון
-          </button>
+          {hasUnsavedChanges && (
+            <button
+              type="button"
+              onClick={handleDiscard}
+              className="px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg"
+            >
+              איפוס לשמור האחרון
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-3">
           {saveMessage && (
