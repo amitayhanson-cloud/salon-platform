@@ -4,21 +4,20 @@ import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { HEADER_CTA, NAV_LINKS } from "@/lib/landingContent";
 
 export function LandingHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <header
-      dir="rtl"
-      className="sticky top-0 z-50 border-b border-gray-200 bg-white backdrop-blur-sm md:bg-white/95"
-      role="banner"
-    >
-      {/* Desktop RTL grid: col1=actions (right), col2=links (center), col3=logo (left). Mobile: logo left, hamburger right. */}
+    <header dir="rtl" className="sticky top-2 z-50 md:top-4" role="banner">
+      {/* Pill navbar — template style: rounded, soft bg, shadow */}
       <nav
         aria-label="ניווט ראשי"
-        className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 md:grid md:h-16 md:px-6 md:[grid-template-columns:auto_1fr_auto] lg:px-8"
+        className={cn(
+          "flex h-14 items-center justify-between gap-3 rounded-full border border-[#E2E8F0] bg-white/80 px-4 shadow-sm backdrop-blur-md md:h-14 md:grid md:px-6 md:[grid-template-columns:auto_1fr_auto]",
+        )}
       >
         {/* A. Actions — first in DOM so in RTL grid they appear on the right; hamburger on mobile (order-1) */}
         <div className="order-1 flex shrink-0 items-center gap-4 md:order-none md:justify-self-end">

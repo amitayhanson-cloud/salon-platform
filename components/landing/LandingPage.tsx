@@ -41,9 +41,16 @@ export function LandingPage() {
       dir="ltr"
       className={`${inter.variable} ${inter.className} min-h-screen bg-white text-caleno-ink antialiased`}
     >
-      <LandingHeader />
+      {/* Top block: template-style gradient + pill nav + hero card */}
+      <div className="relative">
+        <div className="absolute inset-0 -z-10 bg-gradient-to-b from-caleno-50/50 via-caleno-50/30 to-white" />
+        <div className="mx-auto max-w-6xl px-4 py-6 md:py-8 lg:px-8">
+          <LandingHeader />
+          <LandingHero heroImageUrl={content?.hero?.imageUrl} />
+        </div>
+      </div>
+
       <main>
-        <LandingHero heroImageUrl={content?.hero?.imageUrl} />
         <ProductExplanationSection productImageUrl={content?.features?.websitePreviewImageUrl} />
         <LandingFeaturesGrid />
         <ProductDemoSection
