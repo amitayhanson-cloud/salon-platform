@@ -13,7 +13,7 @@ export function LandingHero() {
   return (
     <section
       dir="rtl"
-      className="relative mt-6 overflow-hidden rounded-3xl border border-[#E2E8F0] shadow-sm px-6 py-14 sm:py-16 md:py-20"
+      className="relative mt-3 overflow-hidden rounded-3xl border border-[#E2E8F0] shadow-sm px-6 py-14 sm:py-16 md:py-20"
     >
       {/* Caleno gradient: whiter at top, darker Caleno toward bottom */}
       <div

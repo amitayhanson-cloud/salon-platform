@@ -13,7 +13,7 @@ export function LandingHeader() {
   return (
     <header
       dir="rtl"
-      className="sticky top-0 z-50 w-full bg-transparent py-3 md:py-4"
+      className="sticky top-0 z-50 w-full bg-transparent py-1.5 md:py-2"
       role="banner"
     >
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-0 px-4 lg:px-8">

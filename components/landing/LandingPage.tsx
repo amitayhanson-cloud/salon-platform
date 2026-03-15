@@ -57,7 +57,7 @@ export function LandingPage() {
 
       {/* Top block: hero + Caleno box */}
       <div className="relative">
-        <div className="mx-auto max-w-6xl px-4 py-6 md:py-8 lg:px-8">
+        <div className="mx-auto max-w-6xl px-4 py-3 md:py-4 lg:px-8">
           <LandingHero />
         </div>
       </div>
