@@ -182,21 +182,23 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* dir=ltr so left/right zones stay fixed: left = Caleno, right = tenant+nav */}
         <div className="flex items-center justify-between h-16 w-full" dir="ltr">
-          {/* LEFT: Caleno logo (same as main landing page) */}
-          <div className="flex items-center shrink-0">
+          {/* LEFT: Caleno logo — match landing page position/sizing */}
+          <div className="flex shrink-0">
             <Link
               href={adminBasePath}
-              className="relative flex h-10 w-[140px] items-center text-[#0F172A] transition-opacity hover:opacity-90 md:h-11 md:w-[205px]"
+              className="relative flex shrink-0 items-center py-1 transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-caleno-deep focus-visible:ring-offset-2 rounded"
               aria-label="Caleno – פאנל ניהול"
             >
-              <Image
-                src="/brand/caleno logo/caleno_logo_new.png"
-                alt="Caleno"
-                fill
-                className="object-contain object-left"
-                priority
-                sizes="(max-width: 768px) 140px, 205px"
-              />
+              <span className="relative block h-9 w-[140px] shrink-0 md:h-11 md:min-w-[180px] md:w-[205px]">
+                <Image
+                  src="/brand/caleno logo/caleno_logo_new.png"
+                  alt="Caleno"
+                  fill
+                  className="object-contain object-left"
+                  priority
+                  sizes="(max-width: 768px) 140px, 205px"
+                />
+              </span>
             </Link>
           </div>
 
