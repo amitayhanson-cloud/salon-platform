@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { MapPin } from "lucide-react";
 import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
+import { WazeIcon } from "@/components/icons/WazeIcon";
 
 type ContactIconsBarProps = {
   phoneNumber?: string | null;
@@ -133,7 +133,7 @@ export default function ContactIconsBar({
     });
   }
 
-  // Add map icon if address exists (replaces Waze icon)
+  // Add Waze icon if address exists
   if (address && address.trim()) {
     const wazeUrl = `https://waze.com/ul?q=${encodeURIComponent(address.trim())}&navigate=yes`;
     icons.push({
@@ -141,9 +141,7 @@ export default function ContactIconsBar({
       href: wazeUrl,
       label: "Waze",
       external: true,
-      icon: (
-        <MapPin className="w-6 h-6" strokeWidth={2} />
-      ),
+      icon: <WazeIcon className="w-6 h-6" />,
     });
   }
 
