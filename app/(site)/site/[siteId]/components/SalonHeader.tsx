@@ -115,16 +115,18 @@ export default function SalonHeader({
       {...edit("headerBg")}
     >
       <div className="mx-auto grid h-16 max-w-6xl grid-cols-3 items-center gap-4 px-4 lg:px-8">
-        {/* Col 1 in RTL = right: salon name */}
-        <div className="flex min-w-0 items-center justify-start" {...edit("headerText")}>
-          <span
-            dir="ltr"
-            lang="en"
-            className="text-xl font-semibold tracking-wide"
-            style={{ unicodeBidi: "isolate", color: textColor }}
-          >
-            {salonName}
-          </span>
+        {/* Col 1 in RTL = right: salon name (only when no logo, to avoid logo + text clutter) */}
+        <div className="flex min-w-0 items-center justify-start" {...(logoUrl ? {} : edit("headerText"))}>
+          {!logoUrl && (
+            <span
+              dir="ltr"
+              lang="en"
+              className="text-xl font-semibold tracking-wide"
+              style={{ unicodeBidi: "isolate", color: textColor }}
+            >
+              {salonName}
+            </span>
+          )}
         </div>
 
         {/* Col 2 = center: nav (desktop) or hamburger (mobile) */}
