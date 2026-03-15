@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Inter } from "next/font/google";
 import { LandingHeader } from "./LandingHeader";
 import { LandingHero } from "./LandingHero";
+import { LandingDashboardPreview } from "./LandingDashboardPreview";
 import { ProductExplanationSection } from "./ProductExplanationSection";
 import { LandingFeaturesGrid } from "./LandingFeaturesGrid";
 import { ProductDemoSection } from "./ProductDemoSection";
@@ -41,12 +42,13 @@ export function LandingPage() {
       dir="ltr"
       className={`${inter.variable} ${inter.className} min-h-screen bg-white text-caleno-ink antialiased`}
     >
-      {/* Top block: template-style gradient + pill nav + hero card */}
+      {/* Top block: template-style rose/orange gradient + pill nav + hero + preview card */}
       <div className="relative">
-        <div className="absolute inset-0 -z-10 bg-gradient-to-b from-caleno-50/50 via-caleno-50/30 to-white" />
+        <div className="absolute inset-0 -z-10 bg-gradient-to-b from-rose-50 via-rose-50/60 to-orange-50" />
         <div className="mx-auto max-w-6xl px-4 py-6 md:py-8 lg:px-8">
           <LandingHeader />
           <LandingHero heroImageUrl={content?.hero?.imageUrl} />
+          <LandingDashboardPreview />
         </div>
       </div>
 
