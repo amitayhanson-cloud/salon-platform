@@ -236,6 +236,12 @@ export default function HairLuxurySite({
   const content = config.content ?? ({} as SiteContent);
   const c = (section: keyof SiteContent, key: string) =>
     getContentValue(content, section, key);
+  /** In editor mode, when text is empty, return a non-breaking space so the element keeps height and stays selectable. */
+  const ct = (section: keyof SiteContent, key: string) => {
+    const v = c(section, key);
+    if (editorMode && (!v || !v.trim())) return "\u00A0";
+    return v;
+  };
 
   return (
     <div
@@ -283,12 +289,13 @@ export default function HairLuxurySite({
 
       {/* Hero Section: section-scoped colors */}
       <section
-        className="relative min-h-[80vh] flex items-center justify-center px-4"
+        className="relative min-h-[80vh] flex items-center justify-center px-4 overflow-hidden"
         data-edit-id="hero"
         data-edit-type="section"
         data-edit-paths='["sectionStyles.hero.text","sectionStyles.hero.primaryBtnBg","sectionStyles.hero.primaryBtnText","sectionStyles.hero.overlayBg"]'
         data-edit-label="הירו"
         style={{
+          backgroundColor: "var(--heroBase)",
           ["--hero-text" as string]: getSectionColorResolved(config, "hero", "text"),
           ["--hero-subtitleText" as string]: getSectionColorResolved(config, "hero", "subtitleText"),
           ["--hero-primaryBtnBg" as string]: getSectionColorResolved(config, "hero", "primaryBtnBg"),
@@ -297,20 +304,19 @@ export default function HairLuxurySite({
           ["--hero-secondaryBtnText" as string]: getSectionColorResolved(config, "hero", "secondaryBtnText"),
         }}
       >
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-4" aria-hidden>
-          <div className="w-full max-w-[500px] h-full max-h-[80vh] flex items-center justify-center">
-            <img
-              src={heroImageUrl}
-              alt=""
-              className="w-full h-full object-contain object-center"
-              loading="eager"
-              fetchPriority="high"
-            />
-          </div>
+        {/* Single full-bleed hero image layer — no duplication, clean cover */}
+        <div className="absolute inset-0 pointer-events-none" aria-hidden>
+          <img
+            src={heroImageUrl}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover object-center"
+            loading="eager"
+            fetchPriority="high"
+          />
         </div>
-        {/* Dark overlay for text readability */}
+        {/* Single dark overlay for text readability — subtle, no double image */}
         <div
-          className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/70 to-black/88 pointer-events-auto cursor-pointer"
+          className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/55 to-black/75 pointer-events-auto cursor-pointer"
           data-edit-id="heroImage"
           data-edit-kind="image"
           data-edit-scope="hero"
@@ -347,7 +353,7 @@ export default function HairLuxurySite({
               },
             }}
           >
-            {c("hero", "tagline")}
+            {ct("hero", "tagline")}
           </motion.p>
 
           {/* Main headline */}
@@ -369,7 +375,7 @@ export default function HairLuxurySite({
               },
             }}
           >
-            {c("hero", "title")}
+            {ct("hero", "title")}
           </motion.h1>
 
           {/* Supporting line */}
@@ -389,7 +395,7 @@ export default function HairLuxurySite({
               },
             }}
           >
-            {c("hero", "subtitle")}
+            {ct("hero", "subtitle")}
           </motion.p>
 
           {/* CTAs: primary stands out, secondary subtle */}
@@ -418,7 +424,7 @@ export default function HairLuxurySite({
                 data-edit-paths='["content.hero.ctaPrimaryText","sectionStyles.hero.primaryBtnBg","sectionStyles.hero.primaryBtnText"]'
                 data-edit-label="כפתור ראשי (קביעת תור)"
               >
-                {c("hero", "ctaPrimaryText")}
+                {ct("hero", "ctaPrimaryText")}
               </Link>
             )}
             <button
@@ -435,7 +441,7 @@ export default function HairLuxurySite({
               data-edit-paths='["content.hero.ctaSecondaryText","sectionStyles.hero.secondaryBtnBg","sectionStyles.hero.secondaryBtnText"]'
               data-edit-label="כפתור משני (יצירת קשר)"
             >
-              {c("hero", "ctaSecondaryText")}
+              {ct("hero", "ctaSecondaryText")}
             </button>
           </motion.div>
         </motion.div>
@@ -480,14 +486,14 @@ export default function HairLuxurySite({
                 data-edit-paths='["content.about.headingLabel","content.about.headingTitle","sectionStyles.about.titleText"]'
                 data-edit-label="כותרת אודות"
               >
-                {c("about", "headingLabel")}
+                {ct("about", "headingLabel")}
               </p>
               <h2 className="text-2xl sm:text-3xl font-bold mb-4" style={{ color: "var(--about-titleText)" }}>
                 {content.about?.headingTitle?.trim() ? content.about.headingTitle : (config.salonName ? `על ${config.salonName}` : c("about", "headingTitle"))}
               </h2>
               <div className="space-y-3 leading-relaxed" style={{ color: "var(--about-text)" }} data-edit-id="aboutBody" data-edit-kind="text" data-edit-paths='["content.about.body","sectionStyles.about.text"]' data-edit-label="טקסט אודות">
                 <p className="text-sm whitespace-pre-line">
-                  {c("about", "body")}
+                  {ct("about", "body")}
                 </p>
                 {config.city && (
                   <p className="text-sm font-medium mt-2" style={{ color: "var(--about-titleText)" }}>
@@ -502,13 +508,13 @@ export default function HairLuxurySite({
               </div>
               <div className="grid grid-cols-3 gap-4 pt-4" data-edit-id="aboutChips" data-edit-kind="container" data-edit-paths='["content.about.chip1","content.about.chip2","content.about.chip3","sectionStyles.about.cardBg","sectionStyles.about.cardText","sectionStyles.about.border"]' data-edit-label="תגיות אודות">
                 <div className="rounded-full px-4 py-2 text-xs text-center shadow-sm" style={{ backgroundColor: getSectionColorResolved(config, "about", "cardBg"), color: getSectionColorResolved(config, "about", "cardText"), borderColor: getSectionColorResolved(config, "about", "border"), borderWidth: "1px" }}>
-                  {c("about", "chip1")}
+                  {ct("about", "chip1")}
                 </div>
                 <div className="rounded-full px-4 py-2 text-xs text-center shadow-sm" style={{ backgroundColor: getSectionColorResolved(config, "about", "cardBg"), color: getSectionColorResolved(config, "about", "cardText"), borderColor: getSectionColorResolved(config, "about", "border"), borderWidth: "1px" }}>
-                  {c("about", "chip2")}
+                  {ct("about", "chip2")}
                 </div>
                 <div className="rounded-full px-4 py-2 text-xs text-center shadow-sm" style={{ backgroundColor: getSectionColorResolved(config, "about", "cardBg"), color: getSectionColorResolved(config, "about", "cardText"), borderColor: getSectionColorResolved(config, "about", "border"), borderWidth: "1px" }}>
-                  {c("about", "chip3")}
+                  {ct("about", "chip3")}
                 </div>
               </div>
             </motion.div>
@@ -568,10 +574,10 @@ export default function HairLuxurySite({
             data-edit-label="כותרת שירותים"
           >
             <h2 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ color: "var(--services-titleText)" }}>
-              {c("services", "sectionTitle")}
+              {ct("services", "sectionTitle")}
             </h2>
             <p className="text-base max-w-2xl" style={{ color: getSectionColorResolved(config, "services", "text") }}>
-              {c("services", "sectionSubtitle")}
+              {ct("services", "sectionSubtitle")}
             </p>
           </motion.div>
 
@@ -622,13 +628,13 @@ export default function HairLuxurySite({
               className="text-2xl sm:text-3xl font-bold"
               style={{ color: "var(--gallery-titleText)" }}
             >
-              {c("gallery", "title")}
+              {ct("gallery", "title")}
             </h2>
             <p
               className="mt-2 text-sm"
               style={{ color: "var(--gallery-text)" }}
             >
-              {c("gallery", "subtitle")}
+              {ct("gallery", "subtitle")}
             </p>
           </div>
 
@@ -685,10 +691,10 @@ export default function HairLuxurySite({
                     className="text-sm uppercase tracking-[0.3em] font-light"
                     style={{ color: "var(--reviews-titleText)" }}
                   >
-                    {c("reviews", "sectionLabel")}
+                    {ct("reviews", "sectionLabel")}
                   </p>
                   <h2 className="text-3xl sm:text-4xl font-serif font-light tracking-wide pb-2 mb-6 border-b" style={{ color: "var(--reviews-titleText)", borderColor: getSectionColorResolved(config, "reviews", "border") }}>
-                    {c("reviews", "sectionTitle")}
+                    {ct("reviews", "sectionTitle")}
                   </h2>
                 </div>
 
@@ -727,10 +733,10 @@ export default function HairLuxurySite({
                 className="text-sm uppercase tracking-[0.3em] font-light"
                 style={{ color: "var(--faq-titleText)" }}
               >
-                {c("faq", "sectionTitle")}
+                {ct("faq", "sectionTitle")}
               </p>
               <h2 className="text-3xl sm:text-4xl font-serif font-light tracking-wide" style={{ color: "var(--faq-titleText)" }}>
-                {c("faq", "sectionSubtitle")}
+                {ct("faq", "sectionSubtitle")}
               </h2>
             </div>
 
@@ -816,7 +822,7 @@ export default function HairLuxurySite({
                 data-edit-label="טקסט מפה"
               >
                 <p className="text-sm mb-2" style={{ color: getSectionColorResolved(config, "map", "text") }}>
-                  {c("map", "placeholderText")}
+                  {ct("map", "placeholderText")}
                 </p>
                 {config.city && (
                   <p className="text-xs font-medium" style={{ color: getSectionColorResolved(config, "map", "cardText") }}>
@@ -866,7 +872,7 @@ export default function HairLuxurySite({
             data-edit-paths='["content.footer.copyright","sectionStyles.footer.text"]'
             data-edit-label="זכויות יוצרים בפוטר"
           >
-            © {currentYear} {config.salonName || "הסלון שלך"} – {c("footer", "copyright")}
+            © {currentYear} {config.salonName || "הסלון שלך"} – {ct("footer", "copyright")}
           </p>
         </div>
       </footer>

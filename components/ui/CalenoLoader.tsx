@@ -1,8 +1,11 @@
 "use client";
 
+/** Logo in public: public/brand/caleno logo/caleno_logo_new 2.png */
+const CALENO_LOGO_SRC = "/brand/caleno%20logo/caleno_logo_new%202.png";
+
 /**
- * Caleno logo loading animation: expand + gentle pulse on the logo, three fading dots below.
- * Use in loading states (e.g. full-screen or inline).
+ * Caleno water loading animation: orbital arcs, glowing logo, ripples, wave bar.
+ * Uses caleno_logo_new 2.png in the center.
  *
  * Example:
  *   <div className="flex items-center justify-center h-screen">
@@ -10,36 +13,83 @@
  *   </div>
  */
 export default function CalenoLoader() {
-  const clipId = "caleno-loader-clip";
-
   return (
-    <div className="relative flex flex-col items-center justify-center">
-      <div className="relative w-20 h-20">
+    <div className="caleno-water-scene" role="status" aria-label="טוען">
+      <div className="caleno-water-logo-outer">
+        <div className="caleno-water-glow-pulse" aria-hidden />
+
+        <div className="caleno-water-arc-ring caleno-water-arc-3" aria-hidden />
+        <div className="caleno-water-arc-ring caleno-water-arc-2" aria-hidden />
+        <div className="caleno-water-arc-ring caleno-water-arc-1" aria-hidden />
+
+        <div className="caleno-water-dot-track caleno-water-dot-track-3">
+          <div className="caleno-water-dot" />
+        </div>
+        <div className="caleno-water-dot-track caleno-water-dot-track-2">
+          <div className="caleno-water-dot" />
+        </div>
+        <div className="caleno-water-dot-track caleno-water-dot-track-1">
+          <div className="caleno-water-dot" />
+        </div>
+
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={CALENO_LOGO_SRC}
+          alt="Caleno"
+          width={160}
+          height={160}
+          className="caleno-water-logo-img"
+          loading="eager"
+        />
+
         <svg
-          className="caleno-loader-anim-svg w-full h-full origin-center"
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 1500 1500"
+          className="caleno-water-ripple-svg"
+          width={220}
+          height={48}
+          viewBox="0 0 220 48"
+          overflow="visible"
           aria-hidden
         >
-          <defs>
-            <clipPath id={clipId}>
-              <path d="M 0 0 L 1500 0 L 1500 1463.117188 L 0 1463.117188 Z" />
-            </clipPath>
-          </defs>
-          <g clipPath={`url(#${clipId})`}>
-            <path
-              className="caleno-loader-anim-path origin-center"
-              fill="#4dd4d4"
-              d="M 511.09375 205.265625 C 328.132812 205.265625 179.378906 354.019531 179.378906 536.976562 L 179.378906 929.140625 C 179.378906 1112.097656 328.132812 1260.851562 511.09375 1260.851562 L 990.113281 1260.851562 C 1173.070312 1260.851562 1321.824219 1112.097656 1321.824219 929.140625 L 1321.824219 733.058594 C 1321.824219 550.101562 1173.070312 401.347656 990.113281 401.347656 L 511.09375 401.347656 C 419.933594 401.347656 343.464844 477.816406 343.464844 568.976562 L 343.464844 897.140625 C 343.464844 988.300781 419.933594 1064.769531 511.09375 1064.769531 L 958.113281 1064.769531 C 1031.605469 1064.769531 1091.746094 1004.625 1091.746094 931.136719 L 1091.746094 765.058594 C 1091.746094 691.566406 1031.605469 631.425781 958.113281 631.425781 L 543.09375 631.425781 Z"
-            />
-          </g>
+          <ellipse
+            className="caleno-water-rp"
+            cx={110}
+            cy={28}
+            rx={28}
+            ry={7}
+            fill="none"
+            stroke="rgba(0,210,200,0.6)"
+            strokeWidth={1.5}
+          />
+          <ellipse
+            className="caleno-water-rp2"
+            cx={110}
+            cy={28}
+            rx={28}
+            ry={7}
+            fill="none"
+            stroke="rgba(0,210,200,0.5)"
+            strokeWidth={1.5}
+          />
+          <ellipse
+            className="caleno-water-rp3"
+            cx={110}
+            cy={28}
+            rx={28}
+            ry={7}
+            fill="none"
+            stroke="rgba(0,210,200,0.4)"
+            strokeWidth={1.5}
+          />
         </svg>
       </div>
-      <div className="caleno-loader-dots">
-        <span className="caleno-loader-dot" aria-hidden />
-        <span className="caleno-loader-dot" aria-hidden />
-        <span className="caleno-loader-dot" aria-hidden />
+
+      <div className="caleno-water-wave-bar">
+        {[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1].map((delay, i) => (
+          <span key={i} style={{ animationDelay: `${delay}s` }} />
+        ))}
       </div>
+
+      <div className="caleno-water-label">Loading</div>
     </div>
   );
 }

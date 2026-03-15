@@ -281,75 +281,157 @@ body {
   }
 }
 
-/* ========== CalenoLoader (animated logo + dots) ========== */
-@keyframes expandPulse {
-  0% {
-    transform: scale(0.1);
-    opacity: 0;
-  }
-  40% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  90%,
-  100% {
-    transform: scale(1);
-    opacity: 0.95;
-  }
+/* ========== CalenoLoader (water loading animation) ========== */
+@keyframes caleno-water-glowBreath {
+  0%, 100% { transform: scale(0.85); opacity: 0.4; }
+  50% { transform: scale(1.3); opacity: 1; }
 }
 
-@keyframes gentlePulse {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.02);
-  }
+@keyframes caleno-water-spinRing {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
-@keyframes dotFade {
-  0%,
-  100% {
-    opacity: 0.3;
-  }
-  50% {
-    opacity: 1;
-  }
+@keyframes caleno-water-logoFloat {
+  0%, 100% { transform: translateY(0) scale(1); opacity: 1; }
+  50% { transform: translateY(-8px) scale(1.04); opacity: 0.92; }
 }
 
-.caleno-loader-anim-svg {
-  animation: expandPulse 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+@keyframes caleno-water-rippleExpand {
+  0% { opacity: 0.6; transform: scale(0.5); }
+  100% { opacity: 0; transform: scale(1.6); }
 }
 
-.caleno-loader-anim-path {
-  animation: gentlePulse 2s ease-in-out infinite 2.5s;
+@keyframes caleno-water-wavePulse {
+  0%, 100% { height: 4px; opacity: 0.3; }
+  50% { height: 22px; opacity: 1; }
 }
 
-.caleno-loader-dots {
-  margin-top: 24px;
+@keyframes caleno-water-labelBreath {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+.caleno-water-scene {
   display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  gap: 6px;
+  padding: 3.5rem 0 2.5rem;
+  gap: 2rem;
 }
 
-.caleno-loader-dot {
-  width: 4px;
-  height: 4px;
-  background: #4dd4d4;
+.caleno-water-logo-outer {
+  position: relative;
+  width: 180px;
+  height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.caleno-water-glow-pulse {
+  position: absolute;
+  width: 180px;
+  height: 180px;
   border-radius: 50%;
-  opacity: 0.3;
-  animation: dotFade 1.4s ease-in-out infinite;
+  background: radial-gradient(circle, rgba(0,210,195,0.18) 0%, rgba(0,210,195,0) 70%);
+  animation: caleno-water-glowBreath 3s ease-in-out infinite;
+  z-index: 1;
 }
 
-.caleno-loader-dot:nth-child(1) {
-  animation-delay: 0s;
+.caleno-water-arc-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  animation: caleno-water-spinRing linear infinite;
 }
 
-.caleno-loader-dot:nth-child(2) {
-  animation-delay: 0.2s;
+.caleno-water-arc-1 {
+  width: 218px; height: 218px;
+  border-top-color: rgba(0, 210, 200, 0.65);
+  border-right-color: rgba(0, 210, 200, 0.12);
+  animation-duration: 2.6s;
 }
 
-.caleno-loader-dot:nth-child(3) {
-  animation-delay: 0.4s;
+.caleno-water-arc-2 {
+  width: 248px; height: 248px;
+  border-bottom-color: rgba(20, 190, 185, 0.45);
+  border-left-color: rgba(20, 190, 185, 0.08);
+  animation-duration: 4s;
+  animation-direction: reverse;
+}
+
+.caleno-water-arc-3 {
+  width: 278px; height: 278px;
+  border-top-color: rgba(80, 225, 215, 0.25);
+  border-right-color: rgba(80, 225, 215, 0.05);
+  animation-duration: 6s;
+}
+
+.caleno-water-dot-track {
+  position: absolute;
+  border-radius: 50%;
+  animation: caleno-water-spinRing linear infinite;
+}
+
+.caleno-water-dot-track-1 { width: 218px; height: 218px; animation-duration: 2.6s; }
+.caleno-water-dot-track-2 { width: 248px; height: 248px; animation-duration: 4s; animation-direction: reverse; }
+.caleno-water-dot-track-3 { width: 278px; height: 278px; animation-duration: 6s; }
+
+.caleno-water-dot {
+  position: absolute;
+  border-radius: 50%;
+  top: -4px;
+  left: calc(50% - 4px);
+}
+
+.caleno-water-dot-track-1 .caleno-water-dot { width: 8px; height: 8px; background: rgba(0,218,205,0.95); box-shadow: 0 0 8px 3px rgba(0,218,205,0.5); }
+.caleno-water-dot-track-2 .caleno-water-dot { width: 6px; height: 6px; top: -3px; left: calc(50% - 3px); background: rgba(20,190,185,0.85); box-shadow: 0 0 6px 2px rgba(20,190,185,0.4); }
+.caleno-water-dot-track-3 .caleno-water-dot { width: 4px; height: 4px; top: -2px; left: calc(50% - 2px); background: rgba(80,225,215,0.7); box-shadow: 0 0 5px 1px rgba(80,225,215,0.3); }
+
+.caleno-water-logo-img {
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  object-fit: contain;
+  position: relative;
+  z-index: 4;
+  animation: caleno-water-logoFloat 3s ease-in-out infinite;
+}
+
+.caleno-water-ripple-svg {
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  pointer-events: none;
+}
+
+.caleno-water-rp { animation: caleno-water-rippleExpand 2.6s ease-out infinite; }
+.caleno-water-rp2 { animation: caleno-water-rippleExpand 2.6s ease-out infinite 0.87s; }
+.caleno-water-rp3 { animation: caleno-water-rippleExpand 2.6s ease-out infinite 1.73s; }
+
+.caleno-water-wave-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 28px;
+}
+
+.caleno-water-wave-bar span {
+  display: block;
+  width: 3.5px;
+  border-radius: 2px;
+  background: rgba(0, 210, 200, 0.7);
+  animation: caleno-water-wavePulse ease-in-out infinite;
+}
+
+.caleno-water-label {
+  font-size: 11px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: rgba(0, 200, 195, 0.75);
+  animation: caleno-water-labelBreath 2.6s ease-in-out infinite;
 }

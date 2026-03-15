@@ -5,6 +5,8 @@ import Image from "next/image";
 import type { SiteConfig, SiteService } from "@/types/siteConfig";
 import type { EditableTarget } from "@/lib/editor/getEditorSchema";
 import { getByPath } from "@/lib/editor/configPath";
+import { getContentValue } from "@/lib/editor/defaultContent";
+import type { SiteContent } from "@/types/siteConfig";
 import { defaultThemeColors } from "@/types/siteConfig";
 import { getSectionColorResolved } from "@/lib/sectionStyles";
 import { uploadSiteImage, SITE_IMAGE_ACCEPT } from "@/lib/siteImageStorage";
@@ -60,6 +62,24 @@ function isMultilinePath(path: string): boolean {
   if (path === "content.about.body") return true;
   if (path.includes(".answer")) return true;
   return false;
+}
+
+/**
+ * Resolve the value shown in the editor for a path.
+ * For content.* paths, use the same resolution as the page (saved value or default) so the field is pre-filled with what the user sees.
+ */
+function getDisplayValueForPath(config: SiteConfig, path: string): string {
+  if (path.startsWith("content.")) {
+    const rest = path.slice("content.".length);
+    const parts = rest.split(".");
+    const section = parts[0] as keyof SiteContent | undefined;
+    const key = parts.slice(1).join(".");
+    if (section && key) {
+      const content = config.content ?? ({} as SiteContent);
+      return getContentValue(content, section, key);
+    }
+  }
+  return (getByPath(config, path) as string | undefined) ?? "";
 }
 
 const COLOR_LABELS: Record<string, string> = {
@@ -337,7 +357,7 @@ export function InspectorPanel({
           <div className="space-y-3">
             <p className="text-xs font-medium text-slate-500">טקסט</p>
             {contentPaths.map((path) => {
-              const value = (getByPath(draftConfig, path) as string | undefined) ?? "";
+              const value = getDisplayValueForPath(draftConfig, path);
               const label = getContentPathLabel(path);
               const isMultiline = isMultilinePath(path);
               return (
