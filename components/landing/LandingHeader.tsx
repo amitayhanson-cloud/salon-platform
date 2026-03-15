@@ -15,45 +15,12 @@ export function LandingHeader() {
       className="sticky top-0 z-50 border-b border-gray-200 bg-white backdrop-blur-sm md:bg-white/95"
       role="banner"
     >
-      {/* Mobile: flex — logo left, hamburger right (order-2, order-1). Desktop: 3-column grid. */}
+      {/* Desktop RTL grid: col1=actions (right), col2=links (center), col3=logo (left). Mobile: logo left, hamburger right. */}
       <nav
         aria-label="ניווט ראשי"
         className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 md:grid md:h-16 md:px-6 md:[grid-template-columns:auto_1fr_auto] lg:px-8"
       >
-        {/* A. Logo — left on mobile (order-2), right on desktop */}
-        <div className="order-2 flex shrink-0 md:order-none md:justify-self-start">
-          <Link
-            href="/"
-            className="relative flex shrink-0 items-center py-1 transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-caleno-deep focus-visible:ring-offset-2 rounded"
-            aria-label="Caleno – דף הבית"
-          >
-            <span className="relative block h-9 w-[140px] shrink-0 md:h-11 md:min-w-[180px] md:w-[205px]">
-              <Image
-                src="/brand/caleno logo/caleno_logo_new.png"
-                alt="Caleno"
-                fill
-                className="object-contain object-left"
-                priority
-                sizes="(max-width: 768px) 140px, 205px"
-              />
-            </span>
-          </Link>
-        </div>
-
-        {/* B. Nav links — hidden on mobile, centered on desktop */}
-        <div className="hidden min-w-0 md:flex md:justify-center md:gap-8">
-          {NAV_LINKS.map(({ href, label }) => (
-            <Link
-              key={href}
-              href={href}
-              className="text-sm font-medium leading-normal text-caleno-ink hover:text-caleno-deep shrink-0"
-            >
-              {label}
-            </Link>
-          ))}
-        </div>
-
-        {/* C. Actions — hamburger on mobile (right via order-1), login+CTA on desktop */}
+        {/* A. Actions — first in DOM so in RTL grid they appear on the right; hamburger on mobile (order-1) */}
         <div className="order-1 flex shrink-0 items-center gap-4 md:order-none md:justify-self-end">
           <div className="hidden md:flex md:items-center md:gap-4">
             <Link
@@ -79,6 +46,39 @@ export function LandingHeader() {
           >
             {mobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
           </button>
+        </div>
+
+        {/* B. Nav links — hidden on mobile, centered on desktop (position unchanged) */}
+        <div className="hidden min-w-0 md:flex md:justify-center md:gap-8">
+          {NAV_LINKS.map(({ href, label }) => (
+            <Link
+              key={href}
+              href={href}
+              className="text-sm font-medium leading-normal text-caleno-ink hover:text-caleno-deep shrink-0"
+            >
+              {label}
+            </Link>
+          ))}
+        </div>
+
+        {/* C. Logo — last in DOM so in RTL grid it appears on the left; on mobile order-2 so logo is left, hamburger right */}
+        <div className="order-2 flex shrink-0 md:order-none md:justify-self-start">
+          <Link
+            href="/"
+            className="relative flex shrink-0 items-center py-1 transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-caleno-deep focus-visible:ring-offset-2 rounded"
+            aria-label="Caleno – דף הבית"
+          >
+            <span className="relative block h-9 w-[140px] shrink-0 md:h-11 md:min-w-[180px] md:w-[205px]">
+              <Image
+                src="/brand/caleno logo/caleno_logo_new.png"
+                alt="Caleno"
+                fill
+                className="object-contain object-left"
+                priority
+                sizes="(max-width: 768px) 140px, 205px"
+              />
+            </span>
+          </Link>
         </div>
       </nav>
 
