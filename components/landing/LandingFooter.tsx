@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { FOOTER } from "@/lib/landingContent";
 
 function FooterColumn({
@@ -37,7 +38,23 @@ export function LandingFooter() {
           <FooterColumn title={FOOTER.legal.title} links={FOOTER.legal.links} />
           <FooterColumn title={FOOTER.social.title} links={FOOTER.social.links} />
         </div>
-        <div className="mt-10 border-t border-gray-200 pt-8">
+        <div className="mt-10 border-t border-gray-200 pt-8 space-y-6">
+          <div className="flex flex-col items-center justify-center gap-2">
+            <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Powered by</span>
+            <a
+              href="/"
+              className="inline-flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-caleno-deep focus-visible:ring-offset-2 rounded"
+              aria-label="Igani"
+            >
+              <Image
+                src="/igani-logo.png"
+                alt="Igani"
+                width={120}
+                height={40}
+                className="h-8 w-auto object-contain"
+              />
+            </a>
+          </div>
           <p className="text-center text-sm font-normal leading-relaxed text-gray-500">{FOOTER.copyright}</p>
         </div>
       </div>

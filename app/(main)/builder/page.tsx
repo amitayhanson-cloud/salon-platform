@@ -6,6 +6,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 export const dynamic = "force-dynamic";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "@/components/auth/AuthProvider";
 import type { MainGoal, SiteConfig } from "@/types/siteConfig";
 import { defaultSiteConfig } from "@/types/siteConfig";
@@ -443,10 +444,10 @@ export default function BuilderPage() {
   // Show loading while auth initializes
   if (!authReady || authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
+      <div className="min-h-screen flex items-center justify-center bg-caleno-bg">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-caleno-deep mx-auto mb-4"></div>
-          <p className="text-[#64748B]">טוען...</p>
+          <p className="text-caleno-deep">טוען...</p>
         </div>
       </div>
     );
@@ -455,23 +456,45 @@ export default function BuilderPage() {
   // Show loading if redirecting
   if (user && user.siteId && didRedirect.current) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
+      <div className="min-h-screen flex items-center justify-center bg-caleno-bg">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-caleno-deep mx-auto mb-4"></div>
-          <p className="text-[#64748B]">מעביר...</p>
+          <p className="text-caleno-deep">מעביר...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] py-8">
+    <div className="min-h-screen bg-caleno-bg py-8" dir="rtl">
         <div className="container mx-auto px-4 max-w-2xl">
-        <div className="rounded-xl border border-[#E2E8F0] bg-white p-6 shadow-sm sm:p-8 mt-8 mb-16 text-right">
+          {/* Caleno branding */}
+          <div className="flex flex-col items-center pt-4 pb-6">
+            <Link
+              href="/"
+              className="inline-flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-caleno-deep focus-visible:ring-offset-2 rounded"
+              aria-label="Caleno – דף הבית"
+            >
+              <span className="relative block h-10 w-36 sm:h-11 sm:w-44">
+                <Image
+                  src="/brand/caleno logo/caleno_logo_new.png"
+                  alt="Caleno"
+                  fill
+                  className="object-contain object-center"
+                  priority
+                  sizes="176px"
+                />
+              </span>
+            </Link>
+            <p className="mt-2 text-sm font-medium text-caleno-deep">
+              בונה את האתר שלך
+            </p>
+          </div>
+        <div className="rounded-xl border border-caleno-border bg-white p-6 shadow-sm sm:p-8 mb-16 text-right ring-1 ring-black/5">
           {/* Step indicator */}
           <div className="mb-8">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-[#64748B]">
+              <span className="text-sm font-medium text-caleno-deep/90">
                 שלב {step} מתוך {totalSteps}
               </span>
               <Link
@@ -481,7 +504,7 @@ export default function BuilderPage() {
                 חזרה לדף הבית
               </Link>
             </div>
-            <div className="w-full rounded-full h-2 bg-[#E2E8F0]">
+            <div className="w-full rounded-full h-2 bg-caleno-border">
               <div
                 className="h-2 rounded-full bg-caleno-deep transition-all duration-300"
                 style={{ width: `${(step / totalSteps) * 100}%` }}
@@ -508,7 +531,7 @@ export default function BuilderPage() {
                   id="salonName"
                   value={config.salonName}
                   onChange={(e) => updateConfig({ salonName: e.target.value })}
-                  className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
+                  className="w-full rounded-lg border border-caleno-border px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                   placeholder="הזן את שם הסלון"
                 />
               </div>
@@ -528,7 +551,7 @@ export default function BuilderPage() {
                         salonType: e.target.value as SiteConfig["salonType"],
                       })
                     }
-                    className="w-full rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
+                    className="w-full rounded-lg border border-caleno-border bg-white px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                   >
                     {(Object.keys(salonTypeLabels) as SiteConfig["salonType"][]).map(
                       (type) => (
@@ -567,7 +590,7 @@ export default function BuilderPage() {
                       setWizardSlug(normalized);
                       setSlugAvailable(null);
                     }}
-                    className="min-w-[140px] flex-1 rounded-lg border border-[#E2E8F0] px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
+                    className="min-w-[140px] flex-1 rounded-lg border border-caleno-border px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                     placeholder="mysalon"
                     maxLength={30}
                   />
@@ -623,7 +646,7 @@ export default function BuilderPage() {
                   id="address"
                   value={config.address || ""}
                   onChange={(e) => updateConfig({ address: e.target.value })}
-                  className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
+                  className="w-full rounded-lg border border-caleno-border px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                   placeholder="למשל: רחוב בן יהודה 10, תל אביב"
                   required
                 />
@@ -645,7 +668,7 @@ export default function BuilderPage() {
                 {(Object.keys(mainGoalLabels) as MainGoal[]).map((goal) => (
                   <label
                     key={goal}
-                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-[#E2E8F0] p-4 transition-colors hover:border-caleno-deep/40 hover:bg-[rgba(30,111,124,0.04)]"
+                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-caleno-border p-4 transition-colors hover:border-caleno-deep/40 hover:bg-[rgba(30,111,124,0.04)]"
                   >
                     <input
                       type="checkbox"
@@ -673,7 +696,7 @@ export default function BuilderPage() {
                   return (
                     <label
                       key={serviceName}
-                      className="flex cursor-pointer items-center gap-3 rounded-lg border border-[#E2E8F0] p-4 transition-colors hover:border-caleno-deep/40 hover:bg-[rgba(30,111,124,0.04)]"
+                      className="flex cursor-pointer items-center gap-3 rounded-lg border border-caleno-border p-4 transition-colors hover:border-caleno-deep/40 hover:bg-[rgba(30,111,124,0.04)]"
                     >
                       <input
                         type="checkbox"
@@ -686,7 +709,7 @@ export default function BuilderPage() {
                   );
                 })}
               </div>
-              <div className="pt-4 border-t border-[#E2E8F0]">
+              <div className="pt-4 border-t border-caleno-border">
                 <label
                   htmlFor="customService"
                   className="block text-sm font-medium text-[#64748B] mb-2"
@@ -705,7 +728,7 @@ export default function BuilderPage() {
                         addCustomService();
                       }
                     }}
-                    className="flex-1 rounded-lg border border-[#E2E8F0] px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
+                    className="flex-1 rounded-lg border border-caleno-border px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                     placeholder="הזן שירות נוסף"
                   />
                   <button
@@ -767,7 +790,7 @@ export default function BuilderPage() {
                     id="phoneNumber"
                     value={config.phoneNumber || ""}
                     onChange={(e) => updateConfig({ phoneNumber: e.target.value })}
-                    className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
+                    className="w-full rounded-lg border border-caleno-border px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                     placeholder="למשל: 050-1234567"
                   />
                 </div>
@@ -784,7 +807,7 @@ export default function BuilderPage() {
                     id="whatsappNumber"
                     value={config.whatsappNumber || ""}
                     onChange={(e) => updateConfig({ whatsappNumber: e.target.value })}
-                    className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
+                    className="w-full rounded-lg border border-caleno-border px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                     placeholder="למשל: 050-1234567"
                   />
                 </div>
@@ -801,7 +824,7 @@ export default function BuilderPage() {
                     id="instagramHandle"
                     value={config.instagramHandle || ""}
                     onChange={(e) => updateConfig({ instagramHandle: e.target.value })}
-                    className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
+                    className="w-full rounded-lg border border-caleno-border px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                     placeholder="למשל: salon_beauty"
                   />
                 </div>
@@ -818,7 +841,7 @@ export default function BuilderPage() {
                     id="facebookPage"
                     value={config.facebookPage || ""}
                     onChange={(e) => updateConfig({ facebookPage: e.target.value })}
-                    className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
+                    className="w-full rounded-lg border border-caleno-border px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                     placeholder="למשל: https://facebook.com/your-salon"
                   />
                 </div>
@@ -835,7 +858,7 @@ export default function BuilderPage() {
                     id="contactEmail"
                     value={config.contactEmail || ""}
                     onChange={(e) => updateConfig({ contactEmail: e.target.value })}
-                    className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
+                    className="w-full rounded-lg border border-caleno-border px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                     placeholder="name@example.com"
                   />
                 </div>
@@ -859,7 +882,7 @@ export default function BuilderPage() {
                 ).map((page) => (
                   <label
                     key={page}
-                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-[#E2E8F0] p-4 transition-colors hover:border-caleno-deep/40 hover:bg-[rgba(30,111,124,0.04)]"
+                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-caleno-border p-4 transition-colors hover:border-caleno-deep/40 hover:bg-[rgba(30,111,124,0.04)]"
                   >
                     <input
                       type="checkbox"
@@ -874,7 +897,7 @@ export default function BuilderPage() {
                 ))}
               </div>
 
-              <div className="pt-6 border-t border-[#E2E8F0]">
+              <div className="pt-6 border-t border-caleno-border">
                 <label
                   htmlFor="specialNote"
                   className="block text-sm font-medium text-[#64748B] mb-2"
@@ -888,7 +911,7 @@ export default function BuilderPage() {
                     updateConfig({ specialNote: e.target.value })
                   }
                   rows={4}
-                  className="w-full resize-none rounded-lg border border-[#E2E8F0] px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
+                  className="w-full resize-none rounded-lg border border-caleno-border px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                   placeholder="כתוב כאן הערות או פרטים מיוחדים..."
                 />
               </div>
@@ -896,11 +919,11 @@ export default function BuilderPage() {
           )}
 
           {/* Navigation buttons */}
-          <div className="mt-8 pt-6 border-t border-[#E2E8F0] flex justify-between gap-4">
+          <div className="mt-8 pt-6 border-t border-caleno-border flex justify-between gap-4">
             <button
               onClick={handleBack}
               disabled={step === 1}
-              className="rounded-lg border border-[#E2E8F0] px-6 py-3 font-medium text-caleno-ink transition-colors hover:bg-[rgba(15,23,42,0.04)] disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-lg border border-caleno-border px-6 py-3 font-medium text-caleno-ink transition-colors hover:bg-[rgba(15,23,42,0.04)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               חזור
             </button>
