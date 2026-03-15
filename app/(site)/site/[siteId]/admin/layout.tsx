@@ -6,6 +6,7 @@ import { useParams, useRouter, usePathname } from "next/navigation";
 // Admin routes are dynamic - they require authentication and load user data
 export const dynamic = "force-dynamic";
 import AdminHeader from "@/components/admin/AdminHeader";
+import { AdminHelpPanel } from "@/components/admin/AdminHelpPanel";
 import { useAuth } from "@/components/auth/AuthProvider";
 import CalenoLoading from "@/components/CalenoLoading";
 
@@ -25,6 +26,7 @@ export default function AdminLayout({
   const siteId = params.siteId as string;
   const [lazyCleanupToast, setLazyCleanupToast] = useState<string | null>(null);
   const lazyCleanupTriggeredRef = useRef(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   // Prevent redirect loops
   const redirectAttempted = useRef(false);
@@ -388,7 +390,8 @@ export default function AdminLayout({
         </div>
       )}
       <div className="relative z-10 w-full overflow-x-hidden">
-        <AdminHeader />
+        <AdminHeader onOpenHelp={() => setHelpOpen(true)} />
+        <AdminHelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} />
         {/* Full-width content area: no top padding on day view so calendar sits under header */}
         <main
           className={`w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ${isDayView ? "pt-0 pb-4" : "py-8"}`}

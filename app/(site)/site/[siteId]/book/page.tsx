@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { db } from "@/lib/firebaseClient";
 import { doc, getDoc, onSnapshot, query, where, getDocs, orderBy } from "firebase/firestore";
 import { collection } from "firebase/firestore";
@@ -1419,6 +1420,26 @@ export default function BookingPage() {
       >
         <div className="max-w-2xl mx-auto px-4">
           <div className="rounded-3xl shadow-lg p-6 sm:p-8 text-center" style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)", borderWidth: "1px" }}>
+            {config?.branding?.logoUrl && (
+              <div className="mb-6 flex justify-center">
+                <Link
+                  href={getSiteUrl(config?.slug, siteId, "")}
+                  className="inline-block"
+                  aria-label={config.branding?.logoAlt || config?.salonName || "דף הבית"}
+                >
+                  <div className="relative h-10 w-32 sm:h-12 sm:w-40 mx-auto">
+                    <Image
+                      src={config.branding.logoUrl}
+                      alt={config.branding?.logoAlt || config?.salonName || "לוגו"}
+                      fill
+                      className="object-contain object-center"
+                      sizes="160px"
+                      unoptimized={config.branding.logoUrl.startsWith("https://res.cloudinary.com")}
+                    />
+                  </div>
+                </Link>
+              </div>
+            )}
             <div className="mb-6">
               <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: "#d1fae5" }}>
                 <svg
@@ -1725,6 +1746,27 @@ export default function BookingPage() {
       } as React.CSSProperties}
     >
       <div className="max-w-2xl mx-auto px-4">
+        {/* Brand logo */}
+        {config?.branding?.logoUrl && (
+          <div className="mb-6 flex justify-center">
+            <Link
+              href={getSiteUrl(config?.slug, siteId, "")}
+              className="inline-block"
+              aria-label={config.branding?.logoAlt || config?.salonName || "דף הבית"}
+            >
+              <div className="relative h-12 w-40 sm:h-14 sm:w-48">
+                <Image
+                  src={config.branding.logoUrl}
+                  alt={config.branding?.logoAlt || config?.salonName || "לוגו"}
+                  fill
+                  className="object-contain object-center"
+                  sizes="192px"
+                  unoptimized={config.branding.logoUrl.startsWith("https://res.cloudinary.com")}
+                />
+              </div>
+            </Link>
+          </div>
+        )}
         {/* Progress indicator */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-3">

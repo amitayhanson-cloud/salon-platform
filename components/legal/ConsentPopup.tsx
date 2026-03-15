@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@/components/auth/AuthProvider";
 
 const STORAGE_KEY = "caleno_terms_privacy_agreed";
 
@@ -12,6 +13,7 @@ const LEGAL_PATHS = ["/privacy", "/terms"];
 
 export function ConsentPopup() {
   const pathname = usePathname();
+  const { user } = useAuth();
   const [agreed, setAgreed] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -33,6 +35,8 @@ export function ConsentPopup() {
     }
   };
 
+  /* Only show terms/privacy consent after user has logged in, not on the public landing page. */
+  if (!user) return null;
   if (agreed === null) return null;
   if (agreed) return null;
   /* On legal pages, hide the popup so the user can read; popup will show again on any other page until they agree. */

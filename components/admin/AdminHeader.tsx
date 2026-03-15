@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useParams, useRouter } from "next/navigation";
-import { ChevronDown, Menu, X, ExternalLink } from "lucide-react";
+import { ChevronDown, Menu, X, ExternalLink, HelpCircle } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { isOnTenantSubdomainClient, getAdminBasePath } from "@/lib/url";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
@@ -53,7 +53,11 @@ function getMenuItems(basePath: string): MenuItem[] {
   ];
 }
 
-export default function AdminHeader() {
+type AdminHeaderProps = {
+  onOpenHelp?: () => void;
+};
+
+export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
   const pathname = usePathname();
   const params = useParams();
   const router = useRouter();
@@ -199,6 +203,17 @@ export default function AdminHeader() {
           <div className="flex items-center gap-4 md:gap-6 shrink-0">
             {/* Navbar */}
             <nav className="hidden md:flex items-center gap-4 whitespace-nowrap">
+              {onOpenHelp && (
+                <button
+                  type="button"
+                  onClick={onOpenHelp}
+                  className="flex items-center gap-2 rounded-lg border border-[#E2E8F0] px-4 py-2 text-sm font-medium text-[#0F172A] transition-colors hover:bg-[rgba(15,23,42,0.04)]"
+                  title="עזרה בפאנל"
+                >
+                  <HelpCircle className="w-4 h-4" />
+                  <span>עזרה</span>
+                </button>
+              )}
               {canViewSite && (
                 <button
                   onClick={handleViewWebsite}
@@ -383,6 +398,21 @@ export default function AdminHeader() {
                 )}
               </div>
             ))}
+            {onOpenHelp && (
+              <div className="mb-3 border-b border-[#E2E8F0] pb-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenHelp();
+                    setMobileMenuOpen(false);
+                  }}
+                  className="flex w-full items-center justify-between rounded-lg border border-[#E2E8F0] px-4 py-3 text-sm font-medium text-[#0F172A] transition-colors hover:bg-[rgba(15,23,42,0.04)]"
+                >
+                  <span>עזרה</span>
+                  <HelpCircle className="w-4 h-4" />
+                </button>
+              </div>
+            )}
             {canViewSite && (
               <div className="mb-3 border-b border-[#E2E8F0] pb-3 pt-3">
                 <button

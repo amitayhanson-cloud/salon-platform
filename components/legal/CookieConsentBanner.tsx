@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useAuth } from "@/components/auth/AuthProvider";
 import {
   hasValidCookieConsent,
   setCookieConsent,
@@ -9,6 +10,7 @@ import {
 } from "@/lib/cookieConsent";
 
 export function CookieConsentBanner() {
+  const { user } = useAuth();
   const [show, setShow] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -21,6 +23,8 @@ export function CookieConsentBanner() {
     setShow(false);
   };
 
+  /* Only show cookie consent after user has logged in, not on the public landing page. */
+  if (!user) return null;
   if (show === null || !show) return null;
 
   return (
