@@ -519,14 +519,26 @@ export default function BuilderPage() {
                 >
                   איזה סוג סלון? *
                 </label>
-                <select
-                  id="salonType"
-                  value="hair"
-                  onChange={() => {}}
-                  className="w-full rounded-lg border border-[#E2E8F0] bg-slate-100 cursor-not-allowed px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
-                >
-                  <option value="hair">מספרת שיער</option>
-                </select>
+                <div className="w-full" dir="ltr" style={{ position: "relative" }}>
+                  <select
+                    id="salonType"
+                    value={config.salonType}
+                    onChange={(e) =>
+                      updateConfig({
+                        salonType: e.target.value as SiteConfig["salonType"],
+                      })
+                    }
+                    className="w-full rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
+                  >
+                    {(Object.keys(salonTypeLabels) as SiteConfig["salonType"][]).map(
+                      (type) => (
+                        <option key={type} value={type}>
+                          {salonTypeLabels[type]}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
               </div>
             </div>
           )}

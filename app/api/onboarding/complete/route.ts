@@ -88,20 +88,14 @@ export async function POST(request: NextRequest) {
     const userRef = db.collection(USERS_COLLECTION).doc(uid);
     const now = new Date();
 
-    // Merge template defaults (hair1) with builder config
+    // Merge template defaults (hair1) with builder config; fallback to builder config if template missing in Firestore
     let finalConfig: SiteConfig = { ...config, slug };
     try {
       const templateDefaults = await getTemplateConfigDefaults(DEFAULT_HAIR_TEMPLATE_KEY);
       finalConfig = mergeTemplateWithBuilderConfig(templateDefaults, finalConfig);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Template not available: ${msg}. Run scripts/createHair1TemplateFromSite.ts to create the template.`,
-        },
-        { status: 500 }
-      );
+    } catch {
+      // Template not in Firestore (e.g. new project): use builder config as-is so site creation still works
+      finalConfig = { ...config, slug };
     }
 
     // Generate demo FAQs/Reviews if extra pages selected and none exist

@@ -27,6 +27,10 @@ export default function MainLayoutClient({
     return <>{children}</>;
   }
 
+  if (pathname === "/builder" || pathname?.startsWith("/builder/")) {
+    return <>{children}</>;
+  }
+
   if (pathname === "/privacy" || pathname === "/terms") {
     return (
       <div
