@@ -11,14 +11,19 @@ export function LandingHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <header dir="rtl" className="sticky top-2 z-50 md:top-4" role="banner">
-      {/* Pill navbar — match template: mt-2, py-2, bg-white/70, rounded-full, CTA with inset shadow */}
-      <nav
-        aria-label="ניווט ראשי"
-        className={cn(
-          "mt-2 flex items-center justify-between gap-3 rounded-full border border-[#E2E8F0] bg-white/70 px-4 py-2 shadow-sm backdrop-blur-md md:grid md:px-6 md:[grid-template-columns:auto_1fr_auto]",
-        )}
-      >
+    <header
+      dir="rtl"
+      className="sticky top-0 z-50 w-full bg-transparent py-3 md:py-4"
+      role="banner"
+    >
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-0 px-4 lg:px-8">
+        {/* Pill navbar — full-width bar, nav content centered in max-w-6xl */}
+        <nav
+          aria-label="ניווט ראשי"
+          className={cn(
+            "flex w-full items-center justify-between gap-3 rounded-full border border-white/30 bg-white/25 px-4 py-2 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.08),0_0_0_1px_rgba(255,255,255,0.4)_inset] backdrop-blur-xl md:grid md:px-6 md:[grid-template-columns:auto_1fr_auto]",
+          )}
+        >
         {/* A. Actions — first in DOM so in RTL grid they appear on the right; hamburger on mobile (order-1) */}
         <div className="order-1 flex shrink-0 items-center gap-2 md:order-none md:justify-self-end">
           <div className="hidden md:flex md:items-center md:gap-2">
@@ -79,10 +84,10 @@ export function LandingHeader() {
             </span>
           </Link>
         </div>
-      </nav>
+        </nav>
 
-      {/* Mobile menu: slide-down, smooth animation */}
-      <div
+        {/* Mobile menu: slide-down, same width as nav */}
+        <div
         id="mobile-nav-menu"
         className="overflow-hidden transition-[max-height] duration-300 ease-out md:hidden"
         style={{ maxHeight: mobileOpen ? "400px" : "0" }}
@@ -90,7 +95,7 @@ export function LandingHeader() {
         aria-label="תפריט ניווט"
         aria-hidden={!mobileOpen}
       >
-        <div className="border-t border-gray-200 bg-white px-4 py-4">
+        <div className="mt-2 rounded-2xl border border-[#E2E8F0] bg-white px-4 py-4 shadow-sm">
           <nav className="flex flex-col gap-1" aria-label="ניווט מובייל">
             {NAV_LINKS.map(({ href, label }) => (
               <Link
@@ -119,6 +124,7 @@ export function LandingHeader() {
               </Link>
             </div>
           </nav>
+        </div>
         </div>
       </div>
     </header>

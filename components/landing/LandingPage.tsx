@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { Inter } from "next/font/google";
 import { LandingHeader } from "./LandingHeader";
 import { LandingHero } from "./LandingHero";
-import { LandingDashboardPreview } from "./LandingDashboardPreview";
 import { ProductExplanationSection } from "./ProductExplanationSection";
 import { LandingFeaturesGrid } from "./LandingFeaturesGrid";
 import { ProductDemoSection } from "./ProductDemoSection";
@@ -40,19 +39,30 @@ export function LandingPage() {
   return (
     <div
       dir="ltr"
-      className={`${inter.variable} ${inter.className} min-h-screen bg-white text-caleno-ink antialiased`}
+      className={`${inter.variable} ${inter.className} relative min-h-screen text-caleno-ink antialiased`}
     >
-      {/* Top block: template-style rose/orange gradient + pill nav + hero + preview card */}
+      {/* Stationary gradient: Caleno at center spreading out, white at edges; fixed so content scrolls on top */}
+      <div
+        aria-hidden
+        className="fixed inset-0 -z-10"
+        style={{
+          backgroundImage: `
+            radial-gradient(ellipse 100% 100% at 50% 50%, #cceef1 0%, #e6f5f7 25%, #f0f9fa 50%, #f8fcfd 75%, #ffffff 100%)
+          `,
+        }}
+      />
+
+      {/* Navbar: full-width, sticky for entire page (unchanged) */}
+      <LandingHeader />
+
+      {/* Top block: hero + Caleno box */}
       <div className="relative">
-        <div className="absolute inset-0 -z-10 bg-gradient-to-b from-rose-50 via-rose-50/60 to-orange-50" />
         <div className="mx-auto max-w-6xl px-4 py-6 md:py-8 lg:px-8">
-          <LandingHeader />
-          <LandingHero heroImageUrl={content?.hero?.imageUrl} />
-          <LandingDashboardPreview />
+          <LandingHero />
         </div>
       </div>
 
-      <main>
+      <main className="relative">
         <ProductExplanationSection productImageUrl={content?.features?.websitePreviewImageUrl} />
         <LandingFeaturesGrid />
         <ProductDemoSection

@@ -9,15 +9,16 @@ type ProductExplanationSectionProps = {
 
 export function ProductExplanationSection({ productImageUrl }: ProductExplanationSectionProps) {
   return (
-    <section dir="rtl" id="product" className="bg-caleno-off py-16 md:py-20 lg:py-24">
+    <section dir="rtl" id="product" className="py-16 md:py-20 lg:py-24">
       <div className="mx-auto max-w-6xl px-4 md:px-6 lg:px-8">
-        <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:items-center lg:gap-16">
-          {/* Image: second on mobile (order-2), first column on desktop (lg:order-1) */}
-          <div className="order-2 mb-8 flex justify-center lg:order-1 lg:mb-0 lg:justify-start">
-            <div
-              className="h-72 w-full max-w-md rounded-2xl border border-[#E5E7EB] bg-white shadow-md overflow-hidden md:h-80"
-              aria-hidden
-            >
+        <div className="overflow-hidden rounded-3xl border border-[#E2E8F0] bg-white shadow-sm">
+          <div className="grid grid-cols-1 gap-12 p-6 md:p-8 lg:grid-cols-2 lg:items-center lg:gap-16 lg:p-10">
+            {/* Image: second on mobile (order-2), first column on desktop (lg:order-1) */}
+            <div className="order-2 mb-8 flex justify-center lg:order-1 lg:mb-0 lg:justify-start">
+              <div
+                className="h-72 w-full max-w-md overflow-hidden rounded-2xl border border-[#E2E8F0] bg-caleno-off/50 md:h-80"
+                aria-hidden
+              >
               {productImageUrl ? (
                 <Image
                   src={productImageUrl}
@@ -32,10 +33,10 @@ export function ProductExplanationSection({ productImageUrl }: ProductExplanatio
                   {PRODUCT_EXPLANATION.imagePlaceholder}
                 </div>
               )}
+              </div>
             </div>
-          </div>
-          {/* Text: first on mobile (order-1), second column on desktop (lg:order-2) */}
-          <div className="order-1 text-right lg:order-2">
+            {/* Text: first on mobile (order-1), second column on desktop (lg:order-2) */}
+            <div className="order-1 text-right lg:order-2">
             <h2 className="text-2xl font-semibold leading-tight tracking-tight text-caleno-ink md:text-3xl">
               {PRODUCT_EXPLANATION.title}
             </h2>
@@ -49,6 +50,7 @@ export function ProductExplanationSection({ productImageUrl }: ProductExplanatio
                 </li>
               ))}
             </ul>
+            </div>
           </div>
         </div>
       </div>
