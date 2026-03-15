@@ -180,30 +180,28 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
       className="sticky top-0 z-50 border-b border-[#E2E8F0] bg-white"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* dir=ltr: left = tenant logo + nav, right = Caleno logo */}
+        {/* dir=ltr so left/right zones stay fixed: left = Caleno, right = tenant+nav */}
         <div className="flex items-center justify-between h-16 w-full" dir="ltr">
-          {/* LEFT: tenant logo + navbar */}
-          <div className="flex items-center gap-4 md:gap-6 shrink-0 min-w-0">
-            {/* Tenant logo or name (leftmost) */}
+          {/* LEFT: Caleno logo (same as main landing page) */}
+          <div className="flex items-center shrink-0">
             <Link
               href={adminBasePath}
-              className="flex h-9 shrink-0 items-center text-[#0F172A] transition-colors hover:text-[#1E6F7C] min-w-0"
-              aria-label={siteName || "פאנל ניהול"}
+              className="relative flex h-10 w-[140px] items-center text-[#0F172A] transition-opacity hover:opacity-90 md:h-11 md:w-[205px]"
+              aria-label="Caleno – פאנל ניהול"
             >
-              {siteLogoUrl ? (
-                <img
-                  src={siteLogoUrl}
-                  alt={siteName || "לוגו"}
-                  className="h-9 w-auto object-contain max-w-[140px] sm:max-w-[180px]"
-                  width={180}
-                  height={36}
-                />
-              ) : (
-                <div className="max-w-[220px] truncate text-base font-semibold">
-                  {siteName || "פאנל ניהול"}
-                </div>
-              )}
+              <Image
+                src="/brand/caleno logo/caleno_logo_new.png"
+                alt="Caleno"
+                fill
+                className="object-contain object-left"
+                priority
+                sizes="(max-width: 768px) 140px, 205px"
+              />
             </Link>
+          </div>
+
+          {/* RIGHT: tenant branding + navbar (one cluster) */}
+          <div className="flex items-center gap-4 md:gap-6 shrink-0">
             {/* Navbar */}
             <nav className="hidden md:flex items-center gap-4 whitespace-nowrap">
               {onOpenHelp && (
@@ -298,6 +296,29 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
               ))}
             </nav>
 
+            {/* Tenant logo or name (far right) */}
+            <div className="flex items-center gap-2 min-w-0">
+              <Link
+                href={adminBasePath}
+                className="flex h-9 items-center text-[#0F172A] transition-colors hover:text-[#1E6F7C]"
+                aria-label={siteName || "פאנל ניהול"}
+              >
+                {siteLogoUrl ? (
+                  <img
+                    src={siteLogoUrl}
+                    alt={siteName || "לוגו"}
+                    className="h-9 w-auto object-contain max-w-[140px] sm:max-w-[180px]"
+                    width={180}
+                    height={36}
+                  />
+                ) : (
+                  <div className="max-w-[220px] truncate text-base font-semibold">
+                    {siteName || "פאנל ניהול"}
+                  </div>
+                )}
+              </Link>
+            </div>
+
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="shrink-0 rounded-lg p-2 text-[#0F172A] transition-colors hover:bg-[rgba(15,23,42,0.04)] md:hidden"
@@ -309,24 +330,6 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                 <Menu className="w-6 h-6" />
               )}
             </button>
-          </div>
-
-          {/* RIGHT: Caleno logo */}
-          <div className="flex items-center shrink-0">
-            <Link
-              href={adminBasePath}
-              className="relative flex h-10 w-[140px] items-center text-[#0F172A] transition-opacity hover:opacity-90 md:h-11 md:w-[205px]"
-              aria-label="Caleno – פאנל ניהול"
-            >
-              <Image
-                src="/brand/caleno logo/caleno_logo_new.png"
-                alt="Caleno"
-                fill
-                className="object-contain object-right"
-                priority
-                sizes="(max-width: 768px) 140px, 205px"
-              />
-            </Link>
           </div>
         </div>
 
