@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import type { SiteConfig } from "@/types/siteConfig";
 import { DEFAULT_CONTENT } from "@/lib/editor/defaultContent";
+import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 
 interface LuxurySalonTemplateProps {
   config: SiteConfig;
@@ -631,10 +632,10 @@ export function LuxurySalonTemplate({ config }: LuxurySalonTemplateProps) {
       {config.contactOptions.includes("whatsapp") && (
         <button
           type="button"
-          className="fixed bottom-4 left-4 sm:bottom-6 sm:left-6 z-30 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white shadow-xl w-14 h-14 flex items-center justify-center text-2xl transition-colors"
+          className="fixed bottom-4 left-4 sm:bottom-6 sm:left-6 z-30 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white shadow-xl w-14 h-14 flex items-center justify-center transition-colors"
           aria-label="פתח וואטסאפ"
         >
-          ⟳
+          <WhatsAppIcon className="w-7 h-7 text-white" />
         </button>
       )}
     </div>

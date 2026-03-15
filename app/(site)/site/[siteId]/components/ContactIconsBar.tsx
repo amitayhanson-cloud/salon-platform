@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { MapPin, MessageCircle } from "lucide-react";
+import { MapPin } from "lucide-react";
+import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 
 type ContactIconsBarProps = {
   phoneNumber?: string | null;
@@ -59,9 +60,7 @@ export default function ContactIconsBar({
       href: `https://wa.me/${whatsappNumber.replace(/[^0-9]/g, "")}`,
       label: "וואטסאפ",
       external: true,
-      icon: (
-        <MessageCircle className="w-6 h-6" strokeWidth={2} />
-      ),
+      icon: <WhatsAppIcon className="w-6 h-6" />,
     });
   }
 

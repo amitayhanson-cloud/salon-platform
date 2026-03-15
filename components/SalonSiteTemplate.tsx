@@ -2,6 +2,7 @@
 
 import type { SiteConfig } from "@/types/siteConfig";
 import type { GeneratedContent } from "@/types/generatedContent";
+import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 
 type SalonSiteTemplateProps = {
   config: SiteConfig;
@@ -323,10 +324,10 @@ export function SalonSiteTemplate({
       {config.contactOptions.includes("whatsapp") && (
         <button
           type="button"
-          className="fixed bottom-4 left-4 sm:bottom-6 sm:left-6 z-30 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white shadow-xl w-14 h-14 flex items-center justify-center text-2xl transition-colors"
+          className="fixed bottom-4 left-4 sm:bottom-6 sm:left-6 z-30 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white shadow-xl w-14 h-14 flex items-center justify-center transition-colors"
           aria-label="פתח וואטסאפ"
         >
-          ⟳
+          <WhatsAppIcon className="w-7 h-7 text-white" />
         </button>
       )}
     </div>

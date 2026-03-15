@@ -27,6 +27,7 @@ import {
   servicesTitle,
 } from "@/lib/animations";
 import { getSiteUrl } from "@/lib/tenant";
+import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 import WaveDivider from "./components/WaveDivider";
 import ContactIconsBar from "./components/ContactIconsBar";
 import SalonHeader from "./components/SalonHeader";
@@ -886,7 +887,7 @@ export default function HairLuxurySite({
           className="fixed bottom-4 left-4 sm:bottom-6 sm:left-6 z-30 rounded-full shadow-xl w-14 h-14 flex items-center justify-center text-2xl text-white transition-colors bg-[#25D366] hover:bg-[#1EBE5A]"
           aria-label="פתח וואטסאפ"
         >
-          ⟳
+          <WhatsAppIcon className="w-7 h-7 text-white" />
         </a>
       )}
     </div>
