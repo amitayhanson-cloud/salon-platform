@@ -211,11 +211,11 @@ export const FOOTER = {
     ],
   },
   legal: {
-    title: "Legal",
+    title: "משפטי",
     links: [
-      { label: "Privacy", href: "#" },
-      { label: "Terms", href: "#" },
-      { label: "Cookies", href: "#" },
+      { label: "מדיניות פרטיות", href: "/privacy" },
+      { label: "תנאי שימוש", href: "/terms" },
+      { label: "עוגיות", href: "#" },
     ],
   },
   social: {

@@ -7,9 +7,12 @@ import {
   createUserWithEmailAndPassword,
   signInWithPopup,
   GoogleAuthProvider,
+  signInWithPhoneNumber,
   signOut,
   onAuthStateChanged,
   type User as FirebaseUser,
+  type RecaptchaVerifier,
+  type ConfirmationResult,
 } from "firebase/auth";
 import { getUserDocument, createUserDocument } from "@/lib/firestoreUsers";
 import { normalizeFirebaseError, logFirebaseError } from "@/lib/firebaseErrors";
@@ -51,6 +54,10 @@ type AuthContextType = {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string; redirectPath?: string }>;
   loginWithGoogle: () => Promise<{ success: boolean; error?: string; redirectPath?: string }>;
   signup: (email: string, password: string, name?: string) => Promise<{ success: boolean; error?: string; userId?: string }>;
+  signupWithGoogle: () => Promise<{ success: boolean; error?: string; userId?: string; needsProfile?: boolean }>;
+  signupWithPhoneNumberSend: (phoneNumber: string, recaptchaVerifier: RecaptchaVerifier) => Promise<{ success: boolean; error?: string; confirmationResult?: ConfirmationResult }>;
+  signupWithPhoneNumberConfirm: (confirmationResult: ConfirmationResult, code: string) => Promise<{ success: boolean; error?: string; userId?: string; needsProfile?: boolean }>;
+  refreshUser: () => Promise<void>;
   logout: () => Promise<void>;
   loading: boolean;
   authReady: boolean; // True when auth state is fully initialized
@@ -417,6 +424,91 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const signupWithGoogle = useCallback(async (): Promise<{ success: boolean; error?: string; userId?: string; needsProfile?: boolean }> => {
+    if (!auth) {
+      return { success: false, error: "Firebase לא מאותחל. אנא בדוק את הגדרות Firebase שלך." };
+    }
+    try {
+      const provider = new GoogleAuthProvider();
+      const userCredential = await signInWithPopup(auth, provider);
+      const fbUser = userCredential.user;
+      let userDoc = await getUserDocument(fbUser.uid);
+      if (!userDoc) {
+        userDoc = await createUserDocument(
+          fbUser.uid,
+          fbUser.email || "",
+          fbUser.displayName || undefined,
+          null
+        );
+      }
+      setUser(userDoc);
+      setFirebaseUser(fbUser);
+      const hasPhone = typeof userDoc.phone === "string" && userDoc.phone.trim().length > 0;
+      return { success: true, userId: fbUser.uid, needsProfile: !hasPhone };
+    } catch (error: unknown) {
+      logFirebaseError("signupWithGoogle", error);
+      const normalized = normalizeFirebaseError(error);
+      return { success: false, error: normalized.message };
+    }
+  }, []);
+
+  const signupWithPhoneNumberSend = useCallback(async (
+    phoneNumber: string,
+    recaptchaVerifier: RecaptchaVerifier
+  ): Promise<{ success: boolean; error?: string; confirmationResult?: ConfirmationResult }> => {
+    if (!auth) {
+      return { success: false, error: "Firebase לא מאותחל. אנא בדוק את הגדרות Firebase שלך." };
+    }
+    try {
+      const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
+      return { success: true, confirmationResult };
+    } catch (error: unknown) {
+      logFirebaseError("signupWithPhoneNumberSend", error);
+      const normalized = normalizeFirebaseError(error);
+      return { success: false, error: normalized.message };
+    }
+  }, []);
+
+  const signupWithPhoneNumberConfirm = useCallback(async (
+    confirmationResult: ConfirmationResult,
+    code: string
+  ): Promise<{ success: boolean; error?: string; userId?: string; needsProfile?: boolean }> => {
+    if (!auth) {
+      return { success: false, error: "Firebase לא מאותחל." };
+    }
+    try {
+      const userCredential = await confirmationResult.confirm(code);
+      const fbUser = userCredential.user;
+      const phone = fbUser.phoneNumber || "";
+      let userDoc = await getUserDocument(fbUser.uid);
+      if (!userDoc) {
+        userDoc = await createUserDocument(
+          fbUser.uid,
+          fbUser.email || "",
+          fbUser.displayName || undefined,
+          phone
+        );
+      }
+      setUser(userDoc);
+      setFirebaseUser(fbUser);
+      return { success: true, userId: fbUser.uid, needsProfile: true };
+    } catch (error: unknown) {
+      logFirebaseError("signupWithPhoneNumberConfirm", error);
+      const normalized = normalizeFirebaseError(error);
+      return { success: false, error: normalized.message };
+    }
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    if (!firebaseUser) return;
+    try {
+      const userDoc = await getUserDocumentWithRetry(firebaseUser.uid);
+      if (userDoc) setUser(userDoc);
+    } catch (e) {
+      console.error("[AuthProvider] refreshUser failed:", e);
+    }
+  }, [firebaseUser]);
+
   const logout = useCallback(async () => {
     if (!auth) return;
     try {
@@ -431,14 +523,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const contextValue = useMemo(
-    () => ({ user, firebaseUser, login, loginWithGoogle, signup, logout, loading, authReady }),
-    [user, firebaseUser, login, loginWithGoogle, signup, logout, loading, authReady]
+    () => ({
+      user,
+      firebaseUser,
+      login,
+      loginWithGoogle,
+      signup,
+      signupWithGoogle,
+      signupWithPhoneNumberSend,
+      signupWithPhoneNumberConfirm,
+      refreshUser,
+      logout,
+      loading,
+      authReady,
+    }),
+    [
+      user,
+      firebaseUser,
+      login,
+      loginWithGoogle,
+      signup,
+      signupWithGoogle,
+      signupWithPhoneNumberSend,
+      signupWithPhoneNumberConfirm,
+      refreshUser,
+      logout,
+      loading,
+      authReady,
+    ]
   );
 
   // Show fallback UI if Firebase config is invalid
   if (!configValid) {
     return (
-      <AuthContext.Provider value={{ user: null, firebaseUser: null, login, loginWithGoogle, signup, logout, loading: false, authReady: true }}>
+      <AuthContext.Provider value={{ user: null, firebaseUser: null, login, loginWithGoogle, signup, signupWithGoogle: async () => ({ success: false, error: "Firebase לא מוגדר" }), signupWithPhoneNumberSend: async () => ({ success: false, error: "Firebase לא מוגדר" }), signupWithPhoneNumberConfirm: async () => ({ success: false, error: "Firebase לא מוגדר" }), refreshUser: async () => {}, logout, loading: false, authReady: true }}>
         <FirebaseConfigErrorBanner />
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg shadow-lg p-6 max-w-md text-right">

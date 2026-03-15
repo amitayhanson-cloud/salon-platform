@@ -26,23 +26,31 @@ function timestampToDate(timestamp: any): Date {
 export async function createUserDocument(
   userId: string,
   email: string,
-  name?: string
+  name?: string,
+  phone?: string | null
 ): Promise<User> {
   const db = getDb(); // Always get a fresh, valid Firestore instance
   const userRef = doc(db, USERS_COLLECTION, userId);
   const userData: User = {
     id: userId,
-    email,
+    email: email || "",
     name,
+    phone: phone ?? null,
     siteId: null, // No siteId at signup - will be set after wizard completion
     createdAt: new Date(),
   };
 
-  await setDoc(userRef, {
-    ...userData,
+  const payload: Record<string, unknown> = {
+    id: userId,
+    email: userData.email,
+    siteId: null,
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
-  });
+  };
+  if (name != null) payload.name = name;
+  if (phone != null) payload.phone = phone;
+
+  await setDoc(userRef, payload);
 
   return userData;
 }
@@ -60,13 +68,28 @@ export async function getUserDocument(userId: string): Promise<User | null> {
   const data = userSnap.data();
   return {
     id: userSnap.id,
-    email: data.email,
+    email: data.email ?? "",
     name: data.name,
+    phone: typeof data.phone === "string" && data.phone ? data.phone : null,
     siteId: data.siteId || null,
     primarySlug: typeof data.primarySlug === "string" && data.primarySlug ? data.primarySlug : null,
     createdAt: timestampToDate(data.createdAt),
     updatedAt: data.updatedAt ? timestampToDate(data.updatedAt) : undefined,
   };
+}
+
+/** Update user profile fields (name, email, phone). Merge only provided fields. */
+export async function updateUserProfile(
+  userId: string,
+  updates: { name?: string; email?: string; phone?: string | null }
+): Promise<void> {
+  const db = getDb();
+  const userRef = doc(db, USERS_COLLECTION, userId);
+  const payload: Record<string, unknown> = { updatedAt: Timestamp.now() };
+  if (updates.name !== undefined) payload.name = updates.name;
+  if (updates.email !== undefined) payload.email = updates.email;
+  if (updates.phone !== undefined) payload.phone = updates.phone;
+  await setDoc(userRef, payload, { merge: true });
 }
 
 // Update user's siteId

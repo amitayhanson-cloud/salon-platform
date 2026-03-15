@@ -14,6 +14,7 @@ import { HAIR_HERO_IMAGES, HAIR_ABOUT_IMAGES } from "@/lib/hairImages";
 import { Timestamp } from "firebase/firestore";
 import { validateTenantSlug, getSitePublicUrl } from "@/lib/tenant";
 import { getDashboardUrl } from "@/lib/url";
+import { isUserProfileComplete } from "@/types/user";
 
 /*
  * Manual test steps (signup wizard + subdomain):
@@ -92,6 +93,15 @@ export default function BuilderPage() {
           });
         }
         router.replace("/login");
+      }
+      return;
+    }
+
+    // Require complete profile (name, email, phone) before builder
+    if (!isUserProfileComplete(user)) {
+      if (!didRedirect.current) {
+        didRedirect.current = true;
+        router.replace("/signup/complete-profile");
       }
       return;
     }

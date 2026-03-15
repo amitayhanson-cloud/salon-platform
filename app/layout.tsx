@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth/AuthProvider";
+import { ConsentPopup } from "@/components/legal/ConsentPopup";
+import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
 import { isPlatformHost } from "@/lib/tenant";
 
 const ROOT_METADATA: Metadata = {
@@ -40,6 +42,8 @@ export default function RootLayout({
     <html lang="he" dir="rtl">
       <body className="min-h-screen w-full overflow-x-hidden overscroll-none bg-white text-slate-900 antialiased">
         <AuthProvider>
+          <ConsentPopup />
+          <CookieConsentBanner />
           {children}
         </AuthProvider>
       </body>
