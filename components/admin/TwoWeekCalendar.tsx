@@ -4,6 +4,7 @@ import { ymdLocal } from "@/lib/dateLocal";
 import { toYYYYMMDD } from "@/lib/calendarUtils";
 import { useRouter } from "next/navigation";
 import { getAdminBasePathFromSiteId } from "@/lib/url";
+import { getServiceCalendarColors } from "@/lib/colorUtils";
 
 const DAY_LABELS_SHORT: Record<string, string> = {
   "0": "א׳", "1": "ב׳", "2": "ג׳", "3": "ד׳", "4": "ה׳", "5": "ו׳", "6": "ש׳",
@@ -23,6 +24,7 @@ interface BookingSummary {
   time: string;
   serviceName: string;
   workerName?: string;
+  serviceColor?: string | null;
 }
 
 interface TwoWeekCalendarProps {
@@ -33,25 +35,30 @@ interface TwoWeekCalendarProps {
   siteId: string;
 }
 
-/** Booking load indicator: 1–3 thin bars, or +N for many. No text. */
-function LoadIndicator({ count }: { count: number }) {
-  if (count <= 0) return null;
-  const bars = count <= 3 ? count : 3;
-  const showPlus = count > 3;
+/** Booking colour bars: one per booking (up to 3), then +N. Uses service colour like daily calendar. */
+function BookingColorBars({ bookings }: { bookings: BookingSummary[] }) {
+  if (bookings.length <= 0) return null;
+  const show = bookings.slice(0, 3);
+  const showPlus = bookings.length > 3;
 
   return (
     <div className="flex flex-col gap-0.5 items-center justify-start w-full min-h-[18px]" aria-hidden>
       <div className="flex flex-col gap-0.5 w-full max-w-[20px]">
-        {Array.from({ length: bars }).map((_, i) => (
-          <div
-            key={i}
-            className="h-1 w-full rounded-full bg-[#1E6F7C] opacity-[0.35 + i * 0.2]"
-          />
-        ))}
+        {show.map((b, i) => {
+          const { background } = getServiceCalendarColors(b.serviceColor);
+          return (
+            <div
+              key={b.id}
+              className="h-1.5 w-full rounded-full flex-shrink-0"
+              style={{ backgroundColor: background }}
+              title={`${b.time} ${b.serviceName}`}
+            />
+          );
+        })}
       </div>
       {showPlus && (
-        <span className="text-[10px] font-medium text-[#1E6F7C]/80 leading-tight mt-0.5">
-          +{count - 3}
+        <span className="text-[10px] font-medium text-slate-500 leading-tight mt-0.5">
+          +{bookings.length - 3}
         </span>
       )}
     </div>
@@ -125,7 +132,7 @@ export default function TwoWeekCalendar({
                   {DAY_LABELS_SHORT[day.getDay().toString()]}
                 </span>
                 <div className="pt-1.5 w-full flex justify-center">
-                  <LoadIndicator count={count} />
+                  <BookingColorBars bookings={dayBookings} />
                 </div>
               </button>
             );
@@ -167,15 +174,19 @@ export default function TwoWeekCalendar({
                   {dayBookings.length} {dayBookings.length === 1 ? "תור" : "תורים"}
                 </div>
                 <div className="space-y-1">
-                  {dayBookings.slice(0, 3).map((booking: BookingSummary) => (
-                    <div
-                      key={booking.id}
-                      className="truncate rounded bg-[rgba(30,111,124,0.08)] px-1 py-0.5 text-xs text-[#1E6F7C]"
-                      title={`${booking.time} ${booking.serviceName} ${booking.workerName ? `(${booking.workerName})` : ""}`}
-                    >
-                      {booking.time} {booking.serviceName}
-                    </div>
-                  ))}
+                  {dayBookings.slice(0, 3).map((booking: BookingSummary) => {
+                    const { background, text } = getServiceCalendarColors(booking.serviceColor);
+                    return (
+                      <div
+                        key={booking.id}
+                        className="truncate rounded px-1 py-0.5 text-xs"
+                        style={{ backgroundColor: background, color: text }}
+                        title={`${booking.time} ${booking.serviceName} ${booking.workerName ? `(${booking.workerName})` : ""}`}
+                      >
+                        {booking.time} {booking.serviceName}
+                      </div>
+                    );
+                  })}
                   {dayBookings.length > 3 && (
                     <div className="text-xs text-slate-500">
                       +{dayBookings.length - 3}

@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { motion } from "framer-motion";
 import { db } from "@/lib/firebaseClient";
 import { doc, getDoc, onSnapshot, query, where, getDocs, orderBy } from "firebase/firestore";
 import { collection } from "firebase/firestore";
@@ -1419,7 +1420,7 @@ export default function BookingPage() {
         } as React.CSSProperties}
       >
         <div className="max-w-2xl mx-auto px-4">
-          <div className="rounded-3xl shadow-lg p-6 sm:p-8 text-center" style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)", borderWidth: "1px" }}>
+          <div className="rounded-3xl shadow-lg p-6 sm:p-8" style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)", borderWidth: "1px" }}>
             {/* User branding: logo at top (or salon name if no logo) */}
             <header className="mb-6 flex justify-center">
               {config?.branding?.logoUrl ? (
@@ -1449,23 +1450,33 @@ export default function BookingPage() {
                 </Link>
               )}
             </header>
-            <div className="mb-6">
-              <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: "#d1fae5" }}>
+            <div className="mb-6 text-center">
+              {/* Animated checkmark */}
+              <motion.div
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.1 }}
+                className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4"
+                style={{ backgroundColor: "#d1fae5" }}
+              >
                 <svg
-                  className="w-8 h-8"
+                  className="w-10 h-10"
                   style={{ color: "#10b981" }}
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
+                  strokeWidth={2.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
+                  <motion.path
                     d="M5 13l4 4L19 7"
+                    initial={{ pathLength: 0.001 }}
+                    animate={{ pathLength: 1 }}
+                    transition={{ delay: 0.25, duration: 0.4, ease: "easeOut" }}
                   />
                 </svg>
-              </div>
+              </motion.div>
               <h1 className="text-2xl sm:text-3xl font-bold mb-2" style={{ color: "var(--text)" }}>
                 ההזמנה נקלטה
               </h1>
@@ -1474,10 +1485,15 @@ export default function BookingPage() {
               </p>
             </div>
 
-            <div className="rounded-2xl p-6 mb-6 text-right space-y-3" style={{ backgroundColor: "var(--bg)" }}>
-              <div className="flex justify-between items-start gap-3 pb-3 border-b" style={{ borderColor: "var(--border)" }}>
-                <span className="text-sm shrink-0" style={{ color: "var(--muted)" }}>שירות{selectedServices.length > 1 ? "ים" : ""}:</span>
-                <div className="flex flex-col items-end gap-0.5 min-w-0">
+            {/* Appointment details: RTL, right-aligned so text flows right-to-left */}
+            <div
+              className="rounded-2xl p-6 mb-6 w-full space-y-3 text-right"
+              style={{ backgroundColor: "var(--bg)", borderColor: "var(--border)" }}
+              dir="rtl"
+            >
+              <div className="flex justify-end items-start gap-3 pb-3 border-b" style={{ borderColor: "var(--border)" }}>
+                <span className="text-sm shrink-0 order-2" style={{ color: "var(--muted)" }}>שירות{selectedServices.length > 1 ? "ים" : ""}:</span>
+                <div className="flex flex-col items-end gap-0.5 min-w-0 order-1">
                   <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
                     {selectedServices.length === 1
                       ? selectedService?.name
@@ -1493,41 +1509,43 @@ export default function BookingPage() {
                   )}
                 </div>
               </div>
-              <div className="flex justify-between items-center pb-3 border-b" style={{ borderColor: "var(--border)" }}>
-                <span className="text-sm" style={{ color: "var(--muted)" }}>מעצב:</span>
+              <div className="flex justify-end items-center gap-3 pb-3 border-b" style={{ borderColor: "var(--border)" }}>
+                <span className="text-sm shrink-0" style={{ color: "var(--muted)" }}>מעצב:</span>
                 <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
                   {selectedWorker ? selectedWorker.name : "ללא העדפה"}
                 </span>
               </div>
               {phase2WorkerAssigned && (
-                <div className="flex justify-between items-center pb-3 border-b" style={{ borderColor: "var(--border)" }}>
-                  <span className="text-sm" style={{ color: "var(--muted)" }}>המשך טיפול יבוצע על ידי:</span>
+                <div className="flex justify-end items-center gap-3 pb-3 border-b" style={{ borderColor: "var(--border)" }}>
+                  <span className="text-sm shrink-0" style={{ color: "var(--muted)" }}>המשך טיפול יבוצע על ידי:</span>
                   <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
                     {phase2WorkerAssigned.name}
                   </span>
                 </div>
               )}
-              <div className="flex justify-between items-center pb-3 border-b" style={{ borderColor: "var(--border)" }}>
-                <span className="text-sm" style={{ color: "var(--muted)" }}>תאריך:</span>
+              <div className="flex justify-end items-center gap-3 pb-3 border-b" style={{ borderColor: "var(--border)" }}>
+                <span className="text-sm shrink-0" style={{ color: "var(--muted)" }}>תאריך:</span>
                 <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
                   {selectedDate ? formatDateForDisplay(selectedDate) : ""}
                 </span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm" style={{ color: "var(--muted)" }}>שעה:</span>
+              <div className="flex justify-end items-center gap-3">
+                <span className="text-sm shrink-0" style={{ color: "var(--muted)" }}>שעה:</span>
                 <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
                   {selectedTime}
                 </span>
               </div>
             </div>
 
-            <Link
-              href={getSiteUrl(config?.slug, siteId, "")}
-              className="inline-block px-6 py-3 font-semibold rounded-lg transition-colors hover:opacity-90"
-              style={{ backgroundColor: "var(--primary)", color: "var(--primaryText)" }}
-            >
-              חזרה לאתר
-            </Link>
+            <div className="flex justify-center">
+              <Link
+                href={getSiteUrl(config?.slug, siteId, "")}
+                className="inline-block px-6 py-3 font-semibold rounded-lg transition-colors hover:opacity-90"
+                style={{ backgroundColor: "var(--primary)", color: "var(--primaryText)" }}
+              >
+                חזרה לאתר
+              </Link>
+            </div>
           </div>
         </div>
 

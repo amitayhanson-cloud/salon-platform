@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import type { SiteConfig } from "@/types/siteConfig";
 import { defaultSiteConfig } from "@/types/siteConfig";
 import { normalizeServices } from "@/lib/normalizeServices";
@@ -43,6 +43,7 @@ export function useSiteConfig(siteId: string) {
   const [siteConfig, setSiteConfig] = useState<SiteConfig | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
+  const lastSavedRef = useRef<string | null>(null);
 
   // Load config from Firestore (source of truth); fallback to localStorage when doc missing or error
   useEffect(() => {
@@ -58,11 +59,14 @@ export function useSiteConfig(siteId: string) {
         if (cfg) {
           const withTheme = { ...cfg, themeColors: cfg.themeColors || defaultThemeColors };
           setSiteConfig(withTheme);
+          lastSavedRef.current = JSON.stringify(withTheme);
           window.localStorage.setItem(`siteConfig:${siteId}`, JSON.stringify(cfg));
         } else {
           const raw = window.localStorage.getItem(`siteConfig:${siteId}`);
           const merged = raw ? migrateAndMerge(raw) : defaultSiteConfig;
-          setSiteConfig(merged ?? defaultSiteConfig);
+          const next = merged ?? defaultSiteConfig;
+          setSiteConfig(next);
+          lastSavedRef.current = JSON.stringify(next);
           if (process.env.NODE_ENV !== "production" && !raw) {
             console.log("[useSiteConfig] No Firestore doc, using default config");
           }
@@ -72,7 +76,9 @@ export function useSiteConfig(siteId: string) {
         console.error("[useSiteConfig] Firestore error", e);
         const raw = window.localStorage.getItem(`siteConfig:${siteId}`);
         const merged = raw ? migrateAndMerge(raw) : defaultSiteConfig;
-        setSiteConfig(merged ?? defaultSiteConfig);
+        const next = merged ?? defaultSiteConfig;
+        setSiteConfig(next);
+        lastSavedRef.current = JSON.stringify(next);
       }
     );
 
@@ -170,8 +176,9 @@ export function useSiteConfig(siteId: string) {
         JSON.stringify(updatedConfig)
       );
 
-      // Update local state
+      // Update local state and mark as saved
       setSiteConfig(updatedConfig);
+      lastSavedRef.current = JSON.stringify(updatedConfig);
 
       setSaveMessage("השינויים נשמרו בהצלחה");
     } catch (e) {
@@ -183,10 +190,19 @@ export function useSiteConfig(siteId: string) {
     }
   };
 
+  const hasUnsavedChanges = useMemo(
+    () =>
+      siteConfig != null &&
+      lastSavedRef.current != null &&
+      JSON.stringify(siteConfig) !== lastSavedRef.current,
+    [siteConfig]
+  );
+
   return {
     siteConfig,
     isSaving,
     saveMessage,
+    hasUnsavedChanges,
     handleConfigChange,
     handleSaveConfig,
   };

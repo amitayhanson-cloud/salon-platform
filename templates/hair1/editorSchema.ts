@@ -13,7 +13,8 @@ export type EditablePath =
   | `content.${string}`
   | `faqs.${string}`
   | `heroImage`
-  | `aboutImage`;
+  | `aboutImage`
+  | "branding.logoUrl";
 
 export interface EditableTarget {
   id: string;
@@ -63,7 +64,7 @@ export const hair1EditorSchema: EditableTarget[] = [
     label: "שם הסלון בכותרת",
     selectorId: "headerText",
     type: "text",
-    editablePaths: ["content.header.brandName", "themeColors.primaryText", "themeColors.text"],
+    editablePaths: ["content.header.brandName", "branding.logoUrl", "themeColors.primaryText", "themeColors.text"],
   },
   {
     id: "headerNavLink",

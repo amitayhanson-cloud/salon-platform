@@ -35,11 +35,12 @@ export function ConsentPopup() {
     }
   };
 
-  /* Only show terms/privacy consent after user has logged in, not on the public landing page. */
-  if (!user) return null;
+  /* Only show terms/privacy consent when user is logged in AND on the admin panel (not when browsing landing or user site). */
+  const isAdminRoute = typeof pathname === "string" && pathname.includes("/admin");
+  if (!user || !isAdminRoute) return null;
   if (agreed === null) return null;
   if (agreed) return null;
-  /* On legal pages, hide the popup so the user can read; popup will show again on any other page until they agree. */
+  /* On legal pages, hide the popup so the user can read; popup will show again on any other admin page until they agree. */
   if (pathname && LEGAL_PATHS.includes(pathname)) return null;
 
   return (

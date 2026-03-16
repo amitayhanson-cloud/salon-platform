@@ -37,10 +37,10 @@ service cloud.firestore {
             || get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUserId == request.auth.uid);
     }
 
-    // Bookings: public create (submit booking); read/update/delete only site owner.
+    // Bookings: public read (slot availability) and create (submit booking); update/delete only site owner.
     match /sites/{siteId}/bookings/{bookingId} {
-      allow create: if true;
-      allow read, update, delete: if request.auth != null
+      allow read, create: if true;
+      allow update, delete: if request.auth != null
         && (get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUid == request.auth.uid
             || get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUserId == request.auth.uid);
     }
@@ -59,10 +59,10 @@ service cloud.firestore {
             || get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUserId == request.auth.uid);
     }
 
-    // Clients: public create (getOrCreateClient when submitting booking); read/update/delete only site owner.
+    // Clients: public read/update (getOrCreateClient, personal pricing when submitting booking); delete only site owner.
     match /sites/{siteId}/clients/{clientId} {
-      allow create: if true;
-      allow read, update, delete: if request.auth != null
+      allow read, create, update: if true;
+      allow delete: if request.auth != null
         && (get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUid == request.auth.uid
             || get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUserId == request.auth.uid);
     }
@@ -74,6 +74,14 @@ service cloud.firestore {
             || get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUserId == request.auth.uid);
     }
 
+    // Multi-booking combos (packages): public read for booking flow; write only site owner.
+    match /sites/{siteId}/multiBookingCombos/{comboId} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && (get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUid == request.auth.uid
+            || get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUserId == request.auth.uid);
+    }
+
     // Other subcollections under sites (tasks, etc.): only if user owns the site
     match /sites/{siteId}/{subcollection}/{docId} {
       allow read, write: if request.auth != null
@@ -81,31 +89,10 @@ service cloud.firestore {
             || get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUserId == request.auth.uid);
     }
 
-    // Templates: public read (used when creating new sites); write server-only (Admin SDK)
-    match /templates/{templateKey} {
-      allow read: if true;
-      allow write: if false;
-    }
-
     // Platform landing page content (CMS): public read; write by authenticated (admin gated in app)
     match /platform/{docId} {
       allow read: if true;
       allow write: if request.auth != null;
-    }
-
-    // Security audit events: server-only (Admin SDK writes; clients cannot read/write)
-    match /securityEvents/{eventId} {
-      allow read, write: if false;
-    }
-
-    // Rate limits: server-only (Admin SDK only)
-    match /rateLimits/{docId} {
-      allow read, write: if false;
-    }
-
-    // Platform settings (e.g. WhatsApp automations kill-switch): server-only (Admin SDK); super-admin updates via API.
-    match /platformSettings/{docId} {
-      allow read, write: if false;
     }
 
     // Tenants (subdomain slug -> siteId): public read for routing; create only when ownerUid == auth; update/delete only owner; no changing ownerUid/siteId on update.

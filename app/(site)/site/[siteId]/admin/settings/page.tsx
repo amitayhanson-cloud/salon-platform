@@ -27,6 +27,7 @@ import { validateLogoFile } from "@/lib/siteLogoStorage";
 import { ImagePickerModal } from "@/components/editor/ImagePickerModal";
 import { AdminPageHero } from "@/components/admin/AdminPageHero";
 import { AdminCard } from "@/components/admin/AdminCard";
+import { useUnsavedChanges } from "@/components/admin/UnsavedChangesContext";
 
 
 const SERVICE_OPTIONS: Record<SiteConfig["salonType"], string[]> = {
@@ -1029,7 +1030,7 @@ function AdminSiteTab({
       {shouldRender("basic") && (
       <div className="space-y-4">
         <h2 className="text-sm font-semibold text-slate-900">פרטים בסיסיים</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1">
               שם הסלון *
@@ -1041,24 +1042,6 @@ function AdminSiteTab({
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-2 focus:ring-caleno-deep focus:border-caleno-deep"
               placeholder="הקלד את שם הסלון"
             />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">
-              סוג סלון
-            </label>
-            <select
-              value={siteConfig.salonType}
-              onChange={(e) =>
-                onChange({ salonType: e.target.value as SiteConfig["salonType"] })
-              }
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-2 focus:ring-caleno-deep focus:border-caleno-deep bg-white"
-            >
-              {Object.entries(salonTypeLabels).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
           </div>
         </div>
       </div>
@@ -1392,7 +1375,9 @@ export default function SettingsPage() {
   const params = useParams();
   const router = useRouter();
   const siteId = params?.siteId as string;
-  const { siteConfig, isSaving, saveMessage, handleConfigChange, handleSaveConfig } = useSiteConfig(siteId);
+  const { siteConfig, isSaving, saveMessage, hasUnsavedChanges, handleConfigChange, handleSaveConfig } =
+    useSiteConfig(siteId);
+  const unsavedCtx = useUnsavedChanges();
   const { user, firebaseUser, logout } = useAuth();
   // Tab state for settings sections - MUST be declared before any early returns
   const [activeTab, setActiveTab] = useState<SettingsTabType>("basic");
@@ -1419,6 +1404,34 @@ export default function SettingsPage() {
     const t = setTimeout(() => setBookingHoursToast(null), 5000);
     return () => clearTimeout(t);
   }, [bookingHoursToast]);
+
+  // Register unsaved state for leave confirmation modal (in-app nav) and beforeunload
+  useEffect(() => {
+    unsavedCtx?.setUnsaved(hasUnsavedChanges, () => handleSaveConfig());
+  }, [unsavedCtx, hasUnsavedChanges, handleSaveConfig]);
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  // Enter key saves (except when focus is in a textarea)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Enter") return;
+      const target = e.target as HTMLElement;
+      if (target.tagName === "TEXTAREA") return;
+      if (target.closest("[role=dialog]")) return;
+      handleSaveConfig();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [handleSaveConfig]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !siteId) return;

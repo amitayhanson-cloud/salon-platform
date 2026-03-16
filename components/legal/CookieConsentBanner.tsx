@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import {
   hasValidCookieConsent,
@@ -10,6 +11,7 @@ import {
 } from "@/lib/cookieConsent";
 
 export function CookieConsentBanner() {
+  const pathname = usePathname();
   const { user } = useAuth();
   const [show, setShow] = useState<boolean | null>(null);
 
@@ -23,8 +25,9 @@ export function CookieConsentBanner() {
     setShow(false);
   };
 
-  /* Only show cookie consent after user has logged in, not on the public landing page. */
-  if (!user) return null;
+  /* Only show cookie consent when user is logged in AND on the admin panel (not when browsing landing or user site). */
+  const isAdminRoute = typeof pathname === "string" && pathname.includes("/admin");
+  if (!user || !isAdminRoute) return null;
   if (show === null || !show) return null;
 
   return (

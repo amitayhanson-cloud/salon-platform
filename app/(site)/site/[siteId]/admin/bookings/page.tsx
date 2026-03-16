@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 
 const DEV_LOGS = false; // Set to true only when debugging listener loops
@@ -20,7 +20,8 @@ import {
 import { ymdLocal } from "@/lib/dateLocal";
 import { useAuth } from "@/hooks/useAuth";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
-import type { SiteConfig } from "@/types/siteConfig";
+import { subscribeSiteServices } from "@/lib/firestoreSiteServices";
+import type { SiteConfig, SiteService } from "@/types/siteConfig";
 import { getDateRange, getTwoWeekStart, getSundayStart, toYYYYMMDD } from "@/lib/calendarUtils";
 import { normalizeBooking, isBookingCancelled, isBookingArchived } from "@/lib/normalizeBooking";
 import TwoWeekCalendar from "@/components/admin/TwoWeekCalendar";
@@ -56,6 +57,7 @@ export default function BookingsAdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [config, setConfig] = useState<SiteConfig | null>(null);
+  const [services, setServices] = useState<SiteService[]>([]);
 
   // Calendar state
   const [bookings, setBookings] = useState<any[]>([]);
@@ -131,6 +133,20 @@ export default function BookingsAdminPage() {
       if (DEV_LOGS) console.log("[BookingManagement] Cleaning up site config subscription");
       unsubscribe?.();
     };
+  }, [siteId]);
+
+  // Load site services for calendar color lookup (same as day view)
+  useEffect(() => {
+    if (!siteId) return;
+    const unsub = subscribeSiteServices(
+      siteId,
+      (svcs) => setServices((svcs ?? []).filter((s) => s.enabled !== false)),
+      (e) => {
+        console.error("[BookingManagement] Failed to load services", e);
+        setServices([]);
+      }
+    );
+    return () => unsub();
   }, [siteId]);
 
   // Validate siteId and setup realtime listeners. Deps: only stable primitives (siteId, rangeStartKey).
@@ -318,13 +334,50 @@ export default function BookingsAdminPage() {
     }
   };
 
+  // Resolve service color from site services (same as day view) so every booking gets a consistent color
+  const serviceColorLookup = useMemo(() => {
+    const byName = new Map<string, string>();
+    const byId = new Map<string, string>();
+    const normalize = (s: string) => (s ?? "").trim().toLowerCase();
+    services.forEach((service) => {
+      const raw = (service.color ?? "").trim();
+      const color = /^#[0-9A-Fa-f]{6}$/.test(raw) ? raw : "#3B82F6";
+      if (service.name) {
+        const name = service.name.trim();
+        byName.set(service.name, color);
+        if (name) byName.set(name, color);
+        byName.set(normalize(service.name), color);
+      }
+      if (service.id) byId.set(service.id, color);
+    });
+    return { byName, byId, normalize };
+  }, [services]);
+
+  const resolveBookingColor = useCallback(
+    (b: { serviceName?: string; serviceId?: string; serviceColor?: string | null; phases?: Array<{ serviceColor?: string }> }) => {
+      const stored = b.serviceColor ?? b.phases?.[0]?.serviceColor;
+      if (stored && /^#[0-9A-Fa-f]{6}$/.test(String(stored).trim())) return String(stored).trim();
+      const name = (b.serviceName ?? "").trim();
+      const id = b.serviceId;
+      return (
+        serviceColorLookup.byName.get(b.serviceName ?? "") ??
+        (name ? serviceColorLookup.byName.get(name) : null) ??
+        serviceColorLookup.byName.get(serviceColorLookup.normalize(b.serviceName ?? "")) ??
+        (id ? serviceColorLookup.byId.get(id) : null) ??
+        undefined
+      );
+    },
+    [serviceColorLookup]
+  );
+
   // Get 14-day date range
   const dateRange = getDateRange(rangeStart, 14);
   const dateRangeKeys = dateRange.map(toYYYYMMDD);
 
   // Group by dateStr (string day key); bookings are already normalized and non-cancelled from listener
-  const groupedByDay = dateRangeKeys.reduce((acc, dayKey) => {
-    const dayBookings = bookings
+  type DayBooking = { id: string; time: string; serviceName: string; workerName?: string; serviceColor?: string };
+  const groupedByDay = dateRangeKeys.reduce<Record<string, DayBooking[]>>((acc, dayKey) => {
+    const dayBookings: DayBooking[] = bookings
       .filter((b: { dateStr?: string }) => (b.dateStr ?? (b as any).date) === dayKey)
       .sort((a: { timeHHmm?: string; time?: string }, b: { timeHHmm?: string; time?: string }) =>
         (a.timeHHmm ?? a.time ?? "").localeCompare(b.timeHHmm ?? b.time ?? "")
@@ -334,10 +387,11 @@ export default function BookingsAdminPage() {
         time: b.timeHHmm ?? b.time ?? "N/A",
         serviceName: b.serviceName ?? "N/A",
         workerName: b.workerName ?? b.workerId ?? undefined,
+        serviceColor: resolveBookingColor(b),
       }));
     acc[dayKey] = dayBookings;
     return acc;
-  }, {} as Record<string, Array<{ id: string; time: string; serviceName: string; workerName?: string }>>);
+  }, {});
 
   const bookingsByDay = groupedByDay;
 
@@ -441,7 +495,7 @@ export default function BookingsAdminPage() {
               </div>
               <div className="flex items-center gap-2 order-3 justify-center md:justify-end">
                 <Link
-                  href={`${getAdminBasePathFromSiteId(siteId)}/bookings/day/${toYYYYMMDD(new Date())}/cancelled`}
+                  href={`${getAdminBasePathFromSiteId(siteId)}/bookings/cancelled`}
                   className="rounded-full border border-[#E2E8F0] bg-white/80 px-4 py-2 text-sm font-medium text-[#0F172A] backdrop-blur transition-colors hover:bg-white"
                 >
                   תורים שבוטלו

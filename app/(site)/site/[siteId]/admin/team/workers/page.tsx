@@ -737,74 +737,32 @@ export default function WorkersPage() {
             </AdminCard>
           </div>
 
-          {/* Worker Details Card */}
+          {/* Worker Details Card — same section template for new worker and פרטי עובד */}
           <div className="lg:col-span-2 min-w-0">
             <AdminCard className="p-6">
-              {!selectedWorkerId ? (
-                <div>
-                  <h2 className="text-xl font-bold text-[#0F172A] mb-4">עובד חדש</h2>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-[#0F172A] mb-1">
-                        שם עובד *
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.name || ""}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
-                        placeholder="הזן שם עובד"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-[#0F172A] mb-1">
-                        תפקיד (אופציונלי)
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.role || ""}
-                        onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                        className="w-full rounded-lg border border-[#E2E8F0] px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
-                        placeholder="למשל: מעצב ראשי"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleAddWorker}
-                        disabled={saving || !formData.name?.trim()}
-                        className="px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
-                      >
-                        {saving ? "שומר..." : "שמור עובד"}
-                      </button>
-                      <button
-                        onClick={() => setFormData({ name: "", role: "", phone: "", email: "", services: [], availability: defaultAvailability, active: true, treatmentCommissionPercent: 0 })}
-                        className="px-4 py-2 bg-[#E2E8F0] hover:bg-[#CBD5E1] text-[#0F172A] rounded-lg text-sm font-medium"
-                      >
-                        נקה
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  <div className="flex justify-between items-center">
-                    <h2 className="text-xl font-bold text-[#0F172A]">פרטי עובד</h2>
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-xl font-bold text-[#0F172A]">
+                    {selectedWorkerId ? "פרטי עובד" : "עובד חדש"}
+                  </h2>
+                  {selectedWorkerId && (
                     <button
                       onClick={handleDeleteWorker}
                       className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium"
                     >
                       מחק עובד
                     </button>
-                  </div>
+                  )}
+                </div>
 
-                  <AdminTabs
-                    tabs={WORKER_PROFILE_TABS}
-                    activeKey={activeWorkerTab}
-                    onChange={setActiveWorkerTab}
-                  />
+                <AdminTabs
+                  tabs={WORKER_PROFILE_TABS}
+                  activeKey={activeWorkerTab}
+                  onChange={setActiveWorkerTab}
+                />
 
-                  {/* Tab Content */}
-                  <div>
+                {/* Tab Content */}
+                <div>
                     {/* Details Tab */}
                     {activeWorkerTab === "details" && (
                       <div className="space-y-4">
@@ -1065,20 +1023,38 @@ export default function WorkersPage() {
                         )}
                       </div>
                     )}
-                  </div>
+                </div>
 
-                  {/* Save Button */}
-                  <div className="border-t border-[#E2E8F0] pt-4">
+                {/* Save / Add Button */}
+                <div className="border-t border-[#E2E8F0] pt-4 flex flex-wrap gap-2">
+                  {selectedWorkerId ? (
                     <button
                       onClick={handleSaveWorker}
                       disabled={saving || !formData.name?.trim() || (formData.availability || defaultAvailability).some((_, idx) => getWorkerBreaksError(idx) != null)}
-                      className="w-full px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium"
+                      className="flex-1 min-w-[140px] px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium"
                     >
                       {saving ? "שומר..." : "שמור שינויים"}
                     </button>
-                  </div>
+                  ) : (
+                    <>
+                      <button
+                        onClick={handleAddWorker}
+                        disabled={saving || !formData.name?.trim() || (formData.availability || defaultAvailability).some((_, idx) => getWorkerBreaksError(idx) != null)}
+                        className="flex-1 min-w-[140px] px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium"
+                      >
+                        {saving ? "שומר..." : "שמור עובד"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ name: "", role: "", phone: "", email: "", services: [], availability: defaultAvailability, active: true, treatmentCommissionPercent: 0 })}
+                        className="px-4 py-2 border border-[#E2E8F0] hover:bg-[#F1F5F9] text-[#0F172A] rounded-lg font-medium text-sm"
+                      >
+                        נקה
+                      </button>
+                    </>
+                  )}
                 </div>
-              )}
+              </div>
             </AdminCard>
           </div>
         </div>

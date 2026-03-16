@@ -11,6 +11,7 @@ import { defaultThemeColors } from "@/types/siteConfig";
 import { getSectionColorResolved } from "@/lib/sectionStyles";
 import { uploadSiteImage, SITE_IMAGE_ACCEPT } from "@/lib/siteImageStorage";
 import type { SiteImageType } from "@/lib/siteImageStorage";
+import { validateLogoFile } from "@/lib/siteLogoStorage";
 import type { SelectedTarget } from "./SelectionOverlay";
 import { ImagePickerModal } from "./ImagePickerModal";
 
@@ -128,6 +129,8 @@ interface InspectorPanelProps {
   services?: SiteService[];
   /** When a service card image is replaced, update Firestore services array */
   onServiceImageUpload?: (serviceId: string, url: string) => Promise<void>;
+  /** For logo upload in design tab: get auth token for Cloudinary sign */
+  getToken?: () => Promise<string | null>;
   onClose: () => void;
 }
 
@@ -154,12 +157,16 @@ export function InspectorPanel({
   siteId,
   services = [],
   onServiceImageUpload,
+  getToken,
   onClose,
 }: InspectorPanelProps) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [replacingPath, setReplacingPath] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const logoFileInputRef = useRef<HTMLInputElement>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerTargetPath, setPickerTargetPath] = useState<string | null>(null);
   const [pickerTargetServiceId, setPickerTargetServiceId] = useState<string | undefined>(undefined);
@@ -266,6 +273,69 @@ export function InspectorPanel({
     onDraftChange({ sectionStyles: current });
   }, [selected, draftConfig.sectionStyles, onDraftChange]);
 
+  const handleLogoFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      setLogoError(null);
+      if (!file || !getToken) return;
+      const err = validateLogoFile(file);
+      if (err) {
+        setLogoError(err);
+        return;
+      }
+      setLogoUploading(true);
+      try {
+        const token = await getToken();
+        if (!token) {
+          setLogoError("יש להתחבר כדי להעלות לוגו");
+          return;
+        }
+        const signRes = await fetch("/api/cloudinary/sign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ siteId }),
+        });
+        const signData = await signRes.json().catch(() => ({}));
+        if (!signRes.ok) {
+          setLogoError((signData.error as string) || "קבלת חתימה נכשלה");
+          return;
+        }
+        const { timestamp, signature, apiKey, cloudName, folder, publicId } = signData;
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("api_key", apiKey);
+        formData.append("timestamp", String(timestamp));
+        formData.append("signature", signature);
+        formData.append("folder", folder);
+        formData.append("public_id", publicId);
+        const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+          method: "POST",
+          body: formData,
+        });
+        const uploadData = await uploadRes.json().catch(() => ({}));
+        if (!uploadRes.ok || uploadData.error) {
+          setLogoError((uploadData.error?.message as string) || "העלאת הלוגו נכשלה");
+          return;
+        }
+        const secureUrl = uploadData.secure_url as string;
+        const branding = draftConfig.branding ?? {};
+        onDraftChange({ branding: { ...branding, logoUrl: secureUrl } });
+      } catch (err) {
+        setLogoError(err instanceof Error ? err.message : "העלאת הלוגו נכשלה");
+      } finally {
+        setLogoUploading(false);
+      }
+    },
+    [getToken, siteId, draftConfig.branding, onDraftChange]
+  );
+
+  const handleLogoRemove = useCallback(() => {
+    setLogoError(null);
+    const branding = draftConfig.branding ?? {};
+    onDraftChange({ branding: { ...branding, logoUrl: null } });
+  }, [draftConfig.branding, onDraftChange]);
+
   // Derive from selected (safe when selected is null) – must run before any conditional return so hooks below are unconditional
   const paths = selected?.paths ?? [];
   const contentPaths = paths.filter(
@@ -276,8 +346,10 @@ export function InspectorPanel({
   );
   const imagePaths = paths.filter((p) => {
     if (p === "serviceImage") return !!selected?.serviceId;
+    if (p === "branding.logoUrl") return true;
     return p === "heroImage" || p === "aboutImage" || (typeof p === "string" && (p === "galleryImages" || p.startsWith("galleryImages.")));
   });
+  const hasLogoPath = paths.includes("branding.logoUrl");
   const kind = (selected?.type ?? schemaTarget?.type) ?? "section";
   const isImage = kind === "image";
   /** Gallery section selected: show whole-gallery editor (count + slots) instead of per-image */
@@ -295,9 +367,9 @@ export function InspectorPanel({
     const t: { id: InspectorTab; label: string }[] = [];
     if (contentPaths.length > 0) t.push({ id: "text", label: "טקסט" });
     if (colorPaths.length > 0) t.push({ id: "colors", label: "צבעים" });
-    if (imagePaths.length > 0) t.push({ id: "images", label: "תמונות" });
+    if (imagePaths.length > 0) t.push({ id: "images", label: hasLogoPath ? "לוגו" : "תמונות" });
     return t;
-  }, [contentPaths.length, colorPaths.length, imagePaths.length]);
+  }, [contentPaths.length, colorPaths.length, imagePaths.length, hasLogoPath]);
 
   const defaultTab: InspectorTab =
     contentPaths.length > 0 || kind === "text" ? "text"
@@ -309,7 +381,20 @@ export function InspectorPanel({
     setActiveTab(defaultTab);
   }, [selected?.id, defaultTab]);
 
-  if (!selected) return null;
+  if (!selected) {
+    return (
+      <div
+        className="w-full md:w-80 shrink-0 bg-white border-r border-slate-200 flex flex-col overflow-hidden"
+        dir="rtl"
+      >
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+          <p className="text-slate-500 text-sm leading-relaxed max-w-[220px]">
+            לחץ על אלמנטים באתר כדי להתחיל לערוך
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -445,9 +530,70 @@ export function InspectorPanel({
           </div>
         )}
 
-        {/* Image replace: hero, about, gallery (whole panel), service */}
+        {/* Image replace: hero, about, gallery (whole panel), service, logo */}
         {(isImage || imagePaths.length > 0) && activeTab === "images" && (
           <div className="space-y-2">
+            {hasLogoPath && (
+              <>
+                <input
+                  ref={logoFileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp"
+                  className="sr-only"
+                  aria-hidden
+                  onChange={handleLogoFileChange}
+                />
+                <p className="text-xs font-medium text-slate-500">לוגו בכותרת</p>
+                {(draftConfig.branding?.logoUrl ?? null) ? (
+                  <div className="flex flex-col gap-2">
+                    <div className="relative w-full aspect-square max-w-[120px] rounded-lg border border-slate-200 bg-slate-50 overflow-hidden shrink-0">
+                      <Image
+                        src={draftConfig.branding.logoUrl}
+                        alt={draftConfig.branding.logoAlt || draftConfig.salonName || "לוגו"}
+                        fill
+                        className="object-contain"
+                        sizes="120px"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => logoFileInputRef.current?.click()}
+                        disabled={logoUploading}
+                        className="px-3 py-1.5 text-sm font-medium text-caleno-deep hover:text-caleno-ink border border-[#E2E8F0] hover:border-caleno-deep/40 rounded-lg disabled:opacity-50"
+                      >
+                        {logoUploading ? "מעלה…" : "החלף"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleLogoRemove}
+                        disabled={logoUploading}
+                        className="px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-700 border border-slate-300 rounded-lg disabled:opacity-50"
+                      >
+                        הסר
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-xs text-slate-500">הלוגו יוצג בראש האתר. PNG, JPG, SVG או WEBP, עד 2MB.</p>
+                    <button
+                      type="button"
+                      onClick={() => logoFileInputRef.current?.click()}
+                      disabled={logoUploading}
+                      className="inline-flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-sm font-medium rounded-lg w-fit disabled:opacity-50"
+                    >
+                      {logoUploading ? "מעלה…" : "העלה לוגו"}
+                    </button>
+                  </div>
+                )}
+                {logoError && (
+                  <p className="text-xs text-red-600" role="alert">
+                    {logoError}
+                  </p>
+                )}
+              </>
+            )}
             {isGallery ? (
               <>
                 <p className="text-xs font-medium text-slate-500">גלריה</p>
@@ -521,7 +667,7 @@ export function InspectorPanel({
             ) : (
               <>
                 <p className="text-xs font-medium text-slate-500">תמונה</p>
-                {imagePaths.filter((p) => p !== "galleryImages").map((path) => {
+                {imagePaths.filter((p) => p !== "galleryImages" && p !== "branding.logoUrl").map((path) => {
                   const url =
                     path === "serviceImage" && selected?.serviceId
                       ? (services.find((s) => s.id === selected.serviceId)?.imageUrl as string) ?? ""

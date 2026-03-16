@@ -25,6 +25,10 @@ interface VisualSiteEditorProps {
   saveMessage?: string;
   /** When true, hide back and save buttons (parent uses single save for all tabs). */
   hideToolbarSaveAndBack?: boolean;
+  /** Called when the editor draft has unsaved changes (for leave confirmation). */
+  onDirtyChange?: (dirty: boolean) => void;
+  /** For logo upload in inspector: get auth token for Cloudinary sign */
+  getToken?: () => Promise<string | null>;
 }
 
 export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEditorProps>(function VisualSiteEditor({
@@ -35,6 +39,8 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
   isSaving = false,
   saveMessage,
   hideToolbarSaveAndBack = false,
+  onDirtyChange,
+  getToken,
 }, ref) {
   const [draft, setDraft] = useState<SiteConfig>(() => ({
     ...baselineConfig,
@@ -96,6 +102,10 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
     return JSON.stringify(draft) !== JSON.stringify(base);
   }, [draft, baselineConfig]);
 
+  useEffect(() => {
+    onDirtyChange?.(hasUnsavedChanges);
+  }, [hasUnsavedChanges, onDirtyChange]);
+
   const handleSave = useCallback(() => {
     onSave(draft);
   }, [draft, onSave]);
@@ -147,7 +157,10 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
       const id = el.getAttribute("data-edit-id");
       if (!id) return null;
       const type = el.getAttribute("data-edit-type") ?? el.getAttribute("data-edit-kind") ?? "section";
-      const paths = parsePathsFromElement(el);
+      const domPaths = parsePathsFromElement(el);
+      const schemaTarget = getEditableTarget(TEMPLATE_KEY, id);
+      const schemaPaths = schemaTarget?.editablePaths ?? [];
+      const paths = Array.from(new Set([...domPaths, ...schemaPaths]));
       const containerRect = container.getBoundingClientRect();
       const elRect = el.getBoundingClientRect();
       const rect = {
@@ -242,8 +255,8 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
 
   return (
     <div className="flex flex-col h-full min-h-0" dir="rtl">
-      {/* Top bar */}
-      <div className="shrink-0 flex items-center justify-between gap-4 px-4 py-3 bg-white border-b border-slate-200">
+      {/* Top bar — slimmer when embedded in site tab (hideToolbarSaveAndBack) to show more preview */}
+      <div className={`shrink-0 flex items-center justify-between gap-4 px-4 bg-white border-b border-slate-200 ${hideToolbarSaveAndBack ? "py-2" : "py-3"}`}>
         <div className="flex items-center gap-2">
           {!hideToolbarSaveAndBack && onBack && (
             <button
@@ -282,11 +295,11 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
       </div>
 
       {/* Main: preview + inspector */}
-      <div className="flex-1 flex min-h-0">
-        {/* Preview canvas */}
+      <div className="flex-1 flex min-h-0 min-h-[50vh]">
+        {/* Preview canvas — min height so you always see a good amount of the site */}
         <div
           ref={previewContainerRef}
-          className="flex-1 min-w-0 overflow-auto relative bg-slate-100 cursor-pointer"
+          className="flex-1 min-w-0 min-h-[45vh] overflow-auto relative bg-slate-100 cursor-pointer"
           onMouseMove={handlePreviewMouseMove}
           onMouseLeave={handlePreviewMouseLeave}
           role="button"
@@ -320,6 +333,7 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
           siteId={siteId}
           services={services}
           onServiceImageUpload={handleServiceImageUpload}
+          getToken={getToken}
           onClose={() => setSelected(null)}
         />
       </div>
