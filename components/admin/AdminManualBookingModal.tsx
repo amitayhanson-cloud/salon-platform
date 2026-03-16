@@ -25,9 +25,18 @@ function getPricingItemsForService(
   const sid = (service.id || service.name || "").trim();
   const sname = (service.name || "").trim();
   if (!sid && !sname) return [];
-  return pricingItems.filter((item) => {
+  const filtered = pricingItems.filter((item) => {
     const itemSid = (item.serviceId || item.service || "").trim();
     return itemSid === sid || itemSid === sname;
+  });
+  const seen = new Set<string>();
+  return filtered.filter((item) => {
+    const typeLabel = (item.type ?? "").trim();
+    const dur = item.durationMaxMinutes ?? item.durationMinMinutes ?? 30;
+    const key = `${sid}-${typeLabel}-${dur}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
 }
 

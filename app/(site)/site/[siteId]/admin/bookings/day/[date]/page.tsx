@@ -190,12 +190,14 @@ export default function DaySchedulePage() {
   const [toastPersistent, setToastPersistent] = useState(false);
   const { firebaseUser } = useAuth();
 
-  // Map workers to WorkerWithServices (add label + breaks so AdminCreateBookingForm can enforce worker breaks)
+  // Map workers to WorkerWithServices (add label + breaks so AdminCreateBookingForm can enforce worker breaks; include active/allServicesAllowed for phase-2 compatibility)
   const workersForForm = useMemo(() => {
     return workers.map((w) => ({
       id: w.id,
       name: w.name,
       services: w.services,
+      active: (w as { active?: boolean }).active !== false,
+      allServicesAllowed: (w as { allServicesAllowed?: boolean }).allServicesAllowed === true,
       availability: w.availability?.map(
         (a): OpeningHours => ({
           day: toWeekday(a.day),

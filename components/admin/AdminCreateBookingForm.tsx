@@ -61,6 +61,21 @@ function getWeekdayKey(dayIndex: number): Weekday {
   return mapping[dayIndex] ?? "sun";
 }
 
+/** Build worker breaks for the given date for use in phase 2 assignment (avoid assigning follow-up to worker on break). */
+function getWorkerBreaksForDate(
+  workers: Array<{ id: string; availability?: { day: string; breaks?: { start: string; end: string }[] }[] }>,
+  dateStr: string
+): Record<string, { start: string; end: string }[] | undefined> {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dayKey = getWeekdayKey(new Date(y, (m ?? 1) - 1, d ?? 1).getDay());
+  const out: Record<string, { start: string; end: string }[] | undefined> = {};
+  for (const w of workers) {
+    const dayConfig = w.availability?.find((a) => a.day === dayKey);
+    if (dayConfig?.breaks?.length) out[w.id] = dayConfig.breaks;
+  }
+  return out;
+}
+
 const HEBREW_WEEKDAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
 
 function addMonths(ymd: string, months: number): string {
@@ -122,10 +137,20 @@ function getPricingItemsForService(
   const sid = (service.id || service.name || "").trim();
   const sname = (service.name || "").trim();
   if (!sid && !sname) return [];
-  return pricingItems.filter((item) => {
+  const filtered = pricingItems.filter((item) => {
     const itemSid = (item.serviceId || item.service || "").trim();
     if (!itemSid) return false;
     return itemSid === sid || itemSid === sname;
+  });
+  // Deduplicate by logical service type (service + type + duration) so the same option is not shown twice
+  const seen = new Set<string>();
+  return filtered.filter((item) => {
+    const typeLabel = (item.type ?? "").trim();
+    const dur = item.durationMaxMinutes ?? item.durationMinMinutes ?? 30;
+    const key = `${sid}-${typeLabel}-${dur}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
 }
 
@@ -533,7 +558,7 @@ export default function AdminCreateBookingForm({
     const [y, m, d] = date.split("-").map(Number);
     const [hh, mm] = time.split(":").map(Number);
     const startAt = new Date(y, m - 1, d, hh || 0, mm || 0, 0, 0);
-    const rawSlots = computeChainSlots(chain, startAt);
+    const workerBreaksByWorkerId = getWorkerBreaksForDate(workers, date);
 
     if (chain.length === 1) {
       const resolved = resolveChainWorkers({
@@ -545,6 +570,7 @@ export default function AdminCreateBookingForm({
         preferredWorkerId: workerId || null,
         workerWindowByWorkerId,
         businessWindow,
+        workerBreaksByWorkerId,
       });
       return resolved;
     }
@@ -557,6 +583,7 @@ export default function AdminCreateBookingForm({
       preferredWorkerId: workerId || null,
       workerWindowByWorkerId,
       businessWindow,
+      workerBreaksByWorkerId,
     });
   }, [
     chain,
@@ -645,6 +672,7 @@ export default function AdminCreateBookingForm({
           let phase2Payload: { enabled: true; serviceName: string; waitMinutes: number; durationMin: number; workerIdOverride?: string; workerNameOverride?: string; serviceColor?: string | null; serviceId?: string | null } | null = null;
           if (hasFollowUp && pricingItem.followUp) {
             const slotStartMin = timeToMinutes(time);
+            const workerBreaksByWorkerId = getWorkerBreaksForDate(workers, date);
             const phase2Worker = resolvePhase2Worker({
               phase1Worker: { id: worker.id, name: worker.name },
               preferredWorkerId: worker.id,
@@ -659,6 +687,7 @@ export default function AdminCreateBookingForm({
               bookingsForDate,
               workerWindowByWorkerId,
               businessWindow: businessWindow ?? undefined,
+              workerBreaksByWorkerId,
             });
             if (!phase2Worker) {
               throw new Error("אין עובד זמין לשירות ההמשך. נא לנסות שעה או מטפל אחר.");
@@ -740,6 +769,7 @@ export default function AdminCreateBookingForm({
           let phase2Payload: { enabled: true; serviceName: string; waitMinutes: number; durationMin: number; workerIdOverride?: string; workerNameOverride?: string; serviceColor?: string | null; serviceId?: string | null } | null = null;
           if (hasFollowUp && pricingItem.followUp) {
             const slotStartMin = timeToMinutes(time);
+            const workerBreaksByWorkerId = getWorkerBreaksForDate(workers, date);
             const phase2Worker = resolvePhase2Worker({
               phase1Worker: { id: worker.id, name: worker.name },
               preferredWorkerId: worker.id,
@@ -754,6 +784,7 @@ export default function AdminCreateBookingForm({
               bookingsForDate,
               workerWindowByWorkerId,
               businessWindow: businessWindow ?? undefined,
+              workerBreaksByWorkerId,
             });
             if (!phase2Worker) {
               throw new Error("אין עובד זמין לשירות ההמשך. נא לנסות שעה או מטפל אחר.");
@@ -1299,15 +1330,30 @@ export default function AdminCreateBookingForm({
               <p className="text-slate-600 font-medium">משך כולל: {totalDuration} דק׳</p>
               <ul className="space-y-1">
                 {previewSlots.map((s, i) => (
-                  <li key={i} className="flex justify-between text-slate-700">
-                    <span>
-                      {s.serviceName}
-                      {s.serviceType ? ` (${s.serviceType})` : ""}
-                    </span>
-                    <span>
-                      {formatTime(s.startAt)} – {formatTime(s.endAt)}
-                      {s.workerName && ` • ${s.workerName}`}
-                    </span>
+                  <li key={i} className="space-y-0.5">
+                    <div className="flex justify-between text-slate-700">
+                      <span>
+                        {s.serviceName}
+                        {s.serviceType ? ` (${s.serviceType})` : ""}
+                      </span>
+                      <span>
+                        {formatTime(s.startAt)} – {formatTime(s.endAt)}
+                        {s.workerName && ` • ${s.workerName}`}
+                      </span>
+                    </div>
+                    {s.followUp?.serviceName && (
+                      <div className="flex justify-between text-slate-600 ps-4">
+                        <span>המשך: {s.followUp.serviceName}</span>
+                        <span>
+                          {s.followUp.startAt && s.followUp.endAt && (
+                            <>
+                              {formatTime(s.followUp.startAt)} – {formatTime(s.followUp.endAt)}
+                              {s.followUp.workerName && ` • ${s.followUp.workerName}`}
+                            </>
+                          )}
+                        </span>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>

@@ -1420,8 +1420,9 @@ export default function BookingPage() {
       >
         <div className="max-w-2xl mx-auto px-4">
           <div className="rounded-3xl shadow-lg p-6 sm:p-8 text-center" style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)", borderWidth: "1px" }}>
-            {config?.branding?.logoUrl && (
-              <div className="mb-6 flex justify-center">
+            {/* User branding: logo at top (or salon name if no logo) */}
+            <header className="mb-6 flex justify-center">
+              {config?.branding?.logoUrl ? (
                 <Link
                   href={getSiteUrl(config?.slug, siteId, "")}
                   className="inline-block"
@@ -1438,8 +1439,16 @@ export default function BookingPage() {
                     />
                   </div>
                 </Link>
-              </div>
-            )}
+              ) : (
+                <Link
+                  href={getSiteUrl(config?.slug, siteId, "")}
+                  className="text-xl sm:text-2xl font-semibold hover:opacity-90 transition-opacity"
+                  style={{ color: "var(--text)" }}
+                >
+                  {config?.salonName || "הזמנה"}
+                </Link>
+              )}
+            </header>
             <div className="mb-6">
               <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: "#d1fae5" }}>
                 <svg
@@ -1521,6 +1530,29 @@ export default function BookingPage() {
             </Link>
           </div>
         </div>
+
+        {/* Powered by Caleno watermark */}
+        <footer className="mt-8 py-4 flex flex-col items-center justify-center gap-1.5 text-center" style={{ color: "var(--muted)" }}>
+          <span className="text-xs font-medium opacity-90">Powered by</span>
+          <Link
+            href="https://caleno.co"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity"
+            aria-label="Caleno"
+          >
+            <div className="relative w-20 h-6">
+              <Image
+                src="/brand/caleno logo/caleno_logo_new.png"
+                alt="Caleno"
+                fill
+                className="object-contain object-center"
+                sizes="80px"
+                unoptimized
+              />
+            </div>
+          </Link>
+        </footer>
       </div>
     );
   }
@@ -1745,10 +1777,10 @@ export default function BookingPage() {
         "--border": theme.border,
       } as React.CSSProperties}
     >
-      <div className="max-w-2xl mx-auto px-4">
-        {/* Brand logo */}
-        {config?.branding?.logoUrl && (
-          <div className="mb-6 flex justify-center">
+        <div className="max-w-2xl mx-auto px-4">
+        {/* User branding: logo at top (or salon name if no logo) */}
+        <header className="mb-6 flex justify-center">
+          {config?.branding?.logoUrl ? (
             <Link
               href={getSiteUrl(config?.slug, siteId, "")}
               className="inline-block"
@@ -1765,8 +1797,16 @@ export default function BookingPage() {
                 />
               </div>
             </Link>
-          </div>
-        )}
+          ) : (
+            <Link
+              href={getSiteUrl(config?.slug, siteId, "")}
+              className="text-xl sm:text-2xl font-semibold hover:opacity-90 transition-opacity"
+              style={{ color: "var(--text)" }}
+            >
+              {config?.salonName || "הזמנת תור"}
+            </Link>
+          )}
+        </header>
         {/* Progress indicator */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-3">
@@ -2511,6 +2551,29 @@ export default function BookingPage() {
           </div>
         )}
       </div>
+
+      {/* Powered by Caleno watermark */}
+      <footer className="mt-8 py-4 flex flex-col items-center justify-center gap-1.5 text-center" style={{ color: "var(--muted)" }}>
+        <span className="text-xs font-medium opacity-90">Powered by</span>
+        <Link
+          href="https://caleno.co"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity"
+          aria-label="Caleno"
+        >
+          <div className="relative w-20 h-6">
+            <Image
+              src="/brand/caleno logo/caleno_logo_new.png"
+              alt="Caleno"
+              fill
+              className="object-contain object-center"
+              sizes="80px"
+              unoptimized
+            />
+          </div>
+        </Link>
+      </footer>
     </div>
   );
 }

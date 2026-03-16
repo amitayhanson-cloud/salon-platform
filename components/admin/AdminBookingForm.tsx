@@ -127,11 +127,21 @@ export default function AdminBookingForm({
 }: AdminBookingFormProps) {
   const { firebaseUser } = useAuth();
   const getToken = useCallback(() => firebaseUser?.getIdToken() ?? Promise.resolve(undefined), [firebaseUser]);
-  // Service types available for phase 1: only items whose service is in the enabled services list
+  // Service types available for phase 1: only items whose service is in the enabled services list; dedupe by logical (service, type, duration)
   const phase1ServiceTypeOptions = useMemo(() => {
-    return pricingItems.filter((item) => {
+    const filtered = pricingItems.filter((item) => {
       const sid = item.serviceId || item.service;
       return sid && services.some((s) => s.id === sid || s.name === sid);
+    });
+    const seen = new Set<string>();
+    return filtered.filter((item) => {
+      const sid = (item.serviceId || item.service || "").trim();
+      const typeLabel = (item.type ?? "").trim();
+      const dur = item.durationMaxMinutes ?? item.durationMinMinutes ?? 30;
+      const key = `${sid}-${typeLabel}-${dur}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
     });
   }, [pricingItems, services]);
 

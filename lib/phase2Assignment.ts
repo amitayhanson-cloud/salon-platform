@@ -152,10 +152,29 @@ export interface ResolvePhase2WorkerParams {
 }
 
 /**
+ * Returns true if the worker can perform the phase 2 service (by name or id).
+ */
+function phase1WorkerCanDoPhase2Service(
+  phase1Worker: { id: string; name: string },
+  phase2ServiceName: string,
+  phase2ServiceId: string | null | undefined,
+  workers: WorkerForPhase2[]
+): boolean {
+  const worker = workers.find((w) => w.id === phase1Worker.id);
+  if (!worker) return false;
+  const nameTrim = (phase2ServiceName && String(phase2ServiceName).trim()) || "";
+  const idTrim = (phase2ServiceId && String(phase2ServiceId).trim()) || null;
+  if (nameTrim && canWorkerPerformService(worker, nameTrim)) return true;
+  if (idTrim && idTrim !== nameTrim && canWorkerPerformService(worker, idTrim)) return true;
+  return false;
+}
+
+/**
  * Resolve which worker should perform phase 2. Single function used for availability and booking.
  * - If phase 1 worker can do phase 2 service AND is available at phase 2 time → return phase 1 worker.
  * - Else if another worker is eligible and available → return one (deterministic: least busy, then by id).
  * - Else return null (do not show this option / cannot complete booking).
+ * Never assigns phase 2 to a worker who cannot perform the follow-up service (workers page compatibility).
  */
 export function resolvePhase2Worker(params: ResolvePhase2WorkerParams): { id: string; name: string } | null {
   const {
@@ -190,12 +209,29 @@ export function resolvePhase2Worker(params: ResolvePhase2WorkerParams): { id: st
     workerBreaksByWorkerId,
   });
 
+  const phase1CanDoService = phase1WorkerCanDoPhase2Service(phase1Worker, phase2ServiceName, phase2ServiceId ?? null, workers);
+
   if (preferredWorkerId && eligible.some((w) => w.id === preferredWorkerId)) {
+    const preferred = workers.find((w) => w.id === preferredWorkerId);
+    if (preferred && preferredWorkerId === phase1Worker.id && !phase1CanDoService) {
+      const otherEligible = eligible.filter((w) => w.id !== phase1Worker.id);
+      if (otherEligible.length > 0) {
+        return autoAssignPhase2Worker(otherEligible, { dateStr, bookingsForDate });
+      }
+      return null;
+    }
     return { id: preferredWorkerId, name: workers.find((w) => w.id === preferredWorkerId)?.name ?? preferredWorkerId };
   }
   const phase1IsEligible = eligible.some((w) => w.id === phase1Worker.id);
-  if (phase1IsEligible) {
+  if (phase1IsEligible && phase1CanDoService) {
     return { id: phase1Worker.id, name: phase1Worker.name };
+  }
+  if (phase1IsEligible && !phase1CanDoService) {
+    const otherEligible = eligible.filter((w) => w.id !== phase1Worker.id);
+    if (otherEligible.length > 0) {
+      return autoAssignPhase2Worker(otherEligible, { dateStr, bookingsForDate });
+    }
+    return null;
   }
 
   if (eligible.length === 0) return null;

@@ -290,7 +290,15 @@ export default function ServicesPage() {
   };
 
   const handleEditItem = (item: PricingItem) => {
-    setEditingItemParentService(null);
+    const serviceId = item.serviceId || item.service;
+    const parentService =
+      serviceId && services.length
+        ? (() => {
+            const svc = services.find((s) => s.id === serviceId || s.name === serviceId);
+            return svc ? { id: svc.id, name: svc.name } : null;
+          })()
+        : null;
+    setEditingItemParentService(parentService);
     const convertedItem = { ...item };
     setDurationInputValue(formatNumberOrRange(convertedItem.durationMinMinutes, convertedItem.durationMaxMinutes));
     setPriceInputValue(formatNumberOrRange(
@@ -350,11 +358,6 @@ export default function ServicesPage() {
         setError("המתנה אחרי שלב 1 חייבת להיות 0 ומעלה");
         return;
       }
-      const followUpTextTrimmed = (editingItem.followUp?.text ?? followUpTextInputValue ?? "").trim();
-      if (!followUpTextTrimmed) {
-        setError("נא להזין שם המשך טיפול");
-        return;
-      }
     }
 
     try {
@@ -384,21 +387,21 @@ export default function ServicesPage() {
         itemData.type = null;
       }
 
-      // Follow-up: hasFollowUp + followUp { name, durationMinutes, waitMinutes } | null
-      const followUpName = (editingItem.followUp?.name ?? followUpNameInputValue ?? editingItemParentService?.name ?? "").trim();
-      const followUpServiceId = editingItemParentService?.id ?? editingItem.followUp?.serviceId;
+      // Follow-up: hasFollowUp + followUp { name, serviceId, durationMinutes, waitMinutes } | null (follow-up service is user-selected from dropdown)
+      const followUpName = (editingItem.followUp?.name ?? followUpNameInputValue ?? "").trim();
+      const followUpServiceId = editingItem.followUp?.serviceId ?? services.find((s) => s.name === followUpName)?.id;
       const followUpDuration = editingItem.followUp?.durationMinutes ?? (followUpDurationInputValue ? parseInt(followUpDurationInputValue, 10) : NaN);
       const followUpWait = editingItem.followUp?.waitMinutes ?? (followUpWaitInputValue ? parseInt(followUpWaitInputValue, 10) : 0);
       const followUpTextRaw = (editingItem.followUp?.text ?? followUpTextInputValue).trim();
       const followUpText = followUpTextRaw.slice(0, FOLLOWUP_TEXT_MAX_LENGTH) || undefined;
-      if (editingItem.hasFollowUp && followUpName && followUpText && Number.isFinite(followUpDuration) && followUpDuration >= 1 && Number.isFinite(followUpWait) && followUpWait >= 0) {
+      if (editingItem.hasFollowUp && followUpName && Number.isFinite(followUpDuration) && followUpDuration >= 1 && Number.isFinite(followUpWait) && followUpWait >= 0) {
         itemData.hasFollowUp = true;
         itemData.followUp = {
           name: followUpName,
           ...(followUpServiceId && { serviceId: followUpServiceId }),
           durationMinutes: followUpDuration,
           waitMinutes: followUpWait,
-          text: followUpText,
+          ...(followUpText && { text: followUpText }),
         };
       } else {
         itemData.hasFollowUp = false;
@@ -1391,8 +1394,8 @@ export default function ServicesPage() {
             </div>
 
             <div className="p-6 space-y-4">
-              {/* When opened from a service card, parent is known: show read-only. Otherwise show dropdown. */}
-              {editingItem.id === "new" && editingItemParentService ? (
+              {/* Main service: read-only (same as the service you chose from), not changeable. */}
+              {editingItemParentService ? (
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">שירות</label>
                   <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700 text-right">
@@ -1558,9 +1561,7 @@ export default function ServicesPage() {
                     checked={editingItem.hasFollowUp || false}
                     onChange={(e) => {
                       const newHasFollowUp = e.target.checked;
-                      const defaultFollowUp = editingItemParentService
-                        ? { name: editingItemParentService.name, serviceId: editingItemParentService.id, durationMinutes: 15, waitMinutes: 0 }
-                        : { name: "", durationMinutes: 15, waitMinutes: 0 };
+                      const defaultFollowUp = { name: "", durationMinutes: 15, waitMinutes: 0 };
                       setEditingItem({
                         ...editingItem,
                         hasFollowUp: newHasFollowUp,
@@ -1573,8 +1574,8 @@ export default function ServicesPage() {
                         setFollowUpDurationInputValue("");
                         setFollowUpWaitInputValue("0");
                         setFollowUpTextInputValue("");
-                      } else if (editingItemParentService) {
-                        setFollowUpNameInputValue(editingItemParentService.name);
+                      } else {
+                        setFollowUpNameInputValue("");
                       }
                       setError(null);
                     }}
@@ -1585,64 +1586,45 @@ export default function ServicesPage() {
 
                 {editingItem.hasFollowUp && (
                   <div className="space-y-4 pr-6 bg-slate-50 p-4 rounded-lg">
-                    {/* When parent service is known (opened from a service card), show read-only; otherwise show dropdown. */}
-                    {editingItemParentService ? (
-                      <div className="space-y-2">
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">שירות</label>
-                          <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-slate-700 text-right">
-                            {editingItemParentService.name}
-                          </div>
-                        </div>
-                        {editingItem.type != null && editingItem.type.trim() !== "" && (
-                          <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-1">סוג שירות ראשי</label>
-                            <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-slate-700 text-right">
-                              {editingItem.type.trim()}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                          שלב 2 – שירות *
-                        </label>
-                        <select
-                          value={editingItem.followUp?.name ?? followUpNameInputValue ?? ""}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            const svc = services.find((s) => s.name === v);
-                            setFollowUpNameInputValue(v);
-                            setEditingItem({
-                              ...editingItem,
-                              followUp: editingItem.followUp
-                                ? { ...editingItem.followUp, name: v, serviceId: svc?.id }
-                                : { name: v, serviceId: svc?.id, durationMinutes: 15, waitMinutes: 0 },
-                            });
-                          }}
-                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep bg-white"
-                        >
-                          <option value="">בחר שירות...</option>
-                          {(() => {
-                            const currentName = (editingItem.followUp?.name ?? followUpNameInputValue ?? "").trim();
-                            const inList = currentName && services.some((s) => s.name === currentName);
-                            return (
-                              <>
-                                {currentName && !inList && (
-                                  <option value={currentName}>{currentName} (לא ברשימה)</option>
-                                )}
-                                {services.map((s) => (
-                                  <option key={s.id} value={s.name}>
-                                    {s.name}
-                                  </option>
-                                ))}
-                              </>
-                            );
-                          })()}
-                        </select>
-                      </div>
-                    )}
+                    {/* Follow-up service: always changeable, select from all services. */}
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        המשך שירות *
+                      </label>
+                      <select
+                        value={editingItem.followUp?.name ?? followUpNameInputValue ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          const svc = services.find((s) => s.name === v);
+                          setFollowUpNameInputValue(v);
+                          setEditingItem({
+                            ...editingItem,
+                            followUp: editingItem.followUp
+                              ? { ...editingItem.followUp, name: v, serviceId: svc?.id }
+                              : { name: v, serviceId: svc?.id, durationMinutes: 15, waitMinutes: 0 },
+                          });
+                        }}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep bg-white"
+                      >
+                        <option value="">בחר שירות...</option>
+                        {(() => {
+                          const currentName = (editingItem.followUp?.name ?? followUpNameInputValue ?? "").trim();
+                          const inList = currentName && services.some((s) => s.name === currentName);
+                          return (
+                            <>
+                              {currentName && !inList && (
+                                <option value={currentName}>{currentName} (לא ברשימה)</option>
+                              )}
+                              {services.filter((s) => s.enabled !== false).map((s) => (
+                                <option key={s.id} value={s.name}>
+                                  {s.name}
+                                </option>
+                              ))}
+                            </>
+                          );
+                        })()}
+                      </select>
+                    </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">
                         משך שלב 2 (דקות) *
@@ -1683,7 +1665,7 @@ export default function ServicesPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">
-                        שם המשך טיפול *
+                        הערות
                       </label>
                       <input
                         type="text"
@@ -1699,7 +1681,6 @@ export default function ServicesPage() {
                           });
                         }}
                         maxLength={FOLLOWUP_TEXT_MAX_LENGTH}
-                        placeholder="למשל: פן"
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep bg-white"
                       />
                       <p className="text-xs text-[#64748B] mt-1" dir="rtl">
@@ -1735,20 +1716,13 @@ export default function ServicesPage() {
                                          editingItem.durationMinMinutes >= 1;
                 const hasFollowUp = editingItem?.hasFollowUp === true;
                 const followUp = editingItem?.followUp;
-                const followUpText = (editingItem?.followUp?.text ?? followUpTextInputValue ?? "").trim();
                 const hasValidFollowUp = !hasFollowUp ||
                                         (hasFollowUp &&
                                          !!followUp?.name?.trim() &&
-                                         !!followUpText &&
                                          typeof followUp.durationMinutes === "number" && followUp.durationMinutes >= 1 &&
                                          typeof followUp.waitMinutes === "number" && followUp.waitMinutes >= 0);
                 const isSaveDisabled = !hasService || !hasValidDuration || !hasValidFollowUp;
-                const missingFollowUpName = hasFollowUp && !followUpText;
-                return isSaveDisabled && missingFollowUpName ? (
-                  <p className="text-xs text-amber-600 text-right" role="alert">
-                    נא למלא את שם המשך טיפול כדי לשמור.
-                  </p>
-                ) : null;
+                return null;
               })()}
               <div className="flex justify-end gap-3">
                 <button
@@ -1766,11 +1740,9 @@ export default function ServicesPage() {
                                            editingItem.durationMinMinutes >= 1;
                   const hasFollowUp = editingItem?.hasFollowUp === true;
                   const followUp = editingItem?.followUp;
-                  const followUpText = (editingItem?.followUp?.text ?? followUpTextInputValue ?? "").trim();
                   const hasValidFollowUp = !hasFollowUp ||
                                           (hasFollowUp &&
                                            !!followUp?.name?.trim() &&
-                                           !!followUpText &&
                                            typeof followUp.durationMinutes === "number" && followUp.durationMinutes >= 1 &&
                                            typeof followUp.waitMinutes === "number" && followUp.waitMinutes >= 0);
                   const isSaveDisabled = !hasService || !hasValidDuration || !hasValidFollowUp;
@@ -1788,19 +1760,15 @@ export default function ServicesPage() {
                                                     editingItem.durationMinMinutes >= 1;
                     const currentHasFollowUp = editingItem?.hasFollowUp === true;
                     const currentFollowUp = editingItem?.followUp;
-                    const currentFollowUpText = (editingItem?.followUp?.text ?? followUpTextInputValue ?? "").trim();
                     const currentHasValidFollowUp = !currentHasFollowUp ||
                                                     (currentHasFollowUp &&
                                                      !!currentFollowUp?.name?.trim() &&
-                                                     !!currentFollowUpText &&
                                                      typeof currentFollowUp.durationMinutes === "number" && currentFollowUp.durationMinutes >= 1 &&
                                                      typeof currentFollowUp.waitMinutes === "number" && currentFollowUp.waitMinutes >= 0);
                     const currentIsSaveDisabled = !currentHasService || !currentHasValidDuration || !currentHasValidFollowUp;
 
                     if (currentIsSaveDisabled) {
-                      if (currentHasFollowUp && !currentFollowUpText) {
-                        setError("נא למלא את שם המשך טיפול");
-                      } else if (!currentHasService) {
+                      if (!currentHasService) {
                         setError("נא לבחור שירות");
                       } else if (!currentHasValidDuration) {
                         setError("משך השירות חייב להיות גדול או שווה ל-1 דקה");
