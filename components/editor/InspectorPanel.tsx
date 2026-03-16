@@ -548,8 +548,8 @@ export function InspectorPanel({
                   <div className="flex flex-col gap-2">
                     <div className="relative w-full aspect-square max-w-[120px] rounded-lg border border-slate-200 bg-slate-50 overflow-hidden shrink-0">
                       <Image
-                        src={draftConfig.branding.logoUrl}
-                        alt={draftConfig.branding.logoAlt || draftConfig.salonName || "לוגו"}
+                        src={(draftConfig.branding?.logoUrl ?? "") as string}
+                        alt={draftConfig.branding?.logoAlt || draftConfig.salonName || "לוגו"}
                         fill
                         className="object-contain"
                         sizes="120px"
