@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, forwardRef, useImperativeHandle } from "react";
 import type { SiteConfig, SiteService } from "@/types/siteConfig";
 import { defaultThemeColors } from "@/types/siteConfig";
 import WebsiteRenderer from "@/components/site/WebsiteRenderer";
@@ -12,23 +12,30 @@ import { subscribeSiteServices, migrateServicesFromSubcollection, updateSiteServ
 
 const TEMPLATE_KEY = "hair1";
 
+export interface VisualSiteEditorHandle {
+  getDraft: () => SiteConfig | null;
+}
+
 interface VisualSiteEditorProps {
   siteId: string;
   baselineConfig: SiteConfig;
   onSave: (config: SiteConfig) => void;
-  onBack: () => void;
+  onBack?: () => void;
   isSaving?: boolean;
   saveMessage?: string;
+  /** When true, hide back and save buttons (parent uses single save for all tabs). */
+  hideToolbarSaveAndBack?: boolean;
 }
 
-export function VisualSiteEditor({
+export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEditorProps>(function VisualSiteEditor({
   siteId,
   baselineConfig,
   onSave,
   onBack,
   isSaving = false,
   saveMessage,
-}: VisualSiteEditorProps) {
+  hideToolbarSaveAndBack = false,
+}, ref) {
   const [draft, setDraft] = useState<SiteConfig>(() => ({
     ...baselineConfig,
     themeColors: baselineConfig.themeColors ?? defaultThemeColors,
@@ -92,6 +99,10 @@ export function VisualSiteEditor({
   const handleSave = useCallback(() => {
     onSave(draft);
   }, [draft, onSave]);
+
+  useImperativeHandle(ref, () => ({
+    getDraft: () => draft ?? null,
+  }), [draft]);
 
   /** Find deepest element with data-edit-id (walk from target up to container). */
   const findDeepestEditable = useCallback(
@@ -234,13 +245,15 @@ export function VisualSiteEditor({
       {/* Top bar */}
       <div className="shrink-0 flex items-center justify-between gap-4 px-4 py-3 bg-white border-b border-slate-200">
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onBack}
-            className="px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg"
-          >
-            חזרה
-          </button>
+          {!hideToolbarSaveAndBack && onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg"
+            >
+              חזרה
+            </button>
+          )}
           {hasUnsavedChanges && (
             <button
               type="button"
@@ -251,19 +264,21 @@ export function VisualSiteEditor({
             </button>
           )}
         </div>
-        <div className="flex items-center gap-3">
-          {saveMessage && (
-            <span className="text-xs text-emerald-600">{saveMessage}</span>
-          )}
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={isSaving}
-            className="px-4 py-2 rounded-lg bg-caleno-ink text-white text-sm font-semibold shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isSaving ? "שומר…" : "שמור שינויים"}
-          </button>
-        </div>
+        {!hideToolbarSaveAndBack && (
+          <div className="flex items-center gap-3">
+            {saveMessage && (
+              <span className="text-xs text-emerald-600">{saveMessage}</span>
+            )}
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isSaving}
+              className="px-4 py-2 rounded-lg bg-caleno-ink text-white text-sm font-semibold shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSaving ? "שומר…" : "שמור שינויים"}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Main: preview + inspector */}
@@ -310,4 +325,4 @@ export function VisualSiteEditor({
       </div>
     </div>
   );
-}
+});

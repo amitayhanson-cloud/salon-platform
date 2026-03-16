@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useParams } from "next/navigation";
 import type { SiteConfig } from "@/types/siteConfig";
 import { useSiteConfig } from "@/hooks/useSiteConfig";
@@ -11,13 +11,13 @@ import {
   AdminReviewsEditor,
   AdminFaqEditor,
 } from "@/app/(site)/site/[siteId]/admin/settings/page";
-import { VisualSiteEditor } from "@/components/editor/VisualSiteEditor";
+import { VisualSiteEditor, type VisualSiteEditorHandle } from "@/components/editor/VisualSiteEditor";
 
 const SITE_PAGE_TABS = [
   { key: "branding", label: "לוגו ומיתוג" },
   { key: "reviews", label: "ביקורות" },
-  { key: "design", label: "עיצוב האתר" },
   { key: "faq", label: "FAQ" },
+  { key: "design", label: "עיצוב האתר" },
 ] as const;
 
 type SiteTabKey = (typeof SITE_PAGE_TABS)[number]["key"];
@@ -30,6 +30,19 @@ export default function AdminSitePage() {
     useSiteConfig(siteId);
 
   const [activeSiteTab, setActiveSiteTab] = useState<SiteTabKey>("branding");
+  const designEditorRef = useRef<VisualSiteEditorHandle>(null);
+
+  const handleSaveAll = useCallback(() => {
+    if (activeSiteTab === "design" && designEditorRef.current) {
+      const draft = designEditorRef.current.getDraft();
+      if (draft) {
+        handleConfigChange(draft);
+        void handleSaveConfig(draft);
+        return;
+      }
+    }
+    void handleSaveConfig();
+  }, [activeSiteTab, handleConfigChange, handleSaveConfig]);
 
   if (!siteConfig) {
     return (
@@ -63,7 +76,7 @@ export default function AdminSitePage() {
             <span className="text-xs text-emerald-600">{saveMessage}</span>
           )}
           <button
-            onClick={() => void handleSaveConfig()}
+            onClick={handleSaveAll}
             disabled={isSaving}
             className="rounded-lg bg-caleno-ink px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -86,15 +99,16 @@ export default function AdminSitePage() {
       {isDesignTab ? (
         <div className="flex-1 min-h-0 flex flex-col rounded-xl border border-slate-200 overflow-hidden bg-white">
           <VisualSiteEditor
+            ref={designEditorRef}
             siteId={siteId}
             baselineConfig={siteConfig}
             onSave={(config) => {
               handleConfigChange(config);
               void handleSaveConfig(config);
             }}
-            onBack={() => setActiveSiteTab("branding")}
             isSaving={isSaving}
             saveMessage={saveMessage ?? undefined}
+            hideToolbarSaveAndBack
           />
         </div>
       ) : (

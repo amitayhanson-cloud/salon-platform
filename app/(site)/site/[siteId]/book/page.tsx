@@ -1815,8 +1815,12 @@ export default function BookingPage() {
             </h1>
             <Link
               href={getSiteUrl(config?.slug, siteId, "")}
-              className="text-sm hover:opacity-80 transition-opacity"
-              style={{ color: "var(--muted)" }}
+              className="text-sm font-medium px-4 py-2 rounded-lg border transition-colors hover:opacity-90 hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--primary)]"
+              style={{
+                color: "var(--muted)",
+                borderColor: "var(--border)",
+                backgroundColor: "var(--surface)",
+              }}
             >
               ביטול
             </Link>

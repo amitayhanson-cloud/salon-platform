@@ -875,6 +875,28 @@ export default function HairLuxurySite({
           >
             © {currentYear} {config.salonName || "הסלון שלך"} – {ct("footer", "copyright")}
           </p>
+          {/* Powered by Caleno watermark */}
+          <div className="mt-4 pt-4 border-t border-current/30 flex flex-col items-center justify-center gap-1.5 text-center opacity-80" style={{ color: "var(--footer-text)" }}>
+            <span className="text-xs font-medium">Powered by</span>
+            <Link
+              href="https://caleno.co"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 hover:opacity-100 transition-opacity"
+              aria-label="Caleno"
+            >
+              <div className="relative w-20 h-6">
+                <Image
+                  src="/brand/caleno logo/caleno_logo_new.png"
+                  alt="Caleno"
+                  fill
+                  className="object-contain object-center"
+                  sizes="80px"
+                  unoptimized
+                />
+              </div>
+            </Link>
+          </div>
         </div>
       </footer>
 
