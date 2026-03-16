@@ -849,9 +849,9 @@ export default function HairLuxurySite({
         </div>
       </section>
 
-      {/* Footer - section-scoped colors */}
+      {/* Footer - single block: copyright + Powered by Caleno */}
       <footer
-        className="py-8 border-t"
+        className="py-6 border-t"
         data-edit-id="footer"
         data-edit-type="section"
         data-edit-paths='["sectionStyles.footer.bg","sectionStyles.footer.text","sectionStyles.footer.link","sectionStyles.footer.linkHover","sectionStyles.footer.border"]'
@@ -864,10 +864,10 @@ export default function HairLuxurySite({
           ["--footer-linkHover" as string]: getSectionColorResolved(config, "footer", "linkHover"),
         }}
       >
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center sm:text-right">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row flex-wrap items-center justify-center sm:justify-between gap-4 text-center sm:text-right">
           <p
             style={{ color: "var(--footer-text)" }}
-            className="text-sm"
+            className="text-sm order-2 sm:order-1"
             data-edit-id="footerCopyright"
             data-edit-kind="text"
             data-edit-paths='["content.footer.copyright","sectionStyles.footer.text"]'
@@ -875,8 +875,7 @@ export default function HairLuxurySite({
           >
             © {currentYear} {config.salonName || "הסלון שלך"} – {ct("footer", "copyright")}
           </p>
-          {/* Powered by Caleno watermark */}
-          <div className="mt-4 pt-4 border-t border-current/30 flex flex-col items-center justify-center gap-1.5 text-center opacity-80" style={{ color: "var(--footer-text)" }}>
+          <div className="flex flex-col items-center gap-1.5 opacity-80 order-1 sm:order-2" style={{ color: "var(--footer-text)" }}>
             <span className="text-xs font-medium">Powered by</span>
             <Link
               href="https://caleno.co"
