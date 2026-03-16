@@ -380,7 +380,15 @@ export default function AdminLayout({
   const isDayView = typeof pathname === "string" && pathname.includes("/bookings/day");
 
   return (
-    <div className="min-h-screen w-full overflow-x-hidden bg-[#F8FAFC]">
+    <div className="min-h-screen w-full overflow-x-hidden relative">
+      {/* Fixed radial gradient: Caleno at center, white at edges (match landing) */}
+      <div
+        aria-hidden
+        className="fixed inset-0 -z-10"
+        style={{
+          backgroundImage: "radial-gradient(ellipse 100% 100% at 50% 50%, #cceef1 0%, #e6f5f7 25%, #f0f9fa 50%, #f8fcfd 75%, #ffffff 100%)",
+        }}
+      />
       {lazyCleanupToast && (
         <div
           role="alert"

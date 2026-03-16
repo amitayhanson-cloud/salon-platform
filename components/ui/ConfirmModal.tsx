@@ -44,7 +44,7 @@ export default function ConfirmModal({
       }}
     >
       <div
-        className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-6 text-right"
+        className="bg-white rounded-3xl shadow-xl border border-[#E2E8F0] w-full max-w-md p-6 text-right"
         onClick={(e) => e.stopPropagation()}
       >
         {title && (
@@ -67,7 +67,7 @@ export default function ConfirmModal({
             type="button"
             onClick={onConfirm}
             disabled={submitting}
-            className="px-4 py-2 rounded-lg bg-caleno-ink text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-5 py-2.5 rounded-full bg-[#0F172A] text-white shadow-sm transition-all hover:bg-[#1E293B] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submitting ? submittingLabel : confirmLabel}
           </button>

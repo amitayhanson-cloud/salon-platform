@@ -12,6 +12,8 @@ import type { ExecuteResult } from "@/lib/import/types";
 import { Upload, CheckCircle, AlertCircle } from "lucide-react";
 import { getAdminBasePathFromSiteId } from "@/lib/url";
 import AdminClientsTab from "@/components/admin/AdminClientsTab";
+import { AdminPageHero } from "@/components/admin/AdminPageHero";
+import { AdminCard } from "@/components/admin/AdminCard";
 
 type Step = 0 | 1 | 2;
 
@@ -120,12 +122,10 @@ export default function ClientSettingsPage() {
 
   return (
     <div dir="rtl" className="space-y-8 max-w-4xl">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">הגדרות לקוחות</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          סוגי לקוחות וייבוא מקובץ CSV / Excel
-        </p>
-      </div>
+      <AdminPageHero
+        title="הגדרות לקוחות"
+        subtitle="סוגי לקוחות וייבוא מקובץ CSV / Excel"
+      />
 
       {/* Client types section */}
       <section>
@@ -133,7 +133,7 @@ export default function ClientSettingsPage() {
       </section>
 
       {/* CSV / Excel import section */}
-      <section className="bg-white rounded-2xl border border-slate-200 p-6">
+      <AdminCard className="p-6">
         <div className="mb-6 flex items-center justify-between">
           <h2 className="text-xl font-bold text-slate-900">ייבוא לקוחות (CSV / Excel)</h2>
           {step === 0 ? (
@@ -393,7 +393,7 @@ export default function ClientSettingsPage() {
             <li>סוג לקוח חייב להתאים לסוגים המוגדרים באתר (למשל רגיל, VIP, פעיל, חדש, רדום)</li>
           </ul>
         </div>
-      </section>
+      </AdminCard>
     </div>
   );
 }

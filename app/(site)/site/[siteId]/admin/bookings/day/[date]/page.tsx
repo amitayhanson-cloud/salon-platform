@@ -46,6 +46,7 @@ import { getDisplayStatus, getDisplayStatusKey } from "@/lib/bookingRootStatus";
 import StatusDot from "@/components/StatusDot";
 import { useAuth } from "@/hooks/useAuth";
 import { X, Plus, Printer, Trash2, ChevronLeft, ChevronRight, Calendar } from "lucide-react";
+import { AdminCard } from "@/components/admin/AdminCard";
 import type { AdminBookingFormSimpleEditData } from "@/components/admin/AdminBookingFormSimple";
 
 const DAY_LABELS: Record<string, string> = {
@@ -948,7 +949,7 @@ export default function DaySchedulePage() {
       {/* Desktop: toolbar + multi/single worker calendar */}
       <div className="hidden md:flex flex-col flex-1 min-h-0 w-full max-w-7xl mx-auto px-4">
         {/* Calendar toolbar + filters (fixed; no page padding so calendar sits under header) */}
-        <div className="flex-shrink-0 mb-3 bg-white/95 backdrop-blur-sm -mx-4 px-4 py-3 rounded-b-lg border-b border-slate-200/80">
+        <div className="flex-shrink-0 mb-3 -mx-4 px-4 py-3 rounded-2xl border border-white/30 bg-white/25 backdrop-blur-xl shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               {/* Date nav (RTL): [Calendar icon] [Right arrow] [DATE + DAY] [Left arrow] */}
@@ -1080,11 +1081,11 @@ export default function DaySchedulePage() {
 
         {/* Calendar card: flex-1 min-h-0 so only the grid body scrolls; worker names row is fixed above. */}
         {workers.length === 0 ? (
-          <div className="flex-1 min-h-0 flex flex-col bg-white rounded-lg shadow-sm border border-slate-200 p-6 flex items-center justify-center">
+          <AdminCard className={`flex-1 min-h-0 flex flex-col p-6 flex items-center justify-center`}>
             <p className="text-sm text-slate-500">טוען עובדים...</p>
-          </div>
+          </AdminCard>
         ) : selectedWorkerId === ALL_WORKERS ? (
-          <div className={`flex-1 min-h-0 flex flex-col bg-white rounded-lg shadow-sm border border-slate-200 p-6 ${bookingSettings && dateKey && isBusinessClosedAllDay({ bookingSettings, date: dateKey }) ? "opacity-75" : ""}`}>
+          <AdminCard className={`flex-1 min-h-0 flex flex-col p-6 ${bookingSettings && dateKey && isBusinessClosedAllDay({ bookingSettings, date: dateKey }) ? "opacity-75" : ""}`}>
             <MultiWorkerScheduleView
               date={dateKey}
               bookings={bookingsForCalendar}
@@ -1095,9 +1096,9 @@ export default function DaySchedulePage() {
               workerBreaksByWorkerId={workerBreaksByWorkerId}
               onBookingClick={handleBookingClick}
             />
-          </div>
+          </AdminCard>
         ) : (
-          <div className={`flex-1 min-h-0 flex flex-col bg-white rounded-lg shadow-sm border border-slate-200 p-6 ${bookingSettings && dateKey && isBusinessClosedAllDay({ bookingSettings, date: dateKey }) ? "opacity-75" : ""}`}>
+          <AdminCard className={`flex-1 min-h-0 flex flex-col p-6 ${bookingSettings && dateKey && isBusinessClosedAllDay({ bookingSettings, date: dateKey }) ? "opacity-75" : ""}`}>
             <DayScheduleView
               date={dateKey}
               bookings={bookingsForCalendar}
@@ -1107,7 +1108,7 @@ export default function DaySchedulePage() {
               breaks={breaksForCalendar}
               onBookingClick={handleBookingClick}
             />
-          </div>
+          </AdminCard>
         )}
       </div>
 
@@ -1122,7 +1123,7 @@ export default function DaySchedulePage() {
             }
           }}
         >
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-3xl shadow-xl border border-[#E2E8F0] w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             {/* Header */}
             <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center">
               <h3 className="text-lg font-bold text-slate-900">פרטי תור</h3>

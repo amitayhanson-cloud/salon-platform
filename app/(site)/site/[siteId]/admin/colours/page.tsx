@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import type { SiteConfig } from "@/types/siteConfig";
 import { defaultThemeColors } from "@/types/siteConfig";
 import { useSiteConfig } from "@/hooks/useSiteConfig";
+import { AdminPageHero } from "@/components/admin/AdminPageHero";
+import { AdminCard } from "@/components/admin/AdminCard";
 
 const SERVICE_OPTIONS: Record<SiteConfig["salonType"], string[]> = {
   hair: ["תספורת", "צבע", "פן", "החלקה", "טיפולי שיער"],
@@ -272,24 +274,25 @@ export default function ColoursPage() {
 
   return (
     <div dir="rtl" className="space-y-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">צבעים</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            התאם את צבעי האתר לפי העדפותיך
-          </p>
-        </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+        <AdminPageHero
+          title="צבעים"
+          subtitle="התאם את צבעי האתר לפי העדפותיך"
+          className="flex-1"
+        />
         {saveMessage && (
-          <span className="text-xs text-emerald-600">{saveMessage}</span>
+          <span className="text-xs text-emerald-600 shrink-0">{saveMessage}</span>
         )}
       </div>
 
+      <AdminCard className="p-6">
       <AdminColorsTab
         siteConfig={siteConfig}
         onChange={handleConfigChange}
         onSave={handleSaveConfig}
         isSaving={isSaving}
       />
+      </AdminCard>
     </div>
   );
 }

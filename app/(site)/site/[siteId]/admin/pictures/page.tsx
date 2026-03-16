@@ -9,6 +9,8 @@ import type { SiteConfig } from "@/types/siteConfig";
 import { HAIR_HERO_IMAGES, HAIR_ABOUT_IMAGES } from "@/lib/hairImages";
 import { pickNewImage } from "@/lib/pickNewImage";
 import { useSiteConfig } from "@/hooks/useSiteConfig";
+import { AdminPageHero } from "@/components/admin/AdminPageHero";
+import { AdminCard } from "@/components/admin/AdminCard";
 
 const SERVICE_OPTIONS: Record<SiteConfig["salonType"], string[]> = {
   hair: ["תספורת", "צבע", "פן", "החלקה", "טיפולי שיער"],
@@ -280,17 +282,19 @@ export default function PicturesPage() {
   return (
     <div dir="rtl" className="space-y-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">תמונות</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          החלף את תמונות ההירו והאודות של האתר
-        </p>
+        <AdminPageHero
+          title="תמונות"
+          subtitle="החלף את תמונות ההירו והאודות של האתר"
+        />
       </div>
 
+      <AdminCard className="p-6">
       <AdminImagesTab
         siteConfig={siteConfig}
         siteId={siteId}
         onChange={handleConfigChange}
       />
+      </AdminCard>
     </div>
   );
 }

@@ -10,6 +10,8 @@ import { bookingsCollection, clientArchivedServiceTypesCollection } from "@/lib/
 import { ChemicalCard } from "./ChemicalCard";
 import PersonalPricingTab from "./PersonalPricingTab";
 import AdminTabs from "@/components/ui/AdminTabs";
+import { AdminPageHero } from "@/components/admin/AdminPageHero";
+import { AdminCard } from "@/components/admin/AdminCard";
 import { createClient, checkClientExists, type ClientData } from "@/lib/firestoreClients";
 import { subscribeClientTypes } from "@/lib/firestoreClientSettings";
 import { DEFAULT_CLIENT_TYPE_ENTRIES, REGULAR_CLIENT_TYPE_ID } from "@/types/bookingSettings";
@@ -773,16 +775,16 @@ export default function ClientCardPage() {
 
   return (
     <div dir="rtl" className="min-h-screen w-full">
-      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 min-w-0">
+      <div className="w-full max-w-7xl mx-auto min-w-0">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">כרטיס לקוח</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            ניהול לקוחות והיסטוריית תורים
-          </p>
+          <AdminPageHero
+            title="כרטיס לקוח"
+            subtitle="ניהול לקוחות והיסטוריית תורים"
+          />
         </div>
 
         {clientsError && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-right">
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-right">
             <p className="text-sm text-red-700">{clientsError}</p>
           </div>
         )}
@@ -790,7 +792,7 @@ export default function ClientCardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full min-w-0">
           {/* Clients List */}
           <div className="lg:col-span-1 min-w-0">
-            <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 md:p-4">
+            <AdminCard className="p-3 md:p-4">
               <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
                 <h2 className="text-lg font-bold text-slate-900">רשימת לקוחות</h2>
                 <div className="flex gap-2">
@@ -911,13 +913,13 @@ export default function ClientCardPage() {
                   ))}
                 </div>
               )}
-            </div>
+            </AdminCard>
           </div>
 
           {/* Client Details Card */}
           <div className="lg:col-span-2 min-w-0">
             {selectedClient ? (
-              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 md:p-6">
+              <AdminCard className="p-4 md:p-6">
                 <h2 className="text-lg font-bold text-slate-900 mb-1 md:text-xl md:mb-6">פרטי לקוח</h2>
                 <div className="mb-4 md:mb-0">
                   <p className="text-lg md:text-base font-bold text-slate-900 md:font-normal">{selectedClient.name || "—"}</p>
@@ -1175,16 +1177,16 @@ export default function ClientCardPage() {
                     </div>
                   )}
                 </div>
-              </div>
+              </AdminCard>
             ) : (
-              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
+              <AdminCard className="p-6">
                 <div className="text-center py-12">
                   <p className="text-slate-500 mb-2">בחר לקוח מהרשימה</p>
                   <p className="text-sm text-slate-400">
                     פרטי הלקוח והיסטוריית התורים יופיעו כאן
                   </p>
                 </div>
-              </div>
+              </AdminCard>
             )}
           </div>
         </div>

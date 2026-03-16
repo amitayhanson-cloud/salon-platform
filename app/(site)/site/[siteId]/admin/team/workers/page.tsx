@@ -19,6 +19,8 @@ import {
 import { subscribeSiteServices } from "@/lib/firestoreSiteServices";
 import { subscribeBookingSettings } from "@/lib/firestoreBookingSettings";
 import AdminTabs from "@/components/ui/AdminTabs";
+import { AdminPageHero } from "@/components/admin/AdminPageHero";
+import { AdminCard } from "@/components/admin/AdminCard";
 
 import type { SiteService } from "@/types/siteConfig";
 import type { OpeningHours } from "@/types/booking";
@@ -667,22 +669,22 @@ export default function WorkersPage() {
 
   return (
     <div dir="rtl" className="min-h-screen w-full">
-      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 min-w-0">
+      <div className="w-full max-w-7xl mx-auto min-w-0">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-[#0F172A]">עובדים</h1>
-          <p className="text-sm text-[#64748B] mt-1">
-            ניהול עובדים, שירותים וזמינות
-          </p>
+          <AdminPageHero
+            title="עובדים"
+            subtitle="ניהול עובדים, שירותים וזמינות"
+          />
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-right">
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-right">
             <p className="text-sm text-red-700">{error}</p>
           </div>
         )}
 
         {saveMessage && (
-          <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-right">
+          <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-right">
             <p className="text-sm text-emerald-700">{saveMessage}</p>
           </div>
         )}
@@ -690,12 +692,12 @@ export default function WorkersPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full min-w-0">
           {/* Workers List */}
           <div className="lg:col-span-1 min-w-0">
-            <div className="bg-white rounded-lg shadow-sm border border-[#E2E8F0] p-4">
+            <AdminCard className="p-4">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-bold text-[#0F172A]">רשימת עובדים</h2>
                 <button
                   onClick={() => setSelectedWorkerId(null)}
-                  className="px-3 py-1.5 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium transition-colors"
+                  className="rounded-full px-4 py-2 bg-[#0F172A] hover:bg-[#1E293B] text-white text-sm font-medium transition-colors shadow-sm"
                 >
                   + הוסף עובד
                 </button>
@@ -732,12 +734,12 @@ export default function WorkersPage() {
                   ))}
                 </div>
               )}
-            </div>
+            </AdminCard>
           </div>
 
           {/* Worker Details Card */}
           <div className="lg:col-span-2 min-w-0">
-            <div className="bg-white rounded-lg shadow-sm border border-[#E2E8F0] p-6">
+            <AdminCard className="p-6">
               {!selectedWorkerId ? (
                 <div>
                   <h2 className="text-xl font-bold text-[#0F172A] mb-4">עובד חדש</h2>
@@ -1077,7 +1079,7 @@ export default function WorkersPage() {
                   </div>
                 </div>
               )}
-            </div>
+            </AdminCard>
           </div>
         </div>
       </div>

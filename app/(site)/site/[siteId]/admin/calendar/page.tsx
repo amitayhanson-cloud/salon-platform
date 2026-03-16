@@ -1,8 +1,18 @@
+"use client";
+
+import { AdminPageHero } from "@/components/admin/AdminPageHero";
+import { AdminCard } from "@/components/admin/AdminCard";
+
 export default function CalendarPage() {
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-slate-900 mb-4">יומן</h1>
-      <p className="text-slate-600">עמוד יומן - כאן תוכל לראות את לוח הזמנים</p>
+    <div dir="rtl" className="space-y-6">
+      <AdminPageHero
+        title="יומן"
+        subtitle="עמוד יומן - כאן תוכל לראות את לוח הזמנים"
+      />
+      <AdminCard className="p-6">
+        <p className="text-[#64748B]">בחר תאריך ביומן התורים כדי לצפות ביום ספציפי.</p>
+      </AdminCard>
     </div>
   );
 }

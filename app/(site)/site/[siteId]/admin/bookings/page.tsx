@@ -29,6 +29,8 @@ import CancelBookingModal from "@/components/admin/CancelBookingModal";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import CalenoLoading from "@/components/CalenoLoading";
+import { AdminPageHero } from "@/components/admin/AdminPageHero";
+import { AdminCard } from "@/components/admin/AdminCard";
 
 interface Booking {
   id: string;
@@ -382,50 +384,30 @@ export default function BookingsAdminPage() {
 
   return (
     <div className="min-h-screen" dir="rtl">
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* Header */}
+      <div className="max-w-7xl mx-auto">
         <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-2xl font-bold text-slate-900">ניהול הזמנות</h1>
-            <div className="flex items-center gap-3">
-              <Link
-                href={`${getAdminBasePathFromSiteId(siteId)}/bookings/day/${toYYYYMMDD(new Date())}/cancelled`}
-                className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm font-medium transition-colors"
-              >
-                תורים שבוטלו
-              </Link>
-              <Link
-                href={getAdminBasePathFromSiteId(siteId)}
-                className="hidden md:inline-flex text-sm text-caleno-700 hover:text-caleno-800"
-              >
-                ← חזרה לפאנל ניהול
-              </Link>
-            </div>
-          </div>
-
+          <AdminPageHero
+            title="ניהול הזמנות"
+            subtitle="יומן תורים וניהול משימות"
+          />
         </div>
 
         {/* Error message */}
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-right">
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-right">
             <p className="text-sm text-red-700">{error}</p>
           </div>
         )}
 
         {/* Calendar */}
         <div className="mb-6">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6">
-            {/* Header: compact on mobile, clear date range + nav */}
-            <div className="flex flex-col gap-3 md:flex-row md:justify-between md:items-center mb-4 md:mb-6">
-              <div className="flex items-center justify-between gap-2 md:block">
-                <h2 className="hidden md:block text-base font-semibold text-slate-900 md:text-xl md:font-bold">
-                  יומן תורים
-                </h2>
-                <p className="hidden md:block text-xs text-slate-500" aria-hidden>
-                  {dateRange[0]?.getDate()}.{dateRange[0]?.getMonth() != null ? dateRange[0].getMonth() + 1 : ""} – {dateRange[13]?.getDate()}.{dateRange[13]?.getMonth() != null ? dateRange[13].getMonth() + 1 : ""}
-                </p>
+        <AdminCard className="p-4 md:p-6">
+            {/* One line: title (right in RTL) | date display + arrows (exact center) | links (left in RTL) */}
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-3 md:gap-4 md:items-center mb-4 md:mb-6">
+              <div className="flex flex-col items-center order-1 md:items-start text-center md:text-right" aria-hidden>
+                <span className="text-base font-semibold text-slate-900 md:text-xl md:font-bold">יומן תורים</span>
               </div>
-              <div className="flex items-center gap-1.5 md:gap-2">
+              <div className="flex items-center justify-center gap-1.5 md:gap-2 order-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -438,15 +420,12 @@ export default function BookingsAdminPage() {
                 >
                   <ChevronRight className="w-4 h-4 md:w-4 md:h-4" />
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    router.push(`${getAdminBasePathFromSiteId(siteId)}/bookings/day/${toYYYYMMDD(new Date())}`);
-                  }}
-                  className="px-2.5 py-1.5 rounded-lg border border-[#E2E8F0] bg-white text-slate-700 text-xs font-medium hover:bg-[#F8FAFC] md:px-3 md:py-1 md:text-sm"
+                <span
+                  className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] bg-white text-slate-700 text-xs font-medium md:px-4 md:py-2 md:text-sm min-w-[7rem] text-center"
+                  aria-hidden
                 >
-                  היום
-                </button>
+                  {dateRange[0]?.getDate()}.{dateRange[0]?.getMonth() != null ? dateRange[0].getMonth() + 1 : ""} – {dateRange[13]?.getDate()}.{dateRange[13]?.getMonth() != null ? dateRange[13].getMonth() + 1 : ""}
+                </span>
                 <button
                   type="button"
                   onClick={() => {
@@ -459,6 +438,14 @@ export default function BookingsAdminPage() {
                 >
                   <ChevronLeft className="w-4 h-4 md:w-4 md:h-4" />
                 </button>
+              </div>
+              <div className="flex items-center gap-2 order-3 justify-center md:justify-end">
+                <Link
+                  href={`${getAdminBasePathFromSiteId(siteId)}/bookings/day/${toYYYYMMDD(new Date())}/cancelled`}
+                  className="rounded-full border border-[#E2E8F0] bg-white/80 px-4 py-2 text-sm font-medium text-[#0F172A] backdrop-blur transition-colors hover:bg-white"
+                >
+                  תורים שבוטלו
+                </Link>
               </div>
             </div>
 
@@ -476,7 +463,7 @@ export default function BookingsAdminPage() {
                 siteId={siteId}
               />
             )}
-          </div>
+          </AdminCard>
 
         {/* Tasks (below calendar) */}
         <div className="mt-4">

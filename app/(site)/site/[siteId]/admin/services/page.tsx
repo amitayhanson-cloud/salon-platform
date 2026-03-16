@@ -31,6 +31,8 @@ import {
   updateMultiBookingCombo,
   deleteMultiBookingCombo,
 } from "@/lib/firestoreMultiBookingCombos";
+import { AdminPageHero } from "@/components/admin/AdminPageHero";
+import { AdminCard } from "@/components/admin/AdminCard";
 
 // Module-level guard: only one create can run at a time (survives Strict Mode remount / duplicate triggers).
 let createServiceInProgress = false;
@@ -710,27 +712,25 @@ export default function ServicesPage() {
 
   return (
     <div dir="rtl" className="min-h-screen">
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="max-w-7xl mx-auto">
         <div className="mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">שירותים</h1>
-            <p className="text-sm text-[#64748B] mt-1">
-              ניהול שירותים ומחיריהם
-            </p>
-          </div>
+          <AdminPageHero
+            title="שירותים"
+            subtitle="ניהול שירותים ומחיריהם"
+          />
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-right">
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-right">
             <p className="text-sm text-red-700">{error}</p>
           </div>
         )}
 
-        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
+        <AdminCard className="p-6">
           {/* Unified Services and Pricing View */}
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h2 className="text-lg font-bold text-slate-900">שירותים ומחירים</h2>
+              <h2 className="text-lg font-bold text-[#0F172A]">שירותים ומחירים</h2>
               <p className="text-sm text-[#64748B] mt-1">
                 ניהול שירותים וסוגי המחירים שלהם
               </p>
@@ -985,7 +985,7 @@ export default function ServicesPage() {
               )}
             </div>
           )}
-        </div>
+        </AdminCard>
 
         {/* Multi-Booking Combos */}
         <div className="mt-6 bg-white rounded-lg shadow-sm border border-slate-200 p-6">
@@ -1076,12 +1076,11 @@ export default function ServicesPage() {
             </>
           )}
         </div>
-      </div>
 
       {/* Combo Create/Edit Modal — rule builder: trigger set + ordered sequence */}
       {comboModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" dir="rtl">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-lg max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-3xl shadow-xl border border-[#E2E8F0] w-full max-w-lg max-h-[90vh] flex flex-col">
             <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center">
               <h3 className="text-lg font-bold text-slate-900">
                 {comboModal.type === "create" ? "הוסף כלל Multi-Booking" : "ערוך כלל"}
@@ -1380,7 +1379,7 @@ export default function ServicesPage() {
       {/* Edit Item Modal */}
       {editingItem && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" dir="rtl">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-xl border border-[#E2E8F0] w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center">
               <h3 className="text-lg font-bold text-slate-900">
                 {editingItem.id === "new" ? "הוסף פריט מחיר" : "ערוך פריט מחיר"}
@@ -1806,10 +1805,10 @@ export default function ServicesPage() {
           onClick={() => setShowNewServiceReminderModal(false)}
         >
           <div
-            className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-6 text-right"
+            className="bg-white rounded-3xl shadow-xl border border-[#E2E8F0] w-full max-w-md p-6 text-right"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-slate-900 mb-3">שים לב</h3>
+            <h3 className="text-lg font-semibold text-[#0F172A] mb-3">שים לב</h3>
             <p className="text-base text-slate-900">
               זכור להגדיר זמינות לעובדים עבור השירות החדש, אחרת הוא לא יהיה זמין להזמנה.
             </p>
@@ -1825,6 +1824,7 @@ export default function ServicesPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

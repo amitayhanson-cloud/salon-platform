@@ -8,6 +8,8 @@ import { onSnapshotDebug } from "@/lib/firestoreListeners";
 import { bookingsCollection, workersCollection } from "@/lib/firestorePaths";
 import { ymdLocal } from "@/lib/dateLocal";
 import { RefreshCw } from "lucide-react";
+import { AdminPageHero } from "@/components/admin/AdminPageHero";
+import { AdminCard } from "@/components/admin/AdminCard";
 import { subscribePricingItems } from "@/lib/firestorePricing";
 import type { PricingItem } from "@/types/pricingItem";
 import { getAllPersonalPricing } from "@/lib/firestorePersonalPricing";
@@ -466,16 +468,15 @@ export default function TeamPerformancePage() {
 
   return (
     <div dir="rtl" className="space-y-6">
-      {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">ביצועי צוות</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          דוח ביצועים לפי עובד - הכנסות ושעות עבודה
-        </p>
+        <AdminPageHero
+          title="ביצועי צוות"
+          subtitle="דוח ביצועים לפי עובד - הכנסות ושעות עבודה"
+        />
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4">
+      <AdminCard className="p-4">
         <div className="flex flex-wrap items-center gap-4">
           {/* Period Toggle */}
           <div className="flex items-center gap-2">
@@ -538,7 +539,7 @@ export default function TeamPerformancePage() {
             <span>רענן</span>
           </button>
         </div>
-      </div>
+      </AdminCard>
 
       {/* Error Message */}
       {error && (
@@ -557,7 +558,7 @@ export default function TeamPerformancePage() {
           <p className="text-sm text-slate-500">אין נתונים לתקופה שנבחרה</p>
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+        <AdminCard className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
               <thead>
@@ -630,7 +631,7 @@ export default function TeamPerformancePage() {
               סה״כ חלק העסק: <span className="font-bold">{formatCurrency(totals.totalBusinessShare)}</span>
             </p>
           </div>
-        </div>
+        </AdminCard>
       )}
     </div>
   );

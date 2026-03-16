@@ -12,6 +12,8 @@ import {
   AdminFaqEditor,
 } from "@/app/(site)/site/[siteId]/admin/settings/page";
 import { VisualSiteEditor, type VisualSiteEditorHandle } from "@/components/editor/VisualSiteEditor";
+import { AdminPageHero } from "@/components/admin/AdminPageHero";
+import { AdminCard } from "@/components/admin/AdminCard";
 
 const SITE_PAGE_TABS = [
   { key: "branding", label: "לוגו ומיתוג" },
@@ -53,8 +55,8 @@ export default function AdminSitePage() {
   }
 
   const sectionCardClass =
-    "bg-white rounded-2xl border border-slate-200 p-6 text-right";
-  const sectionTitleClass = "text-lg font-bold text-slate-900 mb-4";
+    "rounded-3xl border border-[#E2E8F0] bg-white shadow-sm p-6 text-right";
+  const sectionTitleClass = "text-lg font-bold text-[#0F172A] mb-4";
 
   const isDesignTab = activeSiteTab === "design";
 
@@ -63,41 +65,38 @@ export default function AdminSitePage() {
       dir="rtl"
       className={`flex flex-col min-h-0 ${isDesignTab ? "h-[calc(100vh-8rem)] min-h-[520px]" : "h-full"}`}
     >
-      {/* Header row: title + save — always visible under navbar */}
-      <div className="shrink-0 flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">אתר</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            לוגו, מיתוג, ביקורות, עיצוב האתר ו־FAQ
-          </p>
-        </div>
-        <div className="flex items-center gap-4">
-          {saveMessage && (
-            <span className="text-xs text-emerald-600">{saveMessage}</span>
-          )}
-          <button
-            onClick={handleSaveAll}
-            disabled={isSaving}
-            className="rounded-lg bg-caleno-ink px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isSaving ? "שומר…" : "שמור שינויים"}
-          </button>
-        </div>
-      </div>
-
-      {/* Site tabs: always visible under header so user can switch without going back */}
+      {/* Hero strip: title only */}
       <div className="shrink-0 mb-4">
-        <AdminTabs
-          tabs={SITE_PAGE_TABS}
-          activeKey={activeSiteTab}
-          onChange={setActiveSiteTab}
-          className="flex-wrap"
+        <AdminPageHero
+          title="אתר"
+          subtitle="לוגו, מיתוג, ביקורות, עיצוב האתר ו־FAQ"
         />
       </div>
 
-      {/* Content: editor when design tab, form panels otherwise */}
+      {/* Content card: tabs + save on one line, then content */}
       {isDesignTab ? (
-        <div className="flex-1 min-h-0 flex flex-col rounded-xl border border-slate-200 overflow-hidden bg-white">
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          <AdminCard className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          <div className="shrink-0 flex flex-wrap items-center justify-between gap-4 px-6 py-3 border-b border-[#E2E8F0] bg-white/80">
+            <AdminTabs
+              tabs={SITE_PAGE_TABS}
+              activeKey={activeSiteTab}
+              onChange={setActiveSiteTab}
+              className="flex-1 min-w-0"
+            />
+            <div className="flex items-center gap-4 shrink-0">
+              {saveMessage && (
+                <span className="text-xs text-emerald-600">{saveMessage}</span>
+              )}
+              <button
+                onClick={handleSaveAll}
+                disabled={isSaving}
+                className="rounded-full bg-[#0F172A] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#1E293B] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isSaving ? "שומר…" : "שמור שינויים"}
+              </button>
+            </div>
+          </div>
           <VisualSiteEditor
             ref={designEditorRef}
             siteId={siteId}
@@ -110,9 +109,32 @@ export default function AdminSitePage() {
             saveMessage={saveMessage ?? undefined}
             hideToolbarSaveAndBack
           />
+          </AdminCard>
         </div>
       ) : (
-        <div className="flex-1 min-w-0 overflow-y-auto space-y-6">
+        <div className="flex-1 min-w-0 overflow-y-auto">
+          <AdminCard className="overflow-hidden">
+          <div className="shrink-0 flex flex-wrap items-center justify-between gap-4 px-6 py-3 border-b border-[#E2E8F0] bg-white/80">
+            <AdminTabs
+              tabs={SITE_PAGE_TABS}
+              activeKey={activeSiteTab}
+              onChange={setActiveSiteTab}
+              className="flex-1 min-w-0"
+            />
+            <div className="flex items-center gap-4 shrink-0">
+              {saveMessage && (
+                <span className="text-xs text-emerald-600">{saveMessage}</span>
+              )}
+              <button
+                onClick={handleSaveAll}
+                disabled={isSaving}
+                className="rounded-full bg-[#0F172A] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#1E293B] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isSaving ? "שומר…" : "שמור שינויים"}
+              </button>
+            </div>
+          </div>
+          <div className="p-6">
           {/* Tab panels: all mounted so Firestore listeners and state stay alive; only one visible */}
           <div className="min-h-[320px]">
         {/* לוגו ומיתוג */}
@@ -165,6 +187,8 @@ export default function AdminSitePage() {
           </section>
         </div>
           </div>
+          </div>
+        </AdminCard>
         </div>
       )}
     </div>

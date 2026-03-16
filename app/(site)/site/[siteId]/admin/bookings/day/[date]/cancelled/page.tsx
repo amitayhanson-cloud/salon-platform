@@ -20,6 +20,8 @@ import {
 import { fromYYYYMMDD } from "@/lib/calendarUtils";
 import { getAdminBasePathFromSiteId } from "@/lib/url";
 import { ymdLocal } from "@/lib/dateLocal";
+import { AdminPageHero } from "@/components/admin/AdminPageHero";
+import { AdminCard } from "@/components/admin/AdminCard";
 
 const DEBUG = typeof process !== "undefined" && process.env?.NEXT_PUBLIC_DEBUG_BOOKING === "true";
 
@@ -175,50 +177,52 @@ export default function CancelledBookingsPage() {
 
   return (
     <div className="min-h-screen" dir="rtl">
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-            <h1 className="text-2xl font-bold text-slate-900">תורים שבוטלו</h1>
-            <Link
-              href={`${adminBasePath}/bookings/day/${dateKey}`}
-              className="text-sm text-caleno-700 hover:underline"
-            >
-              ← חזרה ללוח זמנים
-            </Link>
-          </div>
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-right">
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-          )}
-          {deleteError && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-right">
-              <p className="text-sm text-red-700">{deleteError}</p>
-            </div>
-          )}
-          {deleteSuccess && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-right">
-              <p className="text-sm text-green-700">התור המבוטל נמחק בהצלחה.</p>
-            </div>
-          )}
-          {DEBUG && debugInfo && (
-            <div className="mb-4 p-3 bg-slate-100 border border-slate-200 rounded-lg text-right text-xs font-mono">
-              <span>נסרקו: {debugInfo.bookingsScanned} bookings, {debugInfo.archivedScanned} archived</span>
-              {" · "}
-              <span>בוטלו: {debugInfo.cancelledFromBookings} מ-bookings, {debugInfo.cancelledFromArchived} מארכיון</span>
-              {" · "}
-              <span>סה״כ: {debugInfo.totalCancelled}</span>
-              {debugInfo.firstDate && debugInfo.lastDate && (
-                <>
-                  {" · "}
-                  <span>טווח: {debugInfo.firstDate} – {debugInfo.lastDate}</span>
-                </>
-              )}
-            </div>
-          )}
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <AdminPageHero
+            title="תורים שבוטלו"
+            subtitle="רשימת תורים שבוטלו או לא הגיעו"
+            className="flex-1"
+          />
+          <Link
+            href={`${adminBasePath}/bookings/day/${dateKey}`}
+            className="rounded-full border border-[#E2E8F0] bg-white/80 px-4 py-2 text-sm font-medium text-[#0F172A] backdrop-blur transition-colors hover:bg-white shrink-0"
+          >
+            ← חזרה ללוח זמנים
+          </Link>
         </div>
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-right">
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
+        )}
+        {deleteError && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-right">
+            <p className="text-sm text-red-700">{deleteError}</p>
+          </div>
+        )}
+        {deleteSuccess && (
+          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-xl text-right">
+            <p className="text-sm text-green-700">התור המבוטל נמחק בהצלחה.</p>
+          </div>
+        )}
+        {DEBUG && debugInfo && (
+          <div className="mb-4 p-3 bg-slate-100 border border-slate-200 rounded-xl text-right text-xs font-mono">
+            <span>נסרקו: {debugInfo.bookingsScanned} bookings, {debugInfo.archivedScanned} archived</span>
+            {" · "}
+            <span>בוטלו: {debugInfo.cancelledFromBookings} מ-bookings, {debugInfo.cancelledFromArchived} מארכיון</span>
+            {" · "}
+            <span>סה״כ: {debugInfo.totalCancelled}</span>
+            {debugInfo.firstDate && debugInfo.lastDate && (
+              <>
+                {" · "}
+                <span>טווח: {debugInfo.firstDate} – {debugInfo.lastDate}</span>
+              </>
+            )}
+          </div>
+        )}
 
-        <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+        <AdminCard className="overflow-hidden">
           {archiveBookings.length === 0 ? (
             <div className="p-12 text-center">
               <p className="text-slate-500 text-sm">אין תורים שבוטלו</p>
@@ -317,7 +321,7 @@ export default function CancelledBookingsPage() {
               </div>
             </>
           )}
-        </div>
+        </AdminCard>
       </div>
 
       {/* Confirm delete modal */}
@@ -329,7 +333,7 @@ export default function CancelledBookingsPage() {
           aria-modal="true"
           aria-labelledby="confirm-delete-title"
         >
-          <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
+          <div className="w-full max-w-sm rounded-3xl border border-[#E2E8F0] bg-white p-6 shadow-xl">
             <h2 id="confirm-delete-title" className="text-lg font-bold text-slate-900 text-right">
               מחיקת תור מבוטל
             </h2>

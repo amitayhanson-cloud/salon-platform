@@ -43,7 +43,7 @@ export default function CancelBookingModal({
       }}
     >
       <div
-        className="bg-white rounded-2xl shadow-xl border border-[#E2E8F0] w-full max-w-md p-6 text-right"
+        className="bg-white rounded-3xl shadow-xl border border-[#E2E8F0] w-full max-w-md p-6 text-right"
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="text-lg font-bold text-[#0F172A]">ביטול תור</h3>

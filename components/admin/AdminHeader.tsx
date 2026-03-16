@@ -175,13 +175,13 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
   }, [pathname]);
 
   return (
-    <header
-      ref={headerRef}
-      className="sticky top-0 z-50 border-b border-[#E2E8F0] bg-white"
-    >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <header ref={headerRef} className="sticky top-0 z-50 pt-3 pb-2 px-4 sm:px-6 lg:px-8">
+      <div
+        className="max-w-7xl mx-auto rounded-full border border-white/30 bg-white/25 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.08),0_0_0_1px_rgba(255,255,255,0.4)_inset] backdrop-blur-xl px-4 sm:px-6 md:px-6"
+        style={{ WebkitBackdropFilter: "blur(16px)" }}
+      >
         {/* dir=ltr so left/right zones stay fixed: left = Caleno, right = tenant+nav */}
-        <div className="flex items-center justify-between h-16 w-full" dir="ltr">
+        <div className="flex items-center justify-between h-14 w-full" dir="ltr">
           {/* LEFT: Caleno logo — match landing page position/sizing */}
           <div className="flex shrink-0">
             <Link
@@ -222,7 +222,7 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
               {canViewSite && (
                 <button
                   onClick={handleViewWebsite}
-                  className="flex items-center gap-2 rounded-lg border border-[#E2E8F0] px-4 py-2 text-sm font-medium text-[#0F172A] transition-colors hover:bg-[rgba(15,23,42,0.04)]"
+                  className="flex items-center gap-2 rounded-full border border-white/50 bg-white/30 px-4 py-2 text-sm font-medium text-[#0F172A] transition-colors hover:bg-white/50 backdrop-blur-sm"
                   title="צפייה באתר הציבורי"
                 >
                   <span>צפייה באתר</span>
@@ -231,13 +231,13 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
               )}
               {menuItems.map((item) => (
                 <div key={item.label} className="relative">
-                  {item.href ? (
+                      {item.href ? (
                     <Link
                       href={item.href}
-                      className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                      className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
                         isActive(item.href)
-                          ? "text-[#1E6F7C]"
-                          : "text-[#0F172A] hover:bg-[rgba(15,23,42,0.04)]"
+                          ? "text-[#1E6F7C] bg-white/40"
+                          : "text-[#0F172A] hover:bg-white/30"
                       }`}
                     >
                       {item.label}
@@ -246,10 +246,10 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                     <>
                       <button
                         onClick={() => toggleDropdown(item.label)}
-                        className={`flex items-center gap-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                        className={`flex items-center gap-1 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
                           isParentActive(item)
-                            ? "text-[#1E6F7C]"
-                            : "text-[#0F172A] hover:bg-[rgba(15,23,42,0.04)]"
+                            ? "text-[#1E6F7C] bg-white/40"
+                            : "text-[#0F172A] hover:bg-white/30"
                         }`}
                       >
                         {item.label}
@@ -260,7 +260,7 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                         />
                       </button>
                       {openDropdown === item.label && item.items && (
-                        <div className="absolute right-0 top-full mt-1 w-48 overflow-hidden rounded-lg border border-[#E2E8F0] bg-white shadow-lg animate-[dropdown_0.2s_ease-out_forwards]">
+                        <div className="absolute right-0 top-full mt-1 w-48 overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white/95 shadow-xl backdrop-blur-md animate-[dropdown_0.2s_ease-out_forwards]">
                           {item.items.map((subItem) => (
                             <div key={subItem.href}>
                               <Link

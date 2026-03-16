@@ -110,10 +110,10 @@ export default function TaskListPanel({ siteId, maxHeight = "280px" }: TaskListP
 
   return (
     <div
-      className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden text-right w-full"
+      className="rounded-2xl border border-[#E2E8F0] bg-white shadow-sm overflow-hidden text-right w-full"
       dir="rtl"
     >
-      <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-slate-200 bg-slate-50">
+      <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-[#E2E8F0] bg-[rgba(30,111,124,0.04)]">
         <span className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
           <ListTodo className="w-4 h-4" />
           משימות
@@ -121,7 +121,7 @@ export default function TaskListPanel({ siteId, maxHeight = "280px" }: TaskListP
         <button
           type="button"
           onClick={handleAddTask}
-          className="flex-shrink-0 rounded bg-caleno-ink px-2 py-1 text-xs font-medium text-white shadow-sm hover:bg-[#1E293B]"
+          className="flex-shrink-0 rounded-full bg-[#0F172A] px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-[#1E293B]"
         >
           הוסף משימה
         </button>

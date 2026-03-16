@@ -25,6 +25,8 @@ import { resetWorkersAvailabilityToBusinessHours } from "@/lib/resetWorkersAvail
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { validateLogoFile } from "@/lib/siteLogoStorage";
 import { ImagePickerModal } from "@/components/editor/ImagePickerModal";
+import { AdminPageHero } from "@/components/admin/AdminPageHero";
+import { AdminCard } from "@/components/admin/AdminCard";
 
 
 const SERVICE_OPTIONS: Record<SiteConfig["salonType"], string[]> = {
@@ -1582,33 +1584,35 @@ export default function SettingsPage() {
 
   return (
     <div dir="rtl" className="space-y-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">הגדרות</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            כאן תוכל לעדכן את כל הפרטים וההגדרות של האתר
-          </p>
-        </div>
-        <div className="flex items-center gap-4">
+      <div className="mb-6">
+        <AdminPageHero
+          title="הגדרות"
+          subtitle="כאן תוכל לעדכן את כל הפרטים וההגדרות של האתר"
+        />
+      </div>
+
+      <AdminCard className="overflow-hidden">
+      <div className="shrink-0 flex flex-wrap items-center justify-between gap-4 px-6 py-3 border-b border-[#E2E8F0] bg-white/80">
+        <AdminTabs
+          tabs={settingsTabs}
+          activeKey={activeTab}
+          onChange={(key) => setActiveTab(key)}
+          className="flex-1 min-w-0"
+        />
+        <div className="flex items-center gap-4 shrink-0">
           {saveMessage && (
             <span className="text-xs text-emerald-600">{saveMessage}</span>
           )}
           <button
             onClick={() => { void handleSaveConfig(); }}
             disabled={isSaving}
-            className="px-4 py-2 rounded-lg bg-caleno-ink hover:bg-[#1E293B] disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+            className="rounded-full bg-[#0F172A] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#1E293B] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {isSaving ? "שומר…" : "שמור שינויים"}
           </button>
         </div>
       </div>
-
-      <div className="bg-white rounded-2xl border border-slate-200 p-6">
-      <AdminTabs
-  tabs={settingsTabs}
-  activeKey={activeTab}
-  onChange={(key) => setActiveTab(key)}
-/>
+      <div className="p-6">
 
 
         {/* Tab Content */}
@@ -1642,7 +1646,7 @@ export default function SettingsPage() {
           )}
           {activeTab === "hours" && (
             <div className="pt-4 space-y-4">
-              <h2 className="text-lg font-bold text-slate-900">שעות פעילות</h2>
+              <h2 className="text-lg font-bold text-[#0F172A]">שעות פעילות</h2>
               {bookingHoursToast && (
                 <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-800 text-right">
                   {bookingHoursToast}
@@ -1665,7 +1669,7 @@ export default function SettingsPage() {
           {activeTab === "security" && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-lg font-bold text-slate-900 mb-1">אבטחה</h2>
+                <h2 className="text-lg font-bold text-[#0F172A] mb-1">אבטחה</h2>
                 <p className="text-sm text-slate-500 mb-4">
                   שנה את הסיסמה של החשבון שלך.
                 </p>
@@ -1690,6 +1694,7 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
+      </AdminCard>
 
       <ConfirmModal
         open={showHoursConfirmModal}
