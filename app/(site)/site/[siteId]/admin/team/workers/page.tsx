@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import {
   addDoc,
@@ -124,6 +124,8 @@ export default function WorkersPage() {
   const [workersLoading, setWorkersLoading] = useState(true);
   const [workersError, setWorkersError] = useState<string | null>(null);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string | null>(null);
+  /** True when user clicked "הוסף עובד" and we show the add-worker form; false when showing empty state or a selected worker. */
+  const [isAddingWorker, setIsAddingWorker] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
@@ -137,6 +139,22 @@ export default function WorkersPage() {
       setActiveWorkerTab("details");
     }
   }, [selectedWorkerId]);
+
+  const workerCardRef = useRef<HTMLDivElement>(null);
+
+  // On mobile, scroll to worker card when a worker is selected or add form is shown
+  useEffect(() => {
+    if (!selectedWorkerId && !isAddingWorker) return;
+    if (typeof window === "undefined") return;
+    const isMobile = window.innerWidth < 1024;
+    if (!isMobile) return;
+    const el = workerCardRef.current;
+    if (!el) return;
+    const id = requestAnimationFrame(() => {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [selectedWorkerId, isAddingWorker]);
   
   // Services from Firestore (same source as Pricing/Services page)
   const [services, setServices] = useState<SiteService[]>([]);
@@ -497,6 +515,7 @@ export default function WorkersPage() {
       });
       const docRef = await addDoc(workersCollection(siteId), newWorker);
       setSelectedWorkerId(docRef.id);
+      setIsAddingWorker(false);
       if (process.env.NODE_ENV !== "production") {
         console.log("[Workers] Add worker success", { workerId: docRef.id, treatmentCommissionPercent: commission });
       }
@@ -696,7 +715,10 @@ export default function WorkersPage() {
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-bold text-[#0F172A]">רשימת עובדים</h2>
                 <button
-                  onClick={() => setSelectedWorkerId(null)}
+                  onClick={() => {
+                    setSelectedWorkerId(null);
+                    setIsAddingWorker(true);
+                  }}
                   className="rounded-full px-4 py-2 bg-[#0F172A] hover:bg-[#1E293B] text-white text-sm font-medium transition-colors shadow-sm"
                 >
                   + הוסף עובד
@@ -712,7 +734,10 @@ export default function WorkersPage() {
                   {workers.map((worker) => (
                     <button
                       key={worker.id}
-                      onClick={() => setSelectedWorkerId(worker.id)}
+                      onClick={() => {
+                        setSelectedWorkerId(worker.id);
+                        setIsAddingWorker(false);
+                      }}
                       className={`w-full text-right p-3 rounded-lg border transition-colors ${
                         selectedWorkerId === worker.id
                           ? "border-[#1E6F7C] bg-[rgba(30,111,124,0.08)]"
@@ -737,22 +762,43 @@ export default function WorkersPage() {
             </AdminCard>
           </div>
 
-          {/* Worker Details Card — same section template for new worker and פרטי עובד */}
-          <div className="lg:col-span-2 min-w-0">
+          {/* Worker Details Card — empty state, new worker form, or פרטי עובד (ref for mobile scroll-into-view) */}
+          <div ref={workerCardRef} className="lg:col-span-2 min-w-0">
+            {!selectedWorkerId && !isAddingWorker ? (
+              <AdminCard className="p-6">
+                <div className="text-center py-12">
+                  <p className="text-slate-500 mb-2">בחר עובד מהרשימה</p>
+                  <p className="text-sm text-slate-400">
+                    פרטי העובד והיסטוריית התורים יופיעו כאן
+                  </p>
+                </div>
+              </AdminCard>
+            ) : (
             <AdminCard className="p-6">
               <div className="space-y-6">
                 <div className="flex justify-between items-center">
                   <h2 className="text-xl font-bold text-[#0F172A]">
                     {selectedWorkerId ? "פרטי עובד" : "עובד חדש"}
                   </h2>
-                  {selectedWorkerId && (
-                    <button
-                      onClick={handleDeleteWorker}
-                      className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium"
-                    >
-                      מחק עובד
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {isAddingWorker && (
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingWorker(false)}
+                        className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium"
+                      >
+                        ביטול
+                      </button>
+                    )}
+                    {selectedWorkerId && (
+                      <button
+                        onClick={handleDeleteWorker}
+                        className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium"
+                      >
+                        מחק עובד
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <AdminTabs
@@ -1056,6 +1102,7 @@ export default function WorkersPage() {
                 </div>
               </div>
             </AdminCard>
+            )}
           </div>
         </div>
       </div>

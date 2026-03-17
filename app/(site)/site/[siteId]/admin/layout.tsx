@@ -400,8 +400,8 @@ export default function AdminLayout({
       )}
       <UnsavedChangesProvider>
         <div className="relative z-10 w-full overflow-x-hidden">
-          {/* Header in its own stacking layer so dropdowns sit above full-screen design tab */}
-          <div className="relative z-[150]">
+          {/* Header below modals (z-40) so edit modals (z-50) appear on top */}
+          <div className="relative z-40">
             <AdminHeader onOpenHelp={() => setHelpOpen(true)} />
           </div>
           <AdminHelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} />

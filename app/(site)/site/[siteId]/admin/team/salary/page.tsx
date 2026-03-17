@@ -559,7 +559,75 @@ export default function TeamPerformancePage() {
         </div>
       ) : (
         <AdminCard className="overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile: card layout — all info visible without horizontal scroll */}
+          <div className="md:hidden space-y-3 p-3 sm:p-4">
+            {/* Summary card */}
+            <div className="rounded-xl bg-slate-100 border border-slate-200 p-3 text-right">
+              <p className="text-xs font-semibold text-slate-600 mb-2">סיכום לתקופה</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-600">שירותים</span>
+                  <span className="font-medium text-slate-900">{formatCurrency(totals.totalGrossRevenue)}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-600">שעות עבודה</span>
+                  <span className="font-medium text-slate-900">{formatTime(totals.totalHours)}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-600">ממוצע לשעה</span>
+                  <span className="font-medium text-slate-900">
+                    {totals.totalHours > 0 ? formatCurrency(totals.avgPerHour) : formatCurrency(0)}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-600">חלק עובד</span>
+                  <span className="font-medium text-slate-900">{formatCurrency(totals.totalWorkerPayout)}</span>
+                </div>
+                <div className="flex justify-between gap-2 col-span-2">
+                  <span className="text-slate-600">חלק עסק</span>
+                  <span className="font-bold text-slate-900">{formatCurrency(totals.totalBusinessShare)}</span>
+                </div>
+              </div>
+            </div>
+            {/* Per-worker cards */}
+            {workerMetrics.map((worker) => (
+              <div
+                key={worker.workerId}
+                className="rounded-xl border border-slate-200 bg-white p-3 text-right"
+              >
+                <p className="text-sm font-semibold text-slate-900 mb-2 border-b border-slate-100 pb-1.5">
+                  {worker.workerName}
+                </p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+                  <div className="flex justify-between gap-2">
+                    <span className="text-slate-600">שירותים</span>
+                    <span className="text-slate-900">{formatCurrency(worker.grossRevenue)}</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-slate-600">שעות עבודה</span>
+                    <span className="text-slate-900">{formatTime(worker.totalHours)}</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-slate-600">ממוצע לשעה</span>
+                    <span className="text-slate-900">
+                      {worker.totalHours > 0 ? formatCurrency(worker.avgPerHour) : formatCurrency(0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-slate-600">חלק עובד</span>
+                    <span className="text-slate-900">{formatCurrency(worker.workerPayout)}</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-slate-600">חלק עסק</span>
+                    <span className="text-slate-900">{formatCurrency(worker.businessShare)}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop: table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b-2 border-slate-300">
@@ -625,8 +693,8 @@ export default function TeamPerformancePage() {
               </tbody>
             </table>
           </div>
-          {/* Business share summary */}
-          <div className="p-4 bg-slate-50 border-t border-slate-200 text-right">
+          {/* Business share summary — desktop only (mobile has it in summary card) */}
+          <div className="hidden md:block p-4 bg-slate-50 border-t border-slate-200 text-right">
             <p className="text-sm font-medium text-slate-800">
               סה״כ חלק העסק: <span className="font-bold">{formatCurrency(totals.totalBusinessShare)}</span>
             </p>

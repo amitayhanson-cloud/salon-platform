@@ -28,6 +28,7 @@ import { ImagePickerModal } from "@/components/editor/ImagePickerModal";
 import { AdminPageHero } from "@/components/admin/AdminPageHero";
 import { AdminCard } from "@/components/admin/AdminCard";
 import { useUnsavedChanges } from "@/components/admin/UnsavedChangesContext";
+import { Trash2 } from "lucide-react";
 
 
 const SERVICE_OPTIONS: Record<SiteConfig["salonType"], string[]> = {
@@ -765,7 +766,7 @@ export function AdminBookingTab({
     const defaultStart = `${String(oh + 1).padStart(2, "0")}:00`;
     const [ch, cm] = close.split(":").map(Number);
     const defaultEnd = `${String(ch - 1).padStart(2, "0")}:${String(cm || 0).padStart(2, "0")}`;
-    updateDayBreaks(dayIndex, [...existing, { start: defaultStart, end: defaultEnd }]);
+    updateDayBreaks(dayIndex, [{ start: defaultStart, end: defaultEnd }, ...existing]);
   };
 
   const removeBreak = (dayIndex: number, breakIndex: number) => {
@@ -805,8 +806,8 @@ export function AdminBookingTab({
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-6 text-right space-y-6">
-      <h2 className="text-xl font-bold text-slate-900">ניהול תורים ושעות פתיחה</h2>
+    <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 p-4 sm:p-6 text-right space-y-4 sm:space-y-6">
+      <h2 className="text-lg sm:text-xl font-bold text-slate-900">ניהול תורים ושעות פתיחה</h2>
       <p className="text-xs text-slate-500">
         כאן תוכל להגדיר באילו ימים ושעות הסלון פתוח לקבלת לקוחות. הזמנות חדשות
         ייבנו על בסיס שעות הפתיחה האלו.
@@ -817,27 +818,27 @@ export function AdminBookingTab({
           <button
             type="button"
             onClick={onSaveRequest}
-            className="px-4 py-2 rounded-lg bg-caleno-ink hover:bg-[#1E293B] text-white text-sm font-semibold transition-colors"
+            className="min-h-[44px] px-4 py-2.5 rounded-lg bg-caleno-ink hover:bg-[#1E293B] text-white text-sm font-semibold transition-colors touch-manipulation"
           >
             שמור שעות פעילות
           </button>
         </div>
       )}
 
-      <div className="overflow-x-auto mt-4">
-        <table className="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+      <div className="overflow-x-auto -mx-1 sm:mx-0 mt-4 rounded-lg border border-slate-200/60">
+        <table className="w-full text-xs border-collapse min-w-[280px]" style={{ borderCollapse: "separate", borderSpacing: "0 0.5rem" }}>
           <thead className="bg-slate-50">
             <tr>
-              <th className="py-2 px-3 text-right font-medium text-slate-600">
+              <th className="py-2.5 px-2 sm:px-3 text-right font-medium text-slate-600">
                 יום
               </th>
-              <th className="py-2 px-3 text-right font-medium text-slate-600">
+              <th className="py-2.5 px-2 sm:px-3 text-right font-medium text-slate-600">
                 פתיחה
               </th>
-              <th className="py-2 px-3 text-right font-medium text-slate-600">
+              <th className="py-2.5 px-2 sm:px-3 text-right font-medium text-slate-600">
                 סגירה
               </th>
-              <th className="py-2 px-3 text-right font-medium text-slate-600">
+              <th className="py-2.5 px-2 sm:px-3 text-right font-medium text-slate-600">
                 מצב
               </th>
             </tr>
@@ -849,11 +850,11 @@ export function AdminBookingTab({
               const breaksError = getBreaksError(index);
               return (
                 <Fragment key={day.day}>
-                  <tr className="border-t border-slate-100">
-                    <td className="py-2 px-3 text-slate-800 whitespace-nowrap">
+                  <tr className={`[&>td]:border-slate-200/60 [&>td]:bg-white [&>td:first-child]:border-r [&>td:last-child]:border-l ${closed ? "[&>td]:border [&>td:first-child]:rounded-r-lg [&>td:last-child]:rounded-l-lg" : "[&>td]:border-t [&>td]:border-x [&>td]:border-b-0 [&>td:first-child]:rounded-t-r-lg [&>td:last-child]:rounded-t-l-lg"}`}>
+                    <td className="py-2.5 px-2 sm:px-3 text-slate-800 whitespace-nowrap">
                       {day.label}
                     </td>
-                    <td className="py-2 px-3">
+                    <td className="py-2.5 px-2 sm:px-3">
                       <input
                         type="time"
                         value={day.open ?? ""}
@@ -861,10 +862,10 @@ export function AdminBookingTab({
                         onChange={(e) =>
                           updateHours(index, "open", e.target.value)
                         }
-                        className="w-24 rounded border border-slate-300 px-2 py-1 text-xs text-right disabled:bg-slate-50 disabled:text-slate-400"
+                        className="w-full min-w-[72px] sm:w-24 rounded border border-slate-300 px-2 py-1.5 sm:py-1 text-xs text-right disabled:bg-slate-50 disabled:text-slate-400 touch-manipulation"
                       />
                     </td>
-                    <td className="py-2 px-3">
+                    <td className="py-2.5 px-2 sm:px-3">
                       <input
                         type="time"
                         value={day.close ?? ""}
@@ -872,61 +873,66 @@ export function AdminBookingTab({
                         onChange={(e) =>
                           updateHours(index, "close", e.target.value)
                         }
-                        className="w-24 rounded border border-slate-300 px-2 py-1 text-xs text-right disabled:bg-slate-50 disabled:text-slate-400"
+                        className="w-full min-w-[72px] sm:w-24 rounded border border-slate-300 px-2 py-1.5 sm:py-1 text-xs text-right disabled:bg-slate-50 disabled:text-slate-400 touch-manipulation"
                       />
                     </td>
-                    <td className="py-2 px-3">
+                    <td className="py-2.5 px-2 sm:px-3" dir="ltr">
                       <button
                         type="button"
+                        role="switch"
+                        aria-checked={!closed}
+                        aria-label={closed ? "סגור – לחץ לפתיחה" : "פתוח – לחץ לסגירה"}
                         onClick={() => toggleClosed(index)}
-                        className={`px-3 py-1 rounded-full text-[11px] border ${
-                          closed
-                            ? "bg-slate-50 text-slate-600 border-slate-200"
-                            : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 touch-manipulation ${
+                          closed ? "bg-slate-300" : "bg-emerald-500"
                         }`}
                       >
-                        {closed ? "סגור" : "פתוח"}
+                        <span
+                          className={`pointer-events-none block h-5 w-5 shrink-0 transform rounded-full bg-white shadow ring-0 transition-transform ${
+                            closed ? "translate-x-0.5" : "translate-x-5"
+                          }`}
+                        />
                       </button>
                     </td>
                   </tr>
                   {!closed && (
-                    <tr className="border-t border-slate-100 bg-slate-50/50">
-                      <td colSpan={4} className="py-2 px-3">
-                        <div className="text-xs">
+                    <tr className="[&>td]:border [&>td]:border-t-0 [&>td]:border-slate-200/60 [&>td]:rounded-b-lg bg-slate-50/50">
+                      <td colSpan={4} className="py-2 px-2 sm:px-3 rounded-b-lg">
+                        <div className="text-xs flex flex-wrap items-center gap-2 gap-y-2">
                           <span className="font-medium text-slate-600">הפסקות</span>
+                          <button
+                            type="button"
+                            onClick={() => addBreak(index)}
+                            className="min-h-[40px] px-2.5 py-2 sm:py-1 rounded-md border border-slate-300 bg-white text-caleno-deep hover:bg-slate-50 hover:border-caleno-deep/50 text-sm font-medium transition-colors touch-manipulation"
+                          >
+                            הוסף הפסקה
+                          </button>
                           {breaks.map((b, bi) => (
-                            <div key={bi} className="flex flex-wrap items-center gap-2 mt-1">
+                            <div key={bi} className="flex flex-wrap items-center gap-2">
                               <input
                                 type="time"
                                 value={b.start}
                                 onChange={(e) => updateBreak(index, bi, "start", e.target.value)}
-                                className="w-20 rounded border border-slate-300 px-1.5 py-0.5 text-right"
+                                className="w-20 min-w-[70px] rounded border border-slate-300 px-1.5 py-1 sm:py-0.5 text-right touch-manipulation"
                               />
                               <span className="text-slate-400">–</span>
                               <input
                                 type="time"
                                 value={b.end}
                                 onChange={(e) => updateBreak(index, bi, "end", e.target.value)}
-                                className="w-20 rounded border border-slate-300 px-1.5 py-0.5 text-right"
+                                className="w-20 min-w-[70px] rounded border border-slate-300 px-1.5 py-1 sm:py-0.5 text-right touch-manipulation"
                               />
                               <button
                                 type="button"
                                 onClick={() => removeBreak(index, bi)}
-                                className="text-red-600 hover:underline flex items-center gap-1"
+                                className="p-2 sm:p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors touch-manipulation"
                                 title="מחק הפסקה"
+                                aria-label="מחק הפסקה"
                               >
-                                <span aria-hidden>🗑</span>
-                                מחק הפסקה
+                                <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
                           ))}
-                          <button
-                            type="button"
-                            onClick={() => addBreak(index)}
-                            className="mt-1 text-caleno-deep hover:underline hover:text-caleno-ink"
-                          >
-                            הוסף הפסקה
-                          </button>
                           {breaksError && (
                             <p className="text-red-600 mt-0.5">{breaksError}</p>
                           )}
@@ -942,7 +948,7 @@ export function AdminBookingTab({
       </div>
 
       {/* Closed dates (holidays) */}
-      <div className="border-t border-slate-200 pt-6">
+      <div className="border-t border-slate-200 pt-4 sm:pt-6">
         <h3 className="text-sm font-semibold text-slate-800 mb-2">תאריכים סגורים (חגים)</h3>
         <p className="text-xs text-slate-500 mb-3">
           בימים אלו העסק סגור. לא יוצגו שעות זמינות לאף עובד.
@@ -1013,7 +1019,7 @@ function ClosedDatesEditor({
             type="date"
             value={newDate}
             onChange={(e) => setNewDate(e.target.value)}
-            className="rounded border border-slate-300 px-2 py-1.5 text-xs text-right"
+            className="rounded border border-slate-300 px-2 py-2 sm:py-1.5 text-xs text-right touch-manipulation min-h-[40px] sm:min-h-0"
           />
         </div>
         <div>
@@ -1023,13 +1029,13 @@ function ClosedDatesEditor({
             value={newLabel}
             onChange={(e) => setNewLabel(e.target.value)}
             placeholder="למשל: ערב פסח"
-            className="rounded border border-slate-300 px-2 py-1.5 text-xs text-right w-32"
+            className="rounded border border-slate-300 px-2 py-2 sm:py-1.5 text-xs text-right w-32 touch-manipulation min-h-[40px] sm:min-h-0"
           />
         </div>
         <button
           type="button"
           onClick={addDate}
-          className="px-3 py-1.5 rounded-lg bg-caleno-ink text-white text-xs shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md"
+          className="min-h-[44px] px-3 py-2 sm:py-1.5 rounded-lg bg-caleno-ink text-white text-xs shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md touch-manipulation"
         >
           הוסף תאריך
         </button>
@@ -1044,7 +1050,7 @@ function ClosedDatesEditor({
               <button
                 type="button"
                 onClick={() => removeDate(e.date)}
-                className="text-red-600 hover:underline"
+                className="py-2 px-1 text-red-600 hover:underline touch-manipulation min-h-[44px] flex items-center"
                 aria-label="הסר"
               >
                 הסר
@@ -1157,6 +1163,26 @@ function AdminSiteTab({
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-2 focus:ring-caleno-deep focus:border-caleno-deep"
               placeholder="למשל: 050-1234567"
             />
+          </div>
+
+          <div>
+            <label
+              htmlFor="adminWhatsappDraftMessage"
+              className="block text-xs font-medium text-slate-700 mb-1"
+            >
+              טופס הודעה לוואטסאפ (אופציונלי)
+            </label>
+            <textarea
+              id="adminWhatsappDraftMessage"
+              rows={3}
+              value={siteConfig.whatsappDraftMessage ?? ""}
+              onChange={(e) => onChange({ whatsappDraftMessage: e.target.value })}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep focus:border-caleno-deep resize-none"
+              placeholder="טקסט שיופיע מראש כשהלקוח לוחץ על קישור וואטסאפ (ריק = בלי טופס)"
+            />
+            <p className="text-xs text-[#64748B] mt-1">
+              כשמישהו לוחץ על קישור וואטסאפ באתר, האפליקציה תיפתח עם ההודעה הזו מוכנה לשליחה.
+            </p>
           </div>
 
           <div>
@@ -1679,8 +1705,8 @@ export default function SettingsPage() {
   const settingsTabs = [
     { key: "basic", label: "מידע בסיסי" },
     { key: "contact", label: "פרטי יצירת קשר" },
-    { key: "hours", label: "שעות פעילות" },
     { key: "security", label: "אבטחה" },
+    { key: "hours", label: "שעות פעילות" },
   ] as const;
 
   // Derive type from tabs config to ensure type safety
@@ -1688,8 +1714,8 @@ export default function SettingsPage() {
 
 
   return (
-    <div dir="rtl" className="space-y-6">
-      <div className="mb-6">
+    <div dir="rtl" className="space-y-4 sm:space-y-6 max-w-4xl mx-auto">
+      <div className="mb-4 sm:mb-6">
         <AdminPageHero
           title="הגדרות"
           subtitle="כאן תוכל לעדכן את כל הפרטים וההגדרות של האתר"
@@ -1697,29 +1723,29 @@ export default function SettingsPage() {
       </div>
 
       <AdminCard className="overflow-hidden">
-      <div className="shrink-0 flex flex-wrap items-center justify-between gap-4 px-6 py-3 border-b border-[#E2E8F0] bg-white/80">
+      <div className="shrink-0 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-between gap-3 sm:gap-4 px-4 sm:px-6 py-3 border-b border-[#E2E8F0] bg-white/80">
         <AdminTabs
           tabs={settingsTabs}
           activeKey={activeTab}
           onChange={(key) => setActiveTab(key)}
-          className="flex-1 min-w-0"
+          className="flex-1 min-w-0 w-full sm:w-auto"
         />
-        <div className="flex items-center gap-4 shrink-0">
-          {saveMessage && hasUnsavedChanges && (
+        <div className="flex items-center gap-3 sm:gap-4 shrink-0 flex-wrap">
+          {saveMessage && hasUnsavedChanges && activeTab !== "hours" && (
             <span className="text-xs text-emerald-600">{saveMessage}</span>
           )}
-          {hasUnsavedChanges && (
+          {hasUnsavedChanges && activeTab !== "hours" && (
             <button
               onClick={() => { void handleSaveConfig(); }}
               disabled={isSaving}
-              className="rounded-full bg-[#0F172A] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#1E293B] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="min-h-[44px] rounded-full bg-[#0F172A] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#1E293B] disabled:opacity-50 disabled:cursor-not-allowed transition-colors touch-manipulation"
             >
               {isSaving ? "שומר…" : "שמור שינויים"}
             </button>
           )}
         </div>
       </div>
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
 
 
         {/* Tab Content */}
@@ -1752,15 +1778,15 @@ export default function SettingsPage() {
             />
           )}
           {activeTab === "hours" && (
-            <div className="pt-4 space-y-4">
-              <h2 className="text-lg font-bold text-[#0F172A]">שעות פעילות</h2>
+            <div className="pt-2 sm:pt-4 space-y-4">
+              <h2 className="text-base sm:text-lg font-bold text-[#0F172A]">שעות פעילות</h2>
               {bookingHoursToast && (
-                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-800 text-right">
+                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs sm:text-sm text-emerald-800 text-right">
                   {bookingHoursToast}
                 </div>
               )}
               {bookingSaveError && (
-                <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700 text-right">
+                <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs sm:text-sm text-red-700 text-right">
                   {bookingSaveError}
                 </div>
               )}
@@ -1768,7 +1794,7 @@ export default function SettingsPage() {
                 <AdminBookingTab
                   state={bookingState}
                   onChange={handleBookingStateChange}
-                  onSaveRequest={handleSaveHoursClick}
+                  onSaveRequest={hasHoursUnsaved ? handleSaveHoursClick : undefined}
                 />
               )}
             </div>
@@ -1776,7 +1802,7 @@ export default function SettingsPage() {
           {activeTab === "security" && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-lg font-bold text-[#0F172A] mb-1">אבטחה</h2>
+                <h2 className="text-base sm:text-lg font-bold text-[#0F172A] mb-1">אבטחה</h2>
                 <p className="text-sm text-slate-500 mb-4">
                   שנה את הסיסמה של החשבון שלך.
                 </p>

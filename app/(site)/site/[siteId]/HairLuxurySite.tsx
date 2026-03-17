@@ -269,23 +269,30 @@ export default function HairLuxurySite({
       } as React.CSSProperties}
     >
       {/* Salon header: section-scoped colors so header edit doesn't affect rest of site */}
-      <div data-edit-id="header" data-edit-type="section" data-edit-paths='["sectionStyles.header.bg","sectionStyles.header.text"]' data-edit-label="כותרת עליונה">
-      <SalonHeader
-        salonName={content.header?.brandName?.trim() ? content.header.brandName : (config.salonName || "שם הסלון")}
-        siteId={siteId}
-        slug={config.slug ?? null}
-        bookingEnabled={bookingEnabled(config)}
-        scrollToSection={scrollToSection}
-        logoUrl={config.branding?.logoUrl ?? null}
-        logoAlt={config.branding?.logoAlt}
-        editorMode={editorMode}
-        headerBg={config.sectionStyles?.header?.bg ?? undefined}
-        headerText={getSectionColorResolved(config, "header", "text")}
-        headerLink={getSectionColorResolved(config, "header", "link")}
-        headerCtaBg={getSectionColorResolved(config, "header", "primaryBtnBg")}
-        headerCtaText={getSectionColorResolved(config, "header", "primaryBtnText")}
-        contentHeader={content.header}
-      />
+      <div
+        data-edit-id="header"
+        data-edit-type="section"
+        data-edit-paths='["sectionStyles.header.bg","sectionStyles.header.text","sectionStyles.header.pillStyle"]'
+        data-edit-label="כותרת עליונה"
+        className={(config.sectionStyles?.header as { pillStyle?: boolean } | undefined)?.pillStyle ? "pt-3 px-3 sm:pt-4 sm:px-4" : ""}
+      >
+        <SalonHeader
+          salonName={content.header?.brandName?.trim() ? content.header.brandName : (config.salonName || "שם הסלון")}
+          siteId={siteId}
+          slug={config.slug ?? null}
+          bookingEnabled={bookingEnabled(config)}
+          scrollToSection={scrollToSection}
+          logoUrl={config.branding?.logoUrl ?? null}
+          logoAlt={config.branding?.logoAlt}
+          editorMode={editorMode}
+          headerBg={config.sectionStyles?.header?.bg ?? undefined}
+          headerText={getSectionColorResolved(config, "header", "text")}
+          headerLink={getSectionColorResolved(config, "header", "link")}
+          headerCtaBg={getSectionColorResolved(config, "header", "primaryBtnBg")}
+          headerCtaText={getSectionColorResolved(config, "header", "primaryBtnText")}
+          contentHeader={content.header}
+          pillStyle={(config.sectionStyles?.header as { pillStyle?: boolean } | undefined)?.pillStyle ?? false}
+        />
       </div>
 
       {/* Hero Section: section-scoped colors */}
@@ -840,6 +847,7 @@ export default function HairLuxurySite({
             <ContactIconsBar
               phoneNumber={config.phoneNumber}
               whatsappNumber={config.whatsappNumber}
+              whatsappDraftMessage={config.whatsappDraftMessage}
               instagramHandle={config.instagramHandle}
               facebookPage={config.facebookPage}
               contactEmail={config.contactEmail}
@@ -902,7 +910,11 @@ export default function HairLuxurySite({
       {/* Floating WhatsApp button */}
       {config.whatsappNumber && (
         <a
-          href={`https://wa.me/${config.whatsappNumber.replace(/[^0-9]/g, "")}`}
+          href={
+            config.whatsappDraftMessage?.trim()
+              ? `https://wa.me/${config.whatsappNumber.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(config.whatsappDraftMessage.trim())}`
+              : `https://wa.me/${config.whatsappNumber.replace(/[^0-9]/g, "")}`
+          }
           target="_blank"
           rel="noopener noreferrer"
           className="fixed bottom-4 left-4 sm:bottom-6 sm:left-6 z-30 rounded-full shadow-xl w-14 h-14 flex items-center justify-center text-2xl text-white transition-colors bg-[#25D366] hover:bg-[#1EBE5A]"

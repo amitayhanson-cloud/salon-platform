@@ -181,7 +181,7 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
   return (
     <header ref={headerRef} className="sticky top-0 z-[100] pt-3 pb-2 px-4 sm:px-6 lg:px-8">
       <div
-        className="max-w-7xl mx-auto rounded-full border border-white/30 bg-white/25 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.08),0_0_0_1px_rgba(255,255,255,0.4)_inset] backdrop-blur-xl px-4 sm:px-6 md:px-6"
+        className="max-w-7xl mx-auto rounded-xl md:rounded-full border border-white/30 bg-white/25 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.08),0_0_0_1px_rgba(255,255,255,0.4)_inset] backdrop-blur-xl px-4 sm:px-6 md:px-6"
         style={{ WebkitBackdropFilter: "blur(16px)" }}
       >
         {/* dir=ltr so left/right zones stay fixed: left = Caleno, right = tenant+nav */}

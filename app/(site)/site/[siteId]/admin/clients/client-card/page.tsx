@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { query, where, orderBy, getDocs, collection, limit } from "firebase/firestore";
@@ -456,6 +456,8 @@ export default function ClientCardPage() {
     ];
   }, []);
 
+  const clientCardRef = useRef<HTMLDivElement>(null);
+
   const handleClientSelect = (clientId: string) => {
     setSelectedClientId(clientId);
     // Update URL without page reload
@@ -463,6 +465,19 @@ export default function ClientCardPage() {
     url.searchParams.set("clientId", clientId);
     window.history.pushState({}, "", url.toString());
   };
+
+  // On mobile, scroll to client card when a client is selected
+  useEffect(() => {
+    if (!selectedClientId || typeof window === "undefined") return;
+    const isMobile = window.innerWidth < 1024; // lg breakpoint
+    if (!isMobile) return;
+    const el = clientCardRef.current;
+    if (!el) return;
+    const id = requestAnimationFrame(() => {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [selectedClientId]);
 
   // Handle Add Client Modal
   const handleOpenAddClientModal = () => {
@@ -916,15 +931,11 @@ export default function ClientCardPage() {
             </AdminCard>
           </div>
 
-          {/* Client Details Card */}
-          <div className="lg:col-span-2 min-w-0">
+          {/* Client Details Card — ref for mobile scroll-into-view */}
+          <div ref={clientCardRef} className="lg:col-span-2 min-w-0">
             {selectedClient ? (
               <AdminCard className="p-4 md:p-6">
                 <h2 className="text-lg font-bold text-slate-900 mb-1 md:text-xl md:mb-6">פרטי לקוח</h2>
-                <div className="mb-4 md:mb-0">
-                  <p className="text-lg md:text-base font-bold text-slate-900 md:font-normal">{selectedClient.name || "—"}</p>
-                  <p className="text-sm text-slate-500 mt-0.5">{selectedClient.phone}</p>
-                </div>
 
                 {/* Client Details — compact 2-line key/value on mobile */}
                 <div className="border-b border-slate-200 pb-4 md:pb-6 mb-4 md:mb-6 space-y-3 md:space-y-0">

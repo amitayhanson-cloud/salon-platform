@@ -3,8 +3,10 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { subscribeClientTypes, saveClientTypes, seedDefaultClientTypes } from "@/lib/firestoreClientSettings";
-import { REGULAR_CLIENT_TYPE_ID } from "@/types/bookingSettings";
+import { REGULAR_CLIENT_TYPE_ID, DEFAULT_CLIENT_TYPE_ENTRIES } from "@/types/bookingSettings";
 import type { ClientTypeEntry } from "@/types/bookingSettings";
+
+const DEFAULT_TYPE_LABELS = DEFAULT_CLIENT_TYPE_ENTRIES.map((e) => e.labelHe).join(", ");
 
 function slugFromLabel(label: string): string {
   const t = label.trim().toLowerCase();
@@ -197,12 +199,18 @@ export default function AdminClientsTab({ siteId }: { siteId: string }) {
         >
           הוסף
         </button>
+        <span className="text-sm text-slate-600 py-2">
+          אלו סוגי ברירת המחדל שיש לך כרגע: ({DEFAULT_TYPE_LABELS})
+        </span>
       </div>
       {addError && <p className="text-xs text-red-600">{addError}</p>}
       <ul className="space-y-2">
-        {clientTypes.map((entry, index) => (
+        {clientTypes
+          .map((entry, i) => ({ entry, originalIndex: i }))
+          .filter(({ entry }) => !entry.isSystemDefault)
+          .map(({ entry, originalIndex }) => (
           <li key={entry.id} className="flex items-center gap-2 py-2 border-b border-slate-100">
-            {editingIndex === index ? (
+            {editingIndex === originalIndex ? (
               <>
                 <input
                   type="text"
@@ -217,18 +225,13 @@ export default function AdminClientsTab({ siteId }: { siteId: string }) {
               </>
             ) : (
               <>
-                <span className="flex-1 text-slate-800">
-                  {entry.labelHe}
-                  {entry.isSystemDefault && <span className="text-slate-500 text-xs mr-1">(ברירת מחדל)</span>}
-                </span>
-                <button type="button" onClick={() => handleStartEdit(index)} disabled={!!entry.isSystemDefault} className="rounded p-1.5 text-[#64748B] hover:bg-[rgba(15,23,42,0.04)] hover:text-[#1E6F7C] disabled:cursor-not-allowed disabled:opacity-50" aria-label="ערוך">✎</button>
+                <span className="flex-1 text-slate-800">{entry.labelHe}</span>
+                <button type="button" onClick={() => handleStartEdit(originalIndex)} className="rounded p-1.5 text-[#64748B] hover:bg-[rgba(15,23,42,0.04)] hover:text-[#1E6F7C]" aria-label="ערוך">✎</button>
                 <button
                   type="button"
-                  onClick={() => handleDelete(index)}
-                  disabled={!!entry.isSystemDefault}
-                  className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => handleDelete(originalIndex)}
+                  className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded"
                   aria-label="מחק"
-                  title={entry.id === REGULAR_CLIENT_TYPE_ID ? "לא ניתן למחוק" : undefined}
                 >
                   🗑
                 </button>

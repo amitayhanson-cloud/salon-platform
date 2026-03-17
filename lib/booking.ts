@@ -365,17 +365,20 @@ export function buildServiceItemsFromChain(chainSlots: ChainSlotForSave[]): Serv
       serviceType: slot.serviceType ?? null,
       serviceColor: slot.serviceColor ?? null,
     });
-    if (slot.followUp && slot.followUp.durationMin >= 1 && slot.followUp.serviceName) {
-      const fu = slot.followUp;
-      const fuServiceId = (fu.serviceId && fu.serviceId.trim()) ? fu.serviceId : null;
+    // Phase 2 (follow-up): add whenever slot has followUp with valid service name and duration (public book flow must create both phase 1 and phase 2 docs)
+    const fu = slot.followUp;
+    const fuDurationMin = fu && typeof fu.durationMin === "number" ? fu.durationMin : 0;
+    const fuServiceNameTrim = fu?.serviceName?.trim();
+    if (fu && fuServiceNameTrim && fuDurationMin >= 1) {
+      const fuServiceId = (fu.serviceId && String(fu.serviceId).trim()) ? fu.serviceId : null;
       items.push({
         serviceId: fuServiceId,
         serviceName: fu.serviceName,
-        workerId: fu.workerId,
+        workerId: fu.workerId ?? null,
         workerName: fu.workerName ?? null,
         startAt: fu.startAt,
         endAt: fu.endAt,
-        durationMin: fu.durationMin,
+        durationMin: fuDurationMin,
         serviceOrder: slot.serviceOrder,
         phase: 2,
         pricingItemId: null,

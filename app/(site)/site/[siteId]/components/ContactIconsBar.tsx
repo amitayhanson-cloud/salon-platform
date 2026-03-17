@@ -7,15 +7,27 @@ import { WazeIcon } from "@/components/icons/WazeIcon";
 type ContactIconsBarProps = {
   phoneNumber?: string | null;
   whatsappNumber?: string | null;
+  /** Pre-filled message when opening WhatsApp (wa.me?text=...) */
+  whatsappDraftMessage?: string | null;
   instagramHandle?: string | null;
   facebookPage?: string | null;
   contactEmail?: string | null;
   address?: string | null; // For Waze link
 };
 
+function buildWhatsAppHref(number: string, draftMessage?: string | null): string {
+  const digits = number.replace(/[^0-9]/g, "");
+  const base = `https://wa.me/${digits}`;
+  if (draftMessage?.trim()) {
+    return `${base}?text=${encodeURIComponent(draftMessage.trim())}`;
+  }
+  return base;
+}
+
 export default function ContactIconsBar({
   phoneNumber,
   whatsappNumber,
+  whatsappDraftMessage,
   instagramHandle,
   facebookPage,
   contactEmail,
@@ -57,7 +69,7 @@ export default function ContactIconsBar({
   if (whatsappNumber) {
     icons.push({
       key: "whatsapp",
-      href: `https://wa.me/${whatsappNumber.replace(/[^0-9]/g, "")}`,
+      href: buildWhatsAppHref(whatsappNumber, whatsappDraftMessage),
       label: "וואטסאפ",
       external: true,
       icon: <WhatsAppIcon className="w-6 h-6" />,

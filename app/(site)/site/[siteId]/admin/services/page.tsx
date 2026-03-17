@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { X, Plus, Pencil, Trash2 } from "lucide-react";
+import { X, Plus, Pencil, Trash2, MoreVertical } from "lucide-react";
 import type { PricingItem } from "@/types/pricingItem";
 import type { SiteService } from "@/types/siteConfig";
 import {
@@ -19,7 +20,6 @@ import {
   deleteSiteService,
   migrateServicesFromSubcollection,
 } from "@/lib/firestoreSiteServices";
-import AdminTabs from "@/components/ui/AdminTabs";
 import DurationMinutesStepper from "@/components/admin/DurationMinutesStepper";
 import { parseNumberOrRange, formatNumberOrRange } from "@/lib/parseNumberOrRange";
 import { formatPriceDisplay } from "@/lib/formatPrice";
@@ -87,6 +87,67 @@ export default function ServicesPage() {
   const [openCombos, setOpenCombos] = useState(false);
   const [showNewServiceReminderModal, setShowNewServiceReminderModal] = useState(false);
   const [isSavingService, setSavingService] = useState(false);
+  /** Service id whose 3-dot menu is open (null = none). */
+  const [serviceMenuOpenId, setServiceMenuOpenId] = useState<string | null>(null);
+  const serviceMenuRef = useRef<HTMLDivElement>(null);
+  /** Position for portal-rendered dropdown (so it's not clipped by overflow). */
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
+  /** Pricing item id whose 3-dot menu is open (null = none). */
+  const [itemMenuOpenId, setItemMenuOpenId] = useState<string | null>(null);
+  const itemMenuRef = useRef<HTMLDivElement>(null);
+  const [itemMenuPosition, setItemMenuPosition] = useState<{ top: number; left: number } | null>(null);
+
+  useEffect(() => {
+    if (serviceMenuOpenId == null) {
+      setDropdownPosition(null);
+      return;
+    }
+    const measure = () => {
+      const el = serviceMenuRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      setDropdownPosition({ top: rect.bottom + 4, left: rect.right - 160 });
+    };
+    const raf = requestAnimationFrame(measure);
+    const close = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (serviceMenuRef.current?.contains(target)) return;
+      const portalRoot = document.getElementById("services-tab-dropdown-portal");
+      if (portalRoot?.contains(target)) return;
+      setServiceMenuOpenId(null);
+    };
+    document.addEventListener("click", close, true);
+    return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener("click", close, true);
+    };
+  }, [serviceMenuOpenId]);
+
+  useEffect(() => {
+    if (itemMenuOpenId == null) {
+      setItemMenuPosition(null);
+      return;
+    }
+    const measure = () => {
+      const el = itemMenuRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      setItemMenuPosition({ top: rect.bottom + 4, left: rect.right - 160 });
+    };
+    const raf = requestAnimationFrame(measure);
+    const close = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (itemMenuRef.current?.contains(target)) return;
+      const portalRoot = document.getElementById("services-item-dropdown-portal");
+      if (portalRoot?.contains(target)) return;
+      setItemMenuOpenId(null);
+    };
+    document.addEventListener("click", close, true);
+    return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener("click", close, true);
+    };
+  }, [itemMenuOpenId]);
 
   // Prevent double submission: only one create/update at a time (e.g. double-click or duplicate trigger)
   const savingServiceRef = useRef(false);
@@ -718,8 +779,8 @@ export default function ServicesPage() {
 
   return (
     <div dir="rtl" className="min-h-screen">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        <div className="mb-4 sm:mb-6">
           <AdminPageHero
             title="שירותים"
             subtitle="ניהול שירותים ומחיריהם"
@@ -727,88 +788,149 @@ export default function ServicesPage() {
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-right">
+          <div className="mb-4 p-3 sm:p-4 bg-red-50 border border-red-200 rounded-xl text-right">
             <p className="text-sm text-red-700">{error}</p>
           </div>
         )}
 
-        <AdminCard className="p-6">
+        <AdminCard className="p-4 sm:p-6">
           {/* Unified Services and Pricing View */}
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h2 className="text-lg font-bold text-[#0F172A]">שירותים ומחירים</h2>
-              <p className="text-sm text-[#64748B] mt-1">
-                ניהול שירותים וסוגי המחירים שלהם
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setEditingService({ ...NEW_SERVICE_DRAFT })}
-              className="px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              הוסף שירות
-            </button>
+          <div className="mb-4 sm:mb-6">
+            <h2 className="text-base sm:text-lg font-bold text-[#0F172A]">שירותים ומחירים</h2>
+            <p className="text-xs sm:text-sm text-[#64748B] mt-1">
+              ניהול שירותים וסוגי המחירים שלהם
+            </p>
           </div>
 
           {/* Service tabs + content */}
           {services.length === 0 && unassignedItems.length === 0 ? (
-            <div className="text-center py-12">
+            <div className="text-center py-8 sm:py-12">
               <p className="text-[#64748B] mb-4">אין שירותים עדיין</p>
-              <p className="text-sm text-slate-400">
+              <p className="text-xs sm:text-sm text-slate-400 mb-4">
                 לחץ על "הוסף שירות" כדי להתחיל
               </p>
+              <button
+                type="button"
+                onClick={() => setEditingService({ ...NEW_SERVICE_DRAFT })}
+                className="min-h-[44px] px-4 py-3 sm:py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium transition-colors inline-flex items-center justify-center gap-2 touch-manipulation"
+              >
+                <Plus className="w-4 h-4" />
+                הוסף שירות
+              </button>
             </div>
           ) : (
             <>
-              {/* Tabs: one per service, plus Unassigned if any */}
-              <div className="border-b border-slate-200 mb-6">
-                <AdminTabs
-                  tabs={[
-                    ...services.map((s) => ({
-                      key: s.id,
-                      label: s.name,
-                    })),
-                    ...(unassignedItems.length > 0 ? [{ key: "__UNASSIGNED__" as const, label: `לא משויך (${unassignedItems.length})` }] : []),
-                  ]}
-                  activeKey={activeTabId ?? ""}
-                  onChange={(key) => setSelectedServiceId(key)}
-                  className="flex-wrap"
-                />
+              {/* Tabs navbar with Add service button on the right; each service tab has a 3-dot menu */}
+              <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 sm:gap-3 border-b border-slate-200 pb-4 sm:pb-0 sm:mb-6 -mx-1 sm:mx-0">
+                <button
+                  type="button"
+                  onClick={() => setEditingService({ ...NEW_SERVICE_DRAFT })}
+                  className="shrink-0 min-h-[44px] px-4 py-3 sm:py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 touch-manipulation order-first sm:order-none"
+                >
+                  <Plus className="w-4 h-4" />
+                  הוסף שירות
+                </button>
+                <div className="flex-1 min-w-0 flex flex-wrap gap-1.5 py-1 px-1 rounded-xl sm:rounded-full bg-white/40 border border-[#E2E8F0]/60 w-full">
+                  {services.map((s) => {
+                    const isSelected = activeTabId === s.id;
+                    return (
+                      <div
+                        key={s.id}
+                        className={`flex items-center flex-row-reverse rounded-full touch-manipulation ${
+                          isSelected
+                            ? "bg-[#1E6F7C] text-white shadow-sm"
+                            : ""
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setSelectedServiceId(s.id)}
+                          className={`min-h-[44px] px-3 sm:px-4 py-2.5 md:px-5 text-sm font-medium transition-all whitespace-nowrap touch-manipulation ${
+                            isSelected
+                              ? "text-white"
+                              : "text-[#64748B] hover:bg-white/60 hover:text-[#1E6F7C] rounded-full"
+                          }`}
+                        >
+                          {s.name}
+                        </button>
+                        {isSelected && (
+                          <div className="relative pl-1.5" ref={serviceMenuOpenId === s.id ? serviceMenuRef : undefined}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setServiceMenuOpenId((prev) => (prev === s.id ? null : s.id));
+                              }}
+                              className="p-1.5 rounded-full transition-colors text-white/90 hover:bg-white/20"
+                              aria-label="תפריט שירות"
+                              aria-expanded={serviceMenuOpenId === s.id}
+                            >
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {unassignedItems.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedServiceId("__UNASSIGNED__")}
+                      className={`min-h-[44px] px-3 sm:px-4 py-2.5 md:px-5 text-sm font-medium transition-all rounded-full touch-manipulation whitespace-nowrap ${
+                        activeTabId === "__UNASSIGNED__"
+                          ? "bg-[#1E6F7C] text-white shadow-sm"
+                          : "text-[#64748B] hover:bg-white/60 hover:text-[#1E6F7C]"
+                      }`}
+                    >
+                      לא משויך ({unassignedItems.length})
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Content for selected tab */}
               {activeTabId === "__UNASSIGNED__" ? (
                 <div className="space-y-4">
-                  <p className="text-xs text-[#64748B]">
+                  <p className="text-xs sm:text-sm text-[#64748B]">
                     פריטי מחיר שלא משויכים לשירות. ערוך פריט ובחר שירות כדי לשייך.
                   </p>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm border-collapse">
+                  <div className="overflow-x-auto -mx-1 sm:mx-0 rounded-lg border border-slate-200/60">
+                    <table className="w-full text-xs sm:text-sm border-collapse min-w-[320px]">
                       <thead>
                         <tr className="bg-slate-50 border-b border-slate-200">
-                          <th className="px-3 py-2 text-right font-semibold text-slate-700">שירות</th>
-                          <th className="px-3 py-2 text-right font-semibold text-slate-700">סוג</th>
-                          <th className="px-3 py-2 text-right font-semibold text-slate-700">משך (דקות)</th>
-                          <th className="px-3 py-2 text-right font-semibold text-slate-700">מחיר</th>
-                          <th className="px-3 py-2 text-right font-semibold text-slate-700">פעולות</th>
+                          <th className="px-2 sm:px-3 py-2.5 text-right font-semibold text-slate-700">שירות</th>
+                          <th className="px-2 sm:px-3 py-2.5 text-right font-semibold text-slate-700">סוג</th>
+                          <th className="px-2 sm:px-3 py-2.5 text-right font-semibold text-slate-700">משך (דקות)</th>
+                          <th className="px-2 sm:px-3 py-2.5 text-right font-semibold text-slate-700">מחיר</th>
                         </tr>
                       </thead>
                       <tbody>
                         {unassignedItems.map((item) => (
                           <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
-                            <td className="px-3 py-2 text-[#64748B]">{item.serviceId || item.service || "-"}</td>
-                            <td className="px-3 py-2 text-[#64748B]">{item.type || "-"}</td>
-                            <td className="px-3 py-2 text-[#64748B]">
-                              {item.durationMinMinutes === item.durationMaxMinutes ? `${item.durationMinMinutes}` : `${item.durationMinMinutes}-${item.durationMaxMinutes}`}
-                            </td>
-                            <td className="px-3 py-2 text-slate-900 font-medium">{formatPriceDisplay(item)}</td>
-                            <td className="px-3 py-2">
-                              <div className="flex items-center gap-2 justify-end">
-                                <button onClick={() => handleEditItem(item)} className="p-1.5 hover:bg-[rgba(30,111,124,0.08)] rounded text-caleno-deep" title="ערוך ושייך לשירות"><Pencil className="w-4 h-4" /></button>
-                                <button onClick={() => handleDeleteItem(item.id)} className="p-1.5 hover:bg-red-50 rounded text-red-600" title="מחק"><Trash2 className="w-4 h-4" /></button>
+                            <td className="px-2 sm:px-3 py-2.5 text-[#64748B]">{item.serviceId || item.service || "-"}</td>
+                            <td className="px-2 sm:px-3 py-2.5 text-[#64748B]">
+                              <div className="flex items-center justify-start gap-2 min-w-0">
+                                <div className="relative shrink-0" ref={itemMenuOpenId === item.id ? itemMenuRef : undefined}>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setItemMenuOpenId((prev) => (prev === item.id ? null : item.id));
+                                    }}
+                                    className="p-2 sm:p-1.5 rounded hover:bg-slate-100 text-slate-600 hover:text-slate-900 touch-manipulation"
+                                    aria-label="תפריט פריט"
+                                    aria-expanded={itemMenuOpenId === item.id}
+                                  >
+                                    <MoreVertical className="w-4 h-4" />
+                                  </button>
+                                </div>
+                                <span className="truncate">{item.type || "-"}</span>
                               </div>
                             </td>
+                            <td className="px-2 sm:px-3 py-2.5 text-[#64748B]">
+                              {item.durationMinMinutes === item.durationMaxMinutes ? `${item.durationMinMinutes}` : `${item.durationMinMinutes}-${item.durationMaxMinutes}`}
+                            </td>
+                            <td className="px-2 sm:px-3 py-2.5 text-slate-900 font-medium">{formatPriceDisplay(item)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -820,60 +942,64 @@ export default function ServicesPage() {
                 const items = itemsByService[service.id] || itemsByService[service.name] || [];
                 return (
                   <div className="space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-[#64748B]">
-                          {items.length === 0 ? "אין סוגי מחיר" : `${items.length} סוגי מחיר`}
-                        </span>
-                        <button onClick={() => handleEditService(service)} className="p-1.5 hover:bg-[rgba(30,111,124,0.08)] rounded text-caleno-deep" title="ערוך שירות"><Pencil className="w-4 h-4" /></button>
-                        <button onClick={() => handleDeleteService(service.id)} className="p-1.5 hover:bg-red-50 rounded text-red-600" title="מחק שירות"><Trash2 className="w-4 h-4" /></button>
-                      </div>
-                      <button onClick={() => handleAddItem(service)} className="px-3 py-1.5 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium flex items-center gap-2">
-                        <Plus className="w-4 h-4" />
-                        הוסף סוג שירות
-                      </button>
-                    </div>
+                    <span className="text-xs sm:text-sm text-[#64748B]">
+                      {items.length === 0 ? "אין סוגי מחיר" : `${items.length} סוגי מחיר`}
+                    </span>
                     {items.length === 0 ? (
-                      <p className="text-sm text-[#64748B] text-center py-8">
+                      <p className="text-xs sm:text-sm text-[#64748B] text-center py-6 sm:py-8">
                         אין סוגי שירות בשירות זה. לחץ על "הוסף סוג שירות" כדי להוסיף.
                       </p>
                     ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm border-collapse">
+                      <div className="overflow-x-auto -mx-1 sm:mx-0 rounded-lg border border-slate-200/60">
+                        <table className="w-full text-xs sm:text-sm border-collapse min-w-[360px]">
                           <thead>
                             <tr className="bg-slate-50 border-b border-slate-200">
-                              <th className="px-3 py-2 text-right font-semibold text-slate-700">סוג</th>
-                              <th className="px-3 py-2 text-right font-semibold text-slate-700">משך (דקות)</th>
-                              <th className="px-3 py-2 text-right font-semibold text-slate-700">מחיר</th>
-                              <th className="px-3 py-2 text-right font-semibold text-slate-700">הערות</th>
-                              <th className="px-3 py-2 text-right font-semibold text-slate-700">פעולות</th>
+                              <th className="px-2 sm:px-3 py-2.5 text-right font-semibold text-slate-700">סוג</th>
+                              <th className="px-2 sm:px-3 py-2.5 text-right font-semibold text-slate-700">משך (דקות)</th>
+                              <th className="px-2 sm:px-3 py-2.5 text-right font-semibold text-slate-700">מחיר</th>
+                              <th className="px-2 sm:px-3 py-2.5 text-right font-semibold text-slate-700">המשך טיפול</th>
+                              <th className="px-2 sm:px-3 py-2.5 text-right font-semibold text-slate-700">הערות</th>
                             </tr>
                           </thead>
                           <tbody>
                             {items.map((item) => (
                               <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
-                                <td className="px-3 py-2 text-[#64748B]">{item.type || "-"}</td>
-                                <td className="px-3 py-2 text-[#64748B]">
+                                <td className="px-2 sm:px-3 py-2.5 text-[#64748B]">
+                                  <div className="flex items-center justify-start gap-2 min-w-0">
+                                    <div className="relative shrink-0" ref={itemMenuOpenId === item.id ? itemMenuRef : undefined}>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setItemMenuOpenId((prev) => (prev === item.id ? null : item.id));
+                                        }}
+                                        className="p-2 sm:p-1.5 rounded hover:bg-slate-100 text-slate-600 hover:text-slate-900 touch-manipulation"
+                                        aria-label="תפריט פריט"
+                                        aria-expanded={itemMenuOpenId === item.id}
+                                      >
+                                        <MoreVertical className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                    <span className="truncate">{item.type || "-"}</span>
+                                  </div>
+                                </td>
+                                <td className="px-2 sm:px-3 py-2.5 text-[#64748B]">
                                   {item.durationMinMinutes === item.durationMaxMinutes ? `${item.durationMinMinutes}` : `${item.durationMinMinutes}-${item.durationMaxMinutes}`}
                                 </td>
-                                <td className="px-3 py-2 text-slate-900 font-medium">{formatPriceDisplay(item)}</td>
-                                <td className="px-3 py-2 text-[#64748B] text-xs">
-                                  <div className="space-y-1">
-                                    {item.notes && <div>{item.notes}</div>}
-                                    {item.hasFollowUp && item.followUp && (
-                                      <div className="text-caleno-deep font-medium">
-                                        המשך טיפול: {item.followUp.name}
-                                        {item.followUp.text?.trim() ? ` - ${item.followUp.text.trim()}` : ""} ({item.followUp.durationMinutes} דק׳)
-                                        {item.followUp.waitMinutes ? `, המתנה ${item.followUp.waitMinutes} דק׳` : ""}
-                                      </div>
-                                    )}
-                                  </div>
+                                <td className="px-2 sm:px-3 py-2.5 text-slate-900 font-medium">{formatPriceDisplay(item)}</td>
+                                <td className="px-2 sm:px-3 py-2.5 text-[#64748B] text-xs">
+                                  {item.hasFollowUp && item.followUp ? (
+                                    <div className="text-caleno-deep font-medium">
+                                      {item.followUp.name}
+                                      {item.followUp.text?.trim() ? ` - ${item.followUp.text.trim()}` : ""} ({item.followUp.durationMinutes} דק׳)
+                                      {item.followUp.waitMinutes ? `, המתנה ${item.followUp.waitMinutes} דק׳` : ""}
+                                    </div>
+                                  ) : (
+                                    "—"
+                                  )}
                                 </td>
-                                <td className="px-3 py-2">
-                                  <div className="flex items-center gap-2 justify-end">
-                                    <button onClick={() => handleEditItem(item)} className="p-1.5 hover:bg-[rgba(30,111,124,0.08)] rounded text-caleno-deep" title="ערוך"><Pencil className="w-4 h-4" /></button>
-                                    <button onClick={() => handleDeleteItem(item.id)} className="p-1.5 hover:bg-red-50 rounded text-red-600" title="מחק"><Trash2 className="w-4 h-4" /></button>
-                                  </div>
+                                <td className="px-2 sm:px-3 py-2.5 text-[#64748B] text-xs">
+                                  {item.notes ? <div>{item.notes}</div> : "—"}
                                 </td>
                               </tr>
                             ))}
@@ -881,6 +1007,14 @@ export default function ServicesPage() {
                         </table>
                       </div>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => handleAddItem(service)}
+                      className="w-full min-h-[48px] py-3 px-4 rounded-lg border-2 border-dashed border-slate-300 text-slate-600 hover:border-caleno-deep/50 hover:text-caleno-deep hover:bg-caleno-50/50 text-sm font-medium transition-colors flex items-center justify-center gap-2 touch-manipulation"
+                    >
+                      <Plus className="w-4 h-4" />
+                      הוסף סוג שירות
+                    </button>
                   </div>
                 );
               })() : null}
@@ -889,18 +1023,18 @@ export default function ServicesPage() {
         </AdminCard>
 
         {/* Multi-Booking Combos */}
-        <div className="mt-6 bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-          <div className="flex justify-between items-center mb-4">
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">כללי Multi-Booking (קומבו)</h2>
-              <p className="text-sm text-[#64748B] mt-1">
+        <div className="mt-4 sm:mt-6 bg-white rounded-lg shadow-sm border border-slate-200 p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900">כללי Multi-Booking (קומבו)</h2>
+              <p className="text-xs sm:text-sm text-[#64748B] mt-1">
                 אם הלקוח בוחר סוגי שירותים (מחירון) → מתזמן לפי הסדר + משך והמתנה כמו ב follow-up
               </p>
             </div>
             <button
               type="button"
               onClick={() => setOpenCombos((v) => !v)}
-              className="px-3 py-1.5 text-[#64748B] hover:bg-slate-100 rounded-lg text-sm"
+              className="min-h-[44px] px-4 py-2.5 text-[#64748B] hover:bg-slate-100 rounded-lg text-sm font-medium touch-manipulation shrink-0"
             >
               {openCombos ? "הסתר" : "הצג"}
             </button>
@@ -911,49 +1045,49 @@ export default function ServicesPage() {
                 <button
                   type="button"
                   onClick={openComboCreate}
-                  className="px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium flex items-center gap-2"
+                  className="min-h-[44px] px-4 py-2.5 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium flex items-center gap-2 touch-manipulation"
                 >
                   <Plus className="w-4 h-4" />
                   הוסף קומבו
                 </button>
               </div>
               {combos.length === 0 ? (
-                <p className="text-sm text-[#64748B] text-center py-6">אין קומבו. לחץ על &quot;הוסף קומבו&quot; כדי ליצור.</p>
+                <p className="text-xs sm:text-sm text-[#64748B] text-center py-6">אין קומבו. לחץ על &quot;הוסף קומבו&quot; כדי ליצור.</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm border-collapse">
+                <div className="overflow-x-auto -mx-1 sm:mx-0 rounded-lg border border-slate-200/60">
+                  <table className="w-full text-xs sm:text-sm border-collapse min-w-[320px]">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-200">
-                        <th className="px-3 py-2 text-right font-semibold text-slate-700">שם</th>
-                        <th className="px-3 py-2 text-right font-semibold text-slate-700">אם בוחרים</th>
-                        <th className="px-3 py-2 text-right font-semibold text-slate-700">מתזמן בסדר</th>
-                        <th className="px-3 py-2 text-right font-semibold text-slate-700">פעיל</th>
-                        <th className="px-3 py-2 text-right font-semibold text-slate-700">פעולות</th>
+                        <th className="px-2 sm:px-3 py-2.5 text-right font-semibold text-slate-700">שם</th>
+                        <th className="px-2 sm:px-3 py-2.5 text-right font-semibold text-slate-700">אם בוחרים</th>
+                        <th className="px-2 sm:px-3 py-2.5 text-right font-semibold text-slate-700">מתזמן בסדר</th>
+                        <th className="px-2 sm:px-3 py-2.5 text-right font-semibold text-slate-700">פעיל</th>
+                        <th className="px-2 sm:px-3 py-2.5 text-right font-semibold text-slate-700">פעולות</th>
                       </tr>
                     </thead>
                     <tbody>
                       {combos.map((combo) => (
                         <tr key={combo.id} className="border-b border-slate-100 hover:bg-slate-50">
-                          <td className="px-3 py-2 font-medium text-slate-900">{combo.name}</td>
-                          <td className="px-3 py-2 text-[#64748B]">
+                          <td className="px-2 sm:px-3 py-2.5 font-medium text-slate-900">{combo.name}</td>
+                          <td className="px-2 sm:px-3 py-2.5 text-[#64748B]">
                             {combo.triggerServiceTypeIds.map((typeId) => {
                             const p = getPricingItemById(typeId);
                             return p ? getServiceTypeLabel(p) : typeId;
                           }).join(", ")}
                           </td>
-                          <td className="px-3 py-2 text-[#64748B]">
+                          <td className="px-2 sm:px-3 py-2.5 text-[#64748B]">
                             {combo.orderedServiceTypeIds.map((typeId) => {
                               const p = getPricingItemById(typeId);
                               return p ? getServiceTypeLabel(p) : typeId;
                             }).join(" → ")}
                           </td>
-                          <td className="px-3 py-2">{combo.isActive ? "כן" : "לא"}</td>
-                          <td className="px-3 py-2">
+                          <td className="px-2 sm:px-3 py-2.5">{combo.isActive ? "כן" : "לא"}</td>
+                          <td className="px-2 sm:px-3 py-2.5">
                             <div className="flex items-center gap-2 justify-end">
                               <button
                                 type="button"
                                 onClick={() => openComboEdit(combo)}
-                                className="p-1.5 hover:bg-[rgba(30,111,124,0.08)] rounded text-caleno-deep"
+                                className="p-2 sm:p-1.5 hover:bg-[rgba(30,111,124,0.08)] rounded text-caleno-deep touch-manipulation"
                                 title="ערוך"
                               >
                                 <Pencil className="w-4 h-4" />
@@ -961,7 +1095,7 @@ export default function ServicesPage() {
                               <button
                                 type="button"
                                 onClick={() => deleteCombo(combo)}
-                                className="p-1.5 hover:bg-red-50 rounded text-red-600"
+                                className="p-2 sm:p-1.5 hover:bg-red-50 rounded text-red-600 touch-manipulation"
                                 title="מחק"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -980,17 +1114,17 @@ export default function ServicesPage() {
 
       {/* Combo Create/Edit Modal — rule builder: trigger set + ordered sequence */}
       {comboModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" dir="rtl">
-          <div className="bg-white rounded-3xl shadow-xl border border-[#E2E8F0] w-full max-w-lg max-h-[90vh] flex flex-col">
-            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-slate-900">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 overflow-y-auto" dir="rtl">
+          <div className="bg-white rounded-t-2xl sm:rounded-3xl shadow-xl border border-[#E2E8F0] w-full max-w-lg max-h-[90vh] flex flex-col mt-auto sm:mt-0">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-4 sm:px-6 py-4 flex justify-between items-center shrink-0">
+              <h3 className="text-base sm:text-lg font-bold text-slate-900">
                 {comboModal.type === "create" ? "הוסף כלל Multi-Booking" : "ערוך כלל"}
               </h3>
-              <button type="button" onClick={closeComboModal} className="p-1 hover:bg-slate-100 rounded">
+              <button type="button" onClick={closeComboModal} className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 -m-2 hover:bg-slate-100 rounded-lg touch-manipulation" aria-label="סגור">
                 <X className="w-5 h-5 text-[#64748B]" />
               </button>
             </div>
-            <div className="p-6 space-y-5 overflow-y-auto">
+            <div className="p-4 sm:p-6 space-y-5 overflow-y-auto">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">שם הכלל *</label>
                 <input
@@ -1122,13 +1256,13 @@ export default function ServicesPage() {
                 />
                 <label htmlFor="combo-active" className="text-sm text-slate-700">כלל פעיל</label>
               </div>
-              <div className="flex gap-2 justify-end pt-2">
-                <button type="button" onClick={closeComboModal} className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm font-medium">ביטול</button>
+              <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end pt-4">
+                <button type="button" onClick={closeComboModal} className="min-h-[44px] px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm font-medium touch-manipulation">ביטול</button>
                 <button
                   type="button"
                   onClick={saveCombo}
                   disabled={!comboForm.name.trim() || comboForm.triggerServiceTypeIds.length === 0 || comboForm.orderedServiceTypeIds.length === 0}
-                  className="px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="min-h-[44px] px-4 py-2.5 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
                 >
                   שמור
                 </button>
@@ -1140,19 +1274,20 @@ export default function ServicesPage() {
 
       {/* Service Modal (create + edit) */}
       {editingService && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" dir="rtl">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md">
-            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-slate-900">{isServiceCreateMode ? "הוסף שירות" : "ערוך שירות"}</h3>
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 overflow-y-auto" dir="rtl">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl border border-slate-200 w-full max-w-md max-h-[90vh] sm:max-h-[85vh] flex flex-col mt-auto sm:mt-0">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-4 sm:px-6 py-4 flex justify-between items-center shrink-0">
+              <h3 className="text-base sm:text-lg font-bold text-slate-900">{isServiceCreateMode ? "הוסף שירות" : "ערוך שירות"}</h3>
               <button
                 onClick={() => setEditingService(null)}
-                className="p-1 hover:bg-slate-100 rounded"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 -m-2 hover:bg-slate-100 rounded-lg touch-manipulation"
+                aria-label="סגור"
               >
                 <X className="w-5 h-5 text-[#64748B]" />
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   שם השירות *
@@ -1214,35 +1349,6 @@ export default function ServicesPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    מחיר התחלתי (₪)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={editingService.price ?? ""}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      const n = v === "" ? undefined : parseInt(v, 10);
-                      const validPrice =
-                        typeof n === "number" && Number.isFinite(n) ? n : undefined;
-                      setEditingService({
-                        ...editingService,
-                        price: v === "" ? undefined : (validPrice ?? editingService.price),
-                      });
-                    }}
-                    placeholder="—"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-[#64748B] -mt-1">
-                אופציונלי. יוצגו בכרטיס השירות באתר.
-              </p>
-
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -1256,22 +1362,39 @@ export default function ServicesPage() {
               </label>
             </div>
 
-            <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setEditingService(null)}
-                className="px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 text-sm font-medium"
-              >
-                ביטול
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveService}
-                disabled={!editingService.name.trim() || isSavingService}
-                className="px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
-              >
-                {isSavingService ? "שומר..." : "שמור"}
-              </button>
+            <div className="sticky bottom-0 bg-white border-t border-slate-200 px-4 sm:px-6 py-4 flex flex-col-reverse sm:flex-row justify-between items-stretch sm:items-center gap-3">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                <button
+                  type="button"
+                  onClick={() => setEditingService(null)}
+                  className="min-h-[44px] px-4 py-2.5 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 text-sm font-medium touch-manipulation"
+                >
+                  ביטול
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveService}
+                  disabled={!editingService.name.trim() || isSavingService}
+                  className="min-h-[44px] px-4 py-2.5 bg-caleno-ink hover:bg-[#1E293B] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium touch-manipulation"
+                >
+                  {isSavingService ? "שומר..." : "שמור"}
+                </button>
+              </div>
+              {!isServiceCreateMode && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (editingService && editingService.id !== "new") {
+                      handleDeleteService(editingService.id);
+                      setEditingService(null);
+                    }
+                  }}
+                  className="min-h-[44px] px-4 py-2.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 text-sm font-medium flex items-center justify-center gap-2 touch-manipulation"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  מחק שירות
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1279,21 +1402,22 @@ export default function ServicesPage() {
 
       {/* Edit Item Modal */}
       {editingItem && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" dir="rtl">
-          <div className="bg-white rounded-3xl shadow-xl border border-[#E2E8F0] w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-slate-900">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 overflow-y-auto" dir="rtl">
+          <div className="bg-white rounded-t-2xl sm:rounded-3xl shadow-xl border border-[#E2E8F0] w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col mt-auto sm:mt-0">
+            <div className="sticky top-0 bg-white border-b border-slate-200 px-4 sm:px-6 py-4 flex justify-between items-center shrink-0">
+              <h3 className="text-base sm:text-lg font-bold text-slate-900">
                 {editingItem.id === "new" ? "הוסף פריט מחיר" : "ערוך פריט מחיר"}
               </h3>
               <button
                 onClick={() => { setEditingItem(null); setEditingItemParentService(null); }}
-                className="p-1 hover:bg-slate-100 rounded"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 -m-2 hover:bg-slate-100 rounded-lg touch-manipulation"
+                aria-label="סגור"
               >
                 <X className="w-5 h-5 text-[#64748B]" />
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto">
               {/* Main service: read-only (same as the service you chose from), not changeable. */}
               {editingItemParentService ? (
                 <div>
@@ -1607,7 +1731,7 @@ export default function ServicesPage() {
               </div>
             </div>
 
-            <div className="sticky bottom-0 z-10 bg-white border-t border-slate-200 px-6 py-4 flex flex-col gap-2">
+            <div className="sticky bottom-0 z-10 bg-white border-t border-slate-200 px-4 sm:px-6 py-4 flex flex-col gap-2">
               {(() => {
                 const serviceId = editingItem?.serviceId || editingItem?.service;
                 const hasService = !!serviceId && serviceId.trim().length > 0;
@@ -1624,11 +1748,11 @@ export default function ServicesPage() {
                 const isSaveDisabled = !hasService || !hasValidDuration || !hasValidFollowUp;
                 return null;
               })()}
-              <div className="flex justify-end gap-3">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3">
                 <button
                   type="button"
                   onClick={() => { setEditingItem(null); setEditingItemParentService(null); }}
-                  className="px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 text-sm font-medium"
+                  className="min-h-[44px] px-4 py-2.5 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 text-sm font-medium touch-manipulation"
                 >
                   ביטול
                 </button>
@@ -1648,8 +1772,8 @@ export default function ServicesPage() {
                   const isSaveDisabled = !hasService || !hasValidDuration || !hasValidFollowUp;
 
                   const buttonClasses = isSaveDisabled
-                    ? "px-4 py-2 bg-caleno-ink/60 text-white rounded-lg text-sm font-medium cursor-not-allowed opacity-75"
-                    : "px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium cursor-pointer opacity-100 transition-colors";
+                    ? "min-h-[44px] px-4 py-2.5 bg-caleno-ink/60 text-white rounded-lg text-sm font-medium cursor-not-allowed opacity-75 touch-manipulation"
+                    : "min-h-[44px] px-4 py-2.5 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium cursor-pointer opacity-100 transition-colors touch-manipulation";
 
                   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
                     e.preventDefault();
@@ -1701,23 +1825,23 @@ export default function ServicesPage() {
       {/* New service reminder (info only, after successful create) */}
       {showNewServiceReminderModal && (
         <div
-          className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-[55]"
+          className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-[55] overflow-y-auto"
           dir="rtl"
           onClick={() => setShowNewServiceReminderModal(false)}
         >
           <div
-            className="bg-white rounded-3xl shadow-xl border border-[#E2E8F0] w-full max-w-md p-6 text-right"
+            className="bg-white rounded-2xl sm:rounded-3xl shadow-xl border border-[#E2E8F0] w-full max-w-md p-4 sm:p-6 text-right my-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-[#0F172A] mb-3">שים לב</h3>
-            <p className="text-base text-slate-900">
+            <h3 className="text-base sm:text-lg font-semibold text-[#0F172A] mb-3">שים לב</h3>
+            <p className="text-sm sm:text-base text-slate-900">
               זכור להגדיר זמינות לעובדים עבור השירות החדש, אחרת הוא לא יהיה זמין להזמנה.
             </p>
             <div className="mt-6 flex justify-start">
               <button
                 type="button"
                 onClick={() => setShowNewServiceReminderModal(false)}
-                className="px-4 py-2 rounded-lg bg-caleno-ink text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md"
+                className="min-h-[44px] px-4 py-2.5 rounded-lg bg-caleno-ink text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md touch-manipulation"
               >
                 סגור
               </button>
@@ -1725,6 +1849,86 @@ export default function ServicesPage() {
           </div>
         </div>
       )}
+      {typeof document !== "undefined" &&
+        serviceMenuOpenId &&
+        dropdownPosition &&
+        (() => {
+          const s = services.find((x) => x.id === serviceMenuOpenId);
+          if (!s) return null;
+          return createPortal(
+            <div
+              id="services-tab-dropdown-portal"
+              className="fixed z-[9999]"
+              style={{ top: dropdownPosition.top, left: dropdownPosition.left }}
+            >
+              <div className="min-w-[160px] py-1 rounded-xl border border-slate-200 bg-white shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleEditService(s);
+                    setServiceMenuOpenId(null);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-right text-sm text-slate-700 hover:bg-slate-50"
+                >
+                  <Pencil className="w-4 h-4 shrink-0" />
+                  ערוך שירות
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleDeleteService(s.id);
+                    setServiceMenuOpenId(null);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-right text-sm text-red-600 hover:bg-red-50"
+                >
+                  <Trash2 className="w-4 h-4 shrink-0" />
+                  מחק שירות
+                </button>
+              </div>
+            </div>,
+            document.body
+          );
+        })()}
+      {typeof document !== "undefined" &&
+        itemMenuOpenId &&
+        itemMenuPosition &&
+        (() => {
+          const item = pricingItems.find((p) => p.id === itemMenuOpenId);
+          if (!item) return null;
+          return createPortal(
+            <div
+              id="services-item-dropdown-portal"
+              className="fixed z-[9999]"
+              style={{ top: itemMenuPosition.top, left: itemMenuPosition.left }}
+            >
+              <div className="min-w-[160px] py-1 rounded-xl border border-slate-200 bg-white shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleEditItem(item);
+                    setItemMenuOpenId(null);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-right text-sm text-slate-700 hover:bg-slate-50"
+                >
+                  <Pencil className="w-4 h-4 shrink-0" />
+                  ערוך
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleDeleteItem(item.id);
+                    setItemMenuOpenId(null);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-right text-sm text-red-600 hover:bg-red-50"
+                >
+                  <Trash2 className="w-4 h-4 shrink-0" />
+                  מחק
+                </button>
+              </div>
+            </div>,
+            document.body
+          );
+        })()}
       </div>
     </div>
   );

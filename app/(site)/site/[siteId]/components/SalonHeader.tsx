@@ -68,6 +68,7 @@ export default function SalonHeader({
   headerCtaBg,
   headerCtaText,
   contentHeader,
+  pillStyle = false,
 }: {
   salonName: string;
   siteId: string;
@@ -85,6 +86,8 @@ export default function SalonHeader({
   headerCtaText?: string;
   /** Editable text content for header (nav labels, CTA text) */
   contentHeader?: SiteContent["header"];
+  /** When true, header is pill-shaped with matte liquid glass (rounded-full, backdrop-blur, semi-transparent) */
+  pillStyle?: boolean;
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const edit = editorMode ? (key: keyof typeof EDITOR_ATTRS) => EDITOR_ATTRS[key] : () => ({});
@@ -103,15 +106,27 @@ export default function SalonHeader({
   const ctaBg = headerCtaBg ?? "var(--primary)";
   const ctaText = headerCtaText ?? "var(--primaryText)";
 
-  return (
-    <header
-      dir="rtl"
-      className="sticky top-0 z-20 w-full text-right transition-[background,backdrop-filter]"
-      style={{
+  const headerClassName = pillStyle
+    ? "sticky top-0 z-20 w-full max-w-6xl mx-auto text-right transition-[background,backdrop-filter] rounded-full border border-white/25 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.35)_inset] backdrop-blur-xl"
+    : "sticky top-0 z-20 w-full text-right transition-[background,backdrop-filter]";
+
+  const headerStyle: React.CSSProperties = pillStyle
+    ? {
+        backgroundColor: "rgba(255,255,255,0.18)",
+        backdropFilter: "saturate(180%) blur(20px)",
+        WebkitBackdropFilter: "saturate(180%) blur(20px)",
+      }
+    : {
         backgroundColor: bgColor,
         backdropFilter: "saturate(180%) blur(12px)",
         WebkitBackdropFilter: "saturate(180%) blur(12px)",
-      }}
+      };
+
+  return (
+    <header
+      dir="rtl"
+      className={headerClassName}
+      style={headerStyle}
       {...edit("headerBg")}
     >
       <div className="mx-auto grid h-16 max-w-6xl grid-cols-3 items-center gap-4 px-4 lg:px-8">

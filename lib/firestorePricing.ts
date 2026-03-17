@@ -64,13 +64,14 @@ export async function getPricingItems(siteId: string): Promise<PricingItem[]> {
         durationMaxMinutes = 30;
       }
       
-      const rawFollowUp = data.followUp as { name?: string; durationMinutes?: number; waitMinutes?: number; text?: string } | undefined;
+      const rawFollowUp = data.followUp as { name?: string; durationMinutes?: number; waitMinutes?: number; text?: string; serviceId?: string } | undefined;
       const followUp: PricingItem["followUp"] =
-        rawFollowUp && typeof rawFollowUp.name === "string" && rawFollowUp.name.trim() !== "" && typeof rawFollowUp.durationMinutes === "number" && typeof rawFollowUp.waitMinutes === "number"
+        rawFollowUp && typeof rawFollowUp.name === "string" && rawFollowUp.name.trim() !== "" && typeof rawFollowUp.durationMinutes === "number" && rawFollowUp.durationMinutes >= 1
           ? {
               name: rawFollowUp.name.trim(),
-              durationMinutes: Math.max(0, rawFollowUp.durationMinutes),
-              waitMinutes: Math.max(0, rawFollowUp.waitMinutes),
+              durationMinutes: Math.max(1, rawFollowUp.durationMinutes),
+              waitMinutes: typeof rawFollowUp.waitMinutes === "number" ? Math.max(0, rawFollowUp.waitMinutes) : 0,
+              ...(typeof rawFollowUp.serviceId === "string" && rawFollowUp.serviceId.trim() !== "" && { serviceId: rawFollowUp.serviceId.trim() }),
               ...(typeof rawFollowUp.text === "string" && rawFollowUp.text.trim() !== "" && { text: rawFollowUp.text.trim().slice(0, 50) }),
             }
           : null;
@@ -128,13 +129,14 @@ export function subscribePricingItems(
             durationMaxMinutes = 30;
           }
           
-          const rawFollowUp = data.followUp as { name?: string; durationMinutes?: number; waitMinutes?: number; text?: string } | undefined;
+          const rawFollowUp = data.followUp as { name?: string; durationMinutes?: number; waitMinutes?: number; text?: string; serviceId?: string } | undefined;
           const followUp: PricingItem["followUp"] =
-            rawFollowUp && typeof rawFollowUp.name === "string" && rawFollowUp.name.trim() !== "" && typeof rawFollowUp.durationMinutes === "number" && typeof rawFollowUp.waitMinutes === "number"
+            rawFollowUp && typeof rawFollowUp.name === "string" && rawFollowUp.name.trim() !== "" && typeof rawFollowUp.durationMinutes === "number" && rawFollowUp.durationMinutes >= 1
               ? {
                   name: rawFollowUp.name.trim(),
-                  durationMinutes: Math.max(0, rawFollowUp.durationMinutes),
-                  waitMinutes: Math.max(0, rawFollowUp.waitMinutes),
+                  durationMinutes: Math.max(1, rawFollowUp.durationMinutes),
+                  waitMinutes: typeof rawFollowUp.waitMinutes === "number" ? Math.max(0, rawFollowUp.waitMinutes) : 0,
+                  ...(typeof rawFollowUp.serviceId === "string" && rawFollowUp.serviceId.trim() !== "" && { serviceId: rawFollowUp.serviceId.trim() }),
                   ...(typeof rawFollowUp.text === "string" && rawFollowUp.text.trim() !== "" && { text: rawFollowUp.text.trim().slice(0, 50) }),
                 }
               : null;

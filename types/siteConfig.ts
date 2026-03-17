@@ -89,6 +89,8 @@ export type SectionStyles = {
     border?: string;
     primaryBtnBg?: string;
     primaryBtnText?: string;
+    /** When true, header is pill-shaped with matte liquid glass style (rounded, backdrop-blur, semi-transparent). */
+    pillStyle?: boolean;
   };
   hero?: {
     bg?: string;
@@ -201,6 +203,8 @@ export type SiteConfig = {
   // Contact detail fields
   phoneNumber?: string;
   whatsappNumber?: string;
+  /** Pre-filled message when user clicks WhatsApp link (wa.me?text=...) */
+  whatsappDraftMessage?: string;
   instagramHandle?: string;
   facebookPage?: string;
   contactEmail?: string;
@@ -281,6 +285,7 @@ export const defaultSiteConfig: SiteConfig = {
   contactOptions: [],
   phoneNumber: "",
   whatsappNumber: "",
+  whatsappDraftMessage: "",
   instagramHandle: "",
   facebookPage: "",
   contactEmail: "",
