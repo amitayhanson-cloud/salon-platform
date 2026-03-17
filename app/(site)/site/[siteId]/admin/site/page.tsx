@@ -33,7 +33,15 @@ export default function AdminSitePage() {
 
   const [activeSiteTab, setActiveSiteTab] = useState<SiteTabKey>("reviews");
   const [designDirty, setDesignDirty] = useState(false);
+  const [showRotateHintModal, setShowRotateHintModal] = useState(false);
   const designEditorRef = useRef<VisualSiteEditorHandle>(null);
+
+  const handleSiteTabChange = useCallback((key: SiteTabKey) => {
+    setActiveSiteTab(key);
+    if (key === "design" && typeof window !== "undefined" && window.innerWidth < 768) {
+      setShowRotateHintModal(true);
+    }
+  }, []);
 
   const handleSaveAll = useCallback(() => {
     if (activeSiteTab === "design" && designEditorRef.current) {
@@ -54,6 +62,9 @@ export default function AdminSitePage() {
   const anyUnsaved = hasUnsavedChanges || designDirty;
   useEffect(() => {
     unsavedCtx?.setUnsaved(anyUnsaved, () => handleSaveAll());
+    return () => {
+      unsavedCtx?.setUnsaved(false, () => {});
+    };
   }, [unsavedCtx, anyUnsaved, handleSaveAll]);
 
   useEffect(() => {
@@ -96,13 +107,13 @@ export default function AdminSitePage() {
     <div dir="rtl" className={isDesignTab ? "" : "flex flex-col min-h-0 h-full"}>
       {/* When design tab: full-screen panel below admin header (fixed, fills viewport) */}
       {isDesignTab ? (
-        <div className="fixed top-20 left-0 right-0 bottom-0 z-10 flex flex-col bg-white border-t border-[#E2E8F0] shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
+        <div className="fixed top-20 left-0 right-0 bottom-0 z-0 flex flex-col bg-white border-t border-[#E2E8F0] shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
           {/* Slim bar: tabs + save */}
           <div className="shrink-0 flex flex-wrap items-center justify-between gap-4 border-b border-[#E2E8F0] bg-white/95 backdrop-blur-sm px-4 py-2">
             <AdminTabs
               tabs={SITE_PAGE_TABS}
               activeKey={activeSiteTab}
-              onChange={setActiveSiteTab}
+              onChange={handleSiteTabChange}
               className="flex-1 min-w-0"
             />
             <div className="flex items-center gap-4 shrink-0">
@@ -118,6 +129,62 @@ export default function AdminSitePage() {
               </button>
             </div>
           </div>
+
+          {/* Mobile: rotate to landscape hint modal */}
+          {showRotateHintModal && (
+            <>
+              <style
+                dangerouslySetInnerHTML={{
+                  __html: `
+                    @keyframes rotateHintPhone {
+                      0% { transform: rotate(0deg); }
+                      25% { transform: rotate(90deg); }
+                      50% { transform: rotate(90deg); }
+                      75% { transform: rotate(0deg); }
+                      100% { transform: rotate(0deg); }
+                    }
+                  `,
+                }}
+              />
+              <div
+                className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="rotate-hint-title"
+                aria-describedby="rotate-hint-desc"
+                onClick={() => setShowRotateHintModal(false)}
+                dir="rtl"
+              >
+                <div
+                  className="bg-white rounded-3xl shadow-xl border border-slate-200 p-6 max-w-sm w-full text-center"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex justify-center mb-4">
+                    <div
+                      className="w-14 h-28 rounded-[20px] border-4 border-slate-300 bg-slate-100 flex items-center justify-center shadow-inner"
+                      style={{ animation: "rotateHintPhone 2.5s ease-in-out infinite" }}
+                    >
+                      <div className="w-8 h-14 rounded-md bg-slate-200/80" />
+                    </div>
+                  </div>
+                  <h2 id="rotate-hint-title" className="text-lg font-bold text-slate-900 mb-2">
+                    לעריכה נוחה יותר
+                  </h2>
+                  <p id="rotate-hint-desc" className="text-sm text-slate-600 mb-6">
+                    עריכת האתר במצב אנכי עלולה להיות לא נוחה. מומלץ להפך את המכשיר למצב אופקי.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowRotateHintModal(false)}
+                    className="w-full rounded-xl bg-[#0F172A] px-4 py-3 text-sm font-semibold text-white hover:bg-[#1E293B] transition-colors"
+                  >
+                    הבנתי
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
           {/* Editor fills remaining height */}
           <div className="flex-1 min-h-0 flex flex-col">
             <VisualSiteEditor
@@ -156,21 +223,9 @@ export default function AdminSitePage() {
               <AdminTabs
                 tabs={SITE_PAGE_TABS}
                 activeKey={activeSiteTab}
-                onChange={setActiveSiteTab}
+                onChange={handleSiteTabChange}
                 className="flex-1 min-w-0"
               />
-              <div className="flex items-center gap-4 shrink-0">
-                {saveMessage && (
-                  <span className="text-xs text-emerald-600">{saveMessage}</span>
-                )}
-                <button
-                  onClick={handleSaveAll}
-                  disabled={isSaving}
-                  className="rounded-full bg-[#0F172A] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#1E293B] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {isSaving ? "שומר…" : "שמור שינויים"}
-                </button>
-              </div>
             </div>
             <div className="p-6">
               <div className="min-h-[320px]">

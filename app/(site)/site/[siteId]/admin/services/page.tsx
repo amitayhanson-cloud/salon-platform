@@ -19,7 +19,7 @@ import {
   deleteSiteService,
   migrateServicesFromSubcollection,
 } from "@/lib/firestoreSiteServices";
-import { AccordionItem } from "@/components/admin/Accordion";
+import AdminTabs from "@/components/ui/AdminTabs";
 import DurationMinutesStepper from "@/components/admin/DurationMinutesStepper";
 import { parseNumberOrRange, formatNumberOrRange } from "@/lib/parseNumberOrRange";
 import { formatPriceDisplay } from "@/lib/formatPrice";
@@ -47,7 +47,8 @@ export default function ServicesPage() {
   const [pricingItems, setPricingItems] = useState<PricingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [openServices, setOpenServices] = useState<Set<string>>(new Set());
+  /** Selected service tab (service id). "__UNASSIGNED__" for unassigned items. */
+  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<PricingItem | null>(null);
   /** When set, the "Add service type" modal was opened from a specific service card; hide service dropdown and show parent as read-only. */
   const [editingItemParentService, setEditingItemParentService] = useState<{ id: string; name: string } | null>(null);
@@ -455,17 +456,22 @@ export default function ServicesPage() {
     }
   };
 
-  const toggleService = (serviceId: string) => {
-    setOpenServices((prev) => {
-      const next = new Set(prev);
-      if (next.has(serviceId)) {
-        next.delete(serviceId);
-      } else {
-        next.add(serviceId);
-      }
-      return next;
-    });
-  };
+  // Keep selected tab in sync with available services (e.g. after add/delete)
+  useEffect(() => {
+    if (services.length === 0 && unassignedItems.length === 0) {
+      setSelectedServiceId(null);
+      return;
+    }
+    const hasUnassigned = unassignedItems.length > 0;
+    const validIds = new Set(services.map((s) => s.id));
+    if (hasUnassigned) validIds.add("__UNASSIGNED__");
+    if (!selectedServiceId || !validIds.has(selectedServiceId)) {
+      setSelectedServiceId(services.length > 0 ? services[0].id : "__UNASSIGNED__");
+    }
+  }, [services, unassignedItems.length, selectedServiceId]);
+
+  /** Resolved tab for display (avoids empty content before effect runs). */
+  const activeTabId = selectedServiceId ?? (services[0]?.id ?? (unassignedItems.length > 0 ? "__UNASSIGNED__" : null));
 
   const handleEditService = (service: SiteService) => {
     setEditingService(service);
@@ -745,7 +751,7 @@ export default function ServicesPage() {
             </button>
           </div>
 
-          {/* Services with nested pricing items */}
+          {/* Service tabs + content */}
           {services.length === 0 && unassignedItems.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-[#64748B] mb-4">אין שירותים עדיין</p>
@@ -754,236 +760,131 @@ export default function ServicesPage() {
               </p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {/* Services with pricing items */}
-              {services.map((service) => {
-                // Items may be keyed by service id or name (backward compat)
-                const items = itemsByService[service.id] || itemsByService[service.name] || [];
-                const isOpen = openServices.has(service.id);
+            <>
+              {/* Tabs: one per service, plus Unassigned if any */}
+              <div className="border-b border-slate-200 mb-6">
+                <AdminTabs
+                  tabs={[
+                    ...services.map((s) => ({
+                      key: s.id,
+                      label: s.name,
+                    })),
+                    ...(unassignedItems.length > 0 ? [{ key: "__UNASSIGNED__" as const, label: `לא משויך (${unassignedItems.length})` }] : []),
+                  ]}
+                  activeKey={activeTabId ?? ""}
+                  onChange={(key) => setSelectedServiceId(key)}
+                  className="flex-wrap"
+                />
+              </div>
 
+              {/* Content for selected tab */}
+              {activeTabId === "__UNASSIGNED__" ? (
+                <div className="space-y-4">
+                  <p className="text-xs text-[#64748B]">
+                    פריטי מחיר שלא משויכים לשירות. ערוך פריט ובחר שירות כדי לשייך.
+                  </p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200">
+                          <th className="px-3 py-2 text-right font-semibold text-slate-700">שירות</th>
+                          <th className="px-3 py-2 text-right font-semibold text-slate-700">סוג</th>
+                          <th className="px-3 py-2 text-right font-semibold text-slate-700">משך (דקות)</th>
+                          <th className="px-3 py-2 text-right font-semibold text-slate-700">מחיר</th>
+                          <th className="px-3 py-2 text-right font-semibold text-slate-700">פעולות</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {unassignedItems.map((item) => (
+                          <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
+                            <td className="px-3 py-2 text-[#64748B]">{item.serviceId || item.service || "-"}</td>
+                            <td className="px-3 py-2 text-[#64748B]">{item.type || "-"}</td>
+                            <td className="px-3 py-2 text-[#64748B]">
+                              {item.durationMinMinutes === item.durationMaxMinutes ? `${item.durationMinMinutes}` : `${item.durationMinMinutes}-${item.durationMaxMinutes}`}
+                            </td>
+                            <td className="px-3 py-2 text-slate-900 font-medium">{formatPriceDisplay(item)}</td>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2 justify-end">
+                                <button onClick={() => handleEditItem(item)} className="p-1.5 hover:bg-[rgba(30,111,124,0.08)] rounded text-caleno-deep" title="ערוך ושייך לשירות"><Pencil className="w-4 h-4" /></button>
+                                <button onClick={() => handleDeleteItem(item.id)} className="p-1.5 hover:bg-red-50 rounded text-red-600" title="מחק"><Trash2 className="w-4 h-4" /></button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : activeTabId && services.some((s) => s.id === activeTabId) ? (() => {
+                const service = services.find((s) => s.id === activeTabId)!;
+                const items = itemsByService[service.id] || itemsByService[service.name] || [];
                 return (
-                  <AccordionItem
-                    key={service.id}
-                    title={
-                      <div className="flex items-center justify-between w-full pr-2">
-                        <span className="font-semibold text-slate-900">{service.name}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-[#64748B]">
-                            {items.length} סוגי מחיר
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEditService(service);
-                            }}
-                            className="p-1.5 hover:bg-[rgba(30,111,124,0.08)] rounded text-caleno-deep"
-                            title="ערוך שירות"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteService(service.id);
-                            }}
-                            className="p-1.5 hover:bg-red-50 rounded text-red-600"
-                            title="מחק שירות"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-[#64748B]">
+                          {items.length === 0 ? "אין סוגי מחיר" : `${items.length} סוגי מחיר`}
+                        </span>
+                        <button onClick={() => handleEditService(service)} className="p-1.5 hover:bg-[rgba(30,111,124,0.08)] rounded text-caleno-deep" title="ערוך שירות"><Pencil className="w-4 h-4" /></button>
+                        <button onClick={() => handleDeleteService(service.id)} className="p-1.5 hover:bg-red-50 rounded text-red-600" title="מחק שירות"><Trash2 className="w-4 h-4" /></button>
                       </div>
-                    }
-                    isOpen={isOpen}
-                    onToggle={() => toggleService(service.id)}
-                  >
-                    <div className="mb-4 flex justify-between items-center">
-                      <span className="text-xs text-[#64748B]">
-                        {items.length === 0 ? "אין סוגי מחיר עדיין" : `${items.length} סוגי מחיר`}
-                      </span>
-                      <button
-                        onClick={() => handleAddItem(service)}
-                        className="px-3 py-1.5 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium flex items-center gap-2"
-                      >
+                      <button onClick={() => handleAddItem(service)} className="px-3 py-1.5 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium flex items-center gap-2">
                         <Plus className="w-4 h-4" />
-                        הוסף סוג שירות / מחיר
+                        הוסף סוג שירות
                       </button>
                     </div>
-                    <div className="space-y-4">
-                      {items.length === 0 ? (
-                        <p className="text-sm text-[#64748B] text-center py-4">
-                          אין סוגי מחיר בשירות זה. לחץ על "הוסף סוג שירות / מחיר" כדי להתחיל.
-                        </p>
-                      ) : (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm border-collapse">
-                            <thead>
-                              <tr className="bg-slate-50 border-b border-slate-200">
-                                <th className="px-3 py-2 text-right font-semibold text-slate-700">
-                                  סוג
-                                </th>
-                                <th className="px-3 py-2 text-right font-semibold text-slate-700">
-                                  משך (דקות)
-                                </th>
-                                <th className="px-3 py-2 text-right font-semibold text-slate-700">
-                                  מחיר
-                                </th>
-                                <th className="px-3 py-2 text-right font-semibold text-slate-700">
-                                  הערות
-                                </th>
-                                <th className="px-3 py-2 text-right font-semibold text-slate-700">
-                                  פעולות
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {items.map((item) => (
-                                <tr
-                                  key={item.id}
-                                  className="border-b border-slate-100 hover:bg-slate-50"
-                                >
-                                  <td className="px-3 py-2 text-[#64748B]">
-                                    {item.type || "-"}
-                                  </td>
-                                  <td className="px-3 py-2 text-[#64748B]">
-                                    {item.durationMinMinutes === item.durationMaxMinutes
-                                      ? `${item.durationMinMinutes}`
-                                      : `${item.durationMinMinutes}-${item.durationMaxMinutes}`}
-                                  </td>
-                                  <td className="px-3 py-2 text-slate-900 font-medium">
-                                    {formatPriceDisplay(item)}
-                                  </td>
-                                  <td className="px-3 py-2 text-[#64748B] text-xs">
-                                    <div className="space-y-1">
-                                      {item.notes && <div>{item.notes}</div>}
-                                      {item.hasFollowUp && item.followUp && (
-                                        <div className="text-caleno-deep font-medium">
-                                          המשך טיפול: {item.followUp.name}
-                                          {item.followUp.text?.trim() ? ` - ${item.followUp.text.trim()}` : ""}
-                                          {" "}({item.followUp.durationMinutes} דק׳)
-                                          {item.followUp.waitMinutes ? `, המתנה ${item.followUp.waitMinutes} דק׳` : ""}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td className="px-3 py-2">
-                                    <div className="flex items-center gap-2 justify-end">
-                                      <button
-                                        onClick={() => handleEditItem(item)}
-                                        className="p-1.5 hover:bg-[rgba(30,111,124,0.08)] rounded text-caleno-deep"
-                                        title="ערוך"
-                                      >
-                                        <Pencil className="w-4 h-4" />
-                                      </button>
-                                      <button
-                                        onClick={() => handleDeleteItem(item.id)}
-                                        className="p-1.5 hover:bg-red-50 rounded text-red-600"
-                                        title="מחק"
-                                      >
-                                        <Trash2 className="w-4 h-4" />
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-                  </AccordionItem>
-                );
-              })}
-
-              {/* Unassigned pricing items */}
-              {unassignedItems.length > 0 && (
-                <AccordionItem
-                  key="__UNASSIGNED__"
-                  title={
-                    <div className="flex items-center justify-between w-full pr-2">
-                      <span className="font-semibold text-slate-900">לא משויך</span>
-                      <span className="text-xs text-[#64748B]">
-                        {unassignedItems.length} פריטים
-                      </span>
-                    </div>
-                  }
-                  isOpen={openServices.has("__UNASSIGNED__")}
-                  onToggle={() => toggleService("__UNASSIGNED__")}
-                >
-                  <div className="mb-4">
-                    <p className="text-xs text-[#64748B] mb-3">
-                      פריטי מחיר שלא משויכים לשירות. בחר שירות כדי לשייך אותם.
-                    </p>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm border-collapse">
-                        <thead>
-                          <tr className="bg-slate-50 border-b border-slate-200">
-                            <th className="px-3 py-2 text-right font-semibold text-slate-700">
-                              שירות
-                            </th>
-                            <th className="px-3 py-2 text-right font-semibold text-slate-700">
-                              סוג
-                            </th>
-                            <th className="px-3 py-2 text-right font-semibold text-slate-700">
-                              משך (דקות)
-                            </th>
-                            <th className="px-3 py-2 text-right font-semibold text-slate-700">
-                              מחיר
-                            </th>
-                            <th className="px-3 py-2 text-right font-semibold text-slate-700">
-                              פעולות
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {unassignedItems.map((item) => (
-                            <tr
-                              key={item.id}
-                              className="border-b border-slate-100 hover:bg-slate-50"
-                            >
-                              <td className="px-3 py-2 text-[#64748B]">
-                                {item.serviceId || item.service || "-"}
-                              </td>
-                              <td className="px-3 py-2 text-[#64748B]">
-                                {item.type || "-"}
-                              </td>
-                              <td className="px-3 py-2 text-[#64748B]">
-                                {item.durationMinMinutes === item.durationMaxMinutes
-                                  ? `${item.durationMinMinutes}`
-                                  : `${item.durationMinMinutes}-${item.durationMaxMinutes}`}
-                              </td>
-                              <td className="px-3 py-2 text-slate-900 font-medium">
-                                {formatPriceDisplay(item)}
-                              </td>
-                              <td className="px-3 py-2">
-                                <div className="flex items-center gap-2 justify-end">
-                                  <button
-                                    onClick={() => handleEditItem(item)}
-                                    className="p-1.5 hover:bg-[rgba(30,111,124,0.08)] rounded text-caleno-deep"
-                                    title="ערוך ושייך לשירות"
-                                  >
-                                    <Pencil className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteItem(item.id)}
-                                    className="p-1.5 hover:bg-red-50 rounded text-red-600"
-                                    title="מחק"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </td>
+                    {items.length === 0 ? (
+                      <p className="text-sm text-[#64748B] text-center py-8">
+                        אין סוגי שירות בשירות זה. לחץ על "הוסף סוג שירות" כדי להוסיף.
+                      </p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200">
+                              <th className="px-3 py-2 text-right font-semibold text-slate-700">סוג</th>
+                              <th className="px-3 py-2 text-right font-semibold text-slate-700">משך (דקות)</th>
+                              <th className="px-3 py-2 text-right font-semibold text-slate-700">מחיר</th>
+                              <th className="px-3 py-2 text-right font-semibold text-slate-700">הערות</th>
+                              <th className="px-3 py-2 text-right font-semibold text-slate-700">פעולות</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {items.map((item) => (
+                              <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
+                                <td className="px-3 py-2 text-[#64748B]">{item.type || "-"}</td>
+                                <td className="px-3 py-2 text-[#64748B]">
+                                  {item.durationMinMinutes === item.durationMaxMinutes ? `${item.durationMinMinutes}` : `${item.durationMinMinutes}-${item.durationMaxMinutes}`}
+                                </td>
+                                <td className="px-3 py-2 text-slate-900 font-medium">{formatPriceDisplay(item)}</td>
+                                <td className="px-3 py-2 text-[#64748B] text-xs">
+                                  <div className="space-y-1">
+                                    {item.notes && <div>{item.notes}</div>}
+                                    {item.hasFollowUp && item.followUp && (
+                                      <div className="text-caleno-deep font-medium">
+                                        המשך טיפול: {item.followUp.name}
+                                        {item.followUp.text?.trim() ? ` - ${item.followUp.text.trim()}` : ""} ({item.followUp.durationMinutes} דק׳)
+                                        {item.followUp.waitMinutes ? `, המתנה ${item.followUp.waitMinutes} דק׳` : ""}
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2">
+                                  <div className="flex items-center gap-2 justify-end">
+                                    <button onClick={() => handleEditItem(item)} className="p-1.5 hover:bg-[rgba(30,111,124,0.08)] rounded text-caleno-deep" title="ערוך"><Pencil className="w-4 h-4" /></button>
+                                    <button onClick={() => handleDeleteItem(item.id)} className="p-1.5 hover:bg-red-50 rounded text-red-600" title="מחק"><Trash2 className="w-4 h-4" /></button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
-                </AccordionItem>
-              )}
-            </div>
+                );
+              })() : null}
+            </>
           )}
         </AdminCard>
 

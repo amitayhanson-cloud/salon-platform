@@ -44,6 +44,7 @@ export function useSiteConfig(siteId: string) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const lastSavedRef = useRef<string | null>(null);
+  const userHasEditedRef = useRef(false);
 
   // Load config from Firestore (source of truth); fallback to localStorage when doc missing or error
   useEffect(() => {
@@ -60,6 +61,7 @@ export function useSiteConfig(siteId: string) {
           const withTheme = { ...cfg, themeColors: cfg.themeColors || defaultThemeColors };
           setSiteConfig(withTheme);
           lastSavedRef.current = JSON.stringify(withTheme);
+          userHasEditedRef.current = false;
           window.localStorage.setItem(`siteConfig:${siteId}`, JSON.stringify(cfg));
         } else {
           const raw = window.localStorage.getItem(`siteConfig:${siteId}`);
@@ -67,6 +69,7 @@ export function useSiteConfig(siteId: string) {
           const next = merged ?? defaultSiteConfig;
           setSiteConfig(next);
           lastSavedRef.current = JSON.stringify(next);
+          userHasEditedRef.current = false;
           if (process.env.NODE_ENV !== "production" && !raw) {
             console.log("[useSiteConfig] No Firestore doc, using default config");
           }
@@ -79,6 +82,7 @@ export function useSiteConfig(siteId: string) {
         const next = merged ?? defaultSiteConfig;
         setSiteConfig(next);
         lastSavedRef.current = JSON.stringify(next);
+        userHasEditedRef.current = false;
       }
     );
 
@@ -86,6 +90,7 @@ export function useSiteConfig(siteId: string) {
   }, [siteId]);
 
   const handleConfigChange = (updates: Partial<SiteConfig>) => {
+    userHasEditedRef.current = true;
     setSiteConfig((prev) => (prev ? { ...prev, ...updates } : prev));
   };
 
@@ -179,6 +184,7 @@ export function useSiteConfig(siteId: string) {
       // Update local state and mark as saved
       setSiteConfig(updatedConfig);
       lastSavedRef.current = JSON.stringify(updatedConfig);
+      userHasEditedRef.current = false;
 
       setSaveMessage("השינויים נשמרו בהצלחה");
     } catch (e) {
@@ -192,6 +198,7 @@ export function useSiteConfig(siteId: string) {
 
   const hasUnsavedChanges = useMemo(
     () =>
+      userHasEditedRef.current &&
       siteConfig != null &&
       lastSavedRef.current != null &&
       JSON.stringify(siteConfig) !== lastSavedRef.current,

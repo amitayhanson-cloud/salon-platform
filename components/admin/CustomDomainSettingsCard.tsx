@@ -185,8 +185,21 @@ export default function CustomDomainSettingsCard({ siteId, firebaseUser }: Custo
   const hasDomain = domain && status && status !== "none";
   const showDns = hasDomain && (status === "pending" || status === "misconfigured");
 
+  /** Custom domain is locked; users must contact Caleno to enable it. */
+  const isLocked = true;
+
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-6 text-right">
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 text-right relative">
+      {isLocked && (
+        <div className="absolute inset-0 rounded-2xl bg-white/30 z-10 flex items-center justify-center">
+          <div className="bg-white/95 border border-slate-200 rounded-xl shadow-lg p-4 max-w-sm text-center mx-4">
+            <p className="text-slate-600 text-sm font-medium mb-1">התכונה נעולה כרגע</p>
+            <p className="text-slate-500 text-sm">
+              לשימוש בדומיין מותאם צרו קשר עם Caleno.
+            </p>
+          </div>
+        </div>
+      )}
       <h2 className="text-lg font-bold text-slate-900 mb-4">דומיין מותאם</h2>
 
       {message && (
@@ -211,14 +224,15 @@ export default function CustomDomainSettingsCard({ siteId, firebaseUser }: Custo
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               placeholder="example.com"
-              className="w-full max-w-md rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep focus:border-caleno-deep font-mono"
+              disabled={isLocked}
+              className="w-full max-w-md rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep focus:border-caleno-deep font-mono disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
               dir="ltr"
             />
           </div>
           <button
             type="button"
             onClick={handleConnect}
-            disabled={connectLoading || !inputValue.trim()}
+            disabled={isLocked || connectLoading || !inputValue.trim()}
             className="rounded-lg bg-caleno-ink px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
           >
             {connectLoading ? "מתחבר…" : "חבר דומיין"}
@@ -280,8 +294,8 @@ export default function CustomDomainSettingsCard({ siteId, firebaseUser }: Custo
               <button
                 type="button"
                 onClick={handleVerify}
-                disabled={verifyLoading}
-                className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 text-sm font-medium"
+                disabled={isLocked || verifyLoading}
+                className="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 text-sm font-medium disabled:cursor-not-allowed"
               >
                 {verifyLoading ? "בודק…" : "אמת דומיין"}
               </button>
@@ -289,8 +303,8 @@ export default function CustomDomainSettingsCard({ siteId, firebaseUser }: Custo
             <button
               type="button"
               onClick={handleDisconnect}
-              disabled={disconnectLoading}
-              className="px-4 py-2 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50 text-sm font-medium"
+              disabled={isLocked || disconnectLoading}
+              className="px-4 py-2 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50 text-sm font-medium disabled:cursor-not-allowed"
             >
               {disconnectLoading ? "נותק…" : "נתק דומיין"}
             </button>

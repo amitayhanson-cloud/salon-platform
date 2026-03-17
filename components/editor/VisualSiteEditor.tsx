@@ -49,6 +49,7 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
   const [selected, setSelected] = useState<SelectedTarget | null>(null);
   const [services, setServices] = useState<SiteService[]>([]);
   const previewContainerRef = useRef<HTMLDivElement>(null);
+  const userHasEditedDraftRef = useRef(false);
 
   // Load services for WebsiteRenderer
   useEffect(() => {
@@ -71,10 +72,12 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
   }, [siteId]);
 
   const handlePathChange = useCallback((path: string, value: unknown) => {
+    userHasEditedDraftRef.current = true;
     setDraft((prev) => setByPath(prev, path, value) as SiteConfig);
   }, []);
 
   const handleDraftChange = useCallback((updates: Partial<SiteConfig>) => {
+    userHasEditedDraftRef.current = true;
     setDraft((prev) => (prev ? { ...prev, ...updates } : prev));
   }, []);
 
@@ -87,6 +90,7 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
   );
 
   const handleDiscard = useCallback(() => {
+    userHasEditedDraftRef.current = false;
     setDraft({
       ...baselineConfig,
       themeColors: baselineConfig.themeColors ?? defaultThemeColors,
@@ -95,6 +99,7 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
   }, [baselineConfig]);
 
   const hasUnsavedChanges = useMemo(() => {
+    if (!userHasEditedDraftRef.current) return false;
     const base = {
       ...baselineConfig,
       themeColors: baselineConfig.themeColors ?? defaultThemeColors,

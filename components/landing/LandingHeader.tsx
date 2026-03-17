@@ -29,7 +29,7 @@ export function LandingHeader() {
           <div className="hidden md:flex md:items-center md:gap-2">
             <Link
               href="/login"
-              className="text-sm text-[#64748B] transition-colors hover:text-[#0F172A]"
+              className="inline-flex items-center justify-center rounded-full border border-[#94A3B8] px-4 py-2 text-sm font-medium text-[#0F172A] transition-colors hover:border-[#64748B] hover:bg-[#F8FAFC]"
             >
               התחברות
             </Link>

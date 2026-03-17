@@ -112,7 +112,7 @@ export default function TwoWeekCalendar({
                   flex flex-col items-center justify-start rounded-xl border min-h-[64px] py-2 px-1
                   transition-colors touch-manipulation active:scale-[0.98]
                   ${isSelected ? "border-[#1E6F7C] bg-[rgba(30,111,124,0.1)] ring-2 ring-[#1E6F7C]/30" : ""}
-                  ${!isSelected && isToday ? "border-[#1E6F7C]/50 bg-[rgba(30,111,124,0.06)]" : ""}
+                  ${!isSelected && isToday ? "border-[#1E6F7C]/60 bg-[rgba(30,111,124,0.05)]" : ""}
                   ${!isSelected && !isToday ? "border-[#E2E8F0] bg-white hover:border-[#CBD5E1] hover:bg-[#F8FAFC]" : ""}
                 `}
                 aria-label={`${formatDayLabelFull(day)}, ${count} תורים`}
@@ -163,8 +163,9 @@ export default function TwoWeekCalendar({
                 }}
                 className={`
                   border rounded-lg p-2 cursor-pointer transition-colors min-h-[120px]
-                  ${isSelected ? "border-[#1E6F7C] bg-[rgba(30,111,124,0.08)]" : "border-slate-200 hover:border-slate-300"}
-                  ${isToday ? "bg-[rgba(15,23,42,0.04)]" : ""}
+                  ${isSelected ? "border-[#1E6F7C] bg-[rgba(30,111,124,0.08)]" : ""}
+                  ${!isSelected && isToday ? "border-[#1E6F7C]/55 bg-[rgba(30,111,124,0.05)] hover:border-[#1E6F7C]/70" : ""}
+                  ${!isSelected && !isToday ? "border-slate-200 hover:border-slate-300" : ""}
                 `}
               >
                 <div className="text-xs font-semibold text-slate-700 mb-1">

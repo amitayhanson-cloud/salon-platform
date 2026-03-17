@@ -400,11 +400,14 @@ export default function AdminLayout({
       )}
       <UnsavedChangesProvider>
         <div className="relative z-10 w-full overflow-x-hidden">
-          <AdminHeader onOpenHelp={() => setHelpOpen(true)} />
+          {/* Header in its own stacking layer so dropdowns sit above full-screen design tab */}
+          <div className="relative z-[150]">
+            <AdminHeader onOpenHelp={() => setHelpOpen(true)} />
+          </div>
           <AdminHelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} />
           {/* Full-width content area: no top padding on day view so calendar sits under header */}
           <main
-            className={`w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ${isDayView ? "pt-0 pb-4" : "py-8"}`}
+            className={`relative z-0 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ${isDayView ? "pt-0 pb-4" : "py-8"}`}
           >
             {children}
           </main>

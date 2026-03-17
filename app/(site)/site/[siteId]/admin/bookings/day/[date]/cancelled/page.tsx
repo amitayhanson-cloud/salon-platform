@@ -178,18 +178,12 @@ export default function CancelledBookingsPage() {
   return (
     <div className="min-h-screen" dir="rtl">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-6">
           <AdminPageHero
             title="תורים שבוטלו"
             subtitle="רשימת תורים שבוטלו או לא הגיעו"
             className="flex-1"
           />
-          <Link
-            href={`${adminBasePath}/bookings/day/${dateKey}`}
-            className="rounded-full border border-[#E2E8F0] bg-white/80 px-4 py-2 text-sm font-medium text-[#0F172A] backdrop-blur transition-colors hover:bg-white shrink-0"
-          >
-            ← חזרה ללוח זמנים
-          </Link>
         </div>
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-right">
@@ -223,6 +217,14 @@ export default function CancelledBookingsPage() {
         )}
 
         <AdminCard className="overflow-hidden">
+          <div className="flex justify-start border-b border-slate-200 bg-slate-50/50 px-4 py-3">
+            <Link
+              href={`${adminBasePath}/bookings/day/${dateKey}`}
+              className="rounded-full border border-[#E2E8F0] bg-white px-4 py-2 text-sm font-medium text-[#0F172A] transition-colors hover:bg-slate-50 shrink-0"
+            >
+              ← חזרה ללוח זמנים
+            </Link>
+          </div>
           {archiveBookings.length === 0 ? (
             <div className="p-12 text-center">
               <p className="text-slate-500 text-sm">אין תורים שבוטלו</p>

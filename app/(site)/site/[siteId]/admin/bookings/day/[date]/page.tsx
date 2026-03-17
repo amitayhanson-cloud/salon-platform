@@ -950,81 +950,92 @@ export default function DaySchedulePage() {
       <div className="hidden md:flex flex-col flex-1 min-h-0 w-full max-w-7xl mx-auto px-4">
         {/* Calendar toolbar + filters (fixed; no page padding so calendar sits under header) */}
         <div className="flex-shrink-0 mb-3 -mx-4 px-4 py-3 rounded-2xl border border-white/30 bg-white/25 backdrop-blur-xl shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              {/* Date nav (RTL): [Calendar icon] [Right arrow] [DATE + DAY] [Left arrow] */}
-              <div
-                className="flex items-center gap-2"
-                role="group"
-                aria-label="ניווט תאריך"
+          <div className="flex items-center">
+            {/* Right side (RTL first): worker filter + calendar icon */}
+            <div className="flex shrink-0 items-center gap-2">
+              <input
+                ref={dateInputRef}
+                type="date"
+                value={dateKey}
+                onChange={(e) => {
+                  const newKey = e.target.value;
+                  if (newKey && siteId) {
+                    const query = selectedWorkerId && selectedWorkerId !== ALL_WORKERS ? `?workerId=${encodeURIComponent(selectedWorkerId)}` : "";
+                    router.push(`${adminBasePath}/bookings/day/${newKey}${query}`);
+                  }
+                }}
+                className="sr-only"
+                aria-hidden="true"
+                tabIndex={-1}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof dateInputRef.current?.showPicker === "function") {
+                    dateInputRef.current.showPicker();
+                  } else {
+                    dateInputRef.current?.click();
+                  }
+                }}
+                title="בחר תאריך"
+                aria-label="בחר תאריך"
+                className="p-2 rounded-lg text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-colors border border-slate-300"
               >
-                <input
-                  ref={dateInputRef}
-                  type="date"
-                  value={dateKey}
-                  onChange={(e) => {
-                    const newKey = e.target.value;
-                    if (newKey && siteId) {
-                      const query = selectedWorkerId && selectedWorkerId !== ALL_WORKERS ? `?workerId=${encodeURIComponent(selectedWorkerId)}` : "";
-                      router.push(`${adminBasePath}/bookings/day/${newKey}${query}`);
-                    }
-                  }}
-                  className="sr-only"
-                  aria-hidden="true"
-                  tabIndex={-1}
+                <Calendar className="w-5 h-5" />
+              </button>
+              {workers.length > 0 && (
+                <WorkerFilter
+                  workers={workers}
+                  selectedWorkerId={selectedWorkerId}
+                  onWorkerChange={setSelectedWorkerId}
                 />
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (typeof dateInputRef.current?.showPicker === "function") {
-                      dateInputRef.current.showPicker();
-                    } else {
-                      dateInputRef.current?.click();
-                    }
-                  }}
-                  title="בחר תאריך"
-                  aria-label="בחר תאריך"
-                  className="p-2 rounded-lg text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-colors border border-slate-300"
-                >
-                  <Calendar className="w-5 h-5" />
-                </button>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    title="היום הקודם"
-                    onClick={() => {
-                      if (!dateKey || !siteId) return;
-                      const query = selectedWorkerId && selectedWorkerId !== ALL_WORKERS ? `?workerId=${encodeURIComponent(selectedWorkerId)}` : "";
-                      router.push(`${adminBasePath}/bookings/day/${getPrevDate(dateKey)}${query}`);
-                    }}
-                    className="p-2 rounded-lg text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-colors"
-                    aria-label="היום הקודם"
-                  >
-                    <ChevronRight className="w-5 h-5" />
-                  </button>
-                  <span
-                    id="day-view-title"
-                    className="min-w-[10rem] text-center text-2xl font-bold text-slate-900"
-                  >
-                    {formatDayDisplay(selectedDate)}
-                  </span>
-                  <button
-                    type="button"
-                    title="היום הבא"
-                    onClick={() => {
-                      if (!dateKey || !siteId) return;
-                      const query = selectedWorkerId && selectedWorkerId !== ALL_WORKERS ? `?workerId=${encodeURIComponent(selectedWorkerId)}` : "";
-                      router.push(`${adminBasePath}/bookings/day/${getNextDate(dateKey)}${query}`);
-                    }}
-                    className="p-2 rounded-lg text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-colors"
-                    aria-label="היום הבא"
-                  >
-                    <ChevronLeft className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
+              )}
             </div>
-            <div className="flex items-center gap-3">
+            {/* Spacer so date nav stays centered */}
+            <div className="flex-1 min-w-0" aria-hidden />
+            {/* Center: date nav (arrows + day/date text) */}
+            <div
+              className="flex shrink-0 items-center gap-2"
+              role="group"
+              aria-label="ניווט תאריך"
+            >
+              <button
+                type="button"
+                title="היום הקודם"
+                onClick={() => {
+                  if (!dateKey || !siteId) return;
+                  const query = selectedWorkerId && selectedWorkerId !== ALL_WORKERS ? `?workerId=${encodeURIComponent(selectedWorkerId)}` : "";
+                  router.push(`${adminBasePath}/bookings/day/${getPrevDate(dateKey)}${query}`);
+                }}
+                className="p-2 rounded-lg text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-colors"
+                aria-label="היום הקודם"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+              <span
+                id="day-view-title"
+                className="min-w-[10rem] text-center text-2xl font-bold text-slate-900"
+              >
+                {formatDayDisplay(selectedDate)}
+              </span>
+              <button
+                type="button"
+                title="היום הבא"
+                onClick={() => {
+                  if (!dateKey || !siteId) return;
+                  const query = selectedWorkerId && selectedWorkerId !== ALL_WORKERS ? `?workerId=${encodeURIComponent(selectedWorkerId)}` : "";
+                  router.push(`${adminBasePath}/bookings/day/${getNextDate(dateKey)}${query}`);
+                }}
+                className="p-2 rounded-lg text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition-colors"
+                aria-label="היום הבא"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+            </div>
+            {/* Spacer so date nav stays centered */}
+            <div className="flex-1 min-w-0" aria-hidden />
+            {/* Left side (RTL last): actions */}
+            <div className="flex shrink-0 items-center gap-3">
               <button
                 type="button"
                 data-testid="print-day-button"
@@ -1052,17 +1063,6 @@ export default function DaySchedulePage() {
               </Link>
             </div>
           </div>
-
-          {/* Worker Filter - show if workers are loaded */}
-          {workers.length > 0 && (
-            <div className="mb-4">
-              <WorkerFilter
-                workers={workers}
-                selectedWorkerId={selectedWorkerId}
-                onWorkerChange={setSelectedWorkerId}
-              />
-            </div>
-          )}
 
           {/* Error message */}
           {error && (

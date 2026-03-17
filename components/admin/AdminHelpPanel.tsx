@@ -98,7 +98,7 @@ export function AdminHelpPanel({
   return (
     <>
       <div
-        className="fixed inset-0 z-40 bg-caleno-ink/20 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 z-[200] bg-caleno-ink/20 backdrop-blur-sm transition-opacity"
         aria-hidden
         onClick={onClose}
       />
@@ -106,7 +106,7 @@ export function AdminHelpPanel({
         role="dialog"
         aria-label="עזרה – ניווט בפאנל"
         className={cn(
-          "fixed top-0 right-0 z-50 flex h-full w-full max-w-[420px] flex-col",
+          "fixed top-0 right-0 z-[210] flex h-full w-full max-w-[420px] flex-col",
           "rounded-l-[28px] sm:rounded-l-[32px]",
           "border-l border-caleno-200/80",
           "bg-gradient-to-b from-white via-caleno-off/30 to-caleno-50/50",
@@ -144,6 +144,18 @@ export function AdminHelpPanel({
               </p>
             </div>
           </div>
+          <a
+            href="https://igani.co/help/caleno?src=caleno"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+              "shrink-0 rounded-xl px-3 py-2 text-sm font-medium transition-all duration-200",
+              "text-caleno-deep hover:text-caleno-ink border border-caleno-200/80 hover:border-caleno-300 hover:bg-caleno-50/80",
+              "focus:outline-none focus-visible:ring-2 focus-visible:ring-caleno-deep focus-visible:ring-offset-2"
+            )}
+          >
+            יצירת קשר
+          </a>
           <button
             type="button"
             onClick={onClose}

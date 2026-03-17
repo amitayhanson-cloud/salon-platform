@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Fragment } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback, Fragment } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import DeleteAccountButton from "@/components/admin/DeleteAccountButton";
@@ -143,6 +143,7 @@ export function AdminReviewsEditor({
   });
   /** "new" = add form; string = review id (edit form). null = closed. */
   const [avatarPickerFor, setAvatarPickerFor] = useState<"new" | string | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
 
   const handleAdd = () => {
     if (!newReview.name.trim() || !newReview.text.trim()) return;
@@ -158,6 +159,7 @@ export function AdminReviewsEditor({
       },
     ]);
     setNewReview({ name: "", rating: 5, text: "", avatarUrl: "" });
+    setShowAddForm(false);
   };
 
   const handleEdit = (id: string) => {
@@ -208,104 +210,12 @@ export function AdminReviewsEditor({
 
   return (
     <div className="space-y-4">
-      {/* Add new review form */}
-      <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
-        <h3 className="text-xs font-semibold text-slate-700">הוסף ביקורת חדשה</h3>
-        <div>
-          <label className="block text-xs font-medium text-slate-700 mb-1">
-            שם הלקוח *
-          </label>
-          <input
-            type="text"
-            value={newReview.name}
-            onChange={(e) => setNewReview({ ...newReview, name: e.target.value })}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep"
-            placeholder="הזן שם לקוח"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-700 mb-1">
-            דירוג (1-5) *
-          </label>
-          <select
-            value={newReview.rating}
-            onChange={(e) =>
-              setNewReview({ ...newReview, rating: Number(e.target.value) })
-            }
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep bg-white"
-          >
-            {[1, 2, 3, 4, 5].map((n) => (
-              <option key={n} value={n}>
-                {n} כוכבים
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-700 mb-1">
-            טקסט הביקורת *
-          </label>
-          <textarea
-            value={newReview.text}
-            onChange={(e) => setNewReview({ ...newReview, text: e.target.value })}
-            rows={3}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep resize-none"
-            placeholder="הזן את טקסט הביקורת"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-700 mb-1">
-            תמונת פרופיל
-          </label>
-          <div className="flex items-center gap-3 flex-wrap">
-            {(newReview.avatarUrl ?? "").trim() ? (
-              <img
-                src={(newReview.avatarUrl ?? "").trim()}
-                alt=""
-                className="w-12 h-12 rounded-full object-cover border border-slate-300 flex-shrink-0"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = "none";
-                }}
-              />
-            ) : null}
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  setAvatarPickerFor("new");
-                }}
-                className="px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium"
-              >
-                בחר תמונת פרופיל
-              </button>
-              {(newReview.avatarUrl ?? "").trim() ? (
-                <button
-                  type="button"
-                  onClick={() => setNewReview({ ...newReview, avatarUrl: "" })}
-                  className="px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm"
-                >
-                  הסר תמונה
-                </button>
-              ) : null}
-            </div>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={handleAdd}
-          className="px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium"
-        >
-          הוסף ביקורת
-        </button>
-      </div>
-
       {/* Existing reviews list */}
-      {reviews.length === 0 ? (
+      {reviews.length === 0 && !showAddForm ? (
         <p className="text-xs text-slate-500 text-center py-4">
-          אין ביקורות עדיין. הוסף ביקורת ראשונה למעלה.
+          אין ביקורות עדיין. לחץ על הוסף ביקורת למטה.
         </p>
-      ) : (
+      ) : reviews.length === 0 ? null : (
         <div className="space-y-3">
           {reviews.map((review) => (
             <div
@@ -451,6 +361,121 @@ export function AdminReviewsEditor({
           ))}
         </div>
       )}
+
+      {/* Add review button or form (below list) */}
+      {!showAddForm ? (
+        <button
+          type="button"
+          onClick={() => setShowAddForm(true)}
+          className="w-full py-3 px-4 rounded-lg border-2 border-dashed border-slate-300 text-slate-600 hover:border-caleno-deep/50 hover:text-caleno-deep hover:bg-caleno-50/50 text-sm font-medium transition-colors"
+        >
+          הוסף ביקורת
+        </button>
+      ) : (
+        <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
+          <h3 className="text-xs font-semibold text-slate-700">הוסף ביקורת חדשה</h3>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">
+              שם הלקוח *
+            </label>
+            <input
+              type="text"
+              value={newReview.name}
+              onChange={(e) => setNewReview({ ...newReview, name: e.target.value })}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep"
+              placeholder="הזן שם לקוח"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">
+              דירוג (1-5) *
+            </label>
+            <select
+              value={newReview.rating}
+              onChange={(e) =>
+                setNewReview({ ...newReview, rating: Number(e.target.value) })
+              }
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep bg-white"
+            >
+              {[1, 2, 3, 4, 5].map((n) => (
+                <option key={n} value={n}>
+                  {n} כוכבים
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">
+              טקסט הביקורת *
+            </label>
+            <textarea
+              value={newReview.text}
+              onChange={(e) => setNewReview({ ...newReview, text: e.target.value })}
+              rows={3}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep resize-none"
+              placeholder="הזן את טקסט הביקורת"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">
+              תמונת פרופיל
+            </label>
+            <div className="flex items-center gap-3 flex-wrap">
+              {(newReview.avatarUrl ?? "").trim() ? (
+                <img
+                  src={(newReview.avatarUrl ?? "").trim()}
+                  alt=""
+                  className="w-12 h-12 rounded-full object-cover border border-slate-300 flex-shrink-0"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = "none";
+                  }}
+                />
+              ) : null}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setAvatarPickerFor("new");
+                  }}
+                  className="px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium"
+                >
+                  בחר תמונת פרופיל
+                </button>
+                {(newReview.avatarUrl ?? "").trim() ? (
+                  <button
+                    type="button"
+                    onClick={() => setNewReview({ ...newReview, avatarUrl: "" })}
+                    className="px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm"
+                  >
+                    הסר תמונה
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleAdd}
+              className="px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium"
+            >
+              הוסף ביקורת
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowAddForm(false);
+                setNewReview({ name: "", rating: 5, text: "", avatarUrl: "" });
+              }}
+              className="px-4 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-sm font-medium"
+            >
+              ביטול
+            </button>
+          </div>
+        </div>
+      )}
+
       <ImagePickerModal
         isOpen={avatarPickerFor !== null}
         onClose={() => setAvatarPickerFor(null)}
@@ -480,6 +505,7 @@ export function AdminFaqEditor({
     question: "",
     answer: "",
   });
+  const [showAddForm, setShowAddForm] = useState(false);
 
   const handleAdd = () => {
     if (!newFaq.question.trim() || !newFaq.answer.trim()) return;
@@ -492,6 +518,7 @@ export function AdminFaqEditor({
       },
     ]);
     setNewFaq({ question: "", answer: "" });
+    setShowAddForm(false);
   };
 
   const handleEdit = (id: string) => {
@@ -528,48 +555,12 @@ export function AdminFaqEditor({
 
   return (
     <div className="space-y-4">
-      {/* Add new FAQ form */}
-      <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
-        <h3 className="text-xs font-semibold text-slate-700">הוסף שאלה חדשה</h3>
-        <div>
-          <label className="block text-xs font-medium text-slate-700 mb-1">
-            שאלה *
-          </label>
-          <input
-            type="text"
-            value={newFaq.question}
-            onChange={(e) => setNewFaq({ ...newFaq, question: e.target.value })}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep"
-            placeholder="הזן שאלה"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-700 mb-1">
-            תשובה *
-          </label>
-          <textarea
-            value={newFaq.answer}
-            onChange={(e) => setNewFaq({ ...newFaq, answer: e.target.value })}
-            rows={3}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep resize-none"
-            placeholder="הזן תשובה"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={handleAdd}
-          className="px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium"
-        >
-          הוסף שאלה
-        </button>
-      </div>
-
       {/* Existing FAQ list */}
-      {faqs.length === 0 ? (
+      {faqs.length === 0 && !showAddForm ? (
         <p className="text-xs text-slate-500 text-center py-4">
-          אין שאלות עדיין. הוסף שאלה ראשונה למעלה.
+          אין שאלות עדיין. לחץ על הוסף שאלה למטה.
         </p>
-      ) : (
+      ) : faqs.length === 0 ? null : (
         <div className="space-y-3">
           {faqs.map((faq) => (
             <div
@@ -648,6 +639,64 @@ export function AdminFaqEditor({
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Add FAQ button or form (below list) */}
+      {!showAddForm ? (
+        <button
+          type="button"
+          onClick={() => setShowAddForm(true)}
+          className="w-full py-3 px-4 rounded-lg border-2 border-dashed border-slate-300 text-slate-600 hover:border-caleno-deep/50 hover:text-caleno-deep hover:bg-caleno-50/50 text-sm font-medium transition-colors"
+        >
+          הוסף שאלה
+        </button>
+      ) : (
+        <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
+          <h3 className="text-xs font-semibold text-slate-700">הוסף שאלה חדשה</h3>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">
+              שאלה *
+            </label>
+            <input
+              type="text"
+              value={newFaq.question}
+              onChange={(e) => setNewFaq({ ...newFaq, question: e.target.value })}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep"
+              placeholder="הזן שאלה"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">
+              תשובה *
+            </label>
+            <textarea
+              value={newFaq.answer}
+              onChange={(e) => setNewFaq({ ...newFaq, answer: e.target.value })}
+              rows={3}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-caleno-deep resize-none"
+              placeholder="הזן תשובה"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleAdd}
+              className="px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium"
+            >
+              הוסף שאלה
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowAddForm(false);
+                setNewFaq({ question: "", answer: "" });
+              }}
+              className="px-4 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-sm font-medium"
+            >
+              ביטול
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -1392,6 +1441,8 @@ export default function SettingsPage() {
   const [hoursSaving, setHoursSaving] = useState(false);
   const [bookingHoursToast, setBookingHoursToast] = useState<string | null>(null);
   const [bookingSaveError, setBookingSaveError] = useState<string | null>(null);
+  const lastSavedBookingRef = useRef<string | null>(null);
+  const hoursUserHasEditedRef = useRef(false);
 
   useEffect(() => {
     if (!securityToast) return;
@@ -1405,20 +1456,47 @@ export default function SettingsPage() {
     return () => clearTimeout(t);
   }, [bookingHoursToast]);
 
-  // Register unsaved state for leave confirmation modal (in-app nav) and beforeunload
-  useEffect(() => {
-    unsavedCtx?.setUnsaved(hasUnsavedChanges, () => handleSaveConfig());
-  }, [unsavedCtx, hasUnsavedChanges, handleSaveConfig]);
+  const hasHoursUnsaved = useMemo(
+    () =>
+      hoursUserHasEditedRef.current &&
+      bookingState != null &&
+      lastSavedBookingRef.current != null &&
+      JSON.stringify(bookingState) !== lastSavedBookingRef.current,
+    [bookingState]
+  );
+
+  const anyUnsaved = hasUnsavedChanges || hasHoursUnsaved;
+
+  const handleSaveAll = useCallback(async () => {
+    await handleSaveConfig();
+    if (hasHoursUnsaved && bookingState) {
+      const err = validateBreaks(bookingState);
+      if (!err) {
+        const bookingSettings = convertSalonBookingStateToBookingSettings(bookingState);
+        await saveBookingSettings(siteId, bookingSettings);
+        await resetWorkersAvailabilityToBusinessHours(siteId, bookingSettings);
+        lastSavedBookingRef.current = JSON.stringify(bookingState);
+        hoursUserHasEditedRef.current = false;
+      }
+    }
+  }, [handleSaveConfig, hasHoursUnsaved, bookingState, siteId]);
 
   useEffect(() => {
-    if (!hasUnsavedChanges) return;
+    unsavedCtx?.setUnsaved(anyUnsaved, handleSaveAll);
+    return () => {
+      unsavedCtx?.setUnsaved(false, () => {});
+    };
+  }, [unsavedCtx, anyUnsaved, handleSaveAll]);
+
+  useEffect(() => {
+    if (!anyUnsaved) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = "";
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [hasUnsavedChanges]);
+  }, [anyUnsaved]);
 
   // Enter key saves (except when focus is in a textarea)
   useEffect(() => {
@@ -1463,6 +1541,8 @@ export default function SettingsPage() {
           closedDates: Array.isArray(closedDates) && closedDates.length > 0 ? closedDates : [],
         };
         setBookingState(convertedState);
+        lastSavedBookingRef.current = JSON.stringify(convertedState);
+        hoursUserHasEditedRef.current = false;
         if (typeof window !== "undefined") {
           window.localStorage.setItem(`bookingState:${siteId}`, JSON.stringify(convertedState));
         }
@@ -1471,10 +1551,19 @@ export default function SettingsPage() {
         console.error("[Settings] Failed to load booking settings", err);
         try {
           const bookingRaw = window.localStorage.getItem(`bookingState:${siteId}`);
-          if (bookingRaw) setBookingState(JSON.parse(bookingRaw));
-          else setBookingState(defaultBookingState);
+          if (bookingRaw) {
+            const parsed = JSON.parse(bookingRaw) as SalonBookingState;
+            setBookingState(parsed);
+            lastSavedBookingRef.current = JSON.stringify(parsed);
+          } else {
+            setBookingState(defaultBookingState);
+            lastSavedBookingRef.current = JSON.stringify(defaultBookingState);
+          }
+          hoursUserHasEditedRef.current = false;
         } catch {
           setBookingState(defaultBookingState);
+          lastSavedBookingRef.current = JSON.stringify(defaultBookingState);
+          hoursUserHasEditedRef.current = false;
         }
       }
     );
@@ -1482,6 +1571,7 @@ export default function SettingsPage() {
   }, [siteId]);
 
   const handleBookingStateChange = (next: SalonBookingState) => {
+    hoursUserHasEditedRef.current = true;
     setBookingState(next);
     const err = validateBreaks(next);
     setBookingSaveError(err ?? null);
@@ -1510,6 +1600,8 @@ export default function SettingsPage() {
       await resetWorkersAvailabilityToBusinessHours(siteId, bookingSettings);
       setBookingHoursToast("שעות הפעילות נשמרו. זמינות העובדים אופסה בהתאם.");
       setShowHoursConfirmModal(false);
+      lastSavedBookingRef.current = JSON.stringify(bookingState);
+      hoursUserHasEditedRef.current = false;
     } catch (error) {
       console.error("[Settings] Failed to save booking settings:", error);
     } finally {
@@ -1613,16 +1705,18 @@ export default function SettingsPage() {
           className="flex-1 min-w-0"
         />
         <div className="flex items-center gap-4 shrink-0">
-          {saveMessage && (
+          {saveMessage && hasUnsavedChanges && (
             <span className="text-xs text-emerald-600">{saveMessage}</span>
           )}
-          <button
-            onClick={() => { void handleSaveConfig(); }}
-            disabled={isSaving}
-            className="rounded-full bg-[#0F172A] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#1E293B] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {isSaving ? "שומר…" : "שמור שינויים"}
-          </button>
+          {hasUnsavedChanges && (
+            <button
+              onClick={() => { void handleSaveConfig(); }}
+              disabled={isSaving}
+              className="rounded-full bg-[#0F172A] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#1E293B] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isSaving ? "שומר…" : "שמור שינויים"}
+            </button>
+          )}
         </div>
       </div>
       <div className="p-6">
