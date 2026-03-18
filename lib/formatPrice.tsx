@@ -11,7 +11,14 @@ export function formatPriceDisplay(item: {
   price?: number | null;
   priceRangeMin?: number | null;
   priceRangeMax?: number | null;
+  hasFollowUp?: boolean;
+  followUp?: { price?: number } | null;
 }): React.ReactNode {
+  const fu =
+    item.hasFollowUp && item.followUp && typeof item.followUp.price === "number"
+      ? Math.max(0, item.followUp.price)
+      : 0;
+
   // Check for range first
   if (
     item.priceRangeMin !== undefined &&
@@ -19,24 +26,29 @@ export function formatPriceDisplay(item: {
     item.priceRangeMax !== undefined &&
     item.priceRangeMax !== null
   ) {
-    // Ensure min <= max (handle any edge cases)
     const min = Math.min(item.priceRangeMin, item.priceRangeMax);
     const max = Math.max(item.priceRangeMin, item.priceRangeMax);
-    
-    // Format as ₪500–₪700 with dir="ltr" to prevent RTL reversal
+    if (fu > 0) {
+      return (
+        <span dir="rtl" className="inline-block text-sm">
+          <span dir="ltr" className="inline-block">
+            ₪{min}–₪{max}
+          </span>
+          <span className="text-slate-600"> + המשך ₪{fu}</span>
+        </span>
+      );
+    }
     return (
       <span dir="ltr" className="inline-block">
         ₪{min}–₪{max}
       </span>
     );
   }
-  
-  // Single price
+
   if (item.price !== undefined && item.price !== null) {
-    return `₪${item.price}`;
+    return fu > 0 ? `₪${item.price} + המשך ₪${fu}` : `₪${item.price}`;
   }
-  
-  // No price
+
   return "-";
 }
 

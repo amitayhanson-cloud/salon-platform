@@ -8,6 +8,11 @@ export interface FollowUpConfig {
   waitMinutes: number;
   /** Optional suffix/label for display (e.g. "קרטין"). Shown as "המשך טיפול: {name} - {text}". */
   text?: string;
+  /**
+   * Price for phase 2 only (המשך טיפול). When set, שלב 1 uses the row `price` / range min;
+   * ביצועי צוות attributes this amount to the worker who did the follow-up.
+   */
+  price?: number;
 }
 
 export interface PricingItem {

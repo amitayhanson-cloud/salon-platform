@@ -13,7 +13,8 @@ import {
   type RecurrenceRule,
   type RecurrenceFrequencyUnit,
 } from "@/lib/recurringBookings";
-import { saveMultiServiceBooking } from "@/lib/booking";
+import { saveMultiServiceBooking, attachCatalogPricesToChainSlots } from "@/lib/booking";
+import { catalogRevenuePhase1, catalogRevenuePhase2 } from "@/lib/followUpRevenue";
 import {
   resolveChainWorkers,
   computeChainSlots,
@@ -725,7 +726,8 @@ export default function AdminCreateBookingForm({
             note: null,
             notes: notes.trim() || null,
             status: "booked" as const,
-            price: null,
+            price: hasFollowUp ? catalogRevenuePhase1(pricingItem) : null,
+            phase2Price: hasFollowUp ? catalogRevenuePhase2(pricingItem) : null,
           };
           const { createdIds, failedDates } = await createRecurringBookings(
             siteId,
@@ -822,7 +824,8 @@ export default function AdminCreateBookingForm({
             note: null,
             notes: notes.trim() || null,
             status: "booked" as const,
-            price: null,
+            price: hasFollowUp ? catalogRevenuePhase1(pricingItem) : null,
+            phase2Price: hasFollowUp ? catalogRevenuePhase2(pricingItem) : null,
           };
           const { phase1Id } = await createAdminBooking(siteId, payload);
           await triggerBookingWhatsApp(siteId, phase1Id, getToken);
@@ -848,11 +851,16 @@ export default function AdminCreateBookingForm({
           if (!repaired) throw new Error("אין עובד זמין לאחד השירותים. נא לנסות שעה או מטפל אחר.");
           const validation = validateChainAssignments(repaired, workers);
           if (!validation.valid) throw new Error(validation.errors[0] ?? "ההקצאה אינה תקינה");
-          const { firstBookingId } = await saveMultiServiceBooking(siteId, repaired, {
-            name: customerName.trim(),
-            phone: customerPhone.trim(),
-            note: undefined,
-          }, { workers });
+          const { firstBookingId } = await saveMultiServiceBooking(
+            siteId,
+            attachCatalogPricesToChainSlots(repaired, pricingItems),
+            {
+              name: customerName.trim(),
+              phone: customerPhone.trim(),
+              note: undefined,
+            },
+            { workers }
+          );
           if (firstBookingId) await triggerBookingWhatsApp(siteId, firstBookingId, getToken);
         }
       } else if (previewSlots && previewSlots.length > 0) {
@@ -869,11 +877,16 @@ export default function AdminCreateBookingForm({
         if (!validation.valid) {
           throw new Error(validation.errors[0] ?? "ההקצאה אינה תקינה");
         }
-        const { firstBookingId } = await saveMultiServiceBooking(siteId, repaired, {
-          name: customerName.trim(),
-          phone: customerPhone.trim(),
-          note: undefined,
-        }, { workers });
+        const { firstBookingId } = await saveMultiServiceBooking(
+          siteId,
+          attachCatalogPricesToChainSlots(repaired, pricingItems),
+          {
+            name: customerName.trim(),
+            phone: customerPhone.trim(),
+            note: undefined,
+          },
+          { workers }
+        );
         if (firstBookingId) await triggerBookingWhatsApp(siteId, firstBookingId, getToken);
       } else {
         throw new Error("אין זמינות להשלמת התור");

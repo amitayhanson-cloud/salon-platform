@@ -59,6 +59,7 @@ export default function ServicesPage() {
   const [followUpDurationInputValue, setFollowUpDurationInputValue] = useState<string>("");
   const [followUpWaitInputValue, setFollowUpWaitInputValue] = useState<string>("0");
   const [followUpTextInputValue, setFollowUpTextInputValue] = useState<string>("");
+  const [followUpPriceInputValue, setFollowUpPriceInputValue] = useState<string>("");
 
   const FOLLOWUP_TEXT_MAX_LENGTH = 50;
 
@@ -351,6 +352,7 @@ export default function ServicesPage() {
     setFollowUpDurationInputValue("");
     setFollowUpWaitInputValue("0");
     setFollowUpTextInputValue("");
+    setFollowUpPriceInputValue("");
   };
 
   const handleEditItem = (item: PricingItem) => {
@@ -373,6 +375,11 @@ export default function ServicesPage() {
     setFollowUpDurationInputValue(convertedItem.followUp?.durationMinutes != null ? String(convertedItem.followUp.durationMinutes) : "");
     setFollowUpWaitInputValue(String(convertedItem.followUp?.waitMinutes ?? 0));
     setFollowUpTextInputValue(convertedItem.followUp?.text ?? "");
+    setFollowUpPriceInputValue(
+      convertedItem.followUp && typeof convertedItem.followUp.price === "number"
+        ? String(convertedItem.followUp.price)
+        : ""
+    );
     setEditingItem(convertedItem);
   };
 
@@ -422,6 +429,12 @@ export default function ServicesPage() {
         setError("המתנה אחרי שלב 1 חייבת להיות 0 ומעלה");
         return;
       }
+      const fuPriceRaw = (followUpPriceInputValue ?? "").trim().replace(",", ".");
+      const fuPriceNum = fuPriceRaw === "" ? 0 : Number(fuPriceRaw);
+      if (!Number.isFinite(fuPriceNum) || fuPriceNum < 0) {
+        setError("מחיר שלב המשך חייב להיות מספר חיובי או 0");
+        return;
+      }
     }
 
     try {
@@ -458,6 +471,9 @@ export default function ServicesPage() {
       const followUpWait = editingItem.followUp?.waitMinutes ?? (followUpWaitInputValue ? parseInt(followUpWaitInputValue, 10) : 0);
       const followUpTextRaw = (editingItem.followUp?.text ?? followUpTextInputValue).trim();
       const followUpText = followUpTextRaw.slice(0, FOLLOWUP_TEXT_MAX_LENGTH) || undefined;
+      const followUpPriceRaw = (followUpPriceInputValue ?? "").trim().replace(",", ".");
+      const followUpPriceSaved =
+        followUpPriceRaw === "" ? 0 : Math.max(0, Number(followUpPriceRaw));
       if (editingItem.hasFollowUp && followUpName && Number.isFinite(followUpDuration) && followUpDuration >= 1 && Number.isFinite(followUpWait) && followUpWait >= 0) {
         itemData.hasFollowUp = true;
         itemData.followUp = {
@@ -465,6 +481,7 @@ export default function ServicesPage() {
           ...(followUpServiceId && { serviceId: followUpServiceId }),
           durationMinutes: followUpDuration,
           waitMinutes: followUpWait,
+          price: Number.isFinite(followUpPriceSaved) ? followUpPriceSaved : 0,
           ...(followUpText && { text: followUpText }),
         };
       } else {
@@ -511,6 +528,7 @@ export default function ServicesPage() {
       setFollowUpDurationInputValue("");
       setFollowUpWaitInputValue("0");
       setFollowUpTextInputValue("");
+      setFollowUpPriceInputValue("");
     } catch (err) {
       console.error("Failed to save pricing item", err);
       setError("שגיאה בשמירת הפריט");
@@ -1409,7 +1427,11 @@ export default function ServicesPage() {
                 {editingItem.id === "new" ? "הוסף פריט מחיר" : "ערוך פריט מחיר"}
               </h3>
               <button
-                onClick={() => { setEditingItem(null); setEditingItemParentService(null); }}
+                onClick={() => {
+                  setEditingItem(null);
+                  setEditingItemParentService(null);
+                  setFollowUpPriceInputValue("");
+                }}
                 className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 -m-2 hover:bg-slate-100 rounded-lg touch-manipulation"
                 aria-label="סגור"
               >
@@ -1503,7 +1525,7 @@ export default function ServicesPage() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  מחיר
+                  {editingItem.hasFollowUp ? "מחיר שלב ראשון (טיפול ראשוני)" : "מחיר"}
                 </label>
                 <input
                   type="text"
@@ -1557,6 +1579,11 @@ export default function ServicesPage() {
                   placeholder="0"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
                 />
+                {editingItem.hasFollowUp ? (
+                  <p className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded px-2 py-1.5 mt-1" dir="rtl">
+                    <span className="font-medium text-slate-700">למה שני מחירים?</span> שלב ראשון ושלב המשך נרשמים כשני תורים (לעיתים עם שני מטפלים). מחיר שלב ראשון נספר לעובד שביצע את הטיפול הראשון; מחיר &quot;המשך טיפול&quot; נספר לעובד שביצע את השלב השני — כך ביצועי צוות משקפים נכון את ההכנסה לכל אחד.
+                  </p>
+                ) : null}
                 <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mt-1">
                   שימו לב: מחיר שאינו מספר בודד (לדוגמה 50-100) ייחשב כ-0 בדוחות שכר. אלא אם יוגדר מחיר אישי לכל לקוח
                 </p>
@@ -1585,12 +1612,14 @@ export default function ServicesPage() {
                     checked={editingItem.hasFollowUp || false}
                     onChange={(e) => {
                       const newHasFollowUp = e.target.checked;
-                      const defaultFollowUp = { name: "", durationMinutes: 15, waitMinutes: 0 };
+                      const defaultFollowUp = { name: "", durationMinutes: 15, waitMinutes: 0, price: 0 as number };
                       setEditingItem({
                         ...editingItem,
                         hasFollowUp: newHasFollowUp,
                         followUp: newHasFollowUp
-                          ? (editingItem.followUp ?? defaultFollowUp)
+                          ? (editingItem.followUp
+                              ? { ...editingItem.followUp, price: editingItem.followUp.price ?? 0 }
+                              : defaultFollowUp)
                           : null,
                       });
                       if (!newHasFollowUp) {
@@ -1598,8 +1627,14 @@ export default function ServicesPage() {
                         setFollowUpDurationInputValue("");
                         setFollowUpWaitInputValue("0");
                         setFollowUpTextInputValue("");
+                        setFollowUpPriceInputValue("");
                       } else {
                         setFollowUpNameInputValue("");
+                        setFollowUpPriceInputValue(
+                          editingItem.followUp && typeof editingItem.followUp.price === "number"
+                            ? String(editingItem.followUp.price)
+                            : "0"
+                        );
                       }
                       setError(null);
                     }}
@@ -1648,6 +1683,25 @@ export default function ServicesPage() {
                           );
                         })()}
                       </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        מחיר שלב המשך (המשך טיפול) ₪
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={followUpPriceInputValue}
+                        onChange={(e) => {
+                          setFollowUpPriceInputValue(e.target.value);
+                          setError(null);
+                        }}
+                        placeholder="0"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep bg-white"
+                      />
+                      <p className="text-xs text-slate-600 mt-1" dir="rtl">
+                        סכום זה יוחס לעובד שמבצע את שלב 2 בלבד. סכום שלב 1 מוגדר בשדה &quot;מחיר שלב ראשון&quot; למעלה.
+                      </p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -1751,7 +1805,11 @@ export default function ServicesPage() {
               <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3">
                 <button
                   type="button"
-                  onClick={() => { setEditingItem(null); setEditingItemParentService(null); }}
+                  onClick={() => {
+                  setEditingItem(null);
+                  setEditingItemParentService(null);
+                  setFollowUpPriceInputValue("");
+                }}
                   className="min-h-[44px] px-4 py-2.5 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 text-sm font-medium touch-manipulation"
                 >
                   ביטול

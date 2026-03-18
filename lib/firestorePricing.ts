@@ -64,7 +64,18 @@ export async function getPricingItems(siteId: string): Promise<PricingItem[]> {
         durationMaxMinutes = 30;
       }
       
-      const rawFollowUp = data.followUp as { name?: string; durationMinutes?: number; waitMinutes?: number; text?: string; serviceId?: string } | undefined;
+      const rawFollowUp = data.followUp as {
+        name?: string;
+        durationMinutes?: number;
+        waitMinutes?: number;
+        text?: string;
+        serviceId?: string;
+        price?: number;
+      } | undefined;
+      const followUpPrice =
+        rawFollowUp && typeof rawFollowUp.price === "number" && !Number.isNaN(rawFollowUp.price)
+          ? Math.max(0, rawFollowUp.price)
+          : undefined;
       const followUp: PricingItem["followUp"] =
         rawFollowUp && typeof rawFollowUp.name === "string" && rawFollowUp.name.trim() !== "" && typeof rawFollowUp.durationMinutes === "number" && rawFollowUp.durationMinutes >= 1
           ? {
@@ -73,6 +84,7 @@ export async function getPricingItems(siteId: string): Promise<PricingItem[]> {
               waitMinutes: typeof rawFollowUp.waitMinutes === "number" ? Math.max(0, rawFollowUp.waitMinutes) : 0,
               ...(typeof rawFollowUp.serviceId === "string" && rawFollowUp.serviceId.trim() !== "" && { serviceId: rawFollowUp.serviceId.trim() }),
               ...(typeof rawFollowUp.text === "string" && rawFollowUp.text.trim() !== "" && { text: rawFollowUp.text.trim().slice(0, 50) }),
+              ...(followUpPrice !== undefined && { price: followUpPrice }),
             }
           : null;
 
@@ -129,7 +141,18 @@ export function subscribePricingItems(
             durationMaxMinutes = 30;
           }
           
-          const rawFollowUp = data.followUp as { name?: string; durationMinutes?: number; waitMinutes?: number; text?: string; serviceId?: string } | undefined;
+          const rawFollowUp = data.followUp as {
+            name?: string;
+            durationMinutes?: number;
+            waitMinutes?: number;
+            text?: string;
+            serviceId?: string;
+            price?: number;
+          } | undefined;
+          const followUpPriceSub =
+            rawFollowUp && typeof rawFollowUp.price === "number" && !Number.isNaN(rawFollowUp.price)
+              ? Math.max(0, rawFollowUp.price)
+              : undefined;
           const followUp: PricingItem["followUp"] =
             rawFollowUp && typeof rawFollowUp.name === "string" && rawFollowUp.name.trim() !== "" && typeof rawFollowUp.durationMinutes === "number" && rawFollowUp.durationMinutes >= 1
               ? {
@@ -138,6 +161,7 @@ export function subscribePricingItems(
                   waitMinutes: typeof rawFollowUp.waitMinutes === "number" ? Math.max(0, rawFollowUp.waitMinutes) : 0,
                   ...(typeof rawFollowUp.serviceId === "string" && rawFollowUp.serviceId.trim() !== "" && { serviceId: rawFollowUp.serviceId.trim() }),
                   ...(typeof rawFollowUp.text === "string" && rawFollowUp.text.trim() !== "" && { text: rawFollowUp.text.trim().slice(0, 50) }),
+                  ...(followUpPriceSub !== undefined && { price: followUpPriceSub }),
                 }
               : null;
 

@@ -13,6 +13,7 @@ import { AdminCard } from "@/components/admin/AdminCard";
 import { subscribePricingItems } from "@/lib/firestorePricing";
 import type { PricingItem } from "@/types/pricingItem";
 import { getAllPersonalPricing } from "@/lib/firestorePersonalPricing";
+import { catalogRevenuePhase1, catalogRevenuePhase2 } from "@/lib/followUpRevenue";
 
 // Helper to build override key (consistent format: clientId__serviceTypeId)
 const overrideKey = (clientId: string, serviceTypeId: string): string => {
@@ -43,6 +44,8 @@ interface Booking {
   status?: string;
   dateISO?: string;
   date?: string;
+  phase?: 1 | 2;
+  parentBookingId?: string | null;
 }
 
 /** Commission direction: treatmentCommissionPercent = worker's share (0–100). Business gets the remainder. */
@@ -250,6 +253,9 @@ export default function TeamPerformancePage() {
             status: (data.status as string) ?? "booked",
             dateISO: (data.dateISO as string) || (data.date as string),
             date: (data.date as string) || (data.dateISO as string),
+            phase: data.phase === 2 ? 2 : 1,
+            parentBookingId:
+              typeof data.parentBookingId === "string" ? data.parentBookingId : null,
           });
         });
 
@@ -266,18 +272,27 @@ export default function TeamPerformancePage() {
     return () => unsubscribe();
   }, [siteId, dateRange, periodType, selectedMonth]);
 
-  // Build service type price map (default prices)
+  const pricingItemById = useMemo(() => {
+    const map = new Map<string, PricingItem>();
+    pricingItems.forEach((p) => map.set(p.id, p));
+    return map;
+  }, [pricingItems]);
+
+  // Build service type price map (שלב 1 catalog for items with follow-up split)
   const serviceTypePriceMap = useMemo(() => {
     const map = new Map<string, number>();
     pricingItems.forEach((item) => {
-      // Use price or priceRangeMin as default (allow 0 as valid)
-      const defaultPrice = item.price ?? item.priceRangeMin ?? 0;
-      if (defaultPrice != null) {
-        map.set(item.id, Number(defaultPrice));
-      }
+      const defaultPrice = catalogRevenuePhase1(item);
+      map.set(item.id, Number(defaultPrice));
     });
     return map;
   }, [pricingItems]);
+
+  const bookingsById = useMemo(() => {
+    const map = new Map<string, Booking>();
+    bookings.forEach((b) => map.set(b.id, b));
+    return map;
+  }, [bookings]);
 
   // Fetch personal pricing overrides for all clients in bookings
   useEffect(() => {
@@ -357,15 +372,35 @@ export default function TeamPerformancePage() {
     return map;
   }, [workers]);
 
-  // Price resolution: personal override (client-specific) for serviceTypeId, else default serviceType price, else 0
+  // Price resolution: שלב 2 = מחיר המשך מהמחירון (או מהשדה price בתיעוד); שלב 1 = מחיר שורה + מחיר אישי
   const getEffectivePriceForBooking = (booking: Booking): number => {
     const clientPhone = booking.clientId || booking.customerPhone;
-    const serviceTypeId = booking.serviceTypeId || booking.pricingItemId;
+    const phase = booking.phase ?? 1;
 
+    if (phase === 2) {
+      if (typeof booking.price === "number" && !Number.isNaN(booking.price)) {
+        return Math.max(0, booking.price);
+      }
+      const parentId = booking.parentBookingId;
+      const parent = parentId ? bookingsById.get(parentId) : undefined;
+      const parentTypeId = parent?.serviceTypeId || parent?.pricingItemId;
+      if (!parentTypeId) return 0;
+      const parentItem = pricingItemById.get(parentTypeId);
+      return catalogRevenuePhase2(parentItem);
+    }
+
+    const serviceTypeId = booking.serviceTypeId || booking.pricingItemId;
     const key = clientPhone && serviceTypeId ? overrideKey(clientPhone, serviceTypeId) : "";
     const overridePrice = key ? personalPricingOverrides.get(key) : undefined;
+    const item = serviceTypeId ? pricingItemById.get(serviceTypeId) : undefined;
+    const catalogP1 = serviceTypeId ? catalogRevenuePhase1(item) : 0;
     const defaultPrice = serviceTypeId ? serviceTypePriceMap.get(serviceTypeId) : undefined;
-    const resolvedPrice = overridePrice ?? defaultPrice ?? 0;
+    const resolvedPrice =
+      overridePrice ??
+      (typeof booking.price === "number" && !Number.isNaN(booking.price) ? booking.price : undefined) ??
+      defaultPrice ??
+      catalogP1 ??
+      0;
 
     if (defaultPrice === undefined && resolvedPrice === 0 && serviceTypeId) {
       console.warn("[TeamPerformance] Missing default price", { serviceTypeId, bookingId: booking.id });
@@ -375,6 +410,7 @@ export default function TeamPerformancePage() {
         bookingId: booking.id,
         clientPhone,
         serviceTypeId,
+        phase,
         overridePrice: overridePrice ?? null,
         defaultPrice: defaultPrice ?? null,
         resolvedPrice,
@@ -436,7 +472,15 @@ export default function TeamPerformancePage() {
     });
 
     return metrics.sort((a, b) => b.workerPayout - a.workerPayout);
-  }, [bookings, workerNameMap, workerSharePercentMap, personalPricingOverrides, serviceTypePriceMap]);
+  }, [
+    bookings,
+    workerNameMap,
+    workerSharePercentMap,
+    personalPricingOverrides,
+    serviceTypePriceMap,
+    bookingsById,
+    pricingItemById,
+  ]);
 
   // Totals: gross, hours, worker payout total, business share total
   const totals = useMemo(() => {

@@ -66,6 +66,8 @@ export interface AdminBookingPayload {
   notes?: string | null;
   status?: "booked" | "confirmed" | "cancelled" | "active";
   price?: number | null;
+  /** Revenue for phase 2 doc (ביצועי צוות) when follow-up exists */
+  phase2Price?: number | null;
 }
 
 /**
@@ -165,7 +167,7 @@ export async function createAdminBooking(
     notes: payload.notes ?? null,
     serviceColor: payload.phase1.serviceColor ?? null,
     price: payload.price ?? null,
-    priceSource: null,
+    priceSource: payload.price != null ? "default" : null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     ...(hasPhase2 && { waitMinutes: waitMin }),
@@ -228,8 +230,8 @@ export async function createAdminBooking(
       note: payload.note ?? null,
       notes: payload.notes ?? null,
       serviceColor: payload.phase2.serviceColor ?? null,
-      price: null,
-      priceSource: null,
+      price: payload.phase2Price ?? null,
+      priceSource: payload.phase2Price != null ? "default" : null,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
@@ -406,6 +408,10 @@ export async function updateAdminBooking(
         note: payload.note ?? null,
         notes: payload.notes ?? null,
         serviceColor: payload.phase2.serviceColor ?? null,
+        ...(payload.phase2Price != null && {
+          price: payload.phase2Price,
+          priceSource: "default",
+        }),
         updatedAt: serverTimestamp(),
       }) as Record<string, unknown>);
     }
@@ -460,8 +466,8 @@ export async function updateAdminBooking(
       note: payload.note ?? null,
       notes: payload.notes ?? null,
       serviceColor: payload.phase2.serviceColor ?? null,
-      price: null,
-      priceSource: null,
+      price: payload.phase2Price ?? null,
+      priceSource: payload.phase2Price != null ? "default" : null,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };

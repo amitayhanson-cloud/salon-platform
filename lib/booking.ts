@@ -2,6 +2,7 @@ import { addDoc, getDocs, getDoc, setDoc, query, where, orderBy, serverTimestamp
 import { db } from "./firebaseClient";
 import { bookingsCollection, bookingDoc } from "./firestorePaths";
 import { deriveBookingStatusForWrite } from "./bookingStatusForWrite";
+import { catalogRevenuePhase1, catalogRevenuePhase2 } from "./followUpRevenue";
 import { archiveBookingUniqueByServiceTypeClient } from "./archiveReplace";
 import { getOrCreateClient } from "./firestoreClients";
 import { computePhases } from "./bookingPhasesTiming";
@@ -117,6 +118,8 @@ export interface SaveBookingFollowUp {
   name: string;
   durationMinutes: number;
   waitMinutes: number;
+  /** Catalog phase-2 price (optional; stored on phase 2 booking for reporting). */
+  price?: number;
 }
 
 /** Pricing item shape for saveBooking (durations + follow-up) */
@@ -282,8 +285,11 @@ export async function saveBooking(
         parentBookingId: bookingAId,
         note: booking.note ?? null,
         serviceColor: serviceColor ?? booking.serviceColor ?? null,
-        price: null,
-        priceSource: null,
+        price:
+          typeof followUp.price === "number" && !Number.isNaN(followUp.price)
+            ? Math.max(0, followUp.price)
+            : null,
+        priceSource: typeof followUp.price === "number" ? "default" : null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
@@ -325,6 +331,29 @@ export interface ChainSlotForSave {
     workerId: string | null;
     workerName: string | null;
   };
+  /** Set by attachCatalogPricesToChainSlots before save */
+  phase1CatalogPrice?: number;
+  phase2CatalogPrice?: number;
+}
+
+export function attachCatalogPricesToChainSlots(
+  slots: ChainSlotForSave[],
+  pricingItems: import("@/types/pricingItem").PricingItem[]
+): ChainSlotForSave[] {
+  const byId = new Map(pricingItems.map((p) => [p.id, p]));
+  return slots.map((slot) => {
+    const item = slot.pricingItemId ? byId.get(slot.pricingItemId) : undefined;
+    const hasFu =
+      !!slot.followUp?.serviceName?.trim() && (slot.followUp.durationMin ?? 0) >= 1;
+    if (!item) {
+      return { ...slot };
+    }
+    return {
+      ...slot,
+      phase1CatalogPrice: catalogRevenuePhase1(item),
+      ...(hasFu ? { phase2CatalogPrice: catalogRevenuePhase2(item) } : {}),
+    };
+  });
 }
 
 /** One booking document = one service item. Worker is per item, not shared across the chain. */
@@ -341,6 +370,7 @@ export interface ServiceItemForSave {
   pricingItemId?: string | null;
   serviceType?: string | null;
   serviceColor?: string | null;
+  resolvedPrice?: number | null;
 }
 
 /**
@@ -364,6 +394,10 @@ export function buildServiceItemsFromChain(chainSlots: ChainSlotForSave[]): Serv
       pricingItemId: slot.pricingItemId ?? null,
       serviceType: slot.serviceType ?? null,
       serviceColor: slot.serviceColor ?? null,
+      resolvedPrice:
+        slot.phase1CatalogPrice != null && !Number.isNaN(slot.phase1CatalogPrice)
+          ? slot.phase1CatalogPrice
+          : null,
     });
     // Phase 2 (follow-up): add whenever slot has followUp with valid service name and duration (public book flow must create both phase 1 and phase 2 docs)
     const fu = slot.followUp;
@@ -384,6 +418,10 @@ export function buildServiceItemsFromChain(chainSlots: ChainSlotForSave[]): Serv
         pricingItemId: null,
         serviceType: null,
         serviceColor: null,
+        resolvedPrice:
+          slot.phase2CatalogPrice != null && !Number.isNaN(slot.phase2CatalogPrice)
+            ? slot.phase2CatalogPrice
+            : null,
       });
     }
   }
@@ -521,8 +559,8 @@ export async function saveMultiServiceBooking(
       serviceOrder: item.serviceOrder,
       note: client.note ?? null,
       serviceColor: item.serviceColor ?? null,
-      price: null,
-      priceSource: null,
+      price: item.resolvedPrice ?? null,
+      priceSource: item.resolvedPrice != null ? "default" : null,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };

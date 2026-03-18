@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -47,7 +47,8 @@ import {
   buildChainWithFinishingService,
   type ChainServiceInput,
 } from "@/lib/multiServiceChain";
-import { saveMultiServiceBooking } from "@/lib/booking";
+import { saveMultiServiceBooking, attachCatalogPricesToChainSlots } from "@/lib/booking";
+import { REPEAT_SERVICE_NO_LONGER_AVAILABLE } from "@/lib/repeatBookingMessages";
 import { getSiteUrl } from "@/lib/tenant";
 import type { MultiBookingCombo, MultiBookingSelectionPayload } from "@/types/multiBookingCombo";
 import { subscribeMultiBookingCombos, findMatchingCombo } from "@/lib/firestoreMultiBookingCombos";
@@ -120,6 +121,371 @@ function normalizePhases(value: unknown): PhaseForDate[] | undefined {
 
 type BookingStep = 1 | 2 | 3 | 4 | 5 | 6; // 6 = success
 
+/** Payload from last-for-phone API + UI for repeat booking */
+type RepeatBookingPayload = {
+  pricingItemId: string;
+  /** Parent שירות name from booking (e.g. צבע) */
+  serviceName: string;
+  /** סוג טיפול / מחירון type (e.g. גוונים) — critical for matching */
+  serviceType: string | null;
+  displayTitle: string;
+  displaySubtitle: string | null;
+  dateLabel: string;
+  workerId: string | null;
+  workerName: string | null;
+  siteServiceId: string | null;
+};
+
+function findPricingAndServiceForRepeat(
+  modal: RepeatBookingPayload,
+  pricingItems: PricingItem[],
+  /** All site services (incl. disabled) for matching booking ids */
+  allServices: SiteService[]
+): { item: PricingItem; service: SiteService } | null {
+  const pid = String(modal.pricingItemId || "").trim();
+  const serviceType = String(modal.serviceType ?? "").trim();
+  const serviceNameField = String(modal.serviceName ?? "").trim();
+  /** Prefer type for מחירון match; parent name for קטגוריה */
+  const rawName = (serviceType || serviceNameField).trim();
+  const enabled = (s: SiteService) => s.enabled !== false;
+  const sidMatch = (p: PricingItem, s: SiteService) => {
+    const sid = String(p.serviceId ?? p.service ?? "").trim();
+    return sid === s.name || sid === s.id;
+  };
+
+  /** Pricing rows tied to a site service (strict link, then loose id/name match) */
+  const pricingItemsForService = (s: SiteService): PricingItem[] => {
+    const strict = pricingItems.filter((p) => sidMatch(p, s));
+    if (strict.length) return strict;
+    const idStr = String(s.id ?? "").trim();
+    const nameStr = (s.name || "").trim();
+    return pricingItems.filter((p) => {
+      const sid = String(p.serviceId ?? p.service ?? "").trim();
+      return sid === idStr || sid === nameStr;
+    });
+  };
+
+  const pickItem = (items: PricingItem[], _service: SiteService): PricingItem | null => {
+    if (items.length === 0) return null;
+    const exact = pid
+      ? items.find((p) => String(p.id).trim() === pid.trim())
+      : undefined;
+    if (exact) return exact;
+    const typeQuery = serviceType || serviceNameField || rawName;
+    const byType = typeQuery
+      ? items.find((p) => {
+          const t = String(p.type ?? "").trim();
+          if (!t) return false;
+          return (
+            typeQuery === t ||
+            typeQuery.includes(t) ||
+            t.includes(typeQuery)
+          );
+        })
+      : undefined;
+    if (byType) return byType;
+    const sorted = [...items].sort(
+      (a, b) => (a.order ?? 999) - (b.order ?? 999) || String(a.id).localeCompare(String(b.id))
+    );
+    return sorted[0]!;
+  };
+
+  const serviceBySiteId = (id: string | null | undefined) =>
+    id ? allServices.find((s) => String(s.id) === String(id)) : undefined;
+
+  /**
+   * Strongest signal: שירות (גוונים) + סוג מחירון (רבע ראש).
+   * Must run before 2b or we may match "רבע ראש" under the wrong שירות.
+   */
+  if (serviceNameField && serviceType) {
+    const st = serviceType.trim();
+    const sn = serviceNameField.trim();
+    const tryResolve = (s: SiteService): { item: PricingItem; service: SiteService } | null => {
+      if (!enabled(s)) return null;
+      const items = pricingItemsForService(s);
+      let item = items.find((p) => String(p.type ?? "").trim() === st);
+      if (!item) {
+        item = items.find((p) => {
+          const t = String(p.type ?? "").trim();
+          return t && (t === st || t.includes(st) || st.includes(t));
+        });
+      }
+      if (item) return { item, service: s };
+      return null;
+    };
+    if (modal.siteServiceId) {
+      const s = serviceBySiteId(modal.siteServiceId);
+      if (s) {
+        const r = tryResolve(s);
+        if (r) return r;
+      }
+    }
+    for (const s of allServices) {
+      if (!enabled(s)) continue;
+      const svcName = (s.name || "").trim();
+      const svcId = String(s.id ?? "").trim();
+      const matches =
+        svcName === sn ||
+        svcId === sn ||
+        (sn.length >= 2 && (svcName.includes(sn) || sn.includes(svcName)));
+      if (!matches) continue;
+      const r = tryResolve(s);
+      if (r) return r;
+    }
+  }
+
+  // 1) siteServiceId + pricingItemId from same booking (trust both together)
+  if (modal.siteServiceId) {
+    const service = serviceBySiteId(modal.siteServiceId);
+    if (service) {
+      const linked = pricingItemsForService(service);
+      let item = pickItem(linked, service);
+      if (!item && pid) {
+        const byPid = pricingItems.find((p) => String(p.id) === pid);
+        if (byPid) item = byPid;
+      }
+      if (item) {
+        const svc =
+          enabled(service)
+            ? service
+            : allServices.find(
+                (s) => enabled(s) && String(s.id) === String(service.id)
+              ) ?? service;
+        return { item, service: svc };
+      }
+    }
+  }
+
+  // 2) By pricing item id (booking.serviceTypeId = מחירון id)
+  if (pid) {
+    const item = pricingItems.find((p) => String(p.id).trim() === pid.trim());
+    if (item) {
+      let service = serviceBySiteId(modal.siteServiceId);
+      if (!service) {
+        const sid = String(item.serviceId ?? item.service ?? "").trim();
+        service = allServices.find(
+          (s) => enabled(s) && (s.name === sid || String(s.id) === sid)
+        );
+      }
+      if (!service) {
+        for (const s of allServices) {
+          if (!enabled(s)) continue;
+          const linked = pricingItemsForService(s);
+          if (linked.some((p) => String(p.id) === pid)) {
+            service = s;
+            break;
+          }
+        }
+      }
+      if (service) {
+        const svc =
+          enabled(service)
+            ? service
+            : allServices.find(
+                (s) => enabled(s) && String(s.id) === String(service.id)
+              ) ?? service;
+        return { item, service: svc };
+      }
+    }
+  }
+
+  // 2b) Match מחירון by type/notes (runs after שירות+סוג pin above)
+  if (rawName || serviceNameField || serviceType) {
+    const variants = [
+      ...new Set(
+        [
+          serviceType,
+          serviceNameField,
+          rawName,
+          ...(rawName ? rawName.split(/[—–\-|]/).map((t) => t.trim()) : []),
+          ...(serviceType && serviceNameField
+            ? [`${serviceNameField} — ${serviceType}`, `${serviceType} — ${serviceNameField}`]
+            : []),
+        ]
+          .filter((t): t is string => Boolean(t && String(t).trim().length >= 1))
+          .map((t) => String(t).trim())
+      ),
+    ].filter((t) => t.length >= 1);
+    let best: { item: PricingItem; service: SiteService; score: number } | null = null;
+    for (const rn of variants) {
+      const rnL = rn.toLowerCase();
+      for (const p of pricingItems) {
+      const typ = String(p.type ?? "").trim();
+      const notes = String(p.notes ?? "").trim();
+      let score = 0;
+      if (typ) {
+        const typL = typ.toLowerCase();
+        if (rn === typ || rnL === typL) score = 100;
+        else if (typ.includes(rn) || rn.includes(typ) || typL.includes(rnL) || rnL.includes(typL))
+          score = 75;
+      }
+      if (score < 75 && notes) {
+        const nL = notes.toLowerCase();
+        if (rn === notes || rnL === nL) score = 90;
+        else if (notes.includes(rn) || rn.includes(notes) || nL.includes(rnL) || rnL.includes(nL))
+          score = 75;
+      }
+      if (score < 75) continue;
+      const sid = String(p.serviceId ?? p.service ?? "").trim();
+      const svc = allServices.find(
+        (s) => enabled(s) && (String(s.id) === sid || (s.name || "").trim() === sid)
+      );
+      if (!svc) continue;
+      const preferPid = pid && String(p.id) === pid ? 1 : 0;
+      const bestPid = best && pid && String(best.item.id) === pid ? 1 : 0;
+      if (
+        !best ||
+        score > best.score ||
+        (score === best.score && preferPid > bestPid) ||
+        (score === best.score && preferPid === bestPid && String(p.id) < String(best.item.id))
+      ) {
+        best = { item: p, service: svc, score };
+      }
+      }
+    }
+    if (best && best.score >= 75) {
+      return { item: best.item, service: best.service };
+    }
+  }
+
+  // 3) Parent שירות name (צבע) then fallback labels — pickItem still prefers serviceType (גוונים)
+  const parentNameKeys = [
+    ...new Set(
+      [serviceNameField, rawName].filter((x) => typeof x === "string" && x.trim().length > 0)
+    ),
+  ];
+  for (const nameKey of parentNameKeys.length ? parentNameKeys : rawName ? [rawName] : []) {
+    const base = nameKey.split(/[—–\-]/)[0]?.trim() || nameKey;
+    const candidates: { service: SiteService; items: PricingItem[] }[] = [];
+    for (const s of allServices) {
+      if (!enabled(s)) continue;
+      const sn = (s.name || "").trim();
+      if (!sn) continue;
+      const nameMatches =
+        nameKey === sn ||
+        base === sn ||
+        nameKey.includes(sn) ||
+        (base.length >= 2 && sn.includes(base));
+      if (!nameMatches) continue;
+      const items = pricingItemsForService(s);
+      if (items.length) candidates.push({ service: s, items });
+    }
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => {
+        const an = (a.service.name || "").trim();
+        const bn = (b.service.name || "").trim();
+        const aExact = nameKey === an || base === an;
+        const bExact = nameKey === bn || base === bn;
+        if (aExact && !bExact) return -1;
+        if (!aExact && bExact) return 1;
+        return bn.length - an.length;
+      });
+      const chosen = candidates[0]!;
+      let item = pickItem(chosen.items, chosen.service);
+      if (!item && pid) {
+        const byPid = pricingItems.find((p) => String(p.id).trim() === pid.trim());
+        if (byPid) item = byPid;
+      }
+      if (item) return { item, service: chosen.service };
+    }
+  }
+
+  // 4) Loose word match — use both type and parent name
+  if ((rawName || serviceNameField) && pricingItems.length > 0) {
+    const rn = `${serviceType} ${serviceNameField} ${rawName}`
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+    const tokens = rn.split(/\s+/).filter((t) => t.length >= 2);
+    let best: { service: SiteService; score: number; items: PricingItem[] } | null = null;
+    for (const s of allServices) {
+      if (!enabled(s)) continue;
+      const items = pricingItemsForService(s);
+      if (!items.length) continue;
+      const sn = (s.name || "").trim().toLowerCase();
+      if (!sn) continue;
+      let score = 0;
+      if (rn === sn) score = 200;
+      else if (rn.includes(sn) || sn.includes(rn)) score = 80 + Math.min(rn.length, sn.length);
+      else {
+        for (const t of tokens) {
+          if (sn.includes(t)) score += 15;
+        }
+      }
+      if (score > 0 && (!best || score > best.score)) {
+        best = { service: s, score, items };
+      }
+    }
+    if (best && best.score >= 15) {
+      const item = pickItem(best.items, best.service);
+      if (item) return { item, service: best.service };
+    }
+  }
+
+  // 5) Known pricing id — match service from item.serviceId / item.service
+  if (pid) {
+    const item = pricingItems.find((p) => String(p.id).trim() === pid.trim());
+    if (item) {
+      const sid = String(item.serviceId ?? item.service ?? "").trim();
+      const svc = allServices.find(
+        (s) => enabled(s) && (String(s.id) === sid || (s.name || "").trim() === sid)
+      );
+      if (svc) return { item, service: svc };
+    }
+  }
+
+  return null;
+}
+
+type WorkerForRepeat = {
+  id: string;
+  name: string;
+  active?: boolean;
+  services?: string[];
+};
+
+/**
+ * Last visit already used this worker for this service — prefer roster match.
+ * Try capability first; if missing/empty worker.services, still return them (repeat trust).
+ */
+function pickWorkerFromLastBooking(
+  m: RepeatBookingPayload,
+  serviceForBooking: SiteService,
+  workersList: WorkerForRepeat[]
+): { id: string; name: string } | null {
+  const active = workersList.filter((w) => w.active !== false);
+  if (active.length === 0) return null;
+  const raw = (m.workerName || "").trim();
+  let w: WorkerForRepeat | undefined;
+
+  if (m.workerId?.trim()) {
+    w = active.find((x) => String(x.id) === String(m.workerId).trim());
+    if (w) {
+      if (workerCanDoServiceForService(w, serviceForBooking)) {
+        return { id: w.id, name: w.name?.trim() || m.workerName?.trim() || "עובד" };
+      }
+      return { id: w.id, name: w.name?.trim() || m.workerName?.trim() || "עובד" };
+    }
+  }
+  if (raw) {
+    const nm = raw.toLowerCase();
+    w = active.find((x) => (x.name || "").trim().toLowerCase() === nm);
+    if (!w) {
+      w = active.find((x) => {
+        const xn = (x.name || "").trim().toLowerCase();
+        return xn.includes(nm) || (nm.length >= 2 && nm.includes(xn));
+      });
+    }
+    if (w) {
+      if (workerCanDoServiceForService(w, serviceForBooking)) {
+        return { id: w.id, name: w.name?.trim() || raw || "עובד" };
+      }
+      return { id: w.id, name: w.name?.trim() || raw || "עובד" };
+    }
+  }
+  return null;
+}
+
 /** Today YYYY-MM-DD in the given IANA timezone. */
 function getTodayInTimeZone(timeZone: string): string {
   const formatter = new Intl.DateTimeFormat("en-CA", {
@@ -159,6 +525,8 @@ export default function BookingPage() {
   
   // Services and pricing items from Firestore
   const [services, setServices] = useState<SiteService[]>([]);
+  /** Full list incl. disabled — needed to resolve "repeat last booking" from archived visits */
+  const [allSiteServices, setAllSiteServices] = useState<SiteService[]>([]);
   const [pricingItems, setPricingItems] = useState<PricingItem[]>([]);
   
   // Booking settings from Firestore
@@ -209,6 +577,17 @@ export default function BookingPage() {
   const [clientName, setClientName] = useState("");
   const [clientPhone, setClientPhone] = useState("");
   const [clientNote, setClientNote] = useState("");
+  /** After פרטים: fetch last booking for repeat-service prompt */
+  const [checkingLastBooking, setCheckingLastBooking] = useState(false);
+  const [applyingRepeatBooking, setApplyingRepeatBooking] = useState(false);
+  const [repeatBookingModal, setRepeatBookingModal] = useState<RepeatBookingPayload | null>(null);
+  /** Retry repeat apply when pricing/services finish loading */
+  const [pendingRepeatApply, setPendingRepeatApply] = useState<RepeatBookingPayload | null>(null);
+  /** After "כן": workers may still be loading — assign worker when roster is ready */
+  const [pendingRepeatWorker, setPendingRepeatWorker] = useState<RepeatBookingPayload | null>(null);
+  /** Don't clear selectedWorker when roster says "can't do service" — same worker as last visit */
+  const [repeatPrefillWorkerId, setRepeatPrefillWorkerId] = useState<string | null>(null);
+  const repeatApplyPricingItemIdRef = useRef<string | null>(null);
 
   // Date picker navigation state
   const [dateWindowStart, setDateWindowStart] = useState<Date>(() => {
@@ -490,6 +869,7 @@ export default function BookingPage() {
       (svcs) => {
         console.log(`[Booking] Loaded ${svcs.length} services from sites/${siteId}.services`);
         // Only show enabled services
+        setAllSiteServices(svcs);
         const enabledServices = svcs.filter((s) => s.enabled !== false);
         console.log(`[Booking] Filtered to ${enabledServices.length} enabled services:`, enabledServices.map(s => ({ id: s.id, name: s.name, enabled: s.enabled })));
         setServices(enabledServices);
@@ -497,6 +877,7 @@ export default function BookingPage() {
       (err) => {
         console.error("[Booking] Failed to load services", err);
         setServices([]);
+        setAllSiteServices([]);
       }
     );
 
@@ -961,14 +1342,27 @@ export default function BookingPage() {
 
   // Reset worker if not eligible when services change; show message when cleared
   useEffect(() => {
+    if (workersLoading) return;
     if (selectedServices.length > 0 && selectedWorker) {
+      if (repeatPrefillWorkerId && selectedWorker.id === repeatPrefillWorkerId) {
+        return;
+      }
       const isEligible = eligibleWorkers.some((w) => w.id === selectedWorker.id);
       if (!isEligible) {
         setIneligibleWorkerMessage(true);
         setSelectedWorker(null);
       }
     }
-  }, [selectedServices, eligibleWorkers, selectedWorker]);
+  }, [selectedServices, eligibleWorkers, selectedWorker, workersLoading, repeatPrefillWorkerId]);
+
+  useEffect(() => {
+    const id = selectedServices[0]?.pricingItem?.id ?? "";
+    const refId = repeatApplyPricingItemIdRef.current;
+    if (refId && id && id !== refId) {
+      setRepeatPrefillWorkerId(null);
+      repeatApplyPricingItemIdRef.current = null;
+    }
+  }, [selectedServices]);
 
   // Clear ineligible message when user selects a worker or changes services
   useEffect(() => {
@@ -1037,31 +1431,250 @@ export default function BookingPage() {
   const isStepValid = (): boolean => {
     switch (step) {
       case 1:
+        return clientName.trim() !== "" && clientPhone.trim() !== "";
+      case 2:
         if (selectedServices.length < 1) return false;
         if (isMultiBooking && selectedServices.length > 1 && !hasValidMultiBookingCombo) return false;
         return true;
-      case 2:
-        // Worker selection is optional, but we need at least one eligible worker available
-        // If no eligible workers, disable next step
-        return eligibleWorkers.length > 0;
       case 3:
-        return selectedDate !== null;
+        return eligibleWorkers.length > 0;
       case 4:
-        return selectedTime !== "";
+        return selectedDate !== null;
       case 5:
-        return clientName.trim() !== "" && clientPhone.trim() !== "";
+        return selectedTime !== "";
       default:
         return false;
     }
   };
 
+  const continueFromDetailsStep = async () => {
+    if (!clientName.trim() || !clientPhone.trim() || !siteId) return;
+    setCheckingLastBooking(true);
+    setSubmitError(null);
+    try {
+      const res = await fetch("/api/bookings/last-for-phone", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ siteId, phone: clientPhone.trim() }),
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        booking?: RepeatBookingPayload | null;
+      };
+      const b = data.booking;
+      if (!data.ok || !b) {
+        setStep(2);
+        return;
+      }
+      const bPid = String(b.pricingItemId || "").trim();
+      const bSn = String(b.serviceName || "").trim();
+      const bSt =
+        b.serviceType != null && String(b.serviceType).trim() !== ""
+          ? String(b.serviceType).trim()
+          : "";
+      /** שירות first, סוג second (matches API displayTitle/displaySubtitle) */
+      const bTitle =
+        typeof b.displayTitle === "string" && b.displayTitle.trim()
+          ? b.displayTitle.trim()
+          : bSn || bSt || "השירות האחרון";
+      const bSub =
+        b.displaySubtitle != null && String(b.displaySubtitle).trim() !== ""
+          ? String(b.displaySubtitle).trim()
+          : bSn && bSt && bSn !== bSt
+            ? bSt
+            : null;
+      if (bPid || bSn || bSt) {
+        setRepeatBookingModal({
+          pricingItemId: bPid,
+          serviceName: bSn,
+          serviceType: bSt || null,
+          displayTitle: bTitle,
+          displaySubtitle: bSub,
+          dateLabel: b.dateLabel,
+          workerId: b.workerId ?? null,
+          workerName: b.workerName ?? null,
+          siteServiceId: b.siteServiceId ?? null,
+        });
+      } else {
+        setStep(2);
+      }
+    } catch {
+      setStep(2);
+    } finally {
+      setCheckingLastBooking(false);
+    }
+  };
+
+  const applyRepeatServiceAndContinue = async () => {
+    if (!repeatBookingModal || !siteId) return;
+    const m = { ...repeatBookingModal };
+    setApplyingRepeatBooking(true);
+    setSubmitError(null);
+    setPendingRepeatWorker(null);
+
+    const finishApply = (
+      resolved: { item: PricingItem; service: SiteService },
+      workerModal: RepeatBookingPayload
+    ) => {
+      const itemFull =
+        pricingItems.find((p) => String(p.id) === String(resolved.item.id)) ?? resolved.item;
+      const svcFull =
+        services.find((s) => String(s.id) === String(resolved.service.id)) ??
+        allSiteServices.find((s) => String(s.id) === String(resolved.service.id)) ??
+        resolved.service;
+      setRepeatBookingModal(null);
+      setIsMultiBooking(false);
+      setSelectedServices([{ service: svcFull, pricingItem: itemFull }]);
+      setSelectedDate(null);
+      setSelectedTime("");
+      setPhase2WorkerAssigned(null);
+      repeatApplyPricingItemIdRef.current = itemFull.id;
+      if (workersLoading) {
+        setPendingRepeatWorker(workerModal);
+        setSelectedWorker(null);
+        setRepeatPrefillWorkerId(null);
+      } else {
+        const picked = pickWorkerFromLastBooking(workerModal, svcFull, workers);
+        setSelectedWorker(picked);
+        setRepeatPrefillWorkerId(picked?.id ?? null);
+        setPendingRepeatWorker(null);
+      }
+      setStep(4);
+    };
+
+    try {
+      const res = await fetch("/api/bookings/resolve-repeat-selection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          siteId,
+          pricingItemId: m.pricingItemId,
+          serviceName: m.serviceName,
+          serviceType: m.serviceType,
+          siteServiceId: m.siteServiceId,
+        }),
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        service?: SiteService;
+        pricingItem?: PricingItem;
+        userMessage?: string;
+      };
+      const repeatGoneMessage =
+        typeof data.userMessage === "string" && data.userMessage.trim()
+          ? data.userMessage.trim()
+          : REPEAT_SERVICE_NO_LONGER_AVAILABLE;
+      if (data.ok && data.service && data.pricingItem) {
+        finishApply({ service: data.service, item: data.pricingItem }, m);
+        return;
+      }
+
+      if (pricingItems.length === 0 || services.length === 0) {
+        setPendingRepeatApply(m);
+        setRepeatBookingModal(null);
+        setStep(4);
+        return;
+      }
+
+      const primary = allSiteServices.length > 0 ? allSiteServices : services;
+      const lists =
+        primary === services ? [services] : [primary, services].filter((l) => l.length > 0);
+      let resolved: { item: PricingItem; service: SiteService } | null = null;
+      for (const svcList of lists) {
+        resolved = findPricingAndServiceForRepeat(m, pricingItems, svcList);
+        if (resolved) break;
+      }
+      if (resolved) {
+        finishApply(resolved, m);
+        return;
+      }
+
+      setSubmitError(repeatGoneMessage);
+      setRepeatBookingModal(null);
+      setStep(2);
+    } catch {
+      setSubmitError("שגיאת רשת. נסו שוב או בחרו שירות מהרשימה.");
+      setRepeatBookingModal(null);
+      setStep(2);
+    } finally {
+      setApplyingRepeatBooking(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!pendingRepeatApply) return;
+    if (pricingItems.length === 0 || services.length === 0) return;
+    const m = pendingRepeatApply;
+    setPendingRepeatApply(null);
+    const primary = allSiteServices.length > 0 ? allSiteServices : services;
+    const lists =
+      primary === services ? [services] : [primary, services].filter((l) => l.length > 0);
+    let resolved: { item: PricingItem; service: SiteService } | null = null;
+    for (const svcList of lists) {
+      resolved = findPricingAndServiceForRepeat(m, pricingItems, svcList);
+      if (resolved) break;
+    }
+    if (!resolved) {
+      setSubmitError(REPEAT_SERVICE_NO_LONGER_AVAILABLE);
+      setStep(2);
+      return;
+    }
+    const serviceForBooking =
+      services.find((s) => String(s.id) === String(resolved.service.id)) ?? resolved.service;
+    setIsMultiBooking(false);
+    setSelectedServices([{ service: serviceForBooking, pricingItem: resolved.item }]);
+    setSelectedDate(null);
+    setSelectedTime("");
+    setPhase2WorkerAssigned(null);
+    repeatApplyPricingItemIdRef.current = resolved.item.id;
+    if (workersLoading) {
+      setPendingRepeatWorker(m);
+      setSelectedWorker(null);
+      setRepeatPrefillWorkerId(null);
+    } else {
+      const picked = pickWorkerFromLastBooking(m, serviceForBooking, workers);
+      setSelectedWorker(picked);
+      setRepeatPrefillWorkerId(picked?.id ?? null);
+      setPendingRepeatWorker(null);
+    }
+    setStep(4);
+  }, [pendingRepeatApply, pricingItems, services, allSiteServices, workers, workersLoading]);
+
+  useEffect(() => {
+    if (!pendingRepeatWorker || workersLoading) return;
+    const svc = selectedServices[0]?.service;
+    if (!svc) {
+      setPendingRepeatWorker(null);
+      return;
+    }
+    const picked = pickWorkerFromLastBooking(pendingRepeatWorker, svc, workers);
+    setPendingRepeatWorker(null);
+    if (picked) {
+      setSelectedWorker(picked);
+      setRepeatPrefillWorkerId(picked.id);
+    }
+  }, [pendingRepeatWorker, workersLoading, workers, selectedServices]);
+
+  const dismissRepeatModalPickService = () => {
+    setRepeatBookingModal(null);
+    setPendingRepeatWorker(null);
+    setRepeatPrefillWorkerId(null);
+    repeatApplyPricingItemIdRef.current = null;
+    setStep(2);
+  };
+
   const handleNext = () => {
+    if (step === 1) {
+      if (isStepValid()) void continueFromDetailsStep();
+      return;
+    }
     if (isStepValid() && step < 5) {
       setStep((step + 1) as BookingStep);
     }
   };
 
   const handleBack = () => {
+    setRepeatBookingModal(null);
     if (step > 1) {
       setStep((step - 1) as BookingStep);
     }
@@ -1071,7 +1684,15 @@ export default function BookingPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
-    if (!isStepValid() || selectedServices.length === 0 || !selectedDate || !selectedTime || !db) {
+    if (
+      !clientName.trim() ||
+      !clientPhone.trim() ||
+      step !== 5 ||
+      selectedServices.length === 0 ||
+      !selectedDate ||
+      !selectedTime ||
+      !db
+    ) {
       if (!db) setSubmitError("Firebase לא מאותחל. אנא רענן את הדף.");
       return;
     }
@@ -1259,7 +1880,8 @@ export default function BookingPage() {
           })),
         });
       }
-      const { firstBookingId, visitGroupId } = await saveMultiServiceBooking(siteId, repaired, {
+      const repairedWithPrices = attachCatalogPricesToChainSlots(repaired, pricingItems);
+      const { firstBookingId, visitGroupId } = await saveMultiServiceBooking(siteId, repairedWithPrices, {
         name: clientName.trim(),
         phone: clientPhone.trim(),
         note: clientNote.trim() || undefined,
@@ -1394,11 +2016,11 @@ export default function BookingPage() {
   }
 
   const stepLabels = [
-    { num: 1, label: "שירות" },
-    { num: 2, label: "איש צוות" },
-    { num: 3, label: "תאריך" },
-    { num: 4, label: "שעה" },
-    { num: 5, label: "פרטים" },
+    { num: 1, label: "פרטים" },
+    { num: 2, label: "שירות" },
+    { num: 3, label: "איש צוות" },
+    { num: 4, label: "תאריך" },
+    { num: 5, label: "שעה" },
   ];
 
   if (step === 6) {
@@ -1873,8 +2495,111 @@ export default function BookingPage() {
 
         {/* Step content */}
         <div className="rounded-3xl shadow-lg p-6 sm:p-8" style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)", borderWidth: "1px" }}>
-          {/* Step 1: Service and pricing selection (multi-service only when isMultiBooking) */}
+          {/* Step 1: Client details (first — repeat-last-service after phone lookup) */}
           {step === 1 && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-bold mb-4 text-right" style={{ color: "var(--text)" }}>
+                פרטי לקוח
+              </h2>
+              <div className="space-y-4">
+                <div>
+                  <label
+                    htmlFor="clientName"
+                    className="block text-sm font-medium mb-2 text-right"
+                    style={{ color: "var(--text)" }}
+                  >
+                    שם מלא *
+                  </label>
+                  <input
+                    type="text"
+                    id="clientName"
+                    value={clientName}
+                    onChange={(e) => setClientName(e.target.value)}
+                    className="w-full rounded-xl border px-4 py-3 text-right focus:outline-none focus:ring-2"
+                    style={{
+                      borderColor: "var(--border)",
+                      backgroundColor: "var(--surface)",
+                      color: "var(--text)",
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = "var(--primary)";
+                      e.target.style.boxShadow = "0 0 0 2px rgba(0, 0, 0, 0.1)";
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = "var(--border)";
+                      e.target.style.boxShadow = "none";
+                    }}
+                    placeholder="הזינו את שמכם המלא"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="clientPhone"
+                    className="block text-sm font-medium mb-2 text-right"
+                    style={{ color: "var(--text)" }}
+                  >
+                    טלפון *
+                  </label>
+                  <input
+                    type="tel"
+                    id="clientPhone"
+                    value={clientPhone}
+                    onChange={(e) => setClientPhone(e.target.value)}
+                    className="w-full rounded-xl border px-4 py-3 text-right focus:outline-none focus:ring-2"
+                    style={{
+                      borderColor: "var(--border)",
+                      backgroundColor: "var(--surface)",
+                      color: "var(--text)",
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = "var(--primary)";
+                      e.target.style.boxShadow = "0 0 0 2px rgba(0, 0, 0, 0.1)";
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = "var(--border)";
+                      e.target.style.boxShadow = "none";
+                    }}
+                    placeholder="050-1234567"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="clientNote"
+                    className="block text-sm font-medium mb-2 text-right"
+                    style={{ color: "var(--text)" }}
+                  >
+                    הערה (אופציונלי)
+                  </label>
+                  <textarea
+                    id="clientNote"
+                    value={clientNote}
+                    onChange={(e) => setClientNote(e.target.value)}
+                    rows={3}
+                    className="w-full rounded-xl border px-4 py-3 text-right focus:outline-none focus:ring-2 resize-none"
+                    style={{
+                      borderColor: "var(--border)",
+                      backgroundColor: "var(--surface)",
+                      color: "var(--text)",
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = "var(--primary)";
+                      e.target.style.boxShadow = "0 0 0 2px rgba(0, 0, 0, 0.1)";
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = "var(--border)";
+                      e.target.style.boxShadow = "none";
+                    }}
+                    placeholder="השאירו הערות או בקשות מיוחדות..."
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Service and pricing selection (multi-service only when isMultiBooking) */}
+          {step === 2 && (
             <div className="space-y-4">
               <h2 className="text-xl font-bold mb-4 text-right" style={{ color: "var(--text)" }}>
                 בחרו שירותים
@@ -2050,18 +2775,36 @@ export default function BookingPage() {
                               const displayName = item.type && item.type.trim() 
                                 ? `${service.name} - ${item.type}`
                                 : service.name;
+                              const fuP =
+                                item.hasFollowUp &&
+                                item.followUp &&
+                                typeof item.followUp.price === "number"
+                                  ? item.followUp.price
+                                  : 0;
                               const displayPrice = item.priceRangeMin && item.priceRangeMax
                                 ? (() => {
                                     const min = Math.min(item.priceRangeMin!, item.priceRangeMax!);
                                     const max = Math.max(item.priceRangeMin!, item.priceRangeMax!);
+                                    if (fuP > 0) {
+                                      return (
+                                        <span dir="rtl" className="inline-block">
+                                          ₪{min}–₪{max} + המשך ₪{fuP}
+                                          <span className="text-[var(--muted)] text-xs mr-1">
+                                            (סה״כ משוער ₪{min + fuP}–₪{max + fuP})
+                                          </span>
+                                        </span>
+                                      );
+                                    }
                                     return (
                                       <span dir="ltr" className="inline-block">
                                         ₪{min}–₪{max}
                                       </span>
                                     );
                                   })()
-                                : item.price
-                                ? `₪${item.price}`
+                                : item.price != null
+                                ? fuP > 0
+                                  ? `₪${item.price} + המשך ₪${fuP} (סה״כ ₪${item.price + fuP})`
+                                  : `₪${item.price}`
                                 : "מחיר לפי בקשה";
                               const displayDuration = item.durationMinMinutes === item.durationMaxMinutes
                                 ? `${item.durationMinMinutes} דק'`
@@ -2114,8 +2857,8 @@ export default function BookingPage() {
             </div>
           )}
 
-          {/* Step 2: Worker selection */}
-          {step === 2 && (
+          {/* Step 3: Worker selection */}
+          {step === 3 && (
             <div className="space-y-4">
               <h2 className="text-xl font-bold mb-4 text-right" style={{ color: "var(--text)" }}>
                 בחרו איש צוות
@@ -2152,6 +2895,8 @@ export default function BookingPage() {
                     <button
                       type="button"
                       onClick={() => {
+                        setRepeatPrefillWorkerId(null);
+                        repeatApplyPricingItemIdRef.current = null;
                         setSelectedWorker(null);
                         setTimeUpdatedByWorkerMessage(false);
                       }}
@@ -2181,6 +2926,10 @@ export default function BookingPage() {
                         key={worker.id}
                         type="button"
                         onClick={() => {
+                          if (repeatPrefillWorkerId && worker.id !== repeatPrefillWorkerId) {
+                            setRepeatPrefillWorkerId(null);
+                            repeatApplyPricingItemIdRef.current = null;
+                          }
                           setSelectedWorker({ id: worker.id, name: worker.name });
                           setTimeUpdatedByWorkerMessage(false);
                         }}
@@ -2225,8 +2974,16 @@ export default function BookingPage() {
           )}
 
           {/* Step 3: Date selection */}
-          {step === 3 && (
+          {step === 4 && (
             <div className="space-y-4">
+              {pendingRepeatApply && selectedServices.length === 0 && (
+                <div
+                  className="mb-4 p-4 rounded-xl text-right text-sm"
+                  style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)" }}
+                >
+                  טוען את השירות מההזמנה הקודמת…
+                </div>
+              )}
               <h2 className="text-xl font-bold mb-4 text-right" style={{ color: "var(--text)" }}>
                 בחרו תאריך
               </h2>
@@ -2314,8 +3071,8 @@ export default function BookingPage() {
             </div>
           )}
 
-          {/* Step 4: Time selection */}
-          {step === 4 && (
+          {/* Step 5: Time selection */}
+          {step === 5 && (
             <div className="space-y-4">
               <h2 className="text-xl font-bold mb-4 text-right" style={{ color: "var(--text)" }}>
                 בחרו שעה
@@ -2404,109 +3161,6 @@ export default function BookingPage() {
             </div>
           )}
 
-          {/* Step 5: Client details */}
-          {step === 5 && (
-            <div className="space-y-4">
-              <h2 className="text-xl font-bold mb-4 text-right" style={{ color: "var(--text)" }}>
-                פרטי לקוח
-              </h2>
-              <div className="space-y-4">
-                <div>
-                  <label
-                    htmlFor="clientName"
-                    className="block text-sm font-medium mb-2 text-right"
-                    style={{ color: "var(--text)" }}
-                  >
-                    שם מלא *
-                  </label>
-                  <input
-                    type="text"
-                    id="clientName"
-                    value={clientName}
-                    onChange={(e) => setClientName(e.target.value)}
-                    className="w-full rounded-xl border px-4 py-3 text-right focus:outline-none focus:ring-2"
-                    style={{ 
-                      borderColor: "var(--border)",
-                      backgroundColor: "var(--surface)",
-                      color: "var(--text)",
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = "var(--primary)";
-                      e.target.style.boxShadow = "0 0 0 2px rgba(0, 0, 0, 0.1)";
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = "var(--border)";
-                      e.target.style.boxShadow = "none";
-                    }}
-                    placeholder="הזינו את שמכם המלא"
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="clientPhone"
-                    className="block text-sm font-medium mb-2 text-right"
-                    style={{ color: "var(--text)" }}
-                  >
-                    טלפון *
-                  </label>
-                  <input
-                    type="tel"
-                    id="clientPhone"
-                    value={clientPhone}
-                    onChange={(e) => setClientPhone(e.target.value)}
-                    className="w-full rounded-xl border px-4 py-3 text-right focus:outline-none focus:ring-2"
-                    style={{ 
-                      borderColor: "var(--border)",
-                      backgroundColor: "var(--surface)",
-                      color: "var(--text)",
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = "var(--primary)";
-                      e.target.style.boxShadow = "0 0 0 2px rgba(0, 0, 0, 0.1)";
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = "var(--border)";
-                      e.target.style.boxShadow = "none";
-                    }}
-                    placeholder="050-1234567"
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="clientNote"
-                    className="block text-sm font-medium mb-2 text-right"
-                    style={{ color: "var(--text)" }}
-                  >
-                    הערה (אופציונלי)
-                  </label>
-                  <textarea
-                    id="clientNote"
-                    value={clientNote}
-                    onChange={(e) => setClientNote(e.target.value)}
-                    rows={3}
-                    className="w-full rounded-xl border px-4 py-3 text-right focus:outline-none focus:ring-2 resize-none"
-                    style={{ 
-                      borderColor: "var(--border)",
-                      backgroundColor: "var(--surface)",
-                      color: "var(--text)",
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = "var(--primary)";
-                      e.target.style.boxShadow = "0 0 0 2px rgba(0, 0, 0, 0.1)";
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = "var(--border)";
-                      e.target.style.boxShadow = "none";
-                    }}
-                    placeholder="השאירו הערות או בקשות מיוחדות..."
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Navigation buttons */}
           <div className="mt-8 pt-6 border-t flex justify-between gap-4" style={{ borderColor: "var(--border)" }}>
             <button
@@ -2526,14 +3180,14 @@ export default function BookingPage() {
               <button
                 type="button"
                 onClick={handleNext}
-                disabled={!isStepValid()}
+                disabled={!isStepValid() || checkingLastBooking}
                 className="px-6 py-3 rounded-xl font-semibold transition-colors hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ 
                   backgroundColor: "var(--primary)",
                   color: "var(--primaryText)",
                 }}
               >
-                המשך
+                {checkingLastBooking ? "בודק…" : "המשך"}
               </button>
             ) : (
               <button
@@ -2557,11 +3211,93 @@ export default function BookingPage() {
             </div>
           )}
 
-          {!isStepValid() && step < 6 && (
+          {!isStepValid() && step < 6 && step !== 1 && (
             <div className="mt-4 p-3 border rounded-xl text-right" style={{ backgroundColor: "#fef2f2", borderColor: "#fecaca" }}>
               <p className="text-sm" style={{ color: "#991b1b" }}>
                 יש למלא את כל השדות הנדרשים לפני המשך
               </p>
+            </div>
+          )}
+          {!isStepValid() && step === 1 && (
+            <div className="mt-4 p-3 border rounded-xl text-right" style={{ backgroundColor: "#fef2f2", borderColor: "#fecaca" }}>
+              <p className="text-sm" style={{ color: "#991b1b" }}>
+                נא למלא שם מלא ומספר טלפון כדי להמשיך
+              </p>
+            </div>
+          )}
+
+          {repeatBookingModal && (
+            <div
+              className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50"
+              dir="rtl"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="repeat-booking-title"
+              onClick={() => {
+                if (!applyingRepeatBooking) dismissRepeatModalPickService();
+              }}
+            >
+              <div
+                className="rounded-2xl border p-6 max-w-md w-full shadow-xl text-right"
+                style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 id="repeat-booking-title" className="text-lg font-bold mb-2" style={{ color: "var(--text)" }}>
+                  תור קודם במערכת
+                </h3>
+                <p className="text-sm mb-3" style={{ color: "var(--muted)" }}>
+                  בפעם האחרונה ({repeatBookingModal.dateLabel}) נקבע לך תור ל־
+                </p>
+                <p className="text-xs font-medium mb-0.5" style={{ color: "var(--muted)" }}>
+                  שירות
+                </p>
+                <p className="text-base font-semibold mb-2" style={{ color: "var(--text)" }}>
+                  {repeatBookingModal.displayTitle}
+                </p>
+                {repeatBookingModal.displaySubtitle ? (
+                  <>
+                    <p className="text-xs font-medium mb-0.5" style={{ color: "var(--muted)" }}>
+                      סוג טיפול
+                    </p>
+                    <p className="text-sm font-medium mb-2" style={{ color: "var(--text)" }}>
+                      {repeatBookingModal.displaySubtitle}
+                    </p>
+                  </>
+                ) : null}
+                {repeatBookingModal.workerName ? (
+                  <p className="text-sm mb-3" style={{ color: "var(--muted)" }}>
+                    עם {repeatBookingModal.workerName}
+                  </p>
+                ) : (
+                  <div className="mb-3" />
+                )}
+                <p className="text-sm mb-4" style={{ color: "var(--text)" }}>
+                  לקבוע שוב את אותו שירות
+                  {repeatBookingModal.workerName ? " ואותו איש צוות" : ""}? נעבור ישר לבחירת תאריך ושעה כשהכל זמין.
+                </p>
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void applyRepeatServiceAndContinue()}
+                    disabled={applyingRepeatBooking}
+                    className="w-full py-3 rounded-xl font-semibold disabled:opacity-60 disabled:cursor-wait"
+                    style={{ backgroundColor: "var(--primary)", color: "var(--primaryText)" }}
+                  >
+                    {applyingRepeatBooking
+                      ? "מזהה שירות…"
+                      : `כן — אותו שירות${repeatBookingModal.workerName ? " ואותו איש צוות" : ""}`}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={applyingRepeatBooking}
+                    onClick={dismissRepeatModalPickService}
+                    className="w-full py-3 rounded-xl border font-medium"
+                    style={{ borderColor: "var(--border)", color: "var(--text)" }}
+                  >
+                    לא, אבחר שירות אחר
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

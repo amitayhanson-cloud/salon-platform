@@ -18,6 +18,7 @@ import type { PricingItem } from "@/types/pricingItem";
 import type { BookingSettings } from "@/types/bookingSettings";
 import type { OpeningHours } from "@/types/booking";
 import DurationMinutesStepper from "@/components/admin/DurationMinutesStepper";
+import { catalogRevenuePhase1, catalogRevenuePhase2 } from "@/lib/followUpRevenue";
 
 /** Display label for a service type (pricing item): service name + optional type (e.g. "תספורת - חצי ראש"). */
 function getServiceTypeLabel(item: PricingItem, services: SiteService[]): string {
@@ -439,6 +440,11 @@ export default function AdminBookingForm({
         ? workers.find((w) => w.id === phase2WorkerOverride)?.name ?? ""
         : phase2ResolvedWorker?.name ?? "";
 
+    const withPhase2 =
+      phase2Enabled && phase2ServiceName.trim() && phase2DurationMin >= 1;
+    const manualPriceParsed = price.trim() ? parseFloat(price.replace(",", ".")) : NaN;
+    const hasManualPrice = price.trim() !== "" && !Number.isNaN(manualPriceParsed);
+
     const payload: AdminBookingPayload = {
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
@@ -454,7 +460,7 @@ export default function AdminBookingForm({
         serviceColor: phase1ServiceColor,
       },
       phase2:
-        phase2Enabled && phase2ServiceName.trim() && phase2DurationMin >= 1
+        withPhase2
           ? {
               enabled: true,
               serviceName: phase2ServiceName.trim(),
@@ -466,7 +472,17 @@ export default function AdminBookingForm({
           : null,
       note: note.trim() || null,
       status,
-      price: price.trim() ? parseFloat(price) : null,
+      price: withPhase2
+        ? hasManualPrice
+          ? manualPriceParsed
+          : selectedPhase1Item
+            ? catalogRevenuePhase1(selectedPhase1Item)
+            : null
+        : hasManualPrice
+          ? manualPriceParsed
+          : null,
+      phase2Price:
+        withPhase2 && selectedPhase1Item ? catalogRevenuePhase2(selectedPhase1Item) : null,
     };
 
     setSaving(true);
