@@ -136,6 +136,16 @@ type RepeatBookingPayload = {
   siteServiceId: string | null;
 };
 
+/** Admin saves pricingItem.serviceId as site service id (e.g. svc_…) or legacy name — match both */
+function pricingItemMatchesSiteService(item: PricingItem, service: SiteService): boolean {
+  const key = String(item.serviceId ?? item.service ?? "").trim();
+  if (!key) return false;
+  const id = String(service.id ?? "").trim();
+  const name = String(service.name ?? "").trim();
+  const disp = String((service as { displayName?: string }).displayName ?? "").trim();
+  return key === id || key === name || (!!disp && key === disp);
+}
+
 function findPricingAndServiceForRepeat(
   modal: RepeatBookingPayload,
   pricingItems: PricingItem[],
@@ -1194,10 +1204,9 @@ export default function BookingPage() {
   // If no pricing items exist, create a default one (price is optional)
   const pricingItemsForService = selectedService
     ? (() => {
-        const matchingItems = pricingItems.filter((item) => {
-          const itemServiceId = item.serviceId || item.service;
-          return itemServiceId === selectedService.name;
-        });
+        const matchingItems = pricingItems.filter((item) =>
+          pricingItemMatchesSiteService(item, selectedService)
+        );
         // If no pricing items exist, create a default one to allow booking
         if (matchingItems.length === 0) {
           console.log(`[Booking] Service "${selectedService.name}" has no pricing items, creating default`);
@@ -2734,10 +2743,9 @@ export default function BookingPage() {
                   {bookableServices.map((service) => {
                     // Get pricing items for this service, or use default if none exist
                     const servicePricingItems = (() => {
-                      const matching = pricingItems.filter((item) => {
-                        const itemServiceId = item.serviceId || item.service;
-                        return itemServiceId === service.name;
-                      });
+                      const matching = pricingItems.filter((item) =>
+                        pricingItemMatchesSiteService(item, service)
+                      );
                       // If no pricing items exist, create a default one (price is optional)
                       if (matching.length === 0) {
                         return [getDefaultPricingItem(service)];
