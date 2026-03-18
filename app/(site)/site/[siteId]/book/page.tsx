@@ -2793,27 +2793,21 @@ export default function BookingPage() {
                                 ? (() => {
                                     const min = Math.min(item.priceRangeMin!, item.priceRangeMax!);
                                     const max = Math.max(item.priceRangeMin!, item.priceRangeMax!);
-                                    if (fuP > 0) {
-                                      return (
-                                        <span dir="rtl" className="inline-block">
-                                          ₪{min}–₪{max} + המשך ₪{fuP}
-                                          <span className="text-[var(--muted)] text-xs mr-1">
-                                            (סה״כ משוער ₪{min + fuP}–₪{max + fuP})
-                                          </span>
-                                        </span>
-                                      );
-                                    }
+                                    const low = min + fuP;
+                                    const high = max + fuP;
                                     return (
                                       <span dir="ltr" className="inline-block">
-                                        ₪{min}–₪{max}
+                                        {fuP > 0 && low === high
+                                          ? `₪${low}`
+                                          : `₪${low}–₪${high}`}
                                       </span>
                                     );
                                   })()
                                 : item.price != null
-                                ? fuP > 0
-                                  ? `₪${item.price} + המשך ₪${fuP} (סה״כ ₪${item.price + fuP})`
-                                  : `₪${item.price}`
-                                : "מחיר לפי בקשה";
+                                ? `₪${item.price + fuP}`
+                                : fuP > 0
+                                  ? `₪${fuP}`
+                                  : "מחיר לפי בקשה";
                               const displayDuration = item.durationMinMinutes === item.durationMaxMinutes
                                 ? `${item.durationMinMinutes} דק'`
                                 : `${item.durationMinMinutes}-${item.durationMaxMinutes} דק'`;
