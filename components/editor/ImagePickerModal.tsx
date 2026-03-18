@@ -77,6 +77,17 @@ export function ImagePickerModal({
     if (isOpen) setFailedPlatformUrls(new Set());
   }, [isOpen, targetPath]);
 
+  const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!selectedFile) {
+      setFilePreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(selectedFile);
+    setFilePreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [selectedFile]);
+
   const handleFileChange = useCallback(() => {
     const file = fileInputRef.current?.files?.[0];
     setSelectedFile(file ?? null);
@@ -189,9 +200,37 @@ export function ImagePickerModal({
                 בחר קובץ מהמכשיר
               </button>
               {selectedFile && (
-                <p className="text-xs text-slate-500">
-                  נבחר: {selectedFile.name}
-                </p>
+                <>
+                  <p className="text-xs text-slate-500">
+                    נבחר: {selectedFile.name}
+                  </p>
+                  {filePreviewUrl && (
+                    <div className="flex flex-col items-center gap-2 py-2">
+                      <p className="text-xs font-medium text-slate-600">
+                        {targetPath === "reviewAvatar"
+                          ? "תצוגה מקדימה (כך תופיע תמונת הפרופיל בביקורות)"
+                          : "תצוגה מקדימה"}
+                      </p>
+                      <div
+                        className={
+                          targetPath === "reviewAvatar"
+                            ? "w-24 h-24 rounded-full overflow-hidden border-2 border-slate-200 shadow-md ring-2 ring-slate-100"
+                            : "w-full max-h-48 rounded-xl overflow-hidden border border-slate-200 shadow-sm"
+                        }
+                      >
+                        <img
+                          src={filePreviewUrl}
+                          alt=""
+                          className={
+                            targetPath === "reviewAvatar"
+                              ? "w-full h-full object-cover"
+                              : "w-full h-full max-h-48 object-contain bg-slate-50"
+                          }
+                        />
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
               <button
                 type="button"

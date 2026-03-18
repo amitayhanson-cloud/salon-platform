@@ -3,6 +3,7 @@
 import * as React from "react";
 import { motion, PanInfo } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { TestimonialAvatar } from "@/components/ui/testimonial-avatar";
 
 export type TestimonialItem = {
   id: number | string;
@@ -129,24 +130,7 @@ export const TestimonialCarousel = React.forwardRef<
               }}
             >
               <div className="p-6 flex flex-col items-center gap-3 text-center">
-                {/* Avatar circle */}
-                {t.avatar ? (
-                  <img
-                    src={t.avatar}
-                    alt={t.name}
-                    className="w-16 h-16 rounded-full object-cover border border-[var(--border)]"
-                  />
-                ) : (
-                  <div
-                    className="w-16 h-16 rounded-full flex items-center justify-center border border-[var(--border)] text-sm font-semibold"
-                    style={{
-                      backgroundColor: "var(--surface)",
-                      color: "var(--mutedText)",
-                    }}
-                  >
-                    {initials}
-                  </div>
-                )}
+                <TestimonialAvatar src={t.avatar} name={t.name} initials={initials} />
 
                 {/* Name */}
                 <h3 className="text-lg font-semibold" style={{ color: "var(--text)" }}>

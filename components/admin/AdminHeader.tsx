@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useParams, useRouter } from "next/navigation";
@@ -76,6 +77,14 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
+  const dropdownPortalRef = useRef<HTMLDivElement>(null);
+  const triggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const [dropdownPlacement, setDropdownPlacement] = useState<{
+    top: number;
+    right: number;
+    minWidth: number;
+  } | null>(null);
+  const [portalMounted, setPortalMounted] = useState(false);
 
   // Per-site branding (name + logo) from Firestore
   const [siteName, setSiteName] = useState("");
@@ -112,15 +121,48 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
 
   const canViewSite = !authLoading && !!user;
 
-  // Close dropdown when clicking outside
+  useEffect(() => setPortalMounted(true), []);
+
+  // Position desktop dropdown (portal) under trigger; update on scroll/resize
+  useLayoutEffect(() => {
+    if (!openDropdown) {
+      setDropdownPlacement(null);
+      return;
+    }
+    const update = () => {
+      if (typeof window !== "undefined" && !window.matchMedia("(min-width: 768px)").matches) {
+        setDropdownPlacement(null);
+        return;
+      }
+      const el = triggerRefs.current[openDropdown];
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) {
+        setDropdownPlacement(null);
+        return;
+      }
+      setDropdownPlacement({
+        top: r.bottom + 4,
+        right: document.documentElement.clientWidth - r.right,
+        minWidth: Math.max(r.width, 192),
+      });
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [openDropdown]);
+
+  // Close dropdown when clicking outside (include portal — it renders under body)
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        headerRef.current &&
-        !headerRef.current.contains(event.target as Node)
-      ) {
-        setOpenDropdown(null);
-      }
+      const t = event.target as Node;
+      if (headerRef.current?.contains(t)) return;
+      if (dropdownPortalRef.current?.contains(t)) return;
+      setOpenDropdown(null);
     };
 
     document.addEventListener("mousedown", handleClickOutside);
@@ -251,6 +293,11 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                   ) : (
                     <>
                       <button
+                        type="button"
+                        ref={(el) => {
+                          if (el) triggerRefs.current[item.label] = el;
+                          else delete triggerRefs.current[item.label];
+                        }}
                         onClick={() => toggleDropdown(item.label)}
                         className={`flex items-center gap-1 rounded-full px-4 py-2 text-sm font-medium transition-[background-color,border-color,box-shadow] duration-200 backdrop-blur-md ${
                           isParentActive(item)
@@ -266,39 +313,6 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                           }`}
                         />
                       </button>
-                      {openDropdown === item.label && item.items && (
-                        <div className="absolute right-0 top-full mt-1 z-[110] w-48 overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white/95 shadow-xl backdrop-blur-md animate-[dropdown_0.2s_ease-out_forwards]">
-                          {item.items.map((subItem) => (
-                            <div key={subItem.href}>
-                              <Link
-                                href={subItem.href}
-                                onClick={() => setOpenDropdown(null)}
-                                className={`block px-4 py-2 text-sm transition-colors duration-200 ${
-                                  isActive(subItem.href)
-                                    ? "bg-[rgba(204,238,241,0.5)] font-medium text-[#0F172A]"
-                                    : "text-[#0F172A] hover:bg-caleno-50"
-                                }`}
-                              >
-                                {subItem.label}
-                              </Link>
-                              {subItem.items?.map((nested) => (
-                                <Link
-                                  key={nested.href}
-                                  href={nested.href}
-                                  onClick={() => setOpenDropdown(null)}
-                                  className={`block border-t border-[#E2E8F0] px-4 py-2 pl-6 text-sm transition-colors duration-200 ${
-                                    isActive(nested.href)
-                                      ? "bg-[rgba(204,238,241,0.5)] font-medium text-[#0F172A]"
-                                      : "text-[#0F172A] hover:bg-caleno-50"
-                                  }`}
-                                >
-                                  {nested.label}
-                                </Link>
-                              ))}
-                            </div>
-                          ))}
-                        </div>
-                      )}
                     </>
                   )}
                 </div>
@@ -445,6 +459,56 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
         )}
       </div>
 
+      {portalMounted &&
+        openDropdown &&
+        dropdownPlacement &&
+        (() => {
+          const item = menuItems.find((i) => i.label === openDropdown && i.items);
+          if (!item?.items) return null;
+          return createPortal(
+            <div
+              ref={dropdownPortalRef}
+              dir="rtl"
+              className="fixed z-[300] overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white shadow-xl animate-[dropdown_0.2s_ease-out_forwards]"
+              style={{
+                top: dropdownPlacement.top,
+                right: dropdownPlacement.right,
+                minWidth: dropdownPlacement.minWidth,
+              }}
+            >
+              {item.items.map((subItem) => (
+                <div key={subItem.href}>
+                  <Link
+                    href={subItem.href}
+                    onClick={() => setOpenDropdown(null)}
+                    className={`block px-4 py-2 text-sm transition-colors duration-200 ${
+                      isActive(subItem.href)
+                        ? "bg-[rgba(204,238,241,0.5)] font-medium text-[#0F172A]"
+                        : "text-[#0F172A] hover:bg-caleno-50"
+                    }`}
+                  >
+                    {subItem.label}
+                  </Link>
+                  {subItem.items?.map((nested) => (
+                    <Link
+                      key={nested.href}
+                      href={nested.href}
+                      onClick={() => setOpenDropdown(null)}
+                      className={`block border-t border-[#E2E8F0] px-4 py-2 pl-6 text-sm transition-colors duration-200 ${
+                        isActive(nested.href)
+                          ? "bg-[rgba(204,238,241,0.5)] font-medium text-[#0F172A]"
+                          : "text-[#0F172A] hover:bg-caleno-50"
+                      }`}
+                    >
+                      {nested.label}
+                    </Link>
+                  ))}
+                </div>
+              ))}
+            </div>,
+            document.body
+          );
+        })()}
     </header>
   );
 }

@@ -8,7 +8,7 @@ import { motion } from "framer-motion";
 import type { SiteConfig } from "@/types/siteConfig";
 import type { TemplateDefinition } from "@/lib/templateLibrary";
 import { bookingEnabled } from "@/lib/bookingEnabled";
-import type { SiteService } from "@/types/siteConfig";
+import type { SiteService, ReviewItem } from "@/types/siteConfig";
 import {
   HAIR_HERO_IMAGES,
   HAIR_ABOUT_IMAGES,
@@ -19,14 +19,9 @@ import { defaultThemeColors } from "@/types/siteConfig";
 import { getSectionColorResolved } from "@/lib/sectionStyles";
 import { DEFAULT_CONTENT, getContentValue } from "@/lib/editor/defaultContent";
 import type { SiteContent } from "@/types/siteConfig";
-import {
-  slideInFromLeft,
-  slideInFromRight,
-  servicesContainer,
-  serviceItem,
-  servicesTitle,
-} from "@/lib/animations";
+import { slideInFromLeft, slideInFromRight } from "@/lib/animations";
 import { getSiteUrl } from "@/lib/tenant";
+import { resolveReviewAvatarUrl } from "@/lib/reviewAvatar";
 import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 import WaveDivider from "./components/WaveDivider";
 import ContactIconsBar from "./components/ContactIconsBar";
@@ -121,7 +116,7 @@ function WorkGallery({
       {/* Scroll Container */}
       <div
         ref={scrollContainerRef}
-        className="flex gap-4 overflow-x-auto snap-x snap-mandatory scrollbar-hide cursor-grab active:cursor-grabbing"
+        className="flex gap-4 overflow-x-auto scrollbar-hide cursor-grab active:cursor-grabbing"
         style={{
           scrollbarWidth: "none",
           msOverflowStyle: "none",
@@ -135,7 +130,7 @@ function WorkGallery({
         {images.map((src, index) => (
             <div
               key={src + index}
-              className="gallery-card flex-shrink-0 snap-start w-[80%] sm:w-[45%] lg:w-[32%]"
+              className="gallery-card flex-shrink-0 w-[80%] sm:w-[45%] lg:w-[32%]"
             >
             <div
               className="relative overflow-hidden rounded-2xl shadow-sm aspect-[4/3]"
@@ -145,7 +140,7 @@ function WorkGallery({
                 src={src}
                 alt={`תמונה מהסלון ${index + 1}`}
                 fill
-                className="object-cover transition-transform duration-500 hover:scale-105"
+                className="object-cover"
                 sizes="(max-width: 640px) 80vw, (max-width: 1024px) 45vw, 32vw"
               />
             </div>
@@ -204,10 +199,14 @@ export default function HairLuxurySite({
   const theme = config.themeColors || defaultThemeColors;
 
   // Scroll functions
+  /** Offset for fixed header pill (~nav height + padding) */
+  const headerScrollOffset = 88;
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
     if (element) {
-      element.scrollIntoView({ behavior: "smooth" });
+      const y =
+        element.getBoundingClientRect().top + window.scrollY - headerScrollOffset;
+      window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
     }
   };
 
@@ -268,33 +267,7 @@ export default function HairLuxurySite({
         background: `radial-gradient(circle at top, var(--surface) 0, var(--bg) 55%, #000000 100%)`,
       } as React.CSSProperties}
     >
-      {/* Salon header: section-scoped colors so header edit doesn't affect rest of site */}
-      <div
-        data-edit-id="header"
-        data-edit-type="section"
-        data-edit-paths='["sectionStyles.header.bg","sectionStyles.header.text"]'
-        data-edit-label="כותרת עליונה"
-        className="sticky top-0 z-20 flex w-full justify-center bg-transparent pt-3 px-3 sm:pt-4 sm:px-4"
-      >
-        <SalonHeader
-          salonName={content.header?.brandName?.trim() ? content.header.brandName : (config.salonName || "שם הסלון")}
-          siteId={siteId}
-          slug={config.slug ?? null}
-          bookingEnabled={bookingEnabled(config)}
-          scrollToSection={scrollToSection}
-          logoUrl={config.branding?.logoUrl ?? null}
-          logoAlt={config.branding?.logoAlt}
-          editorMode={editorMode}
-          headerBg={config.sectionStyles?.header?.bg ?? undefined}
-          headerText={getSectionColorResolved(config, "header", "text")}
-          headerLink={getSectionColorResolved(config, "header", "link")}
-          headerCtaBg={getSectionColorResolved(config, "header", "primaryBtnBg")}
-          headerCtaText={getSectionColorResolved(config, "header", "primaryBtnText")}
-          contentHeader={content.header}
-        />
-      </div>
-
-      {/* Hero Section: section-scoped colors */}
+      {/* Hero Section: section-scoped colors — header floats over hero image */}
       <section
         className="relative min-h-[80vh] flex items-center justify-center px-4 overflow-hidden"
         data-edit-id="hero"
@@ -332,8 +305,36 @@ export default function HairLuxurySite({
           data-edit-label="תמונת הירו"
         />
 
+        {/* Header over hero: fixed on live site (viewport); absolute in editor so preview stays inside the scroll pane */}
+        <div
+          data-edit-id="header"
+          data-edit-type="section"
+          data-edit-paths='["sectionStyles.header.bg","sectionStyles.header.text"]'
+          data-edit-label="כותרת עליונה"
+          className={`${editorMode ? "absolute" : "fixed"} top-0 left-0 right-0 z-[100] flex w-full justify-center bg-transparent pt-3 px-3 sm:pt-4 sm:px-4 pointer-events-none`}
+        >
+          <div className="pointer-events-auto w-full flex justify-center max-w-[100vw]">
+            <SalonHeader
+              salonName={content.header?.brandName?.trim() ? content.header.brandName : (config.salonName || "שם הסלון")}
+              siteId={siteId}
+              slug={config.slug ?? null}
+              bookingEnabled={bookingEnabled(config)}
+              scrollToSection={scrollToSection}
+              logoUrl={config.branding?.logoUrl ?? null}
+              logoAlt={config.branding?.logoAlt}
+              editorMode={editorMode}
+              headerBg={config.sectionStyles?.header?.bg ?? undefined}
+              headerText={getSectionColorResolved(config, "header", "text")}
+              headerLink={getSectionColorResolved(config, "header", "link")}
+              headerCtaBg={getSectionColorResolved(config, "header", "primaryBtnBg")}
+              headerCtaText={getSectionColorResolved(config, "header", "primaryBtnText")}
+              contentHeader={content.header}
+            />
+          </div>
+        </div>
+
         <motion.div
-          className="relative z-10 w-full max-w-3xl mx-auto text-center px-4 sm:px-6 py-12 sm:py-16"
+          className="relative z-10 w-full max-w-3xl mx-auto text-center px-4 sm:px-6 pt-24 sm:pt-28 pb-12 sm:pb-16"
           initial="hidden"
           animate="visible"
           variants={{
@@ -569,12 +570,8 @@ export default function HairLuxurySite({
         data-edit-label="שירותים"
       >
         <div className="max-w-6xl mx-auto px-4 lg:px-8 space-y-10">
-          <motion.div
+          <div
             className="text-right space-y-2"
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true }}
-            variants={servicesTitle}
             data-edit-id="servicesHeading"
             data-edit-kind="text"
             data-edit-paths='["content.services.sectionTitle","content.services.sectionSubtitle","sectionStyles.services.titleText"]'
@@ -586,17 +583,17 @@ export default function HairLuxurySite({
             <p className="text-base max-w-2xl" style={{ color: getSectionColorResolved(config, "services", "text") }}>
               {ct("services", "sectionSubtitle")}
             </p>
-          </motion.div>
+          </div>
 
-          <motion.div
-            className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true }}
-            variants={servicesContainer}
-          >
+          <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {visibleServices.map((service, idx) => (
-              <motion.div key={service.id} variants={serviceItem} data-edit-id="serviceCard" data-edit-kind="container" data-edit-paths='["sectionStyles.services.cardBg","sectionStyles.services.cardText"]' data-edit-label="כרטיס שירות">
+              <div
+                key={service.id}
+                data-edit-id="serviceCard"
+                data-edit-kind="container"
+                data-edit-paths='["sectionStyles.services.cardBg","sectionStyles.services.cardText"]'
+                data-edit-label="כרטיס שירות"
+              >
                 <ServiceCard
                   service={service}
                   siteId={siteId}
@@ -605,9 +602,9 @@ export default function HairLuxurySite({
                   libraryImage={HAIR_WORK_IMAGES[idx % HAIR_WORK_IMAGES.length]}
                   editorMode={editorMode}
                 />
-              </motion.div>
+              </div>
             ))}
-          </motion.div>
+          </div>
         </div>
       </section>
       )}
@@ -660,7 +657,7 @@ export default function HairLuxurySite({
             name: (review.name && String(review.name).trim()) ? String(review.name).trim() : "לקוחה",
             description: (review.text && String(review.text).trim()) ? String(review.text).trim() : "",
             rating: Math.max(1, Math.min(5, Number(review.rating) || 5)),
-            avatar: review.avatarUrl || null,
+            avatar: resolveReviewAvatarUrl(review as ReviewItem),
           }))
           .filter((t) => t.description.length > 0);
 

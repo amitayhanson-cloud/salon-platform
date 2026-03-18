@@ -162,7 +162,13 @@ export default function ContactIconsBar({
   }
 
   return (
-    <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:justify-center gap-4 max-w-2xl mx-auto">
+    <div
+      className="
+        flex flex-nowrap justify-center items-center gap-2 sm:gap-3 md:gap-4
+        max-w-full mx-auto overflow-x-auto overflow-y-hidden py-1 px-0.5
+        [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]
+      "
+    >
       {icons.map((icon) => (
         <Link
           key={icon.key}
@@ -170,7 +176,8 @@ export default function ContactIconsBar({
           target={icon.external ? "_blank" : undefined}
           rel={icon.external ? "noopener noreferrer" : undefined}
           className="
-            w-14 h-14 sm:w-16 sm:h-16
+            shrink-0
+            w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16
             rounded-xl
             flex items-center justify-center
             transition-all duration-200
@@ -179,7 +186,6 @@ export default function ContactIconsBar({
             bg-[var(--surface)]
             text-[var(--text)]
             hover:bg-[var(--bg)]
-            mx-auto sm:mx-0
           "
           aria-label={icon.label}
         >

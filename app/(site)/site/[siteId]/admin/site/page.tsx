@@ -34,26 +34,46 @@ export default function AdminSitePage() {
   const [activeSiteTab, setActiveSiteTab] = useState<SiteTabKey>("reviews");
   const [designDirty, setDesignDirty] = useState(false);
   const [showRotateHintModal, setShowRotateHintModal] = useState(false);
+  const [leaveDesignModalOpen, setLeaveDesignModalOpen] = useState(false);
+  const [pendingSiteTab, setPendingSiteTab] = useState<SiteTabKey | null>(null);
+  const [tabSwitchSaving, setTabSwitchSaving] = useState(false);
   const designEditorRef = useRef<VisualSiteEditorHandle>(null);
 
-  const handleSiteTabChange = useCallback((key: SiteTabKey) => {
+  const applySiteTab = useCallback((key: SiteTabKey) => {
     setActiveSiteTab(key);
     if (key === "design" && typeof window !== "undefined" && window.innerWidth < 768) {
       setShowRotateHintModal(true);
     }
   }, []);
 
-  const handleSaveAll = useCallback(() => {
+  const handleSiteTabChange = useCallback(
+    (key: SiteTabKey) => {
+      if (activeSiteTab === "design" && designDirty && key !== "design") {
+        setPendingSiteTab(key);
+        setLeaveDesignModalOpen(true);
+        return;
+      }
+      applySiteTab(key);
+    },
+    [activeSiteTab, designDirty, applySiteTab]
+  );
+
+  const handleSaveAll = useCallback(async () => {
     if (activeSiteTab === "design" && designEditorRef.current) {
       const draft = designEditorRef.current.getDraft();
       if (draft) {
-        handleConfigChange(draft);
-        void handleSaveConfig(draft);
+        const merged = {
+          ...draft,
+          reviews: siteConfig?.reviews ?? draft.reviews ?? [],
+          faqs: siteConfig?.faqs ?? draft.faqs ?? [],
+        };
+        handleConfigChange(merged);
+        await handleSaveConfig(merged);
         return;
       }
     }
-    void handleSaveConfig();
-  }, [activeSiteTab, handleConfigChange, handleSaveConfig]);
+    await handleSaveConfig();
+  }, [activeSiteTab, handleConfigChange, handleSaveConfig, siteConfig]);
 
   useEffect(() => {
     if (activeSiteTab !== "design") setDesignDirty(false);
@@ -61,7 +81,9 @@ export default function AdminSitePage() {
 
   const anyUnsaved = hasUnsavedChanges || designDirty;
   useEffect(() => {
-    unsavedCtx?.setUnsaved(anyUnsaved, () => handleSaveAll());
+    unsavedCtx?.setUnsaved(anyUnsaved, () => {
+      void handleSaveAll();
+    });
     return () => {
       unsavedCtx?.setUnsaved(false, () => {});
     };
@@ -83,11 +105,35 @@ export default function AdminSitePage() {
       const target = e.target as HTMLElement;
       if (target.tagName === "TEXTAREA") return;
       if (target.closest("[role=dialog]")) return;
-      handleSaveAll();
+      void handleSaveAll();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [handleSaveAll]);
+
+  const handleLeaveDesignSaveAndSwitch = useCallback(async () => {
+    if (!pendingSiteTab) return;
+    setTabSwitchSaving(true);
+    try {
+      await handleSaveAll();
+      applySiteTab(pendingSiteTab);
+      setLeaveDesignModalOpen(false);
+      setPendingSiteTab(null);
+    } finally {
+      setTabSwitchSaving(false);
+    }
+  }, [pendingSiteTab, handleSaveAll, applySiteTab]);
+
+  const handleLeaveDesignWithoutSave = useCallback(() => {
+    if (pendingSiteTab) applySiteTab(pendingSiteTab);
+    setLeaveDesignModalOpen(false);
+    setPendingSiteTab(null);
+  }, [pendingSiteTab, applySiteTab]);
+
+  const handleLeaveDesignCancel = useCallback(() => {
+    setLeaveDesignModalOpen(false);
+    setPendingSiteTab(null);
+  }, []);
 
   if (!siteConfig) {
     return (
@@ -120,13 +166,16 @@ export default function AdminSitePage() {
               {saveMessage && (
                 <span className="text-xs text-emerald-600">{saveMessage}</span>
               )}
-              <button
-                onClick={handleSaveAll}
-                disabled={isSaving}
-                className="rounded-full bg-[#0F172A] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#1E293B] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isSaving ? "שומר…" : "שמור שינויים"}
-              </button>
+              {designDirty && (
+                <button
+                  type="button"
+                  onClick={() => void handleSaveAll()}
+                  disabled={isSaving}
+                  className="rounded-full bg-[#0F172A] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#1E293B] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSaving ? "שומר…" : "שמור שינויים"}
+                </button>
+              )}
             </div>
           </div>
 
@@ -202,6 +251,54 @@ export default function AdminSitePage() {
               getToken={async () => (firebaseUser ? await firebaseUser.getIdToken() : null)}
             />
           </div>
+
+          {leaveDesignModalOpen && (
+            <div
+              className="fixed inset-0 z-[130] flex items-center justify-center bg-black/40 p-4"
+              dir="rtl"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="leave-design-title"
+            >
+              <div
+                className="w-full max-w-md rounded-3xl border border-[#E2E8F0] bg-white p-6 text-right shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h2 id="leave-design-title" className="mb-2 text-lg font-semibold text-slate-900">
+                  שינויים שלא נשמרו
+                </h2>
+                <p className="mb-6 text-sm text-slate-600">
+                  יש שינויים בעיצוב האתר שלא נשמרו. לעבור לטאב אחר בלי לשמור?
+                </p>
+                <div className="flex flex-wrap justify-start gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void handleLeaveDesignSaveAndSwitch()}
+                    disabled={tabSwitchSaving || isSaving}
+                    className="rounded-xl bg-[#0F172A] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#1E293B] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {tabSwitchSaving ? "שומר…" : "שמור ועבור"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLeaveDesignWithoutSave}
+                    disabled={tabSwitchSaving}
+                    className="rounded-xl border border-[#E2E8F0] bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    מעבר בלי לשמור
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLeaveDesignCancel}
+                    disabled={tabSwitchSaving}
+                    className="rounded-xl border border-[#E2E8F0] bg-white px-4 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    ביטול
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       ) : null}
 

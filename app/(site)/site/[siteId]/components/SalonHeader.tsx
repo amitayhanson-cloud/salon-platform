@@ -133,7 +133,59 @@ export default function SalonHeader({
         style={headerStyle}
         {...edit("headerBg")}
       >
-        <div className="mx-auto grid h-16 max-w-6xl grid-cols-3 items-center gap-4 px-4 lg:px-8">
+        {/* Mobile: hamburger fixed left edge of pill; logo/name fixed right (same as desktop col3) */}
+        <div className="relative h-16 max-w-6xl mx-auto md:hidden px-4 lg:px-8">
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen((o) => !o)}
+            className="absolute left-4 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 lg:left-8"
+            style={{ color: linkColor }}
+            aria-expanded={mobileMenuOpen}
+            aria-label={mobileMenuOpen ? "סגור תפריט" : "פתח תפריט"}
+          >
+            {mobileMenuOpen ? (
+              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            )}
+          </button>
+          <div
+            className="absolute right-4 top-1/2 flex max-w-[min(70%,calc(100%-4rem))] -translate-y-1/2 items-center justify-end lg:right-8"
+            {...(logoUrl ? {} : edit("headerText"))}
+          >
+            {logoUrl ? (
+              <Link
+                href={getSiteUrl(slug, siteId, "")}
+                className="flex shrink-0 items-center rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+                style={{ height: LOGO_HEIGHT }}
+                aria-label={logoAlt || salonName || "דף הבית"}
+              >
+                <img
+                  src={logoUrl}
+                  alt={logoAlt || salonName || "לוגו"}
+                  className="h-full w-auto object-contain"
+                  style={{ height: LOGO_HEIGHT, maxHeight: LOGO_HEIGHT }}
+                />
+              </Link>
+            ) : (
+              <span
+                dir="ltr"
+                lang="en"
+                className="truncate text-right text-xl font-semibold tracking-wide"
+                style={{ unicodeBidi: "isolate", color: textColor }}
+              >
+                {salonName}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Desktop: 3-column grid, menu centered */}
+        <div className="mx-auto hidden h-16 max-w-6xl grid-cols-3 items-center gap-4 px-4 lg:px-8 md:grid">
           <div className="flex min-w-0 items-center justify-start" {...(logoUrl ? {} : edit("headerText"))}>
             {!logoUrl && (
               <span
@@ -148,7 +200,7 @@ export default function SalonHeader({
           </div>
 
           <div className="flex items-center justify-center">
-            <nav className="hidden items-center gap-8 md:flex" aria-label="ניווט ראשי">
+            <nav className="flex items-center gap-8" aria-label="ניווט ראשי">
               {NAV_IDS.map(({ key, id }) => (
                 <button
                   key={id}
@@ -182,24 +234,6 @@ export default function SalonHeader({
                 </button>
               )}
             </nav>
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen((o) => !o)}
-              className="flex h-10 w-10 items-center justify-center rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 md:hidden"
-              style={{ color: linkColor }}
-              aria-expanded={mobileMenuOpen}
-              aria-label={mobileMenuOpen ? "סגור תפריט" : "פתח תפריט"}
-            >
-              {mobileMenuOpen ? (
-                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              ) : (
-                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              )}
-            </button>
           </div>
 
           <div className="flex min-w-0 items-center justify-end">
@@ -225,25 +259,33 @@ export default function SalonHeader({
       </header>
 
       {mobileMenuOpen && (
-        <div
-          className="fixed left-0 right-0 z-[30] border-t border-white/10 bg-black/90 px-4 py-4 shadow-lg md:hidden max-h-[min(70vh,420px)] overflow-y-auto"
-          style={{
-            top: mobileMenuTop > 0 ? `${mobileMenuTop}px` : "5.5rem",
-            backdropFilter: "saturate(180%) blur(12px)",
-          }}
-        >
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-[109] bg-black/40 md:hidden"
+            aria-label="סגור תפריט"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <div
+            className="fixed left-0 z-[110] w-[min(88vw,300px)] max-w-sm rounded-r-2xl border-y border-r border-white/15 bg-black/95 py-4 pl-3 pr-4 shadow-2xl md:hidden overflow-y-auto"
+            style={{
+              top: mobileMenuTop > 0 ? `${mobileMenuTop}px` : "5.5rem",
+              maxHeight: mobileMenuTop > 0 ? `calc(100vh - ${mobileMenuTop}px - 12px)` : "min(70vh, 420px)",
+              backdropFilter: "saturate(180%) blur(16px)",
+            }}
+          >
           {logoUrl ? (
             <Link
               href={getSiteUrl(slug, siteId, "")}
               onClick={() => setMobileMenuOpen(false)}
-              className="flex justify-center py-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 rounded"
+              className="flex justify-start py-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 rounded"
               style={{ height: LOGO_HEIGHT }}
               aria-label={logoAlt || salonName || "דף הבית"}
             >
               <img
                 src={logoUrl}
                 alt={logoAlt || salonName || "לוגו"}
-                className="h-full w-auto object-contain"
+                className="h-full w-auto object-contain object-left max-w-full"
                 style={{ height: LOGO_HEIGHT, maxHeight: LOGO_HEIGHT }}
               />
             </Link>
@@ -284,6 +326,7 @@ export default function SalonHeader({
             )}
           </nav>
         </div>
+        </>
       )}
     </>
   );
