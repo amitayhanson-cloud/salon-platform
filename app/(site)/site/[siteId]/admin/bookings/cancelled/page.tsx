@@ -194,7 +194,15 @@ export default function CancelledBookingsPage() {
   return (
     <div className="min-h-screen" dir="rtl">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-6">
+        <div className="relative mb-6">
+          <div className="absolute top-4 left-4 z-20 sm:top-6 sm:left-6" dir="ltr">
+            <Link
+              href={`${adminBasePath}/bookings`}
+              className="rounded-full border border-[#E2E8F0] bg-white/90 px-4 py-2 text-sm font-medium text-[#0F172A] shadow-sm transition-colors hover:bg-white"
+            >
+              ← חזרה ליומן תורים
+            </Link>
+          </div>
           <AdminPageHero
             title="תורים שבוטלו"
             subtitle="סינון לפי תאריך כדי למצוא ביטולים ספציפיים"
@@ -232,40 +240,34 @@ export default function CancelledBookingsPage() {
           </div>
         )}
 
-        {/* Date filter + back to calendar */}
+        {/* Date filter */}
         <AdminCard className="p-4 mb-4">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="flex items-center gap-2 text-sm font-medium text-slate-700">
-              <Calendar className="w-4 h-4" aria-hidden />
+            <span className="flex items-center gap-2 text-sm font-medium text-slate-700 w-full md:w-auto shrink-0">
+              <Calendar className="w-4 h-4 shrink-0" aria-hidden />
               סינון לפי תאריך
             </span>
-            <label className="flex items-center gap-2 text-sm text-slate-600">
-              <span>מתאריך</span>
+            <label className="flex flex-col items-stretch gap-1 text-sm text-slate-600 sm:flex-row sm:items-center sm:gap-2">
+              <span className="shrink-0">מתאריך</span>
               <input
                 type="date"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
-                className="rounded-lg border border-[#E2E8F0] px-3 py-1.5 text-sm text-slate-900"
+                className="rounded-lg border border-[#E2E8F0] px-3 py-1.5 text-sm text-slate-900 w-full min-w-0 sm:w-auto"
               />
             </label>
-            <label className="flex items-center gap-2 text-sm text-slate-600">
-              <span>עד תאריך</span>
+            <label className="flex flex-col items-stretch gap-1 text-sm text-slate-600 sm:flex-row sm:items-center sm:gap-2">
+              <span className="shrink-0">עד תאריך</span>
               <input
                 type="date"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
-                className="rounded-lg border border-[#E2E8F0] px-3 py-1.5 text-sm text-slate-900"
+                className="rounded-lg border border-[#E2E8F0] px-3 py-1.5 text-sm text-slate-900 w-full min-w-0 sm:w-auto"
               />
             </label>
-            <span className="text-sm text-slate-500">
+            <span className="text-sm text-slate-500 w-full md:w-auto">
               מוצגים {filteredBookings.length} תורים מבוטלים
             </span>
-            <Link
-              href={`${adminBasePath}/bookings`}
-              className="rounded-full border border-[#E2E8F0] bg-white px-4 py-2 text-sm font-medium text-[#0F172A] transition-colors hover:bg-slate-50 shrink-0 mr-auto"
-            >
-              ← חזרה ליומן תורים
-            </Link>
           </div>
         </AdminCard>
 
