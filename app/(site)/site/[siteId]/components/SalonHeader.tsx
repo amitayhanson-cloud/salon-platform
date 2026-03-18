@@ -138,7 +138,7 @@ export default function SalonHeader({
           <button
             type="button"
             onClick={() => setMobileMenuOpen((o) => !o)}
-            className="absolute left-4 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 lg:left-8"
+            className="absolute left-4 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full transition-colors hover:bg-white/15 focus:outline-none focus-visible:bg-white/15 active:outline-none lg:left-8"
             style={{ color: linkColor }}
             aria-expanded={mobileMenuOpen}
             aria-label={mobileMenuOpen ? "סגור תפריט" : "פתח תפריט"}
@@ -160,7 +160,7 @@ export default function SalonHeader({
             {logoUrl ? (
               <Link
                 href={getSiteUrl(slug, siteId, "")}
-                className="flex shrink-0 items-center rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+                className="flex shrink-0 items-center rounded-full focus:outline-none focus-visible:bg-white/10 active:outline-none"
                 style={{ height: LOGO_HEIGHT }}
                 aria-label={logoAlt || salonName || "דף הבית"}
               >
@@ -206,7 +206,7 @@ export default function SalonHeader({
                   key={id}
                   type="button"
                   onClick={() => handleNavClick(id)}
-                  className="text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-transparent"
+                  className="rounded-full px-4 py-2 text-sm font-medium transition-colors duration-200 hover:bg-white/15 focus:outline-none focus-visible:bg-white/15 active:outline-none active:bg-white/10"
                   style={{ color: linkColor }}
                   {...edit(key === "navAbout" ? "headerNavAbout" : key === "navServices" ? "headerNavServices" : "headerNavGallery")}
                 >
@@ -216,7 +216,7 @@ export default function SalonHeader({
               {isBookingEnabled ? (
                 <Link
                   href={getSiteUrl(slug, siteId, "/book")}
-                  className="rounded-full px-5 py-2.5 text-sm font-semibold transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-transparent"
+                  className="rounded-full px-5 py-2.5 text-sm font-semibold transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/45 focus-visible:ring-offset-0 active:outline-none"
                   style={{ backgroundColor: ctaBg, color: ctaText }}
                   {...edit("headerCtaButton")}
                 >
@@ -226,7 +226,7 @@ export default function SalonHeader({
                 <button
                   type="button"
                   onClick={() => handleNavClick("contact-section")}
-                  className="rounded-full border border-white/30 bg-white/10 px-5 py-2.5 text-sm font-semibold transition hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-transparent"
+                  className="rounded-full border border-white/30 bg-white/10 px-5 py-2.5 text-sm font-semibold transition hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/45 focus-visible:ring-offset-0 active:outline-none"
                   style={{ color: ctaText }}
                   {...edit("headerCtaButton")}
                 >
@@ -240,7 +240,7 @@ export default function SalonHeader({
             {logoUrl ? (
               <Link
                 href={getSiteUrl(slug, siteId, "")}
-                className="flex shrink-0 items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent rounded"
+                className="flex shrink-0 items-center rounded-full focus:outline-none focus-visible:bg-white/10 active:outline-none"
                 style={{ height: LOGO_HEIGHT }}
                 aria-label={logoAlt || salonName || "דף הבית"}
               >
@@ -278,7 +278,7 @@ export default function SalonHeader({
             <Link
               href={getSiteUrl(slug, siteId, "")}
               onClick={() => setMobileMenuOpen(false)}
-              className="flex justify-start py-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 rounded"
+              className="flex justify-start rounded-full py-3 focus:outline-none focus-visible:bg-white/10 active:outline-none"
               style={{ height: LOGO_HEIGHT }}
               aria-label={logoAlt || salonName || "דף הבית"}
             >
@@ -296,7 +296,7 @@ export default function SalonHeader({
                 key={id}
                 type="button"
                 onClick={() => handleNavClick(id)}
-                className="rounded-lg py-3 text-right text-base font-medium focus:outline-none focus:ring-2 focus:ring-white/50"
+                className="w-full rounded-full py-3 pr-3 pl-2 text-right text-base font-medium transition-colors hover:bg-white/12 focus:outline-none focus-visible:bg-white/12 active:outline-none"
                 style={{ color: linkColor }}
                 {...edit(key === "navAbout" ? "headerNavAbout" : key === "navServices" ? "headerNavServices" : "headerNavGallery")}
               >
@@ -307,7 +307,7 @@ export default function SalonHeader({
               <Link
                 href={getSiteUrl(slug, siteId, "/book")}
                 onClick={() => setMobileMenuOpen(false)}
-                className="mt-2 rounded-full px-5 py-3 text-center text-sm font-semibold"
+                className="mt-2 rounded-full px-5 py-3 text-center text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-white/45 focus-visible:ring-offset-0 active:outline-none"
                 style={{ backgroundColor: ctaBg, color: ctaText }}
                 {...edit("headerCtaButton")}
               >
@@ -317,7 +317,7 @@ export default function SalonHeader({
               <button
                 type="button"
                 onClick={() => handleNavClick("contact-section")}
-                className="mt-2 rounded-full border border-white/30 bg-white/10 py-3 text-center text-sm font-semibold"
+                className="mt-2 rounded-full border border-white/30 bg-white/10 py-3 text-center text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-white/45 focus-visible:ring-offset-0 active:outline-none"
                 style={{ color: ctaText }}
                 {...edit("headerCtaButton")}
               >

@@ -198,16 +198,21 @@ export default function HairLuxurySite({
   // Get theme colors with defaults
   const theme = config.themeColors || defaultThemeColors;
 
-  // Scroll functions
-  /** Offset for fixed header pill (~nav height + padding) */
-  const headerScrollOffset = 88;
+  // Scroll to in-page sections (fixed header: sections use scroll-mt-*)
   const scrollToSection = (id: string) => {
-    const element = document.getElementById(id);
-    if (element) {
-      const y =
-        element.getBoundingClientRect().top + window.scrollY - headerScrollOffset;
-      window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
-    }
+    const resolve = (): HTMLElement | null => {
+      let el = document.getElementById(id);
+      if (!el && id === "services-section") {
+        el = document.getElementById("gallery-section");
+      }
+      return el;
+    };
+    const scroll = () => {
+      const element = resolve();
+      if (!element) return;
+      element.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    requestAnimationFrame(() => requestAnimationFrame(scroll));
   };
 
   // Use services from services array (same source as admin Services page)
@@ -471,7 +476,7 @@ export default function HairLuxurySite({
       {/* About Section: section-scoped colors */}
       <section
         id="about-section"
-        className="py-16 lg:py-24"
+        className="scroll-mt-[5.75rem] py-16 lg:py-24"
         style={{
           backgroundColor: getSectionColorResolved(config, "about", "bg"),
           ["--about-titleText" as string]: getSectionColorResolved(config, "about", "titleText"),
@@ -554,7 +559,7 @@ export default function HairLuxurySite({
       <section
         id="services-section"
         dir="rtl"
-        className="py-16 lg:py-24"
+        className="scroll-mt-[5.75rem] py-16 lg:py-24"
         style={{
           backgroundColor: getSectionColorResolved(config, "services", "bg"),
           ["--services-titleText" as string]: getSectionColorResolved(config, "services", "titleText"),
@@ -612,7 +617,7 @@ export default function HairLuxurySite({
       {/* Gallery Section - section-scoped colors */}
       <section
         id="gallery-section"
-        className="py-16 lg:py-24"
+        className="scroll-mt-[5.75rem] py-16 lg:py-24"
         data-edit-id="gallery"
         data-edit-type="section"
         data-edit-kind="gallery"
@@ -782,7 +787,7 @@ export default function HairLuxurySite({
       {/* Contact / Map Section - section-scoped colors */}
       <section
         id="contact-section"
-        className="py-16 lg:py-24"
+        className="scroll-mt-[5.75rem] py-16 lg:py-24"
         data-edit-id="map"
         data-edit-type="section"
         data-edit-paths='["sectionStyles.map.bg","sectionStyles.map.titleText","sectionStyles.map.text","sectionStyles.map.cardBg","sectionStyles.map.cardText","sectionStyles.map.border","sectionStyles.map.buttonBg","sectionStyles.map.buttonText"]'
