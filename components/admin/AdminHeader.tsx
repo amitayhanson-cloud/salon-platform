@@ -239,10 +239,10 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                       {item.href ? (
                     <Link
                       href={item.href}
-                      className={`rounded-full px-4 py-2 text-sm font-medium transition-colors backdrop-blur-md ${
+                      className={`rounded-full px-4 py-2 text-sm font-medium transition-[background-color,border-color,box-shadow] duration-200 backdrop-blur-md ${
                         isActive(item.href)
                           ? "text-[#0F172A] bg-[rgba(204,238,241,0.7)] border border-[rgba(30,111,124,0.25)] shadow-[0_2px_10px_-2px_rgba(30,111,124,0.15),0_0_0_1px_rgba(255,255,255,0.4)_inset]"
-                          : "text-[#0F172A] hover:bg-white/30"
+                          : "text-[#0F172A] hover:bg-caleno-100/70 hover:shadow-[0_1px_8px_-2px_rgba(9,137,155,0.12)]"
                       }`}
                       style={isActive(item.href) ? { WebkitBackdropFilter: "blur(12px)" } : undefined}
                     >
@@ -252,10 +252,10 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                     <>
                       <button
                         onClick={() => toggleDropdown(item.label)}
-                        className={`flex items-center gap-1 rounded-full px-4 py-2 text-sm font-medium transition-colors backdrop-blur-md ${
+                        className={`flex items-center gap-1 rounded-full px-4 py-2 text-sm font-medium transition-[background-color,border-color,box-shadow] duration-200 backdrop-blur-md ${
                           isParentActive(item)
                             ? "text-[#0F172A] bg-[rgba(204,238,241,0.7)] border border-[rgba(30,111,124,0.25)] shadow-[0_2px_10px_-2px_rgba(30,111,124,0.15),0_0_0_1px_rgba(255,255,255,0.4)_inset]"
-                            : "text-[#0F172A] hover:bg-white/30"
+                            : "text-[#0F172A] hover:bg-caleno-100/70 hover:shadow-[0_1px_8px_-2px_rgba(9,137,155,0.12)]"
                         }`}
                         style={isParentActive(item) ? { WebkitBackdropFilter: "blur(12px)" } : undefined}
                       >
@@ -273,10 +273,10 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                               <Link
                                 href={subItem.href}
                                 onClick={() => setOpenDropdown(null)}
-                                className={`block px-4 py-2 text-sm transition-colors ${
+                                className={`block px-4 py-2 text-sm transition-colors duration-200 ${
                                   isActive(subItem.href)
                                     ? "bg-[rgba(204,238,241,0.5)] font-medium text-[#0F172A]"
-                                    : "text-[#0F172A] hover:bg-[rgba(15,23,42,0.04)]"
+                                    : "text-[#0F172A] hover:bg-caleno-50"
                                 }`}
                               >
                                 {subItem.label}
@@ -286,10 +286,10 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                                   key={nested.href}
                                   href={nested.href}
                                   onClick={() => setOpenDropdown(null)}
-                                  className={`block border-t border-[#E2E8F0] px-4 py-2 pl-6 text-sm transition-colors ${
+                                  className={`block border-t border-[#E2E8F0] px-4 py-2 pl-6 text-sm transition-colors duration-200 ${
                                     isActive(nested.href)
                                       ? "bg-[rgba(204,238,241,0.5)] font-medium text-[#0F172A]"
-                                      : "text-[#0F172A] hover:bg-[rgba(15,23,42,0.04)]"
+                                      : "text-[#0F172A] hover:bg-caleno-50"
                                   }`}
                                 >
                                   {nested.label}
@@ -350,10 +350,10 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                 {item.href ? (
                   <Link
                     href={item.href}
-                    className={`block px-4 py-3 text-sm font-medium transition-colors ${
+                    className={`block px-4 py-3 text-sm font-medium transition-colors duration-200 ${
                       isActive(item.href)
                         ? "bg-[rgba(204,238,241,0.5)] text-[#0F172A]"
-                        : "text-[#0F172A] hover:bg-[rgba(15,23,42,0.04)]"
+                        : "text-[#0F172A] hover:bg-caleno-100/50"
                     }`}
                   >
                     {item.label}
@@ -362,10 +362,10 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                   <>
                     <button
                       onClick={() => toggleDropdown(item.label)}
-                      className={`flex w-full items-center justify-between px-4 py-3 text-sm font-medium transition-colors ${
+                      className={`flex w-full items-center justify-between px-4 py-3 text-sm font-medium transition-colors duration-200 ${
                         isParentActive(item)
                           ? "bg-[rgba(204,238,241,0.5)] text-[#0F172A]"
-                          : "text-[#0F172A] hover:bg-[rgba(15,23,42,0.04)]"
+                          : "text-[#0F172A] hover:bg-caleno-100/50"
                       }`}
                     >
                       {item.label}
@@ -381,10 +381,10 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                           <div key={subItem.href}>
                             <Link
                               href={subItem.href}
-                              className={`block px-8 py-2 text-sm transition-colors ${
+                              className={`block px-8 py-2 text-sm transition-colors duration-200 ${
                                 isActive(subItem.href)
                                   ? "bg-[rgba(204,238,241,0.5)] font-medium text-[#0F172A]"
-                                  : "text-[#64748B] hover:bg-[rgba(15,23,42,0.04)]"
+                                  : "text-[#64748B] hover:bg-caleno-50"
                               }`}
                             >
                               {subItem.label}
@@ -393,10 +393,10 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                               <Link
                                 key={nested.href}
                                 href={nested.href}
-                                className={`block px-12 py-2 text-sm transition-colors ${
+                                className={`block px-12 py-2 text-sm transition-colors duration-200 ${
                                   isActive(nested.href)
                                     ? "bg-[rgba(204,238,241,0.5)] font-medium text-[#0F172A]"
-                                    : "text-[#64748B] hover:bg-[rgba(15,23,42,0.04)]"
+                                    : "text-[#64748B] hover:bg-caleno-50"
                                 }`}
                               >
                                 {nested.label}

@@ -7,6 +7,12 @@ import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HEADER_CTA, NAV_LINKS } from "@/lib/landingContent";
 
+const navLinkLine =
+  "relative inline-block pb-1 text-sm text-[#64748B] transition-colors duration-300 group-hover:text-[#0F172A] after:absolute after:bottom-0 after:right-0 after:block after:h-[2px] after:w-0 after:rounded-full after:bg-[#1E6F7C] after:transition-[width] after:duration-300 after:ease-out group-hover:after:w-full after:content-['']";
+
+const navLinkPill =
+  "group shrink-0 rounded-full px-3 py-1.5 text-sm transition-[background-color,box-shadow] duration-300 ease-out hover:bg-caleno-100/80 hover:shadow-[0_2px_14px_-4px_rgba(9,137,155,0.14)] active:bg-caleno-100";
+
 export function LandingHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -29,13 +35,13 @@ export function LandingHeader() {
           <div className="hidden md:flex md:items-center md:gap-2">
             <Link
               href="/login"
-              className="inline-flex items-center justify-center rounded-full border border-[#94A3B8] px-4 py-2 text-sm font-medium text-[#0F172A] transition-colors hover:border-[#64748B] hover:bg-[#F8FAFC]"
+              className="inline-flex items-center justify-center rounded-full border border-caleno-200/50 bg-caleno-50/40 px-4 py-2 text-sm font-medium text-[#0F172A] transition-[background-color,box-shadow,border-color] duration-300 hover:border-caleno-200 hover:bg-caleno-100/90 hover:shadow-[0_2px_16px_-4px_rgba(9,137,155,0.16)]"
             >
               התחברות
             </Link>
             <Link
               href="/signup"
-              className="inline-flex items-center justify-center rounded-full bg-neutral-900 px-4 py-2 text-sm font-medium text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,.15)] transition-colors hover:bg-neutral-800"
+              className="inline-flex items-center justify-center rounded-full bg-caleno-800 px-4 py-2 text-sm font-medium text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,.12)] transition-[background-color,box-shadow] duration-300 hover:bg-caleno-700 hover:shadow-[0_2px_18px_-4px_rgba(15,69,80,0.35),inset_0_1px_0_0_rgba(255,255,255,.1)]"
             >
               {HEADER_CTA}
             </Link>
@@ -55,12 +61,8 @@ export function LandingHeader() {
         {/* B. Nav links — hidden on mobile, centered on desktop (template: text-muted hover:foreground) */}
         <div className="hidden min-w-0 md:flex md:justify-center md:gap-6">
           {NAV_LINKS.map(({ href, label }) => (
-            <Link
-              key={href}
-              href={href}
-              className="shrink-0 text-sm text-[#64748B] transition-colors hover:text-[#0F172A]"
-            >
-              {label}
+            <Link key={href} href={href} className={navLinkPill}>
+              <span className={navLinkLine}>{label}</span>
             </Link>
           ))}
         </div>
@@ -101,23 +103,23 @@ export function LandingHeader() {
               <Link
                 key={href}
                 href={href}
-                className="rounded-lg px-3 py-3 text-right text-sm font-medium leading-relaxed text-caleno-ink hover:bg-caleno-off focus-visible:bg-caleno-off focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
+                className="group flex justify-end rounded-full px-3 py-2.5 text-sm font-medium leading-relaxed text-caleno-ink transition-[background-color,box-shadow] duration-300 hover:bg-caleno-100/75 hover:shadow-[inset_0_0_0_1px_rgba(153,221,227,0.35)] focus-visible:bg-caleno-off focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
                 onClick={() => setMobileOpen(false)}
               >
-                {label}
+                <span className={navLinkLine}>{label}</span>
               </Link>
             ))}
             <div className="mt-3 flex flex-col gap-2 border-t border-gray-100 pt-3">
               <Link
                 href="/login"
-                className="rounded-xl border border-[#E2E8F0] bg-white px-4 py-3 text-center text-sm font-medium leading-relaxed text-[#0F172A] hover:bg-[#F8FAFC] hover:text-[#1E6F7C] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
+                className="rounded-full border border-caleno-200/60 bg-caleno-50/70 px-4 py-3 text-center text-sm font-medium leading-relaxed text-[#0F172A] shadow-sm transition-[background-color,box-shadow,border-color] duration-300 hover:border-caleno-200 hover:bg-caleno-100 hover:shadow-[0_2px_14px_-4px_rgba(9,137,155,0.14)] hover:text-caleno-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
                 onClick={() => setMobileOpen(false)}
               >
                 התחברות
               </Link>
               <Link
                 href="/signup"
-                className="inline-flex items-center justify-center rounded-xl bg-[#0F172A] px-5 py-3 text-sm font-medium leading-normal text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] active:translate-y-0 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2"
+                className="inline-flex items-center justify-center rounded-full bg-caleno-800 px-5 py-3 text-sm font-medium leading-normal text-white shadow-sm transition-[background-color,box-shadow] duration-300 hover:bg-caleno-700 hover:shadow-[0_4px_18px_-4px_rgba(15,69,80,0.3)] active:translate-y-0 focus-visible:ring-2 focus-visible:ring-caleno-300 focus-visible:ring-offset-2"
                 onClick={() => setMobileOpen(false)}
               >
                 {HEADER_CTA}
