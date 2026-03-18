@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { getSiteUrl } from "@/lib/tenant";
 import { DEFAULT_CONTENT } from "@/lib/editor/defaultContent";
@@ -12,7 +12,7 @@ const NAV_IDS = [
   { key: "navGallery", id: "gallery-section" },
 ] as const;
 
-const LOGO_HEIGHT = 44; // prominent in header (h-16)
+const LOGO_HEIGHT = 44;
 
 const EDITOR_ATTRS = {
   headerBg: {
@@ -68,7 +68,6 @@ export default function SalonHeader({
   headerCtaBg,
   headerCtaText,
   contentHeader,
-  pillStyle = false,
 }: {
   salonName: string;
   siteId: string;
@@ -78,18 +77,16 @@ export default function SalonHeader({
   logoUrl?: string | null;
   logoAlt?: string;
   editorMode?: boolean;
-  /** Section-scoped header colors (override themeColors for this section only) */
   headerBg?: string;
   headerText?: string;
   headerLink?: string;
   headerCtaBg?: string;
   headerCtaText?: string;
-  /** Editable text content for header (nav labels, CTA text) */
   contentHeader?: SiteContent["header"];
-  /** When true, header is pill-shaped with matte liquid glass (rounded-full, backdrop-blur, semi-transparent) */
-  pillStyle?: boolean;
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const pillRef = useRef<HTMLElement>(null);
+  const [mobileMenuTop, setMobileMenuTop] = useState(0);
   const edit = editorMode ? (key: keyof typeof EDITOR_ATTRS) => EDITOR_ATTRS[key] : () => ({});
 
   const navLabel = (key: keyof NonNullable<SiteContent["header"]>) =>
@@ -106,126 +103,134 @@ export default function SalonHeader({
   const ctaBg = headerCtaBg ?? "var(--primary)";
   const ctaText = headerCtaText ?? "var(--primaryText)";
 
-  const headerClassName = pillStyle
-    ? "sticky top-0 z-20 w-full max-w-6xl mx-auto text-right transition-[background,backdrop-filter] rounded-full border border-white/25 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.35)_inset] backdrop-blur-xl"
-    : "sticky top-0 z-20 w-full text-right transition-[background,backdrop-filter]";
+  useEffect(() => {
+    if (!mobileMenuOpen || typeof window === "undefined") return;
+    const updateTop = () => {
+      const el = pillRef.current;
+      if (el) setMobileMenuTop(el.getBoundingClientRect().bottom);
+    };
+    updateTop();
+    window.addEventListener("resize", updateTop);
+    window.addEventListener("scroll", updateTop, true);
+    return () => {
+      window.removeEventListener("resize", updateTop);
+      window.removeEventListener("scroll", updateTop, true);
+    };
+  }, [mobileMenuOpen]);
 
-  const headerStyle: React.CSSProperties = pillStyle
-    ? {
-        backgroundColor: "rgba(255,255,255,0.18)",
-        backdropFilter: "saturate(180%) blur(20px)",
-        WebkitBackdropFilter: "saturate(180%) blur(20px)",
-      }
-    : {
-        backgroundColor: bgColor,
-        backdropFilter: "saturate(180%) blur(12px)",
-        WebkitBackdropFilter: "saturate(180%) blur(12px)",
-      };
+  const headerStyle: import("react").CSSProperties = {
+    backgroundColor: bgColor,
+    backdropFilter: "saturate(180%) blur(20px)",
+    WebkitBackdropFilter: "saturate(180%) blur(20px)",
+  };
 
   return (
-    <header
-      dir="rtl"
-      className={headerClassName}
-      style={headerStyle}
-      {...edit("headerBg")}
-    >
-      <div className="mx-auto grid h-16 max-w-6xl grid-cols-3 items-center gap-4 px-4 lg:px-8">
-        {/* Col 1 in RTL = right: salon name (only when no logo, to avoid logo + text clutter) */}
-        <div className="flex min-w-0 items-center justify-start" {...(logoUrl ? {} : edit("headerText"))}>
-          {!logoUrl && (
-            <span
-              dir="ltr"
-              lang="en"
-              className="text-xl font-semibold tracking-wide"
-              style={{ unicodeBidi: "isolate", color: textColor }}
-            >
-              {salonName}
-            </span>
-          )}
-        </div>
+    <>
+      <header
+        ref={pillRef}
+        dir="rtl"
+        className="relative z-20 w-full max-w-6xl text-right transition-[background,backdrop-filter] rounded-full border border-white/25 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.35)_inset] backdrop-blur-xl"
+        style={headerStyle}
+        {...edit("headerBg")}
+      >
+        <div className="mx-auto grid h-16 max-w-6xl grid-cols-3 items-center gap-4 px-4 lg:px-8">
+          <div className="flex min-w-0 items-center justify-start" {...(logoUrl ? {} : edit("headerText"))}>
+            {!logoUrl && (
+              <span
+                dir="ltr"
+                lang="en"
+                className="text-xl font-semibold tracking-wide"
+                style={{ unicodeBidi: "isolate", color: textColor }}
+              >
+                {salonName}
+              </span>
+            )}
+          </div>
 
-        {/* Col 2 = center: nav (desktop) or hamburger (mobile) */}
-        <div className="flex items-center justify-center">
-          <nav className="hidden items-center gap-8 md:flex" aria-label="ניווט ראשי">
-            {NAV_IDS.map(({ key, id }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => handleNavClick(id)}
-                className="text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-transparent"
-                style={{ color: linkColor }}
-                {...edit(key === "navAbout" ? "headerNavAbout" : key === "navServices" ? "headerNavServices" : "headerNavGallery")}
-              >
-                {navLabel(key)}
-              </button>
-            ))}
-            {isBookingEnabled ? (
+          <div className="flex items-center justify-center">
+            <nav className="hidden items-center gap-8 md:flex" aria-label="ניווט ראשי">
+              {NAV_IDS.map(({ key, id }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => handleNavClick(id)}
+                  className="text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-transparent"
+                  style={{ color: linkColor }}
+                  {...edit(key === "navAbout" ? "headerNavAbout" : key === "navServices" ? "headerNavServices" : "headerNavGallery")}
+                >
+                  {navLabel(key)}
+                </button>
+              ))}
+              {isBookingEnabled ? (
+                <Link
+                  href={getSiteUrl(slug, siteId, "/book")}
+                  className="rounded-full px-5 py-2.5 text-sm font-semibold transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-transparent"
+                  style={{ backgroundColor: ctaBg, color: ctaText }}
+                  {...edit("headerCtaButton")}
+                >
+                  {navLabel("navCtaBook")}
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleNavClick("contact-section")}
+                  className="rounded-full border border-white/30 bg-white/10 px-5 py-2.5 text-sm font-semibold transition hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-transparent"
+                  style={{ color: ctaText }}
+                  {...edit("headerCtaButton")}
+                >
+                  {navLabel("navCtaContact")}
+                </button>
+              )}
+            </nav>
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((o) => !o)}
+              className="flex h-10 w-10 items-center justify-center rounded-lg focus:outline-none focus:ring-2 focus:ring-white/50 md:hidden"
+              style={{ color: linkColor }}
+              aria-expanded={mobileMenuOpen}
+              aria-label={mobileMenuOpen ? "סגור תפריט" : "פתח תפריט"}
+            >
+              {mobileMenuOpen ? (
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              )}
+            </button>
+          </div>
+
+          <div className="flex min-w-0 items-center justify-end">
+            {logoUrl ? (
               <Link
-                href={getSiteUrl(slug, siteId, "/book")}
-                className="rounded-full px-5 py-2.5 text-sm font-semibold transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-transparent"
-                style={{ backgroundColor: ctaBg, color: ctaText }}
-                {...edit("headerCtaButton")}
+                href={getSiteUrl(slug, siteId, "")}
+                className="flex shrink-0 items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent rounded"
+                style={{ height: LOGO_HEIGHT }}
+                aria-label={logoAlt || salonName || "דף הבית"}
               >
-                {navLabel("navCtaBook")}
+                <img
+                  src={logoUrl}
+                  alt={logoAlt || salonName || "לוגו"}
+                  className="h-full w-auto object-contain"
+                  style={{ height: LOGO_HEIGHT, maxHeight: LOGO_HEIGHT }}
+                />
               </Link>
             ) : (
-              <button
-                type="button"
-                onClick={() => handleNavClick("contact-section")}
-                className="rounded-full border border-white/30 bg-white/10 px-5 py-2.5 text-sm font-semibold transition hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-transparent"
-                style={{ color: ctaText }}
-                {...edit("headerCtaButton")}
-              >
-                {navLabel("navCtaContact")}
-              </button>
+              <span className="w-0" aria-hidden />
             )}
-          </nav>
-          <button
-            type="button"
-            onClick={() => setMobileMenuOpen((o) => !o)}
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-white/50 md:hidden"
-            aria-expanded={mobileMenuOpen}
-            aria-label={mobileMenuOpen ? "סגור תפריט" : "פתח תפריט"}
-          >
-            {mobileMenuOpen ? (
-              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            ) : (
-              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            )}
-          </button>
+          </div>
         </div>
+      </header>
 
-        {/* Col 3 in RTL = left: logo only */}
-        <div className="flex min-w-0 items-center justify-end">
-          {logoUrl ? (
-            <Link
-              href={getSiteUrl(slug, siteId, "")}
-              className="flex shrink-0 items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent rounded"
-              style={{ height: LOGO_HEIGHT }}
-              aria-label={logoAlt || salonName || "דף הבית"}
-            >
-              <img
-                src={logoUrl}
-                alt={logoAlt || salonName || "לוגו"}
-                className="h-full w-auto object-contain"
-                style={{ height: LOGO_HEIGHT, maxHeight: LOGO_HEIGHT }}
-              />
-            </Link>
-          ) : (
-            <span className="w-0" aria-hidden />
-          )}
-        </div>
-      </div>
-
-      {/* Mobile menu drawer */}
       {mobileMenuOpen && (
         <div
-          className="absolute left-0 right-0 top-16 border-t border-white/10 bg-black/90 px-4 py-4 shadow-lg md:hidden"
-          style={{ backdropFilter: "saturate(180%) blur(12px)" }}
+          className="fixed left-0 right-0 z-[30] border-t border-white/10 bg-black/90 px-4 py-4 shadow-lg md:hidden max-h-[min(70vh,420px)] overflow-y-auto"
+          style={{
+            top: mobileMenuTop > 0 ? `${mobileMenuTop}px` : "5.5rem",
+            backdropFilter: "saturate(180%) blur(12px)",
+          }}
         >
           {logoUrl ? (
             <Link
@@ -280,6 +285,6 @@ export default function SalonHeader({
           </nav>
         </div>
       )}
-    </header>
+    </>
   );
 }

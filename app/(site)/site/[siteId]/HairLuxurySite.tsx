@@ -272,9 +272,9 @@ export default function HairLuxurySite({
       <div
         data-edit-id="header"
         data-edit-type="section"
-        data-edit-paths='["sectionStyles.header.bg","sectionStyles.header.text","sectionStyles.header.pillStyle"]'
+        data-edit-paths='["sectionStyles.header.bg","sectionStyles.header.text"]'
         data-edit-label="כותרת עליונה"
-        className={(config.sectionStyles?.header as { pillStyle?: boolean } | undefined)?.pillStyle ? "pt-3 px-3 sm:pt-4 sm:px-4" : ""}
+        className="sticky top-0 z-20 flex w-full justify-center bg-transparent pt-3 px-3 sm:pt-4 sm:px-4"
       >
         <SalonHeader
           salonName={content.header?.brandName?.trim() ? content.header.brandName : (config.salonName || "שם הסלון")}
@@ -291,7 +291,6 @@ export default function HairLuxurySite({
           headerCtaBg={getSectionColorResolved(config, "header", "primaryBtnBg")}
           headerCtaText={getSectionColorResolved(config, "header", "primaryBtnText")}
           contentHeader={content.header}
-          pillStyle={(config.sectionStyles?.header as { pillStyle?: boolean } | undefined)?.pillStyle ?? false}
         />
       </div>
 

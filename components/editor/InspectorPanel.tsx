@@ -341,11 +341,9 @@ export function InspectorPanel({
   const contentPaths = paths.filter(
     (p): p is string => typeof p === "string" && (p.startsWith("content.") || p.startsWith("faqs."))
   );
-  const colorPaths = paths.filter((p) =>
-    typeof p === "string" && (p.startsWith("themeColors.") || p.startsWith("sectionStyles.")) && p !== "sectionStyles.header.pillStyle"
+  const colorPaths = paths.filter(
+    (p) => typeof p === "string" && (p.startsWith("themeColors.") || p.startsWith("sectionStyles."))
   );
-  const hasHeaderPaths = paths.some((p) => typeof p === "string" && p.startsWith("sectionStyles.header"));
-  const headerPillStyle = (draftConfig.sectionStyles?.header as { pillStyle?: boolean } | undefined)?.pillStyle ?? false;
   const imagePaths = paths.filter((p) => {
     if (p === "serviceImage") return !!selected?.serviceId;
     if (p === "branding.logoUrl") return true;
@@ -477,33 +475,6 @@ export function InspectorPanel({
         {colorPaths.length > 0 && activeTab === "colors" && (
           <div className="space-y-3">
             <p className="text-xs font-medium text-slate-500">צבעים</p>
-            {/* Header pill-style toggle: when editing header, show under colours */}
-            {hasHeaderPaths && (
-              <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2.5">
-                <span className="text-sm font-medium text-slate-700">כותרת בצורת גלולה (matte liquid glass)</span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={headerPillStyle}
-                  onClick={() => {
-                    const header = { ...(draftConfig.sectionStyles?.header as Record<string, unknown> | undefined), pillStyle: !headerPillStyle };
-                    onDraftChange({
-                      sectionStyles: { ...draftConfig.sectionStyles, header: header as import("@/types/siteConfig").SectionStyles["header"] },
-                    });
-                  }}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-caleno-deep focus:ring-offset-2 ${
-                    headerPillStyle ? "bg-caleno-deep" : "bg-slate-200"
-                  }`}
-                >
-                  <span
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition ${
-                      headerPillStyle ? "translate-x-5" : "translate-x-0.5"
-                    }`}
-                    aria-hidden
-                  />
-                </button>
-              </div>
-            )}
             {colorPaths.map((path) => {
               let value = getByPath(draftConfig, path) as string | undefined;
               if (value == null && path.startsWith("sectionStyles.")) {

@@ -90,6 +90,7 @@ export type SectionStyles = {
     primaryBtnBg?: string;
     primaryBtnText?: string;
     /** When true, header is pill-shaped with matte liquid glass style (rounded, backdrop-blur, semi-transparent). */
+    /** @deprecated ignored; header is always pill-shaped on public site */
     pillStyle?: boolean;
   };
   hero?: {
