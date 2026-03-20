@@ -86,7 +86,6 @@ export default function ServicesPage() {
     isActive: boolean;
   }>({ name: "", triggerServiceTypeIds: [], orderedServiceTypeIds: [], autoSteps: [], isActive: true });
   const [openCombos, setOpenCombos] = useState(false);
-  const [showNewServiceReminderModal, setShowNewServiceReminderModal] = useState(false);
   const [isSavingService, setSavingService] = useState(false);
   /** Service id whose 3-dot menu is open (null = none). */
   const [serviceMenuOpenId, setServiceMenuOpenId] = useState<string | null>(null);
@@ -603,7 +602,6 @@ export default function ServicesPage() {
         // the list once. Adding optimistically would race with the subscription and
         // can result in the new service appearing twice (duplicate/mirrored rows).
         setEditingService(null);
-        setShowNewServiceReminderModal(true);
         return;
       }
 
@@ -1880,33 +1878,6 @@ export default function ServicesPage() {
         </div>
       )}
 
-      {/* New service reminder (info only, after successful create) */}
-      {showNewServiceReminderModal && (
-        <div
-          className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-[55] overflow-y-auto"
-          dir="rtl"
-          onClick={() => setShowNewServiceReminderModal(false)}
-        >
-          <div
-            className="bg-white rounded-2xl sm:rounded-3xl shadow-xl border border-[#E2E8F0] w-full max-w-md p-4 sm:p-6 text-right my-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-base sm:text-lg font-semibold text-[#0F172A] mb-3">שים לב</h3>
-            <p className="text-sm sm:text-base text-slate-900">
-              זכור להגדיר זמינות לעובדים עבור השירות החדש, אחרת הוא לא יהיה זמין להזמנה.
-            </p>
-            <div className="mt-6 flex justify-start">
-              <button
-                type="button"
-                onClick={() => setShowNewServiceReminderModal(false)}
-                className="min-h-[44px] px-4 py-2.5 rounded-lg bg-caleno-ink text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md touch-manipulation"
-              >
-                סגור
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       {typeof document !== "undefined" &&
         serviceMenuOpenId &&
         dropdownPosition &&

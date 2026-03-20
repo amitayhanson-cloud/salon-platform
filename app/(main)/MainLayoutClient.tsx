@@ -31,7 +31,7 @@ export default function MainLayoutClient({
     return <>{children}</>;
   }
 
-  if (pathname === "/privacy" || pathname === "/terms") {
+  if (pathname === "/privacy" || pathname === "/terms" || pathname === "/pricing") {
     return (
       <div
         dir="ltr"

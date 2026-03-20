@@ -1,0 +1,25 @@
+connectorId: example
+generate:
+  adminNodeSdk:
+    - outputDir: ../../src/dataconnect-admin-generated
+      package: "@dataconnect/admin-generated"
+      packageJsonDir: ../..
+    - outputDir: ../../functions/src/dataconnect-admin-generated
+      package: "@dataconnect/admin-generated"
+      packageJsonDir: ../../functions
+  javascriptSdk:
+    - outputDir: ../../src/dataconnect-generated
+      package: "@dataconnect/generated"
+      packageJsonDir: ../..
+      react: true
+      angular: false
+    - outputDir: ../../twilio-whatsapp/src/dataconnect-generated
+      package: "@dataconnect/generated"
+      packageJsonDir: ../../twilio-whatsapp
+      react: false
+      angular: false
+    - outputDir: ../../new landing/src/dataconnect-generated
+      package: "@dataconnect/generated"
+      packageJsonDir: ../../new landing
+      react: true
+      angular: false

@@ -12,6 +12,9 @@ interface SiteListItem {
   salonName: string;
   city?: string;
   createdAt?: string;
+  ownerUid?: string | null;
+  ownerEmail?: string;
+  ownerPhone?: string;
 }
 
 export default function PlatformAdminPage() {
@@ -240,6 +243,8 @@ export default function PlatformAdminPage() {
                 <tr>
                   <th className="py-2 px-2 text-right">שם הסלון</th>
                   <th className="py-2 px-2 text-right">עיר</th>
+                  <th className="py-2 px-2 text-right">טלפון בעלים</th>
+                  <th className="py-2 px-2 text-right">אימייל בעלים</th>
                   <th className="py-2 px-2 text-right">תאריך יצירה</th>
                   <th className="py-2 px-2 text-right">קישורים</th>
                 </tr>
@@ -252,6 +257,12 @@ export default function PlatformAdminPage() {
                   >
                     <td className="py-2 px-2">{site.salonName}</td>
                     <td className="py-2 px-2">{site.city || "-"}</td>
+                    <td className="py-2 px-2 whitespace-nowrap" dir="ltr">
+                      {site.ownerPhone || "-"}
+                    </td>
+                    <td className="py-2 px-2 text-xs break-all" dir="ltr">
+                      {site.ownerEmail || "-"}
+                    </td>
                     <td className="py-2 px-2">
                       {site.createdAt
                         ? new Date(site.createdAt).toLocaleString("he-IL")

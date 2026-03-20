@@ -1,0 +1,35 @@
+type User @table {
+  displayName: String!
+  createdAt: Timestamp!
+  email: String
+  photoUrl: String
+}
+
+type Event @table {
+  title: String!
+  startTime: Timestamp!
+  endTime: Timestamp!
+  createdAt: Timestamp!
+  description: String
+  location: String
+  timezone: String
+  creator: User
+}
+
+type Invitation @table {
+  status: String!
+  createdAt: Timestamp!
+  respondedAt: Timestamp
+  event: Event
+  invitee: User
+  inviter: User
+}
+
+type EventReminder @table {
+  reminderTime: Timestamp!
+  message: String!
+  createdAt: Timestamp!
+  type: String
+  event: Event
+  user: User
+}

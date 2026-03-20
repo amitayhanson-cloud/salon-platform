@@ -10,6 +10,10 @@ import {
   AdminReviewsEditor,
   AdminFaqEditor,
 } from "@/app/(site)/site/[siteId]/admin/settings/page";
+import {
+  AdminOpeningHoursSection,
+  type AdminOpeningHoursSectionHandle,
+} from "@/components/admin/AdminOpeningHoursSection";
 import { VisualSiteEditor, type VisualSiteEditorHandle } from "@/components/editor/VisualSiteEditor";
 import { AdminPageHero } from "@/components/admin/AdminPageHero";
 import { AdminCard } from "@/components/admin/AdminCard";
@@ -18,6 +22,7 @@ import { useUnsavedChanges } from "@/components/admin/UnsavedChangesContext";
 const SITE_PAGE_TABS = [
   { key: "reviews", label: "ביקורות" },
   { key: "faq", label: "FAQ" },
+  { key: "hours", label: "שעות פעילות" },
   { key: "design", label: "עיצוב האתר" },
 ] as const;
 
@@ -37,7 +42,9 @@ export default function AdminSitePage() {
   const [leaveDesignModalOpen, setLeaveDesignModalOpen] = useState(false);
   const [pendingSiteTab, setPendingSiteTab] = useState<SiteTabKey | null>(null);
   const [tabSwitchSaving, setTabSwitchSaving] = useState(false);
+  const [hoursUnsaved, setHoursUnsaved] = useState(false);
   const designEditorRef = useRef<VisualSiteEditorHandle>(null);
+  const openingHoursRef = useRef<AdminOpeningHoursSectionHandle>(null);
 
   const applySiteTab = useCallback((key: SiteTabKey) => {
     setActiveSiteTab(key);
@@ -73,13 +80,14 @@ export default function AdminSitePage() {
       }
     }
     await handleSaveConfig();
+    await openingHoursRef.current?.saveIfDirtyWithoutModal();
   }, [activeSiteTab, handleConfigChange, handleSaveConfig, siteConfig]);
 
   useEffect(() => {
     if (activeSiteTab !== "design") setDesignDirty(false);
   }, [activeSiteTab]);
 
-  const anyUnsaved = hasUnsavedChanges || designDirty;
+  const anyUnsaved = hasUnsavedChanges || designDirty || hoursUnsaved;
   useEffect(() => {
     unsavedCtx?.setUnsaved(anyUnsaved, () => {
       void handleSaveAll();
@@ -307,7 +315,7 @@ export default function AdminSitePage() {
         <div className="shrink-0 mb-4">
           <AdminPageHero
             title="אתר"
-            subtitle="לוגו, מיתוג, ביקורות, עיצוב האתר ו־FAQ"
+            subtitle="לוגו, מיתוג, ביקורות, FAQ, שעות פעילות ועיצוב האתר"
           />
         </div>
       )}
@@ -353,6 +361,21 @@ export default function AdminSitePage() {
                     <AdminFaqEditor
                       faqs={siteConfig.faqs || []}
                       onChange={(faqs) => handleConfigChange({ faqs })}
+                    />
+                  </section>
+                </div>
+
+                {/* שעות פעילות */}
+                <div
+                  role="tabpanel"
+                  aria-hidden={activeSiteTab !== "hours"}
+                  className={activeSiteTab === "hours" ? "block" : "hidden"}
+                >
+                  <section className={sectionCardClass}>
+                    <AdminOpeningHoursSection
+                      ref={openingHoursRef}
+                      siteId={siteId}
+                      onUnsavedChange={setHoursUnsaved}
                     />
                   </section>
                 </div>

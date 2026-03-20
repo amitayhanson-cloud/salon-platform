@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Inter } from "next/font/google";
 import { LandingHeader } from "./LandingHeader";
 import { LandingHero } from "./LandingHero";
 import { ProductExplanationSection } from "./ProductExplanationSection";
@@ -13,13 +12,6 @@ import { ContactSection } from "./ContactSection";
 import { FinalCtaSection } from "./FinalCtaSection";
 import { LandingFooter } from "./LandingFooter";
 import type { LandingContent } from "@/types/landingContent";
-
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  display: "swap",
-  variable: "--font-landing-inter",
-});
 
 /**
  * Full Caleno SaaS landing page: header, all sections in order, footer.
@@ -37,10 +29,7 @@ export function LandingPage() {
   }, []);
 
   return (
-    <div
-      dir="ltr"
-      className={`${inter.variable} ${inter.className} relative min-h-screen text-caleno-ink antialiased`}
-    >
+    <>
       {/* Stationary gradient: Caleno at center spreading out, white at edges; fixed so content scrolls on top */}
       <div
         aria-hidden
@@ -76,6 +65,6 @@ export function LandingPage() {
         <FinalCtaSection />
       </main>
       <LandingFooter />
-    </div>
+    </>
   );
 }

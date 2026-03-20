@@ -8,6 +8,12 @@ import type { TemplateDoc, TemplateConfigDefaults } from "@/types/template";
 
 const TEMPLATES_COLLECTION = "templates";
 
+export type TemplateSummary = {
+  templateKey: string;
+  businessType: TemplateDoc["businessType"];
+  displayName?: string;
+};
+
 /**
  * Get template document by key.
  * Path: templates/{templateKey}
@@ -43,6 +49,23 @@ export async function getTemplateConfigDefaults(
 ): Promise<TemplateConfigDefaults> {
   const template = await getTemplate(templateKey);
   return template.configDefaults ?? {};
+}
+
+/**
+ * List all templates from Firestore for builder/business selection UI.
+ * Path: templates/*
+ */
+export async function listTemplates(): Promise<TemplateSummary[]> {
+  const db = getAdminDb();
+  const snap = await db.collection(TEMPLATES_COLLECTION).get();
+  return snap.docs.map((doc) => {
+    const data = doc.data() as Record<string, unknown>;
+    return {
+      templateKey: doc.id,
+      businessType: (data.businessType as TemplateDoc["businessType"]) ?? "hair",
+      displayName: typeof data.displayName === "string" ? data.displayName : undefined,
+    };
+  });
 }
 
 /**

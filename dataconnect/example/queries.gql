@@ -1,0 +1,29 @@
+query ListAllItems @auth(level: PUBLIC, insecureReason: "This operation is safe to expose to the public as it lists general items.") {
+  items {
+    id
+    name
+    description
+  }
+}
+
+query GetMyItems @auth(level: USER, insecureReason: "This operation is safe to expose to all logged in users as it fetches their own items.") {
+  items(where: { ownerId: { eq_expr: "auth.uid" } }) {
+    id
+    name
+    status
+  }
+}
+
+mutation CreateItem($name: String!, $description: String!) @auth(level: USER) {
+  item_insert(data: {
+    name: $name,
+    description: $description,
+    ownerId_expr: "auth.uid"
+  })
+}
+
+mutation UpdateItemStatus($id: ID!, $status: String!) @auth(level: USER) {
+  item_update(key: { id: $id }, data: {
+    status: $status
+  })
+}

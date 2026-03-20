@@ -1,3 +1,5 @@
+import type { MainGoal } from "./siteConfig";
+
 export type User = {
   id: string;
   email: string;
@@ -6,6 +8,13 @@ export type User = {
   phone?: string | null;
   siteId: string | null; // Reference to the user's site (null = no site yet, needs wizard)
   primarySlug?: string | null; // Tenant subdomain; prefer for dashboard links
+  /** Saved from builder step "מה המטרה העיקרית של האתר" before site is created */
+  onboardingMainGoals?: MainGoal[];
+  /**
+   * Phone for display on the public site, from builder step "איך לקוחות יכולים ליצור קשר".
+   * Distinct from `phone` (account / signup phone).
+   */
+  onboardingSiteDisplayPhone?: string | null;
   createdAt: Date;
   updatedAt?: Date;
 };

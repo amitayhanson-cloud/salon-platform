@@ -10,6 +10,22 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import type { User, Website, SetupStatus } from "@/types/user";
+import type { MainGoal } from "@/types/siteConfig";
+
+const MAIN_GOAL_VALUES = new Set<string>([
+  "new_clients",
+  "online_booking",
+  "show_photos",
+  "info_only",
+]);
+
+function parseOnboardingMainGoals(raw: unknown): MainGoal[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out = raw.filter(
+    (g): g is MainGoal => typeof g === "string" && MAIN_GOAL_VALUES.has(g)
+  );
+  return out.length > 0 ? out : undefined;
+}
 
 const USERS_COLLECTION = "users";
 const WEBSITES_COLLECTION = "websites";
@@ -22,6 +38,13 @@ function timestampToDate(timestamp: any): Date {
   return new Date();
 }
 
+/** Normalize phone for Firestore: trim; empty → null (field still stored so admins can see it was cleared). */
+export function normalizeUserPhoneForStorage(phone: string | null | undefined): string | null {
+  if (phone == null) return null;
+  const t = String(phone).trim();
+  return t === "" ? null : t;
+}
+
 // Create a new user document
 export async function createUserDocument(
   userId: string,
@@ -31,11 +54,15 @@ export async function createUserDocument(
 ): Promise<User> {
   const db = getDb(); // Always get a fresh, valid Firestore instance
   const userRef = doc(db, USERS_COLLECTION, userId);
+  const normalizedPhone = normalizeUserPhoneForStorage(phone);
+  const trimmedName =
+    name != null && String(name).trim() !== "" ? String(name).trim() : undefined;
+
   const userData: User = {
     id: userId,
     email: email || "",
-    name,
-    phone: phone ?? null,
+    name: trimmedName,
+    phone: normalizedPhone,
     siteId: null, // No siteId at signup - will be set after wizard completion
     createdAt: new Date(),
   };
@@ -46,9 +73,10 @@ export async function createUserDocument(
     siteId: null,
     createdAt: Timestamp.now(),
     updatedAt: Timestamp.now(),
+    // Always write phone so platform admins / support see the field in Console & API
+    phone: normalizedPhone,
   };
-  if (name != null) payload.name = name;
-  if (phone != null) payload.phone = phone;
+  if (trimmedName !== undefined) payload.name = trimmedName;
 
   await setDoc(userRef, payload);
 
@@ -73,22 +101,43 @@ export async function getUserDocument(userId: string): Promise<User | null> {
     phone: typeof data.phone === "string" && data.phone ? data.phone : null,
     siteId: data.siteId || null,
     primarySlug: typeof data.primarySlug === "string" && data.primarySlug ? data.primarySlug : null,
+    onboardingMainGoals: parseOnboardingMainGoals(data.onboardingMainGoals),
+    onboardingSiteDisplayPhone:
+      typeof data.onboardingSiteDisplayPhone === "string"
+        ? data.onboardingSiteDisplayPhone.trim() || null
+        : data.onboardingSiteDisplayPhone === null
+          ? null
+          : undefined,
     createdAt: timestampToDate(data.createdAt),
     updatedAt: data.updatedAt ? timestampToDate(data.updatedAt) : undefined,
   };
 }
 
-/** Update user profile fields (name, email, phone). Merge only provided fields. */
+/** Update user profile fields (name, email, phone, onboarding wizard data). Merge only provided fields. */
 export async function updateUserProfile(
   userId: string,
-  updates: { name?: string; email?: string; phone?: string | null }
+  updates: {
+    name?: string;
+    email?: string;
+    phone?: string | null;
+    onboardingMainGoals?: MainGoal[];
+    onboardingSiteDisplayPhone?: string | null;
+  }
 ): Promise<void> {
   const db = getDb();
   const userRef = doc(db, USERS_COLLECTION, userId);
   const payload: Record<string, unknown> = { updatedAt: Timestamp.now() };
   if (updates.name !== undefined) payload.name = updates.name;
   if (updates.email !== undefined) payload.email = updates.email;
-  if (updates.phone !== undefined) payload.phone = updates.phone;
+  if (updates.phone !== undefined) {
+    payload.phone = normalizeUserPhoneForStorage(updates.phone);
+  }
+  if (updates.onboardingMainGoals !== undefined) {
+    payload.onboardingMainGoals = updates.onboardingMainGoals;
+  }
+  if (updates.onboardingSiteDisplayPhone !== undefined) {
+    payload.onboardingSiteDisplayPhone = updates.onboardingSiteDisplayPhone;
+  }
   await setDoc(userRef, payload, { merge: true });
 }
 

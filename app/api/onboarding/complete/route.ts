@@ -1,32 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
-import { getTemplateConfigDefaults } from "@/lib/firestoreTemplatesServer";
-import { mergeTemplateWithBuilderConfig } from "@/lib/mergeTemplateConfig";
-import { generateDemoFaqs, generateDemoReviews } from "@/lib/demoContent";
-import { validateSlug } from "@/lib/slug";
-import { getSitePublicUrl } from "@/lib/tenant";
-import { DEFAULT_HAIR_TEMPLATE_KEY } from "@/types/template";
+import { getAdminAuth } from "@/lib/firebaseAdmin";
+import { runOnboardingComplete } from "@/lib/onboardingCompleteServer";
+import { isPaidOnboardingEnforced } from "@/lib/builderPaymentConfig";
 import type { SiteConfig } from "@/types/siteConfig";
 import type { SiteService } from "@/types/siteConfig";
-
-const TENANTS_COLLECTION = "tenants";
-const SITES_COLLECTION = "sites";
-const USERS_COLLECTION = "users";
+import type { BookingSettings } from "@/types/bookingSettings";
 
 type Body = {
   slug: string;
   config: SiteConfig;
   services: Array<{ id: string; name: string; enabled?: boolean; sortOrder?: number }>;
+  bookingSettings?: BookingSettings;
 };
 
 /**
  * POST /api/onboarding/complete
- * Creates site + tenant + user update in one batch (atomic).
- * Auth: Bearer token.
- * Body: { slug, config, services }
+ * Creates site + tenant + user update. When Stripe checkout is configured for onboarding,
+ * this route is disabled unless ALLOW_ONBOARDING_WITHOUT_PAYMENT=true (local dev).
  */
 export async function POST(request: NextRequest) {
   try {
+    if (isPaidOnboardingEnforced()) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "יש להשלים תשלום דרך תהליך ההרשמה. חזרו לשלב התשלום או התחילו מחדש.",
+          code: "PAYMENT_REQUIRED",
+        },
+        { status: 402 }
+      );
+    }
+
     const authHeader = request.headers.get("authorization");
     const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
     if (!token) {
@@ -46,22 +51,7 @@ export async function POST(request: NextRequest) {
 
     const body = (await request.json().catch(() => ({}))) as Partial<Body>;
     const rawSlug = typeof body.slug === "string" ? body.slug : "";
-    const validation = validateSlug(rawSlug);
-    if (!validation.ok) {
-      return NextResponse.json(
-        { success: false, error: validation.error },
-        { status: 400 }
-      );
-    }
-    const slug = validation.normalized;
-
     const config = body.config as SiteConfig | undefined;
-    if (!config || typeof config !== "object" || !config.salonName?.trim()) {
-      return NextResponse.json(
-        { success: false, error: "config with salonName is required" },
-        { status: 400 }
-      );
-    }
 
     const services: SiteService[] = Array.isArray(body.services)
       ? body.services.map((s, i) => ({
@@ -72,72 +62,26 @@ export async function POST(request: NextRequest) {
         }))
       : [];
 
-    const db = getAdminDb();
+    const result = await runOnboardingComplete({
+      uid,
+      slug: rawSlug,
+      config: config ?? ({} as SiteConfig),
+      services,
+      bookingSettings: body.bookingSettings,
+    });
 
-    const tenantRef = db.collection(TENANTS_COLLECTION).doc(slug);
-    const tenantSnap = await tenantRef.get();
-    if (tenantSnap.exists) {
+    if (!result.ok) {
       return NextResponse.json(
-        { success: false, error: "This subdomain is already taken." },
-        { status: 409 }
+        { success: false, error: result.error },
+        { status: result.status }
       );
     }
 
-    const siteRef = db.collection(SITES_COLLECTION).doc();
-    const siteId = siteRef.id;
-    const userRef = db.collection(USERS_COLLECTION).doc(uid);
-    const now = new Date();
-
-    // Merge template defaults (hair1) with builder config; fallback to builder config if template missing in Firestore
-    let finalConfig: SiteConfig = { ...config, slug };
-    try {
-      const templateDefaults = await getTemplateConfigDefaults(DEFAULT_HAIR_TEMPLATE_KEY);
-      finalConfig = mergeTemplateWithBuilderConfig(templateDefaults, finalConfig);
-    } catch {
-      // Template not in Firestore (e.g. new project): use builder config as-is so site creation still works
-      finalConfig = { ...config, slug };
-    }
-
-    // Generate demo FAQs/Reviews if extra pages selected and none exist
-    if (finalConfig.extraPages?.includes("faq") && (!finalConfig.faqs || finalConfig.faqs.length === 0)) {
-      finalConfig = { ...finalConfig, faqs: generateDemoFaqs() };
-    }
-    if (finalConfig.extraPages?.includes("reviews") && (!finalConfig.reviews || finalConfig.reviews.length === 0)) {
-      finalConfig = { ...finalConfig, reviews: generateDemoReviews() };
-    }
-
-    const batch = db.batch();
-    batch.set(siteRef, {
-      ownerUid: uid,
-      ownerUserId: uid,
-      config: finalConfig,
-      slug,
-      services,
-      businessType: "hair",
-      templateKey: DEFAULT_HAIR_TEMPLATE_KEY,
-      templateSource: `templates/${DEFAULT_HAIR_TEMPLATE_KEY}`,
-      createdAt: now,
-      updatedAt: now,
-    });
-    batch.set(tenantRef, {
-      siteId,
-      ownerUid: uid,
-      createdAt: now,
-      updatedAt: now,
-    });
-    batch.update(userRef, {
-      siteId,
-      updatedAt: now,
-    });
-    await batch.commit();
-
-    const publicUrl = getSitePublicUrl(slug);
-
     return NextResponse.json({
       success: true,
-      siteId,
-      slug,
-      publicUrl,
+      siteId: result.siteId,
+      slug: result.slug,
+      publicUrl: result.publicUrl,
     });
   } catch (err) {
     console.error("[onboarding/complete]", err);

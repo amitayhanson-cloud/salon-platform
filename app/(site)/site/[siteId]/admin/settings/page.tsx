@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useMemo, useCallback, Fragment } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import DeleteAccountButton from "@/components/admin/DeleteAccountButton";
@@ -14,21 +14,11 @@ import AdminTabs from "@/components/ui/AdminTabs";
 import { deleteUserAccount } from "@/lib/deleteUserAccount";
 import { clearStaleStorageOnLogout } from "@/lib/client/storageCleanup";
 import type { SiteBranding } from "@/types/siteConfig";
-import type { SalonBookingState } from "@/types/booking";
-import { defaultBookingState } from "@/types/booking";
-import {
-  saveBookingSettings,
-  convertSalonBookingStateToBookingSettings,
-  subscribeBookingSettings,
-} from "@/lib/firestoreBookingSettings";
-import { resetWorkersAvailabilityToBusinessHours } from "@/lib/resetWorkersAvailability";
-import ConfirmModal from "@/components/ui/ConfirmModal";
 import { validateLogoFile } from "@/lib/siteLogoStorage";
 import { ImagePickerModal } from "@/components/editor/ImagePickerModal";
 import { AdminPageHero } from "@/components/admin/AdminPageHero";
 import { AdminCard } from "@/components/admin/AdminCard";
 import { useUnsavedChanges } from "@/components/admin/UnsavedChangesContext";
-import { Trash2 } from "lucide-react";
 
 
 const SERVICE_OPTIONS: Record<SiteConfig["salonType"], string[]> = {
@@ -75,41 +65,13 @@ const salonTypeLabels: Record<SiteConfig["salonType"], string> = {
   other: "אחר",
 };
 
-function validateBreaks(s: SalonBookingState): string | null {
-  for (let i = 0; i < s.openingHours.length; i++) {
-    const day = s.openingHours[i];
-    if (!day?.open || !day?.close) continue;
-    const breaks = day.breaks ?? [];
-    const openMin = day.open
-      .split(":")
-      .reduce((a, b, idx) => a + (idx === 0 ? parseInt(b, 10) * 60 : parseInt(b, 10)), 0);
-    const closeMin = day.close
-      .split(":")
-      .reduce((a, b, idx) => a + (idx === 0 ? parseInt(b, 10) * 60 : parseInt(b, 10)), 0);
-    for (let bi = 0; bi < breaks.length; bi++) {
-      const b = breaks[bi]!;
-      const [sH, sM] = b.start.split(":").map(Number);
-      const [eH, eM] = b.end.split(":").map(Number);
-      const sMin = (sH ?? 0) * 60 + (sM ?? 0);
-      const eMin = (eH ?? 0) * 60 + (eM ?? 0);
-      if (sMin >= eMin)
-        return `${day.label}: הפסקה ${bi + 1} – שעת התחלה חייבת להיות לפני שעת סיום`;
-      if (sMin < openMin || eMin > closeMin)
-        return `${day.label}: הפסקה ${bi + 1} – חייבת להיות בתוך שעות הפתיחה`;
-      for (let j = bi + 1; j < breaks.length; j++) {
-        const o = breaks[j]!;
-        const oS =
-          (parseInt(o.start.split(":")[0], 10) || 0) * 60 +
-          (parseInt(o.start.split(":")[1], 10) || 0);
-        const oE =
-          (parseInt(o.end.split(":")[0], 10) || 0) * 60 +
-          (parseInt(o.end.split(":")[1], 10) || 0);
-        if (sMin < oE && eMin > oS) return `${day.label}: הפסקות לא יכולות לחפוף`;
-      }
-    }
-  }
-  return null;
-}
+const SETTINGS_TABS = [
+  { key: "basic", label: "מידע בסיסי" },
+  { key: "contact", label: "פרטי יצירת קשר" },
+  { key: "security", label: "אבטחה" },
+] as const;
+
+type SettingsTabType = (typeof SETTINGS_TABS)[number]["key"];
 
 export function generateId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -705,365 +667,6 @@ export function AdminFaqEditor({
 }
 
 
-export function AdminBookingTab({
-  state,
-  onChange,
-  onSaveRequest,
-}: {
-  state: SalonBookingState;
-  onChange: (next: SalonBookingState) => void;
-  onSaveRequest?: () => void;
-}) {
-  const updateHours = (dayIndex: number, field: "open" | "close", value: string) => {
-    const updated = { ...state };
-    const day = { ...updated.openingHours[dayIndex] };
-    day[field] = value || null;
-    updated.openingHours = [
-      ...updated.openingHours.slice(0, dayIndex),
-      day,
-      ...updated.openingHours.slice(dayIndex + 1),
-    ];
-    onChange(updated);
-  };
-
-  const toggleClosed = (dayIndex: number) => {
-    const updated = { ...state };
-    const day = { ...updated.openingHours[dayIndex] };
-    const isClosed = !day.open && !day.close;
-    if (isClosed) {
-      day.open = "09:00";
-      day.close = "18:00";
-    } else {
-      day.open = null;
-      day.close = null;
-      day.breaks = undefined;
-    }
-    updated.openingHours = [
-      ...updated.openingHours.slice(0, dayIndex),
-      day,
-      ...updated.openingHours.slice(dayIndex + 1),
-    ];
-    onChange(updated);
-  };
-
-  const updateDayBreaks = (dayIndex: number, breaks: { start: string; end: string }[]) => {
-    const updated = { ...state };
-    const day = { ...updated.openingHours[dayIndex], breaks };
-    updated.openingHours = [
-      ...updated.openingHours.slice(0, dayIndex),
-      day,
-      ...updated.openingHours.slice(dayIndex + 1),
-    ];
-    onChange(updated);
-  };
-
-  const addBreak = (dayIndex: number) => {
-    const day = state.openingHours[dayIndex];
-    const open = day?.open ?? "09:00";
-    const close = day?.close ?? "18:00";
-    const existing = day?.breaks ?? [];
-    const [oh, om] = open.split(":").map(Number);
-    const defaultStart = `${String(oh + 1).padStart(2, "0")}:00`;
-    const [ch, cm] = close.split(":").map(Number);
-    const defaultEnd = `${String(ch - 1).padStart(2, "0")}:${String(cm || 0).padStart(2, "0")}`;
-    updateDayBreaks(dayIndex, [{ start: defaultStart, end: defaultEnd }, ...existing]);
-  };
-
-  const removeBreak = (dayIndex: number, breakIndex: number) => {
-    const existing = state.openingHours[dayIndex]?.breaks ?? [];
-    updateDayBreaks(dayIndex, existing.filter((_, i) => i !== breakIndex));
-  };
-
-  const updateBreak = (dayIndex: number, breakIndex: number, field: "start" | "end", value: string) => {
-    const existing = [...(state.openingHours[dayIndex]?.breaks ?? [])];
-    if (!existing[breakIndex]) return;
-    existing[breakIndex] = { ...existing[breakIndex]!, [field]: value };
-    updateDayBreaks(dayIndex, existing);
-  };
-
-  const getBreaksError = (dayIndex: number): string | null => {
-    const day = state.openingHours[dayIndex];
-    if (!day?.open || !day?.close) return null;
-    const breaks = day.breaks ?? [];
-    const openMin = day.open.split(":").reduce((a, b, i) => a + (i === 0 ? parseInt(b, 10) * 60 : parseInt(b, 10)), 0);
-    const closeMin = day.close.split(":").reduce((a, b, i) => a + (i === 0 ? parseInt(b, 10) * 60 : parseInt(b, 10)), 0);
-    for (let i = 0; i < breaks.length; i++) {
-      const b = breaks[i]!;
-      const [sH, sM] = b.start.split(":").map(Number);
-      const [eH, eM] = b.end.split(":").map(Number);
-      const sMin = (sH ?? 0) * 60 + (sM ?? 0);
-      const eMin = (eH ?? 0) * 60 + (eM ?? 0);
-      if (sMin >= eMin) return `הפסקה ${i + 1}: שעת התחלה חייבת להיות לפני שעת סיום`;
-      if (sMin < openMin || eMin > closeMin) return `הפסקה ${i + 1}: חייבת להיות בתוך שעות הפתיחה`;
-      for (let j = i + 1; j < breaks.length; j++) {
-        const o = breaks[j]!;
-        const oS = (parseInt(o.start.split(":")[0], 10) || 0) * 60 + (parseInt(o.start.split(":")[1], 10) || 0);
-        const oE = (parseInt(o.end.split(":")[0], 10) || 0) * 60 + (parseInt(o.end.split(":")[1], 10) || 0);
-        if (sMin < oE && eMin > oS) return "הפסקות לא יכולות לחפוף";
-      }
-    }
-    return null;
-  };
-
-  return (
-    <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 p-4 sm:p-6 text-right space-y-4 sm:space-y-6">
-      <h2 className="text-lg sm:text-xl font-bold text-slate-900">ניהול תורים ושעות פתיחה</h2>
-      <p className="text-xs text-slate-500">
-        כאן תוכל להגדיר באילו ימים ושעות הסלון פתוח לקבלת לקוחות. הזמנות חדשות
-        ייבנו על בסיס שעות הפתיחה האלו.
-      </p>
-
-      {onSaveRequest && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={onSaveRequest}
-            className="min-h-[44px] px-4 py-2.5 rounded-lg bg-caleno-ink hover:bg-[#1E293B] text-white text-sm font-semibold transition-colors touch-manipulation"
-          >
-            שמור שעות פעילות
-          </button>
-        </div>
-      )}
-
-      <div className="overflow-x-auto -mx-1 sm:mx-0 mt-4 rounded-lg border border-slate-200/60">
-        <table className="w-full text-xs border-collapse min-w-[280px]" style={{ borderCollapse: "separate", borderSpacing: "0 0.5rem" }}>
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="py-2.5 px-2 sm:px-3 text-right font-medium text-slate-600">
-                יום
-              </th>
-              <th className="py-2.5 px-2 sm:px-3 text-right font-medium text-slate-600">
-                פתיחה
-              </th>
-              <th className="py-2.5 px-2 sm:px-3 text-right font-medium text-slate-600">
-                סגירה
-              </th>
-              <th className="py-2.5 px-2 sm:px-3 text-right font-medium text-slate-600">
-                מצב
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {state.openingHours.map((day, index) => {
-              const closed = !day.open && !day.close;
-              const breaks = day.breaks ?? [];
-              const breaksError = getBreaksError(index);
-              return (
-                <Fragment key={day.day}>
-                  <tr className={`[&>td]:border-slate-200/60 [&>td]:bg-white [&>td:first-child]:border-r [&>td:last-child]:border-l ${closed ? "[&>td]:border [&>td:first-child]:rounded-r-lg [&>td:last-child]:rounded-l-lg" : "[&>td]:border-t [&>td]:border-x [&>td]:border-b-0 [&>td:first-child]:rounded-t-r-lg [&>td:last-child]:rounded-t-l-lg"}`}>
-                    <td className="py-2.5 px-2 sm:px-3 text-slate-800 whitespace-nowrap">
-                      {day.label}
-                    </td>
-                    <td className="py-2.5 px-2 sm:px-3">
-                      <input
-                        type="time"
-                        value={day.open ?? ""}
-                        disabled={closed}
-                        onChange={(e) =>
-                          updateHours(index, "open", e.target.value)
-                        }
-                        className="w-full min-w-[72px] sm:w-24 rounded border border-slate-300 px-2 py-1.5 sm:py-1 text-xs text-right disabled:bg-slate-50 disabled:text-slate-400 touch-manipulation"
-                      />
-                    </td>
-                    <td className="py-2.5 px-2 sm:px-3">
-                      <input
-                        type="time"
-                        value={day.close ?? ""}
-                        disabled={closed}
-                        onChange={(e) =>
-                          updateHours(index, "close", e.target.value)
-                        }
-                        className="w-full min-w-[72px] sm:w-24 rounded border border-slate-300 px-2 py-1.5 sm:py-1 text-xs text-right disabled:bg-slate-50 disabled:text-slate-400 touch-manipulation"
-                      />
-                    </td>
-                    <td className="py-2.5 px-2 sm:px-3" dir="ltr">
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={!closed}
-                        aria-label={closed ? "סגור – לחץ לפתיחה" : "פתוח – לחץ לסגירה"}
-                        onClick={() => toggleClosed(index)}
-                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 touch-manipulation ${
-                          closed ? "bg-slate-300" : "bg-emerald-500"
-                        }`}
-                      >
-                        <span
-                          className={`pointer-events-none block h-5 w-5 shrink-0 transform rounded-full bg-white shadow ring-0 transition-transform ${
-                            closed ? "translate-x-0.5" : "translate-x-5"
-                          }`}
-                        />
-                      </button>
-                    </td>
-                  </tr>
-                  {!closed && (
-                    <tr className="[&>td]:border [&>td]:border-t-0 [&>td]:border-slate-200/60 [&>td]:rounded-b-lg bg-slate-50/50">
-                      <td colSpan={4} className="py-2 px-2 sm:px-3 rounded-b-lg">
-                        <div className="text-xs flex flex-wrap items-center gap-2 gap-y-2">
-                          <span className="font-medium text-slate-600">הפסקות</span>
-                          <button
-                            type="button"
-                            onClick={() => addBreak(index)}
-                            className="min-h-[40px] px-2.5 py-2 sm:py-1 rounded-md border border-slate-300 bg-white text-caleno-deep hover:bg-slate-50 hover:border-caleno-deep/50 text-sm font-medium transition-colors touch-manipulation"
-                          >
-                            הוסף הפסקה
-                          </button>
-                          {breaks.map((b, bi) => (
-                            <div key={bi} className="flex flex-wrap items-center gap-2">
-                              <input
-                                type="time"
-                                value={b.start}
-                                onChange={(e) => updateBreak(index, bi, "start", e.target.value)}
-                                className="w-20 min-w-[70px] rounded border border-slate-300 px-1.5 py-1 sm:py-0.5 text-right touch-manipulation"
-                              />
-                              <span className="text-slate-400">–</span>
-                              <input
-                                type="time"
-                                value={b.end}
-                                onChange={(e) => updateBreak(index, bi, "end", e.target.value)}
-                                className="w-20 min-w-[70px] rounded border border-slate-300 px-1.5 py-1 sm:py-0.5 text-right touch-manipulation"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => removeBreak(index, bi)}
-                                className="p-2 sm:p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors touch-manipulation"
-                                title="מחק הפסקה"
-                                aria-label="מחק הפסקה"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          ))}
-                          {breaksError && (
-                            <p className="text-red-600 mt-0.5">{breaksError}</p>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Closed dates (holidays) */}
-      <div className="border-t border-slate-200 pt-4 sm:pt-6">
-        <h3 className="text-sm font-semibold text-slate-800 mb-2">תאריכים סגורים (חגים)</h3>
-        <p className="text-xs text-slate-500 mb-3">
-          בימים אלו העסק סגור. לא יוצגו שעות זמינות לאף עובד.
-        </p>
-        <ClosedDatesEditor
-          closedDates={state.closedDates ?? []}
-          onChange={(closedDates) => onChange({ ...state, closedDates })}
-        />
-      </div>
-
-      <div className="pt-2 text-xs text-slate-500">
-        אורך ברירת מחדל של כל תור:{" "}
-        <span className="font-semibold">
-          {state.defaultSlotMinutes} דקות
-        </span>{" "}
-        (ניתן לשנות זאת בהמשך בהגדרות מתקדמות).
-      </div>
-    </div>
-  );
-}
-
-
-function ClosedDatesEditor({
-  closedDates,
-  onChange,
-}: {
-  closedDates: Array<{ date: string; label?: string }>;
-  onChange: (closedDates: Array<{ date: string; label?: string }>) => void;
-}) {
-  const [newDate, setNewDate] = useState("");
-  const [newLabel, setNewLabel] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  const addDate = () => {
-    setError(null);
-    const raw = newDate.trim();
-    if (!raw) {
-      setError("נא לבחור תאריך");
-      return;
-    }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-      setError("תאריך לא תקין (נדרש YYYY-MM-DD)");
-      return;
-    }
-    const existing = closedDates.map((e) => e.date);
-    if (existing.includes(raw)) {
-      setError("התאריך כבר ברשימה");
-      return;
-    }
-    const next = [...closedDates, { date: raw, label: newLabel.trim() || undefined }].sort(
-      (a, b) => a.date.localeCompare(b.date)
-    );
-    onChange(next);
-    setNewDate("");
-    setNewLabel("");
-  };
-
-  const removeDate = (date: string) => {
-    onChange(closedDates.filter((e) => e.date !== date));
-  };
-
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-end gap-2">
-        <div>
-          <label className="block text-xs text-slate-600 mb-0.5">תאריך</label>
-          <input
-            type="date"
-            value={newDate}
-            onChange={(e) => setNewDate(e.target.value)}
-            className="rounded border border-slate-300 px-2 py-2 sm:py-1.5 text-xs text-right touch-manipulation min-h-[40px] sm:min-h-0"
-          />
-        </div>
-        <div>
-          <label className="block text-xs text-slate-600 mb-0.5">תיאור (אופציונלי)</label>
-          <input
-            type="text"
-            value={newLabel}
-            onChange={(e) => setNewLabel(e.target.value)}
-            placeholder="למשל: ערב פסח"
-            className="rounded border border-slate-300 px-2 py-2 sm:py-1.5 text-xs text-right w-32 touch-manipulation min-h-[40px] sm:min-h-0"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={addDate}
-          className="min-h-[44px] px-3 py-2 sm:py-1.5 rounded-lg bg-caleno-ink text-white text-xs shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md touch-manipulation"
-        >
-          הוסף תאריך
-        </button>
-      </div>
-      {error && <p className="text-red-600 text-xs">{error}</p>}
-      {closedDates.length > 0 && (
-        <ul className="space-y-1">
-          {closedDates.map((e) => (
-            <li key={e.date} className="flex items-center gap-2 text-xs">
-              <span className="text-slate-700">{e.date}</span>
-              {e.label && <span className="text-slate-500">— {e.label}</span>}
-              <button
-                type="button"
-                onClick={() => removeDate(e.date)}
-                className="py-2 px-1 text-red-600 hover:underline touch-manipulation min-h-[44px] flex items-center"
-                aria-label="הסר"
-              >
-                הסר
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-
 function AdminSiteTab({
   siteConfig,
   onChange,
@@ -1242,7 +845,12 @@ function AdminSiteTab({
       {/* Special Note */}
       {shouldRender("specialNote") && (
       <div className="space-y-4">
-        <h2 className="text-sm font-semibold text-slate-900">הערה מיוחדת</h2>
+        <div>
+          <h2 className="text-sm font-semibold text-slate-900">הערה מיוחדת</h2>
+          <p className="mt-1 text-xs text-slate-500 leading-relaxed">
+            הטקסט יוצג במקטע <span className="font-medium text-slate-600">אודות</span> בדף הנחיתה הציבורי של האתר — כך שהמבקרים יבינו את מה שחשוב לך להדגיש על הסלון.
+          </p>
+        </div>
         <div>
           <label className="block text-xs font-medium text-slate-700 mb-1">
             משהו מיוחד שחשוב שיכתבו על הסלון?
@@ -1461,14 +1069,6 @@ export default function SettingsPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   // Security section toast
   const [securityToast, setSecurityToast] = useState<{ message: string; isError?: boolean } | null>(null);
-  // שעות פעילות (opening hours) state
-  const [bookingState, setBookingState] = useState<SalonBookingState | null>(null);
-  const [showHoursConfirmModal, setShowHoursConfirmModal] = useState(false);
-  const [hoursSaving, setHoursSaving] = useState(false);
-  const [bookingHoursToast, setBookingHoursToast] = useState<string | null>(null);
-  const [bookingSaveError, setBookingSaveError] = useState<string | null>(null);
-  const lastSavedBookingRef = useRef<string | null>(null);
-  const hoursUserHasEditedRef = useRef(false);
 
   useEffect(() => {
     if (!securityToast) return;
@@ -1476,36 +1076,11 @@ export default function SettingsPage() {
     return () => clearTimeout(t);
   }, [securityToast]);
 
-  useEffect(() => {
-    if (!bookingHoursToast) return;
-    const t = setTimeout(() => setBookingHoursToast(null), 5000);
-    return () => clearTimeout(t);
-  }, [bookingHoursToast]);
-
-  const hasHoursUnsaved = useMemo(
-    () =>
-      hoursUserHasEditedRef.current &&
-      bookingState != null &&
-      lastSavedBookingRef.current != null &&
-      JSON.stringify(bookingState) !== lastSavedBookingRef.current,
-    [bookingState]
-  );
-
-  const anyUnsaved = hasUnsavedChanges || hasHoursUnsaved;
-
   const handleSaveAll = useCallback(async () => {
     await handleSaveConfig();
-    if (hasHoursUnsaved && bookingState) {
-      const err = validateBreaks(bookingState);
-      if (!err) {
-        const bookingSettings = convertSalonBookingStateToBookingSettings(bookingState);
-        await saveBookingSettings(siteId, bookingSettings);
-        await resetWorkersAvailabilityToBusinessHours(siteId, bookingSettings);
-        lastSavedBookingRef.current = JSON.stringify(bookingState);
-        hoursUserHasEditedRef.current = false;
-      }
-    }
-  }, [handleSaveConfig, hasHoursUnsaved, bookingState, siteId]);
+  }, [handleSaveConfig]);
+
+  const anyUnsaved = hasUnsavedChanges;
 
   useEffect(() => {
     unsavedCtx?.setUnsaved(anyUnsaved, handleSaveAll);
@@ -1536,104 +1111,6 @@ export default function SettingsPage() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [handleSaveConfig]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !siteId) return;
-    const dayLabels = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"] as const;
-    const dayKeys = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
-    const unsubscribe = subscribeBookingSettings(
-      siteId,
-      (firestoreSettings) => {
-        const openingHours = (["0", "1", "2", "3", "4", "5", "6"] as const).map((key, i) => {
-          const d = firestoreSettings.days[key];
-          const enabled = d?.enabled ?? false;
-          const breaks = (d as { breaks?: { start: string; end: string }[] })?.breaks;
-          return {
-            day: dayKeys[i],
-            label: dayLabels[i],
-            open: enabled ? (d?.start ?? null) : null,
-            close: enabled ? (d?.end ?? null) : null,
-            breaks: breaks && breaks.length > 0 ? breaks : undefined,
-          };
-        });
-        const closedDates = (
-          firestoreSettings as { closedDates?: Array<{ date: string; label?: string }> }
-        ).closedDates;
-        const convertedState: SalonBookingState = {
-          defaultSlotMinutes: firestoreSettings.slotMinutes,
-          openingHours,
-          workers: [],
-          bookings: [],
-          closedDates: Array.isArray(closedDates) && closedDates.length > 0 ? closedDates : [],
-        };
-        setBookingState(convertedState);
-        lastSavedBookingRef.current = JSON.stringify(convertedState);
-        hoursUserHasEditedRef.current = false;
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem(`bookingState:${siteId}`, JSON.stringify(convertedState));
-        }
-      },
-      (err) => {
-        console.error("[Settings] Failed to load booking settings", err);
-        try {
-          const bookingRaw = window.localStorage.getItem(`bookingState:${siteId}`);
-          if (bookingRaw) {
-            const parsed = JSON.parse(bookingRaw) as SalonBookingState;
-            setBookingState(parsed);
-            lastSavedBookingRef.current = JSON.stringify(parsed);
-          } else {
-            setBookingState(defaultBookingState);
-            lastSavedBookingRef.current = JSON.stringify(defaultBookingState);
-          }
-          hoursUserHasEditedRef.current = false;
-        } catch {
-          setBookingState(defaultBookingState);
-          lastSavedBookingRef.current = JSON.stringify(defaultBookingState);
-          hoursUserHasEditedRef.current = false;
-        }
-      }
-    );
-    return () => unsubscribe();
-  }, [siteId]);
-
-  const handleBookingStateChange = (next: SalonBookingState) => {
-    hoursUserHasEditedRef.current = true;
-    setBookingState(next);
-    const err = validateBreaks(next);
-    setBookingSaveError(err ?? null);
-    if (typeof window !== "undefined" && siteId) {
-      window.localStorage.setItem(`bookingState:${siteId}`, JSON.stringify(next));
-    }
-  };
-
-  const handleSaveHoursClick = () => {
-    if (!bookingState) return;
-    const err = validateBreaks(bookingState);
-    if (err) {
-      setBookingSaveError(err);
-      return;
-    }
-    setBookingSaveError(null);
-    setShowHoursConfirmModal(true);
-  };
-
-  const handleConfirmSaveHours = async () => {
-    if (!bookingState || !siteId) return;
-    setHoursSaving(true);
-    try {
-      const bookingSettings = convertSalonBookingStateToBookingSettings(bookingState);
-      await saveBookingSettings(siteId, bookingSettings);
-      await resetWorkersAvailabilityToBusinessHours(siteId, bookingSettings);
-      setBookingHoursToast("שעות הפעילות נשמרו. זמינות העובדים אופסה בהתאם.");
-      setShowHoursConfirmModal(false);
-      lastSavedBookingRef.current = JSON.stringify(bookingState);
-      hoursUserHasEditedRef.current = false;
-    } catch (error) {
-      console.error("[Settings] Failed to save booking settings:", error);
-    } finally {
-      setHoursSaving(false);
-    }
-  };
 
   const logSecurityEvent = async (type: string, tenantId?: string) => {
     if (!firebaseUser) return;
@@ -1701,18 +1178,6 @@ export default function SettingsPage() {
     );
   }
 
-  // Build tabs list - single source of truth for tab keys
-  const settingsTabs = [
-    { key: "basic", label: "מידע בסיסי" },
-    { key: "contact", label: "פרטי יצירת קשר" },
-    { key: "security", label: "אבטחה" },
-    { key: "hours", label: "שעות פעילות" },
-  ] as const;
-
-  // Derive type from tabs config to ensure type safety
-  type SettingsTabType = typeof settingsTabs[number]["key"];
-
-
   return (
     <div dir="rtl" className="space-y-4 sm:space-y-6 max-w-4xl mx-auto">
       <div className="mb-4 sm:mb-6">
@@ -1725,16 +1190,16 @@ export default function SettingsPage() {
       <AdminCard className="overflow-hidden">
       <div className="shrink-0 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-between gap-3 sm:gap-4 px-4 sm:px-6 py-3 border-b border-[#E2E8F0] bg-white/80">
         <AdminTabs
-          tabs={settingsTabs}
+          tabs={SETTINGS_TABS}
           activeKey={activeTab}
           onChange={(key) => setActiveTab(key)}
           className="flex-1 min-w-0 w-full sm:w-auto"
         />
         <div className="flex items-center gap-3 sm:gap-4 shrink-0 flex-wrap">
-          {saveMessage && hasUnsavedChanges && activeTab !== "hours" && (
+          {saveMessage && hasUnsavedChanges && (
             <span className="text-xs text-emerald-600">{saveMessage}</span>
           )}
-          {hasUnsavedChanges && activeTab !== "hours" && (
+          {hasUnsavedChanges && (
             <button
               onClick={() => { void handleSaveConfig(); }}
               disabled={isSaving}
@@ -1777,28 +1242,6 @@ export default function SettingsPage() {
               renderSections={["contact"]}
             />
           )}
-          {activeTab === "hours" && (
-            <div className="pt-2 sm:pt-4 space-y-4">
-              <h2 className="text-base sm:text-lg font-bold text-[#0F172A]">שעות פעילות</h2>
-              {bookingHoursToast && (
-                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs sm:text-sm text-emerald-800 text-right">
-                  {bookingHoursToast}
-                </div>
-              )}
-              {bookingSaveError && (
-                <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs sm:text-sm text-red-700 text-right">
-                  {bookingSaveError}
-                </div>
-              )}
-              {bookingState && (
-                <AdminBookingTab
-                  state={bookingState}
-                  onChange={handleBookingStateChange}
-                  onSaveRequest={hasHoursUnsaved ? handleSaveHoursClick : undefined}
-                />
-              )}
-            </div>
-          )}
           {activeTab === "security" && (
             <div className="space-y-6">
               <div>
@@ -1828,17 +1271,6 @@ export default function SettingsPage() {
         </div>
       </div>
       </AdminCard>
-
-      <ConfirmModal
-        open={showHoursConfirmModal}
-        onConfirm={handleConfirmSaveHours}
-        onClose={() => setShowHoursConfirmModal(false)}
-        message="שמירת שעות הפעילות תאפס את זמינות כל העובדים ותתאים אותה לשעות הפעילות של העסק. האם להמשיך?"
-        messageSecondary="Saving business hours will reset all workers' availability to match the business hours. Do you want to continue?"
-        confirmLabel="אישור"
-        cancelLabel="ביטול"
-        submitting={hoursSaving}
-      />
     </div>
   );
 }

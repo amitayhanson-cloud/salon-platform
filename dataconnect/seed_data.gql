@@ -1,0 +1,48 @@
+mutation SeedData @transaction @auth(level: PUBLIC, insecureReason: "This is seed data and should be accessible to initialize the database.") {
+  user_upsertMany(data: [
+    {
+      id: "b45a0b7e-0b0b-4b0b-8b0b-0b0b0b0b0b0b",
+      displayName: "Alice Smith",
+      email: "alice@example.com",
+      createdAt: "2023-01-01T10:00:00Z"
+    },
+    {
+      id: "c67b1c8f-1c1c-5c1c-9c1c-1c1c1c1c1c1c",
+      displayName: "Bob Johnson",
+      email: "bob@example.com",
+      createdAt: "2023-01-02T11:00:00Z"
+    }
+  ])
+  event_upsertMany(data: [
+    {
+      id: "d89c2d9g-2d2d-6d2d-ad2d-2d2d2d2d2d2d",
+      title: "Team Meeting",
+      startTime: "2024-03-10T14:00:00Z",
+      endTime: "2024-03-10T15:00:00Z",
+      createdAt: "2024-03-01T09:00:00Z",
+      description: "Weekly team sync-up.",
+      location: "Conference Room A",
+      creatorId: "b45a0b7e-0b0b-4b0b-8b0b-0b0b0b0b0b0b"
+    },
+    {
+      id: "e01d3e0h-3e3e-7e3e-be3e-3e3e3e3e3e3e",
+      title: "Project Review",
+      startTime: "2024-03-15T10:30:00Z",
+      endTime: "2024-03-15T11:30:00Z",
+      createdAt: "2024-03-05T10:00:00Z",
+      description: "Review of Q1 project progress.",
+      location: "Online Meeting",
+      creatorId: "c67b1c8f-1c1c-5c1c-9c1c-1c1c1c1c1c1c"
+    }
+  ])
+  eventReminder_upsertMany(data: [
+    {
+      id: "f23e4f1i-4f4f-8f4f-cf4f-4f4f4f4f4f4f",
+      reminderTime: "2024-03-10T13:45:00Z",
+      message: "Meeting starts in 15 minutes!",
+      createdAt: "2024-03-09T12:00:00Z",
+      eventId: "d89c2d9g-2d2d-6d2d-ad2d-2d2d2d2d2d2d",
+      userId: "b45a0b7e-0b0b-4b0b-8b0b-0b0b0b0b0b0b"
+    }
+  ])
+}

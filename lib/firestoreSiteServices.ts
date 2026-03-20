@@ -1,6 +1,7 @@
 import { getDb } from "@/lib/firebaseClient";
 import { doc, getDoc, setDoc, updateDoc, onSnapshot, Timestamp } from "firebase/firestore";
 import { sanitizeForFirestore } from "@/lib/sanitizeForFirestore";
+import { syncNewSiteServiceToWorkers } from "@/lib/syncNewServiceToWorkers";
 import type { SiteService } from "@/types/siteConfig";
 
 /**
@@ -84,9 +85,16 @@ export async function addSiteService(
 
   const updatedServices = [...existingServices, newService];
   await saveSiteServices(siteId, updatedServices);
-  
+
+  try {
+    await syncNewSiteServiceToWorkers(siteId, newService, updatedServices);
+  } catch (err) {
+    console.error("[addSiteService] Failed to sync new service to workers", err);
+    throw err;
+  }
+
   console.log(`[addSiteService] PATH=${path} - Service added successfully, new count: ${updatedServices.length}`);
-  
+
   return newId;
 }
 
@@ -206,12 +214,31 @@ export async function migrateServicesFromSubcollection(siteId: string): Promise<
       return;
     }
     
-    // Try to load from old subcollection (legacy: users/{ownerUid}/site/main/services)
-    // Migration only works when siteId === ownerUid (legacy single-tenant); otherwise no-op
+    // Try to load from old subcollection (legacy: users/{ownerUid}/site/main/services).
+    // Firestore only allows reading that path when request.auth.uid === ownerUid.
     try {
       const siteSnap = await getDoc(doc(getDb(), "sites", siteId));
       const ownerUid = siteSnap.data()?.ownerUid ?? siteSnap.data()?.ownerUserId;
       if (!ownerUid) return;
+
+      let currentUid: string | undefined;
+      if (typeof window !== "undefined") {
+        try {
+          const { getClientAuth } = await import("@/lib/firebaseClient");
+          currentUid = getClientAuth().currentUser?.uid;
+        } catch {
+          currentUid = undefined;
+        }
+      }
+      if (!currentUid || currentUid !== ownerUid) {
+        if (process.env.NODE_ENV !== "production") {
+          console.log(
+            "[migrateServicesFromSubcollection] Skipping legacy services read (must be site owner)"
+          );
+        }
+        return;
+      }
+
       const { getServices } = await import("@/lib/firestoreServices");
       const oldServices = await getServices(ownerUid);
       

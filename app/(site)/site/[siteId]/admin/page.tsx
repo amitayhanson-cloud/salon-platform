@@ -98,7 +98,7 @@ export default function AdminHomePage() {
 
                 <div className="mb-10">
                   <h2 className="mb-4 text-lg font-semibold text-[#0F172A]">
-                    סטטיסטיקות האתר
+                    סטטיסטיקות העסק
                   </h2>
                   {statsLoading ? (
                     <div className="grid grid-cols-2 gap-4 md:grid-cols-4">

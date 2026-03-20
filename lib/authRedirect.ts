@@ -26,7 +26,8 @@ export async function routeAfterAuth(userId: string): Promise<RouteAfterAuthResu
     if (!userDoc) {
       console.log(`[routeAfterAuth] User doc not found for uid=${userId}, creating`);
       try {
-        await createUserDocument(userId, "", "");
+        // Minimal stub doc until AuthProvider fills email/name/phone from Firebase user
+        await createUserDocument(userId, "", undefined, null);
         userDoc = await getUserDocument(userId);
       } catch (error) {
         console.error("[routeAfterAuth] Error creating user doc:", error);

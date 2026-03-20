@@ -4,18 +4,22 @@ import { useState, useEffect, useRef, useCallback } from "react";
 
 // Builder is dynamic - it requires authentication and loads user data
 export const dynamic = "force-dynamic";
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/components/auth/AuthProvider";
 import type { MainGoal, SiteConfig } from "@/types/siteConfig";
 import { defaultSiteConfig } from "@/types/siteConfig";
+import type { SalonBookingState } from "@/types/booking";
 import { defaultBookingState } from "@/types/booking";
 import { HAIR_HERO_IMAGES, HAIR_ABOUT_IMAGES } from "@/lib/hairImages";
-import { Timestamp } from "firebase/firestore";
 import { validateTenantSlug, getSitePublicUrl } from "@/lib/tenant";
 import { getDashboardUrl } from "@/lib/url";
-import { isUserProfileComplete } from "@/types/user";
+import { AdminBookingTab } from "@/components/admin/AdminBookingTab";
+import { convertSalonBookingStateToBookingSettings } from "@/lib/firestoreBookingSettings";
+import { isSalonBookingHoursValidForWizard } from "@/lib/openingHoursValidation";
+import { BuilderBotCoach } from "@/components/builder/BuilderBotCoach";
+import { BuilderCheckoutStep } from "@/components/builder/BuilderCheckoutStep";
 
 /*
  * Manual test steps (signup wizard + subdomain):
@@ -28,29 +32,35 @@ import { isUserProfileComplete } from "@/types/user";
 // Reusable component for the "editable later" hint
 function EditableLaterHint() {
   return (
-    <p className="text-sm text-[#64748B] text-right mt-2 mb-4">
-      אפשר לערוך הכל אחר כך בפאנל הניהול.
+    <p className="text-sm text-caleno-600/85 text-right mt-1 mb-4 leading-relaxed">
+      אפשר לשנות הכל אחר כך בפאנל הניהול.
     </p>
   );
 }
 
-const SERVICE_OPTIONS: Record<SiteConfig["salonType"], string[]> = {
-  hair: ["תספורת", "צבע", "פן", "החלקה", "טיפולי שיער"],
-  nails: ["מניקור", "פדיקור", "לק ג׳ל", "בניית ציפורניים", "טיפול כף רגל"],
-  barber: ["תספורת גברים", "עיצוב זקן", "תספורת ילדים"],
-  spa: ["עיסוי", "טיפולי פנים", "טיפול גוף", "שיאצו", "רפלקסולוגיה"],
-  mixed: [
-    "תספורת",
-    "צבע",
-    "פן",
-    "לק ג׳ל",
-    "מניקור",
-    "פדיקור",
-    "עיסוי",
-    "טיפולי פנים",
-  ],
-  other: ["שירות 1", "שירות 2"], // placeholders
-};
+/** Same subtle wash as tenant admin + signup (radial teal + soft blobs). */
+function BuilderCalenoBackground() {
+  return (
+    <>
+      <div
+        aria-hidden
+        className="fixed inset-0 -z-10"
+        style={{
+          backgroundImage:
+            "radial-gradient(ellipse 100% 100% at 50% 50%, #cceef1 0%, #e6f5f7 25%, #f0f9fa 50%, #f8fcfd 75%, #ffffff 100%)",
+        }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none fixed -top-24 -left-24 -z-10 h-80 w-80 rounded-full bg-caleno-200/35 blur-3xl"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none fixed -bottom-32 -right-20 -z-10 h-72 w-72 rounded-full bg-caleno-brand/20 blur-3xl"
+      />
+    </>
+  );
+}
 
 export default function BuilderPage() {
   const router = useRouter();
@@ -94,15 +104,6 @@ export default function BuilderPage() {
           });
         }
         router.replace("/login");
-      }
-      return;
-    }
-
-    // Require complete profile (name, email, phone) before builder
-    if (!isUserProfileComplete(user)) {
-      if (!didRedirect.current) {
-        didRedirect.current = true;
-        router.replace("/signup/complete-profile");
       }
       return;
     }
@@ -164,14 +165,91 @@ export default function BuilderPage() {
     };
   });
   const [step, setStep] = useState(1);
-  const [customService, setCustomService] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [wizardSlug, setWizardSlug] = useState("");
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
   const [slugCheckLoading, setSlugCheckLoading] = useState(false);
+  const [templateOptions, setTemplateOptions] = useState<
+    Array<{ templateKey: string; salonType: SiteConfig["salonType"]; label: string }>
+  >([]);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
+  const [bookingState, setBookingState] = useState<SalonBookingState>(() => ({
+    ...defaultBookingState,
+    workers: [],
+    bookings: [],
+  }));
+  /** Inline “fill required fields” only after user clicks המשך / finish while invalid */
+  const [showStepValidationHint, setShowStepValidationHint] = useState(false);
+  /** Step fields + primary actions fade in after bot finishes typing */
+  const [builderFormVisible, setBuilderFormVisible] = useState(false);
+  /** Steps that already played the typewriter once — revisiting skips animation */
+  const [botStepsSpeechCompleted, setBotStepsSpeechCompleted] = useState<
+    Set<number>
+  >(() => new Set());
+  /** Stripe checkout required before site creation (from GET /api/onboarding/payment-config) */
+  const [paymentEnforced, setPaymentEnforced] = useState(false);
+  const [checkoutProvider, setCheckoutProvider] = useState<
+    "paddle" | "stripe" | null
+  >(null);
+  const [paddleConfigured, setPaddleConfigured] = useState(false);
+  const [stripeConfigured, setStripeConfigured] = useState(false);
+  const [paymentConfigLoading, setPaymentConfigLoading] = useState(true);
+  const [checkoutMessage, setCheckoutMessage] = useState<string | null>(null);
+  const checkoutReturnHandledRef = useRef(false);
 
   const totalSteps = 7;
+
+  useEffect(() => {
+    setBuilderFormVisible(false);
+  }, [step]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/onboarding/payment-config")
+      .then((r) => (r.ok ? r.json() : null))
+      .then(
+        (data: {
+          paymentEnforced?: boolean;
+          provider?: "paddle" | "stripe" | null;
+          paddleConfigured?: boolean;
+          stripeConfigured?: boolean;
+        } | null) => {
+          if (cancelled || !data) return;
+          setPaymentEnforced(Boolean(data.paymentEnforced));
+          setCheckoutProvider(
+            data.provider === "paddle" || data.provider === "stripe"
+              ? data.provider
+              : null
+          );
+          setPaddleConfigured(Boolean(data.paddleConfigured));
+          setStripeConfigured(Boolean(data.stripeConfigured));
+        }
+      )
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setPaymentConfigLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleBuilderBotSpeechComplete = useCallback(() => {
+    setBuilderFormVisible(true);
+    setBotStepsSpeechCompleted((prev) => {
+      if (prev.has(step)) return prev;
+      const next = new Set(prev);
+      next.add(step);
+      return next;
+    });
+  }, [step]);
+
+  const builderFormFadeClass =
+    "transition-opacity duration-700 ease-out motion-reduce:transition-none " +
+    (builderFormVisible
+      ? "opacity-100"
+      : "pointer-events-none select-none opacity-0");
 
   const updateConfig = (updates: Partial<SiteConfig>) => {
     setConfig((prev) => ({ ...prev, ...updates }));
@@ -211,6 +289,43 @@ export default function BuilderPage() {
     return () => clearTimeout(t);
   }, [wizardSlug, checkSlugAvailability]);
 
+  useEffect(() => {
+    const loadTemplates = async () => {
+      try {
+        const res = await fetch("/api/templates");
+        if (!res.ok) {
+          if (process.env.NODE_ENV === "development") {
+            console.warn("[Builder] Failed to load templates from API", res.status);
+          }
+          return;
+        }
+        const data = (await res.json().catch(() => ({}))) as {
+          success?: boolean;
+          templates?: Array<{
+          templateKey: string;
+          salonType: SiteConfig["salonType"];
+          label: string;
+          }>;
+        };
+        const options = Array.isArray(data.templates) ? data.templates : [];
+        if (options.length === 0) return;
+        setTemplateOptions(options);
+        const allowed = new Set(options.map((o) => o.salonType));
+        if (!allowed.has(config.salonType)) {
+          updateConfig({ salonType: options[0].salonType });
+        }
+      } catch (error) {
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[Builder] Failed to load template options:", error);
+        }
+      } finally {
+        setTemplatesLoading(false);
+      }
+    };
+    loadTemplates();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const isStepValid = (): boolean => {
     switch (step) {
       case 1:
@@ -225,9 +340,7 @@ export default function BuilderPage() {
         return !!(config.address && config.address.trim() !== "");
       case 4:
         return config.mainGoals.length > 0;
-      case 5:
-        return config.services.length > 0;
-      case 6: {
+      case 5: {
         const hasPhone = Boolean(config.phoneNumber?.trim());
         const hasWhatsapp = Boolean(config.whatsappNumber?.trim());
         const hasInstagram = Boolean(config.instagramHandle?.trim());
@@ -237,6 +350,8 @@ export default function BuilderPage() {
           hasPhone || hasWhatsapp || hasInstagram || hasFacebook || hasEmail;
         return hasContact;
       }
+      case 6:
+        return isSalonBookingHoursValidForWizard(bookingState);
       case 7:
         return true;
       default:
@@ -244,17 +359,126 @@ export default function BuilderPage() {
     }
   };
 
-  const handleNext = () => {
-    if (isStepValid() && step < totalSteps) {
-      setStep(step + 1);
+  useEffect(() => {
+    setShowStepValidationHint(false);
+  }, [step]);
+
+  useEffect(() => {
+    if (!showStepValidationHint) return;
+    if (isStepValid()) setShowStepValidationHint(false);
+  }, [
+    showStepValidationHint,
+    step,
+    config,
+    wizardSlug,
+    slugAvailable,
+    bookingState,
+  ]);
+
+  const tryAdvanceStep = () => {
+    if (!isStepValid()) {
+      setShowStepValidationHint(true);
+      return;
     }
+    setShowStepValidationHint(false);
+    handleNext();
+  };
+
+  /** From opening-hours step → payment step (does not create site yet). */
+  const tryGoToPaymentStep = () => {
+    if (step !== 6) return;
+    if (!isStepValid()) {
+      setShowStepValidationHint(true);
+      return;
+    }
+    setShowStepValidationHint(false);
+    setCheckoutMessage(null);
+    setStep(7);
+  };
+
+  const handleNext = () => {
+    if (step >= totalSteps) return;
+
+    const advance = () => setStep((s) => s + 1);
+
+    // Persist main goals to users/{uid} when leaving the goals step (before site exists).
+    if (step === 4 && user?.id && config.mainGoals.length > 0) {
+      void (async () => {
+        try {
+          const { updateUserProfile } = await import("@/lib/firestoreUsers");
+          await updateUserProfile(user.id, {
+            onboardingMainGoals: config.mainGoals,
+          });
+        } catch (err) {
+          console.error("[Builder] Failed to save onboarding main goals:", err);
+        } finally {
+          advance();
+        }
+      })();
+      return;
+    }
+
+    // Persist public-site display phone to users/{uid} when leaving the contact step.
+    if (step === 5 && user?.id) {
+      void (async () => {
+        try {
+          const { updateUserProfile, getUserDocument } = await import("@/lib/firestoreUsers");
+          const display = config.phoneNumber?.trim() || null;
+          const fresh = await getUserDocument(user.id);
+          const hasAccountPhone =
+            typeof fresh?.phone === "string" && fresh.phone.trim().length > 0;
+          await updateUserProfile(user.id, {
+            onboardingSiteDisplayPhone: display,
+            // So platform admin always has a phone: copy salon contact when account phone missing (e.g. Google signup)
+            ...(display && !hasAccountPhone ? { phone: display } : {}),
+          });
+        } catch (err) {
+          console.error("[Builder] Failed to save onboarding site display phone:", err);
+        } finally {
+          advance();
+        }
+      })();
+      return;
+    }
+
+    advance();
   };
 
   const handleBack = () => {
     if (step > 1) {
+      if (step === 7) setCheckoutMessage(null);
       setStep(step - 1);
     }
   };
+
+  const applyPostOnboardingSuccess = useCallback(
+    async (newSiteId: string, slug: string, publicUrl: string) => {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(
+          `siteConfig:${newSiteId}`,
+          JSON.stringify({ ...config, services: [] })
+        );
+        const existingBookingState = window.localStorage.getItem(
+          `bookingState:${newSiteId}`
+        );
+        if (!existingBookingState) {
+          window.localStorage.setItem(
+            `bookingState:${newSiteId}`,
+            JSON.stringify(defaultBookingState)
+          );
+        }
+      }
+      const isLocalhost =
+        typeof window !== "undefined" &&
+        window.location.hostname === "localhost";
+      if (isLocalhost) {
+        router.replace(`/admin?tenant=${encodeURIComponent(slug)}`);
+      } else {
+        window.location.href = `${publicUrl}/admin`;
+      }
+    },
+    [config, router]
+  );
 
   const handleFinish = async () => {
     if (!config.salonName.trim()) return;
@@ -274,6 +498,7 @@ export default function BuilderPage() {
       const userDoc = await getUserDocument(user.id);
 
       if (userDoc?.siteId) {
+        setIsSaving(false);
         const url = getDashboardUrl({
           slug: userDoc.primarySlug ?? null,
           siteId: userDoc.siteId,
@@ -286,13 +511,7 @@ export default function BuilderPage() {
         return;
       }
 
-      const siteServices = config.services.map((serviceName, index) => ({
-        id: `svc_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`,
-        name: serviceName,
-        enabled: true,
-        sortOrder: index,
-      }));
-
+      const bookingSettings = convertSalonBookingStateToBookingSettings(bookingState);
       const token = await firebaseUser.getIdToken();
       const res = await fetch("/api/onboarding/complete", {
         method: "POST",
@@ -302,8 +521,9 @@ export default function BuilderPage() {
         },
         body: JSON.stringify({
           slug,
-          config: { ...config, slug },
-          services: siteServices,
+          config: { ...config, slug, services: [] },
+          services: [],
+          bookingSettings,
         }),
       });
 
@@ -322,31 +542,7 @@ export default function BuilderPage() {
 
       const newSiteId = data.siteId!;
       const publicUrl = data.publicUrl ?? getSitePublicUrl(slug);
-
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(
-          `siteConfig:${newSiteId}`,
-          JSON.stringify(config)
-        );
-        const existingBookingState = window.localStorage.getItem(
-          `bookingState:${newSiteId}`
-        );
-        if (!existingBookingState) {
-          window.localStorage.setItem(
-            `bookingState:${newSiteId}`,
-            JSON.stringify(defaultBookingState)
-          );
-        }
-      }
-
-      const isLocalhost =
-        typeof window !== "undefined" &&
-        window.location.hostname === "localhost";
-      if (isLocalhost) {
-        router.replace(`/admin?tenant=${encodeURIComponent(slug)}`);
-      } else {
-        window.location.href = `${publicUrl}/admin`;
-      }
+      await applyPostOnboardingSuccess(newSiteId, slug, publicUrl);
     } catch (err) {
       console.error("Failed to complete onboarding", err);
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -355,18 +551,91 @@ export default function BuilderPage() {
     }
   };
 
-  const toggleService = (serviceName: string) => {
-    const exists = config.services.includes(serviceName);
-    if (exists) {
-      updateConfig({
-        services: config.services.filter((s) => s !== serviceName),
-      });
-    } else {
-      updateConfig({
-        services: [...config.services, serviceName],
-      });
-    }
-  };
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("checkout") !== "cancel") return;
+    setCheckoutMessage("התשלום בוטל. אפשר לנסות שוב למטה.");
+    setStep(7);
+    window.history.replaceState({}, "", "/builder");
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !firebaseUser) return;
+    const params = new URLSearchParams(window.location.search);
+    const ptxn = params.get("_ptxn");
+    const sessionId = params.get("session_id");
+    const stripeOk =
+      params.get("checkout") === "success" &&
+      typeof sessionId === "string" &&
+      sessionId.startsWith("cs_");
+    const paddleOk = typeof ptxn === "string" && ptxn.startsWith("txn_");
+
+    if (!stripeOk && !paddleOk) return;
+    if (checkoutReturnHandledRef.current) return;
+    checkoutReturnHandledRef.current = true;
+
+    const body = paddleOk
+      ? { transactionId: ptxn }
+      : { sessionId: sessionId! };
+
+    let cancelled = false;
+    (async () => {
+      setIsSaving(true);
+      setSaveError(null);
+      try {
+        const token = await firebaseUser.getIdToken();
+        const res = await fetch("/api/onboarding/complete-from-session", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(body),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          success?: boolean;
+          error?: string;
+          siteId?: string;
+          publicUrl?: string;
+          slug?: string;
+          alreadyCompleted?: boolean;
+        };
+        if (cancelled) return;
+        if (data.alreadyCompleted && data.siteId) {
+          window.history.replaceState({}, "", "/builder");
+          router.replace("/account");
+          setIsSaving(false);
+          return;
+        }
+        if (
+          !res.ok ||
+          !data.success ||
+          !data.siteId ||
+          !data.publicUrl ||
+          !data.slug
+        ) {
+          setSaveError(data.error || "לא ניתן להשלים את ההרשמה לאחר התשלום");
+          setIsSaving(false);
+          checkoutReturnHandledRef.current = false;
+          setStep(7);
+          return;
+        }
+        window.history.replaceState({}, "", "/builder");
+        await applyPostOnboardingSuccess(data.siteId, data.slug, data.publicUrl);
+      } catch (e) {
+        if (cancelled) return;
+        setSaveError(e instanceof Error ? e.message : "שגיאה");
+        setIsSaving(false);
+        checkoutReturnHandledRef.current = false;
+        setStep(7);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [firebaseUser, router, applyPostOnboardingSuccess]);
 
   const toggleMainGoal = (goal: MainGoal) => {
     setConfig((prev) => {
@@ -380,29 +649,6 @@ export default function BuilderPage() {
     });
   };
 
-  const addCustomService = () => {
-    const customServiceTrimmed = customService.trim();
-    if (customServiceTrimmed) {
-      const exists = config.services.includes(customServiceTrimmed);
-      if (!exists) {
-        updateConfig({
-          services: [...config.services, customServiceTrimmed],
-        });
-        setCustomService("");
-      }
-    }
-  };
-
-
-  const toggleExtraPage = (page: SiteConfig["extraPages"][number]) => {
-    setConfig((prev) => {
-      const extraPages = prev.extraPages.includes(page)
-        ? prev.extraPages.filter((p) => p !== page)
-        : [...prev.extraPages, page];
-      return { ...prev, extraPages };
-    });
-  };
-
   const salonTypeLabels: Record<SiteConfig["salonType"], string> = {
     hair: "ספרות / עיצוב שיער",
     nails: "מניקור / פדיקור",
@@ -412,6 +658,8 @@ export default function BuilderPage() {
     other: "אחר",
   };
 
+  const renderedSalonTypeOptions = templateOptions;
+
   const mainGoalLabels: Record<MainGoal, string> = {
     new_clients: "להביא לקוחות חדשים",
     online_booking: "לאפשר הזמנות אונליין",
@@ -419,35 +667,16 @@ export default function BuilderPage() {
     info_only: "לתת מידע בסיסי בלבד",
   };
 
-  // vibeLabels kept for backwards compatibility but no longer used in UI
-  const vibeLabels: Record<NonNullable<SiteConfig["vibe"]>, string> = {
-    luxury: "סגנון יוקרתי",
-    clean: "סגנון נקי ורך",
-    colorful: "סגנון צבעוני וכיפי",
-    spa: "לא בשימוש כרגע",
-    surprise: "לא בשימוש כרגע",
-  };
-
-  // photosOptionLabels kept for backwards compatibility but no longer used in UI
-  const photosOptionLabels: Record<NonNullable<SiteConfig["photosOption"]>, string> = {
-    own: "אני מעלה תמונות שלי",
-    ai: "AI ייצור תמונות בשבילי",
-    mixed: "שילוב של שניהם",
-  };
-
-  const extraPageLabels: Record<SiteConfig["extraPages"][number], string> = {
-    reviews: "ביקורות מלקוחות",
-    faq: "שאלות נפוצות",
-  };
-
-
   // Show loading while auth initializes
   if (!authReady || authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-caleno-bg">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-caleno-deep mx-auto mb-4"></div>
-          <p className="text-caleno-deep">טוען...</p>
+      <div className="relative min-h-screen w-full overflow-x-hidden" dir="rtl">
+        <BuilderCalenoBackground />
+        <div className="relative z-10 flex min-h-screen items-center justify-center">
+          <div className="text-center">
+            <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-caleno-deep" />
+            <p className="text-caleno-deep">טוען...</p>
+          </div>
         </div>
       </div>
     );
@@ -456,18 +685,25 @@ export default function BuilderPage() {
   // Show loading if redirecting
   if (user && user.siteId && didRedirect.current) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-caleno-bg">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-caleno-deep mx-auto mb-4"></div>
-          <p className="text-caleno-deep">מעביר...</p>
+      <div className="relative min-h-screen w-full overflow-x-hidden" dir="rtl">
+        <BuilderCalenoBackground />
+        <div className="relative z-10 flex min-h-screen items-center justify-center">
+          <div className="text-center">
+            <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-caleno-deep" />
+            <p className="text-caleno-deep">מעביר...</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-caleno-bg py-8" dir="rtl">
-        <div className="container mx-auto px-4 max-w-2xl">
+    <div className="relative min-h-screen w-full overflow-x-hidden" dir="rtl">
+      <BuilderCalenoBackground />
+      <div className="relative z-10 py-8">
+        <div
+          className={`container mx-auto px-4 ${step === 7 ? "max-w-4xl" : "max-w-2xl"}`}
+        >
           {/* Caleno branding */}
           <div className="flex flex-col items-center pt-4 pb-6">
             <Link
@@ -487,9 +723,70 @@ export default function BuilderPage() {
               </span>
             </Link>
             <p className="mt-2 text-sm font-medium text-caleno-deep">
-              בונה את האתר שלך
+              {step === 7 ? "תשלום והשקת האתר" : "בונה את העסק שלך"}
             </p>
           </div>
+
+        {step === 7 ? (
+          <div className="mb-20 space-y-8">
+            <div className="text-right">
+              <span className="text-sm font-medium text-caleno-deep/90">
+                שלב אחרון · תשלום
+              </span>
+              <div className="mt-2 h-2 w-full rounded-full bg-caleno-border">
+                <div
+                  className="h-2 rounded-full bg-caleno-deep transition-all duration-300"
+                  style={{ width: "100%" }}
+                />
+              </div>
+            </div>
+
+            <BuilderBotCoach
+              key={step}
+              step={step}
+              instantSpeech={botStepsSpeechCompleted.has(step)}
+              onSpeakingComplete={handleBuilderBotSpeechComplete}
+            />
+
+            <div
+              className={builderFormFadeClass}
+              aria-hidden={!builderFormVisible}
+            >
+              {firebaseUser ? (
+                <BuilderCheckoutStep
+                  salonName={config.salonName}
+                  slug={wizardSlug.trim().toLowerCase()}
+                  config={config}
+                  bookingState={bookingState}
+                  paymentEnforced={paymentEnforced}
+                  checkoutProvider={checkoutProvider}
+                  paddleConfigured={paddleConfigured}
+                  stripeConfigured={stripeConfigured}
+                  paymentConfigLoading={paymentConfigLoading}
+                  firebaseUser={firebaseUser}
+                  onDevComplete={async () => {
+                    await handleFinish();
+                  }}
+                  isSaving={isSaving}
+                  setIsSaving={setIsSaving}
+                  saveError={saveError}
+                  setSaveError={setSaveError}
+                  checkoutMessage={checkoutMessage}
+                />
+              ) : null}
+            </div>
+
+            <div className="flex justify-between gap-4 border-t border-caleno-border/50 pt-8">
+              <button
+                type="button"
+                onClick={handleBack}
+                className="rounded-lg border border-caleno-border px-6 py-3 font-medium text-caleno-ink transition-colors hover:bg-[rgba(15,23,42,0.04)]"
+              >
+                חזור לשעות פעילות
+              </button>
+            </div>
+          </div>
+        ) : (
         <div className="rounded-xl border border-caleno-border bg-white p-6 shadow-sm sm:p-8 mb-16 text-right ring-1 ring-black/5">
           {/* Step indicator */}
           <div className="mb-8">
@@ -512,19 +809,28 @@ export default function BuilderPage() {
             </div>
           </div>
 
+          {/* key=step remounts the coach so typewriter state never leaks across steps (fixes back nav: form staying hidden). */}
+          <BuilderBotCoach
+            key={step}
+            step={step}
+            instantSpeech={botStepsSpeechCompleted.has(step)}
+            onSpeakingComplete={handleBuilderBotSpeechComplete}
+          />
+
+          <div
+            className={builderFormFadeClass}
+            aria-hidden={!builderFormVisible}
+          >
           {/* Step 1 - Basic details */}
           {step === 1 && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-caleno-ink mb-6">
-                פרטים בסיסיים
-              </h2>
               <EditableLaterHint />
               <div>
                 <label
                   htmlFor="salonName"
                   className="block text-sm font-medium text-[#64748B] mb-2"
                 >
-                  שם הסלון *
+                  איך קוראים לעסק? *
                 </label>
                 <input
                   type="text"
@@ -551,15 +857,20 @@ export default function BuilderPage() {
                         salonType: e.target.value as SiteConfig["salonType"],
                       })
                     }
+                    disabled={templatesLoading}
                     className="w-full rounded-lg border border-caleno-border bg-white px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                   >
-                    {(Object.keys(salonTypeLabels) as SiteConfig["salonType"][]).map(
-                      (type) => (
-                        <option key={type} value={type}>
-                          {salonTypeLabels[type]}
-                        </option>
-                      )
+                    {templatesLoading && (
+                      <option value={config.salonType}>טוען תבניות...</option>
                     )}
+                    {!templatesLoading && renderedSalonTypeOptions.length === 0 && (
+                      <option value={config.salonType}>{salonTypeLabels[config.salonType]}</option>
+                    )}
+                    {renderedSalonTypeOptions.map((option) => (
+                      <option key={option.templateKey} value={option.salonType}>
+                        {option.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -569,31 +880,44 @@ export default function BuilderPage() {
           {/* Step 2 - Choose your link (subdomain) */}
           {step === 2 && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-caleno-ink mb-6">
-                בחר תת-דומיין / Choose your link
-              </h2>
               <div>
                 <label
                   htmlFor="wizardSlug"
                   className="block text-sm font-medium text-[#64748B] mb-2"
                 >
-                  קישור לאתר *
+                  איך תרצו שהקישור ייראה? *
                 </label>
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    type="text"
-                    id="wizardSlug"
-                    value={wizardSlug}
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      const normalized = raw.toLowerCase().replace(/[^a-z0-9-]/g, "");
-                      setWizardSlug(normalized);
-                      setSlugAvailable(null);
-                    }}
-                    className="min-w-[140px] flex-1 rounded-lg border border-caleno-border px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
-                    placeholder="mysalon"
-                    maxLength={30}
-                  />
+                <div className="flex flex-wrap items-stretch gap-2">
+                  <div
+                    className="flex min-w-[200px] flex-1 items-stretch overflow-hidden rounded-lg border border-caleno-border bg-white shadow-sm transition-[box-shadow,border-color] focus-within:border-caleno-deep focus-within:ring-[3px] focus-within:ring-[rgba(30,111,124,0.15)]"
+                    dir="ltr"
+                  >
+                    <input
+                      type="text"
+                      id="wizardSlug"
+                      value={wizardSlug}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const normalized = raw
+                          .toLowerCase()
+                          .replace(/[^a-z0-9-]/g, "");
+                        setWizardSlug(normalized);
+                        setSlugAvailable(null);
+                      }}
+                      className="min-w-0 flex-1 border-0 bg-transparent px-3 py-2 text-left text-base text-caleno-ink placeholder:text-[#94A3B8] focus:outline-none focus:ring-0"
+                      placeholder="mysalon"
+                      maxLength={30}
+                      spellCheck={false}
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                    />
+                    <span
+                      className="flex shrink-0 select-none items-center border-l border-caleno-border bg-[#F8FAFC] px-3 py-2 text-sm font-medium tabular-nums text-[#64748B]"
+                      aria-hidden
+                    >
+                      .caleno.co
+                    </span>
+                  </div>
                   <button
                     type="button"
                     onClick={() => checkSlugAvailability(wizardSlug.trim().toLowerCase())}
@@ -604,9 +928,26 @@ export default function BuilderPage() {
                   </button>
                 </div>
                 {wizardSlug.trim() && (
-                  <p className="text-sm text-[#64748B] mt-2 text-right">
-                    תצוגה מקדימה: {getSitePublicUrl(wizardSlug.trim().toLowerCase(), "")}
-                  </p>
+                  <div
+                    className="mt-4 rounded-xl border-2 border-[#1E6F7C]/25 bg-gradient-to-br from-[#E8F6F8]/90 to-white p-4 shadow-[0_8px_24px_-12px_rgba(30,111,124,0.35)]"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <p className="text-right text-xs font-bold uppercase tracking-wide text-[#1E6F7C] mb-1.5">
+                      תצוגה מקדימה
+                    </p>
+                    <p className="text-right text-sm font-semibold text-caleno-ink mb-3 leading-snug">
+                      כך ייראה הקישור המלא — מה שלקוחות יראו בדפדפן
+                    </p>
+                    <div
+                      dir="ltr"
+                      className="rounded-lg border border-[#1E6F7C]/20 bg-white px-3 py-3 sm:px-4 text-left shadow-inner"
+                    >
+                      <span className="font-mono text-[0.95rem] sm:text-base font-medium text-[#0F172A] break-all [word-break:break-word] leading-relaxed">
+                        {getSitePublicUrl(wizardSlug.trim().toLowerCase(), "")}
+                      </span>
+                    </div>
+                  </div>
                 )}
                 {wizardSlug.trim() && (() => {
                   const v = validateTenantSlug(wizardSlug.trim().toLowerCase());
@@ -629,17 +970,16 @@ export default function BuilderPage() {
             </div>
           )}
 
-          {/* Step 3 - Location */}
+          {/* Step 3 - Google Maps place name (shows business + reviews on embed) */}
           {step === 3 && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-caleno-ink mb-6">מיקום</h2>
               <EditableLaterHint />
               <div>
                 <label
                   htmlFor="address"
                   className="block text-sm font-medium text-[#64748B] mb-2"
                 >
-                  כתובת *
+                  מה השם בגוגל מפות? *
                 </label>
                 <input
                   type="text"
@@ -647,11 +987,11 @@ export default function BuilderPage() {
                   value={config.address || ""}
                   onChange={(e) => updateConfig({ address: e.target.value })}
                   className="w-full rounded-lg border border-caleno-border px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
-                  placeholder="למשל: רחוב בן יהודה 10, תל אביב"
+                  placeholder="למשל: שם הסלון כפי שמופיע בגוגל מפות"
                   required
                 />
-                <p className="text-xs text-[#64748B] mt-1 text-right">
-                  הכתובת תוצג במפה באתר. אם לא מוגדר, המפה לא תוצג.
+                <p className="text-xs text-caleno-600/90 mt-1.5 text-right leading-relaxed">
+                  טיפ קטן: בדיוק כמו בגוגל — ככה המפה והביקורות יתחברו יפה.
                 </p>
               </div>
             </div>
@@ -660,10 +1000,6 @@ export default function BuilderPage() {
           {/* Step 4 - Main goal */}
           {step === 4 && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-caleno-ink mb-6">
-                מה המטרה העיקרית של האתר? *
-              </h2>
-              <EditableLaterHint />
               <div className="space-y-3">
                 {(Object.keys(mainGoalLabels) as MainGoal[]).map((goal) => (
                   <label
@@ -683,97 +1019,9 @@ export default function BuilderPage() {
             </div>
           )}
 
-          {/* Step 5 - Services */}
+          {/* Step 5 - Contact & booking */}
           {step === 5 && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-caleno-ink mb-6">
-                איזה שירותים יש בסלון? *
-              </h2>
-              <EditableLaterHint />
-              <div className="space-y-3">
-                {(SERVICE_OPTIONS[config.salonType] ?? []).map((serviceName) => {
-                  const isChecked = config.services.includes(serviceName);
-                  return (
-                    <label
-                      key={serviceName}
-                      className="flex cursor-pointer items-center gap-3 rounded-lg border border-caleno-border p-4 transition-colors hover:border-caleno-deep/40 hover:bg-[rgba(30,111,124,0.04)]"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => toggleService(serviceName)}
-                        className="h-4 w-4 rounded text-caleno-deep focus:ring-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
-                      />
-                      <span className="text-[#0F172A]">{serviceName}</span>
-                    </label>
-                  );
-                })}
-              </div>
-              <div className="pt-4 border-t border-caleno-border">
-                <label
-                  htmlFor="customService"
-                  className="block text-sm font-medium text-[#64748B] mb-2"
-                >
-                  אחר (הוסף שירות מותאם אישית)
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    id="customService"
-                    value={customService}
-                    onChange={(e) => setCustomService(e.target.value)}
-                    onKeyPress={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addCustomService();
-                      }
-                    }}
-                    className="flex-1 rounded-lg border border-caleno-border px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
-                    placeholder="הזן שירות נוסף"
-                  />
-                  <button
-                    type="button"
-                    onClick={addCustomService}
-                    className="rounded-lg bg-caleno-ink px-4 py-2 font-medium text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md"
-                  >
-                    הוסף
-                  </button>
-                </div>
-                {config.services.filter(
-                  (s) => !(SERVICE_OPTIONS[config.salonType] ?? []).includes(s)
-                ).length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {config.services
-                      .filter(
-                        (s) => !(SERVICE_OPTIONS[config.salonType] ?? []).includes(s)
-                      )
-                      .map((service) => (
-                        <span
-                          key={service}
-                          className="inline-flex items-center gap-2 rounded-full bg-[rgba(30,111,124,0.08)] px-3 py-1 text-sm text-caleno-deep"
-                        >
-                          <span>{service}</span>
-                          <button
-                            type="button"
-                            onClick={() => toggleService(service)}
-                            className="hover:text-caleno-ink"
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Step 6 - Contact & booking */}
-          {step === 6 && (
-            <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-caleno-ink mb-6">
-                איך לקוחות יכולים ליצור קשר? *
-              </h2>
               <EditableLaterHint />
               
               {/* Contact details */}
@@ -867,84 +1115,21 @@ export default function BuilderPage() {
             </div>
           )}
 
-          {/* Step 6 - Extra pages and note */}
-          {step === 7 && (
-            <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-caleno-ink mb-6">
-                איזה עמודים נוספים תרצה באתר?
-              </h2>
+          {/* Step 6 - Opening hours (same as admin שעות פעילות) */}
+          {step === 6 && (
+            <div className="space-y-4">
               <EditableLaterHint />
-              <div className="space-y-3">
-                {(
-                  Object.keys(extraPageLabels) as Array<
-                    keyof typeof extraPageLabels
-                  >
-                ).map((page) => (
-                  <label
-                    key={page}
-                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-caleno-border p-4 transition-colors hover:border-caleno-deep/40 hover:bg-[rgba(30,111,124,0.04)]"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={config.extraPages.includes(page)}
-                      onChange={() => toggleExtraPage(page)}
-                      className="h-4 w-4 rounded text-caleno-deep focus:ring-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
-                    />
-                    <span className="text-[#0F172A]">
-                      {extraPageLabels[page]}
-                    </span>
-                  </label>
-                ))}
-              </div>
-
-              <div className="pt-6 border-t border-caleno-border">
-                <label
-                  htmlFor="specialNote"
-                  className="block text-sm font-medium text-[#64748B] mb-2"
-                >
-                  משהו מיוחד שחשוב לך שיכתבו על הסלון?
-                </label>
-                <textarea
-                  id="specialNote"
-                  value={config.specialNote || ""}
-                  onChange={(e) =>
-                    updateConfig({ specialNote: e.target.value })
-                  }
-                  rows={4}
-                  className="w-full resize-none rounded-lg border border-caleno-border px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
-                  placeholder="כתוב כאן הערות או פרטים מיוחדים..."
+              <div className="rounded-lg border border-caleno-border bg-slate-50/50 p-3 sm:p-4">
+                <AdminBookingTab
+                  embedded
+                  state={bookingState}
+                  onChange={setBookingState}
+                  title="מתי פתוחים?"
+                  description="סמנו ימים, שעות, הפסקות ותאריכים סגורים — תמיד אפשר לעדכן אחר כך בפאנל."
                 />
               </div>
             </div>
           )}
-
-          {/* Navigation buttons */}
-          <div className="mt-8 pt-6 border-t border-caleno-border flex justify-between gap-4">
-            <button
-              onClick={handleBack}
-              disabled={step === 1}
-              className="rounded-lg border border-caleno-border px-6 py-3 font-medium text-caleno-ink transition-colors hover:bg-[rgba(15,23,42,0.04)] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              חזור
-            </button>
-            {step < totalSteps ? (
-              <button
-                onClick={handleNext}
-                disabled={!isStepValid()}
-                className="rounded-lg bg-caleno-ink px-6 py-3 font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                המשך
-              </button>
-            ) : (
-              <button
-                onClick={handleFinish}
-                disabled={isSaving}
-                className="rounded-lg bg-caleno-ink px-6 py-3 font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isSaving ? "שומר…" : "צור תצוגה מקדימה לאתר"}
-              </button>
-            )}
-          </div>
 
           {/* Save error message */}
           {saveError && (
@@ -953,14 +1138,50 @@ export default function BuilderPage() {
             </div>
           )}
 
-          {/* Validation error message */}
-          {!isStepValid() && (
+          {/* Validation error — only after user clicked המשך / finish while step invalid */}
+          {showStepValidationHint && !isStepValid() && (
             <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-right">
               <p className="text-sm text-red-700">
-                יש למלא את כל השדות החובה לפני המשך
+                עוד רגע — נשלים את השדות החובה ואז נמשיך יחד.
               </p>
             </div>
           )}
+          </div>
+
+          {/* Navigation: חזור תמיד; המשך / סיום אחרי סיום דיבור הבוט */}
+          <div className="mt-8 pt-6 border-t border-caleno-border flex justify-between gap-4">
+            <button
+              type="button"
+              onClick={handleBack}
+              disabled={step === 1}
+              className="rounded-lg border border-caleno-border px-6 py-3 font-medium text-caleno-ink transition-colors hover:bg-[rgba(15,23,42,0.04)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              חזור
+            </button>
+            <div className={builderFormFadeClass} aria-hidden={!builderFormVisible}>
+              {step < 6 ? (
+                <button
+                  type="button"
+                  onClick={tryAdvanceStep}
+                  className="rounded-lg bg-caleno-ink px-6 py-3 font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md"
+                >
+                  המשך
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={tryGoToPaymentStep}
+                  disabled={isSaving}
+                  className="rounded-lg bg-caleno-ink px-6 py-3 font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  המשך לתשלום והשקה
+                </button>
+              )}
+            </div>
+          </div>
+
+        </div>
+        )}
         </div>
       </div>
     </div>

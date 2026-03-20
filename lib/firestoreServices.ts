@@ -49,8 +49,21 @@ export async function getServices(userId: string): Promise<Service[]> {
         updatedAt: data.updatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
       } as Service;
     });
-  } catch (err) {
-    console.error("Failed to get services", err);
+  } catch (err: unknown) {
+    const code =
+      err && typeof err === "object" && "code" in err
+        ? String((err as { code?: string }).code)
+        : "";
+    // Legacy path users/{userId}/... is only readable by that user (Firestore rules).
+    if (code === "permission-denied") {
+      if (process.env.NODE_ENV !== "production") {
+        console.debug(
+          "[getServices] Legacy users/.../services not readable (expected if not that user)"
+        );
+      }
+    } else {
+      console.error("Failed to get services", err);
+    }
     return [];
   }
 }

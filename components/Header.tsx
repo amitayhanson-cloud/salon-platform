@@ -53,7 +53,7 @@ export function Header() {
                 איך זה עובד
               </Link>
               <Link
-                href="#pricing"
+                href="/pricing"
                 className="text-lg text-[#475569] hover:text-[#0F172A] transition-colors min-h-[44px] flex items-center"
               >
                 מחירים
@@ -106,7 +106,7 @@ export function Header() {
                         איך זה עובד
                       </Link>
                       <Link
-                        href="#pricing"
+                        href="/pricing"
                         onClick={closeMenu}
                         className="flex w-full items-center min-h-[44px] px-4 text-[#475569] hover:text-[#0F172A] hover:bg-[#EEF7F9] transition-colors text-base"
                       >

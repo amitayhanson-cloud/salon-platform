@@ -78,7 +78,16 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-caleno-ink">8. שינויים והפסקה</h2>
+          <h2 className="text-lg font-semibold text-caleno-ink">8. מדיניות ביטול והחזר כספי</h2>
+          <p className="mt-2 leading-relaxed">
+            ניתן לבטל מנוי בכל עת, והביטול ייכנס לתוקף בסוף תקופת החיוב הנוכחית. ככלל, תשלומים שכבר נגבו
+            אינם ניתנים להחזר רטרואקטיבי עבור תקופה שכבר נוצלה. במקרים חריגים של חיוב שגוי או תקלה מהותית
+            בשירות, ניתן לפנות אלינו לבדיקה פרטנית ונפעל בהתאם לשיקול דעתנו ובכפוף לדין.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-lg font-semibold text-caleno-ink">9. שינויים והפסקה</h2>
           <p className="mt-2 leading-relaxed">
             אנו רשאים לעדכן את התנאים מעת לעת; עדכון משמעותי יפורסם באתר. אנו רשאים להשעות או להפסיק
             את השירות או את חשבונך בהתאם לתנאים ולמדיניות הפנימית, עם הודעה סבירה במידת האפשר.
@@ -86,7 +95,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-lg font-semibold text-caleno-ink">9. יצירת קשר</h2>
+          <h2 className="text-lg font-semibold text-caleno-ink">10. יצירת קשר</h2>
           <p className="mt-2 leading-relaxed">
             לשאלות לגבי תנאי שימוש או מדיניות פרטיות, פנה אלינו דרך דף &quot;צור קשר&quot; באתר קלינו או בכתובת
             הדוא&quot;ל שמופיעה שם.

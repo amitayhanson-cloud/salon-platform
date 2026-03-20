@@ -14,7 +14,7 @@ import {
   type RecaptchaVerifier,
   type ConfirmationResult,
 } from "firebase/auth";
-import { getUserDocument, createUserDocument } from "@/lib/firestoreUsers";
+import { getUserDocument, createUserDocument, updateUserProfile } from "@/lib/firestoreUsers";
 import { normalizeFirebaseError, logFirebaseError } from "@/lib/firebaseErrors";
 import { getActiveListenerCount } from "@/lib/firestoreListeners";
 import type { User } from "@/types/user";
@@ -53,7 +53,7 @@ type AuthContextType = {
   firebaseUser: FirebaseUser | null;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string; redirectPath?: string }>;
   loginWithGoogle: () => Promise<{ success: boolean; error?: string; redirectPath?: string }>;
-  signup: (email: string, password: string, name?: string) => Promise<{ success: boolean; error?: string; userId?: string }>;
+  signup: (email: string, password: string, name?: string, phone?: string) => Promise<{ success: boolean; error?: string; userId?: string }>;
   signupWithGoogle: () => Promise<{ success: boolean; error?: string; userId?: string; needsProfile?: boolean }>;
   signupWithPhoneNumberSend: (phoneNumber: string, recaptchaVerifier: RecaptchaVerifier) => Promise<{ success: boolean; error?: string; confirmationResult?: ConfirmationResult }>;
   signupWithPhoneNumberConfirm: (confirmationResult: ConfirmationResult, code: string) => Promise<{ success: boolean; error?: string; userId?: string; needsProfile?: boolean }>;
@@ -207,7 +207,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               userDoc = await createUserDocument(
                 firebaseUser.uid,
                 firebaseUser.email || "",
-                firebaseUser.displayName || undefined
+                firebaseUser.displayName || undefined,
+                firebaseUser.phoneNumber || null
               );
             } catch (createError) {
               console.error("[AuthProvider] Error creating user document:", createError);
@@ -299,7 +300,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         userDoc = await createUserDocument(
           userCredential.user.uid,
           userCredential.user.email || email,
-          userCredential.user.displayName || undefined
+          userCredential.user.displayName || undefined,
+          userCredential.user.phoneNumber || null
         );
       }
       
@@ -357,7 +359,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         userDoc = await createUserDocument(
           userCredential.user.uid,
           userCredential.user.email || "",
-          userCredential.user.displayName || undefined
+          userCredential.user.displayName || undefined,
+          userCredential.user.phoneNumber || null
         );
       }
       
@@ -386,7 +389,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signup = useCallback(async (
     email: string,
     password: string,
-    name?: string
+    name?: string,
+    phone?: string
   ): Promise<{ success: boolean; error?: string; userId?: string }> => {
     if (!auth) {
       console.error("Firebase Auth not initialized");
@@ -406,7 +410,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userDoc = await createUserDocument(
         userCredential.user.uid,
         email,
-        name
+        name,
+        phone?.trim() || null
       );
       
       setUser(userDoc);
@@ -438,7 +443,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           fbUser.uid,
           fbUser.email || "",
           fbUser.displayName || undefined,
-          null
+          fbUser.phoneNumber || null
         );
       }
       setUser(userDoc);
@@ -486,8 +491,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           fbUser.uid,
           fbUser.email || "",
           fbUser.displayName || undefined,
-          phone
+          phone || null
         );
+      } else if (phone && !(typeof userDoc.phone === "string" && userDoc.phone.trim().length > 0)) {
+        await updateUserProfile(fbUser.uid, { phone });
+        const merged = await getUserDocument(fbUser.uid);
+        if (merged) userDoc = merged;
       }
       setUser(userDoc);
       setFirebaseUser(fbUser);
