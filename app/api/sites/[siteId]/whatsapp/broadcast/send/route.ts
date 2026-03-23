@@ -14,6 +14,7 @@ import { MAX_BROADCAST_RECIPIENTS } from "@/lib/whatsapp/broadcastConstants";
 import { parseBroadcastFiltersFromBody } from "@/lib/whatsapp/parseBroadcastBody";
 import { renderWhatsAppTemplate } from "@/lib/whatsapp/templateRender";
 import { getPublicBookingPageAbsoluteUrlForSite } from "@/lib/url";
+import { getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
 
 const RATE_WINDOW_MS = 60 * 60 * 1000;
 const RATE_MAX_SENDS_PER_SITE = 10;
@@ -100,16 +101,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     (typeof raw?.slug === "string" && raw.slug.trim() ? raw.slug.trim() : null) ??
     (typeof config?.slug === "string" && config.slug.trim() ? config.slug.trim() : null);
   const bookingUrl = getPublicBookingPageAbsoluteUrlForSite(id, tenantSlug);
+  const waSettings = await getSiteWhatsAppSettings(id);
+  const broadcastTemplate = waSettings.broadcastTemplate;
 
   let sent = 0;
   let failed = 0;
   const errors: string[] = [];
 
   for (const r of recipients) {
-    const bodyRendered = renderWhatsAppTemplate(messageTemplate, {
+    const bodyRendered = renderWhatsAppTemplate(broadcastTemplate, {
       שם_לקוח: r.name,
       שם_העסק: salonName,
       קישור_לתיאום: bookingUrl,
+      client_name: r.name,
+      business_name: salonName,
+      link: bookingUrl,
+      custom_text: messageTemplate,
     });
     try {
       await sendWhatsApp({

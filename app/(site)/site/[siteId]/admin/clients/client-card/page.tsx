@@ -20,6 +20,7 @@ import { automatedStatusBadgeClass } from "@/lib/clientStatusBadgeStyles";
 import { getLastQualifyingBooking } from "@/lib/lastConfirmedAppointment";
 import { getDisplayStatus } from "@/lib/bookingRootStatus";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { triggerClientStatusRecomputeOncePerSession } from "@/lib/triggerClientStatusRecompute";
 import { MoreVertical, Pencil, Trash2, CheckSquare, Square } from "lucide-react";
 
 interface Client {
@@ -95,6 +96,11 @@ export default function ClientCardPage() {
   const router = useRouter();
   const siteId = params?.siteId as string;
   const { firebaseUser } = useAuth();
+
+  useEffect(() => {
+    if (!siteId || !firebaseUser) return;
+    void triggerClientStatusRecomputeOncePerSession(siteId, () => firebaseUser.getIdToken());
+  }, [siteId, firebaseUser]);
 
   const [clients, setClients] = useState<Client[]>([]);
   const [clientsLoading, setClientsLoading] = useState(true);

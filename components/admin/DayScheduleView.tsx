@@ -290,11 +290,13 @@ export default function DayScheduleView({
         >
           <div dir="rtl" className="min-w-0 w-full text-right overflow-hidden flex flex-col gap-0.5">
             <div className="flex items-center gap-1 min-w-0">
-              {block.isSecondary && (
-                <span className="shrink-0 flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold" style={{ backgroundColor: "rgba(255,255,255,0.3)", color: textColor }}>
-                  2
-                </span>
-              )}
+              <span
+                className="shrink-0 flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold"
+                style={{ backgroundColor: "rgba(255,255,255,0.3)", color: textColor }}
+                aria-label={block.phase === 2 ? "שלב 2" : "שלב 1"}
+              >
+                {block.phase}
+              </span>
               {statusKey && <StatusDot statusKey={statusKey} title={statusLabel ?? undefined} />}
               <span className="font-semibold truncate">{block.clientName}</span>
               <span className="truncate"> — {block.serviceName}</span>

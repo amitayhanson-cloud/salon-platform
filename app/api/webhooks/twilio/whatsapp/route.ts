@@ -154,6 +154,8 @@ export async function POST(request: NextRequest) {
   const From = String(twilioParams["From"] ?? "").trim();
   const To = String(twilioParams["To"] ?? "").trim();
   const Body = String(twilioParams["Body"] ?? "").trim();
+  const ButtonText = String(twilioParams["ButtonText"] ?? "").trim();
+  const ButtonPayload = String(twilioParams["ButtonPayload"] ?? "").trim();
   const MessageSid = String(twilioParams["MessageSid"] ?? "").trim();
   const NumMedia = String(twilioParams["NumMedia"] ?? "").trim();
 
@@ -188,7 +190,8 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  console.log("[WA_WEBHOOK] parsed", { messageSid: docId, from: From, body: Body });
+  const inboundBody = ButtonText || Body;
+  console.log("[WA_WEBHOOK] parsed", { messageSid: docId, from: From, body: inboundBody, buttonPayload: ButtonPayload || undefined });
 
   try {
     return await handleInbound();
@@ -249,11 +252,11 @@ export async function POST(request: NextRequest) {
     await logInboundWhatsApp({
       fromPhone: From,
       toPhone: To,
-      body: Body,
+      body: inboundBody,
       twilioMessageSid: MessageSid,
     });
 
-    const { intent, selection } = normalizeInbound(Body);
+    const { intent, selection } = normalizeInbound(inboundBody, ButtonPayload || null);
 
     async function recordAndReturnReply(
       replyBody: string,
@@ -369,7 +372,7 @@ export async function POST(request: NextRequest) {
         intent: intent === "yes" ? "confirm" : "cancel",
         choices,
         lastInboundMessageSid: MessageSid,
-        lastInboundBody: Body,
+        lastInboundBody: inboundBody,
       });
       console.log("[WA_WEBHOOK] session_saved", {
         phoneE164: fromE164,
@@ -379,7 +382,7 @@ export async function POST(request: NextRequest) {
       await logAmbiguousWhatsApp({
         fromPhone: From,
         toPhone: To,
-        body: Body,
+        body: inboundBody,
         twilioMessageSid: MessageSid,
         bookingRefs: choices.map((c) => c.bookingRef),
       });

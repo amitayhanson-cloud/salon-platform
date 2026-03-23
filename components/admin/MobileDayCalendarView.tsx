@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus, ChevronRight, ChevronLeft } from "lucide-react";
 import { fromYYYYMMDD, toYYYYMMDD, adjacentDateKey } from "@/lib/calendarUtils";
 import DayScheduleView from "./DayScheduleView";
+import BookingCalendarLegend from "./BookingCalendarLegend";
 import type { BreakRange } from "@/types/bookingSettings";
 
 const DAY_LABELS_SHORT: Record<string, string> = {
@@ -234,6 +235,7 @@ export default function MobileDayCalendarView({
             <ChevronLeft className="h-5 w-5" />
           </button>
         </div>
+        <BookingCalendarLegend compact className="mt-2 px-1 text-[11px]" />
       </div>
 
       {/* Timeline */}

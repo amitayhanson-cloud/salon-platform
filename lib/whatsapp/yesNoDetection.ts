@@ -99,7 +99,19 @@ export function normalizeInbound(body: string): {
   normalized: string;
   intent: InboundIntent;
   selection: number | null;
+}
+export function normalizeInbound(body: string, buttonPayload?: string | null): {
+  normalized: string;
+  intent: InboundIntent;
+  selection: number | null;
 } {
+  const payloadNorm = normalizeForMatch((buttonPayload ?? "").trim().toLowerCase());
+  if (payloadNorm === "yes" || payloadNorm === "confirm" || payloadNorm.includes("כן")) {
+    return { normalized: payloadNorm || "yes", intent: "yes", selection: null };
+  }
+  if (payloadNorm === "no" || payloadNorm === "cancel" || payloadNorm.includes("לא")) {
+    return { normalized: payloadNorm || "no", intent: "no", selection: null };
+  }
   const rawStr = (body ?? "").trim();
   const normalized = rawStr.replace(/\s+/g, " ").toLowerCase().trim();
   if (/^\d+$/.test(normalized)) {

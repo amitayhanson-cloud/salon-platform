@@ -7,6 +7,7 @@ import {
   DEFAULT_WHATSAPP_SETTINGS,
   DEFAULT_CONFIRMATION_TEMPLATE,
   DEFAULT_REMINDER_TEMPLATE,
+  DEFAULT_BROADCAST_TEMPLATE,
 } from "@/types/whatsappSettings";
 
 function clampHours(n: unknown): number {
@@ -32,6 +33,12 @@ export function normalizeWhatsAppSettingsDoc(raw: Record<string, unknown> | unde
       typeof raw.reminderTemplate === "string" && raw.reminderTemplate.trim()
         ? raw.reminderTemplate
         : DEFAULT_REMINDER_TEMPLATE,
+    broadcastTemplate:
+      typeof raw.broadcastTemplate === "string" && raw.broadcastTemplate.trim()
+        ? raw.broadcastTemplate
+        : DEFAULT_BROADCAST_TEMPLATE,
+    confirmationCustomText:
+      typeof raw.confirmationCustomText === "string" ? raw.confirmationCustomText : "",
     reminderHoursBefore: clampHours(raw.reminderHoursBefore),
   };
 }

@@ -10,6 +10,7 @@ import type { ClientStatusSettings, ManualClientTag } from "@/types/clientStatus
 import { DEFAULT_CLIENT_STATUS_SETTINGS } from "@/types/clientStatus";
 import { automatedStatusBadgeClass } from "@/lib/clientStatusBadgeStyles";
 import { useUnsavedChanges } from "@/components/admin/UnsavedChangesContext";
+import { triggerClientStatusRecomputeOncePerSession } from "@/lib/triggerClientStatusRecompute";
 
 /** Stable JSON for dirty comparison (tag order normalized). */
 function canonicalSettingsJson(s: ClientStatusSettings): string {
@@ -44,7 +45,16 @@ export default function AdminClientStatusSettings({ siteId }: { siteId: string }
     if (!siteId) return;
     baselineRef.current = null;
     setSettings(DEFAULT_CLIENT_STATUS_SETTINGS);
-    seedDefaultClientStatusSettings(siteId).catch(() => {});
+    let cancelled = false;
+    (async () => {
+      try {
+        await seedDefaultClientStatusSettings(siteId);
+      } catch {
+        /* ignore */
+      }
+      if (cancelled || !firebaseUser) return;
+      await triggerClientStatusRecomputeOncePerSession(siteId, () => firebaseUser.getIdToken());
+    })();
     const unsub = subscribeClientStatusSettings(siteId, (incoming) => {
       const canon = canonicalSettingsJson(incoming);
       setSettings((prev) => {
@@ -61,10 +71,11 @@ export default function AdminClientStatusSettings({ siteId }: { siteId: string }
       });
     });
     return () => {
+      cancelled = true;
       unsub();
       baselineRef.current = null;
     };
-  }, [siteId]);
+  }, [siteId, firebaseUser]);
 
   const tags = useMemo(
     () => [...settings.manualTags].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -157,13 +168,18 @@ export default function AdminClientStatusSettings({ siteId }: { siteId: string }
           <span className={automatedStatusBadgeClass("sleeping")}>רדום</span>
           .
         </p>
-        <p className="text-sm text-slate-600">הסטטוס מחושב אוטומטית בזמן אמת לפי היסטוריית התורים של הלקוח.</p>
+        <p className="text-sm text-slate-600">
+          הסטטוס מחושב לפי היסטוריית תורים (כולל תורים שהוסרו מהיומן), ללא ביטולים.{" "}
+          <span className={automatedStatusBadgeClass("sleeping")}>רדום</span> — בלי תורים רלוונטיים בכלל, או בלי תור
+          שכבר התקיים בחלון שמוגדר למטה. <span className={automatedStatusBadgeClass("active")}>פעיל</span> — רק תורים
+          שכבר עברו (לא עתידיים) נספרים בחלון הימים האחרונים.
+        </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <label className="rounded-xl border border-slate-200 p-4 bg-slate-50/70 space-y-2">
           <span className="text-sm text-slate-700">
-            לקוח ייחשב <span className={automatedStatusBadgeClass("new")}>חדש</span> אם יש לו פחות מ־
+            לקוח ייחשב <span className={automatedStatusBadgeClass("new")}>חדש</span> אם יש לו היסטוריה, אבל פחות מ־
           </span>
           <input
             type="number"
@@ -177,7 +193,7 @@ export default function AdminClientStatusSettings({ siteId }: { siteId: string }
             }
             className="w-full rounded-lg border border-slate-300 px-3 py-2"
           />
-          <span className="text-sm text-slate-600">תורים בסך הכול.</span>
+          <span className="text-sm text-slate-600">תורים בסך הכול (לקוח בלי היסטוריה רלוונטית יסומן רדום).</span>
         </label>
 
         <label className="rounded-xl border border-slate-200 p-4 bg-slate-50/70 space-y-2">
@@ -196,7 +212,7 @@ export default function AdminClientStatusSettings({ siteId }: { siteId: string }
             }
             className="w-full rounded-lg border border-slate-300 px-3 py-2"
           />
-          <span className="text-sm text-slate-600">תורים ב־</span>
+          <span className="text-sm text-slate-600">תורים שכבר התקיימו ב־</span>
           <input
             type="number"
             min={1}
@@ -214,7 +230,8 @@ export default function AdminClientStatusSettings({ siteId }: { siteId: string }
 
         <div className="rounded-xl border border-slate-200 p-4 bg-slate-50/70 space-y-2 md:col-span-2">
           <span className="text-sm text-slate-700">
-            לקוח ייחשב <span className={automatedStatusBadgeClass("sleeping")}>רדום</span> אם לא קבע תור ב־
+            לקוח ייחשב <span className={automatedStatusBadgeClass("sleeping")}>רדום</span> אם לא היה לו תור שכבר התקיים
+            ב־
           </span>
           <div className="grid grid-cols-1 sm:grid-cols-[180px_160px] gap-3">
             <input

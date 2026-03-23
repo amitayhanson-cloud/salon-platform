@@ -151,12 +151,14 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
     const reminderBody = renderWhatsAppTemplate(waSettings.reminderTemplate, {
       שם_העסק: salonName,
       זמן_תור: timeStr,
+      business_name: salonName,
+      time: timeStr,
     });
 
     try {
       await sendWhatsApp({
         toE164: customerPhoneE164,
-        body: reminderBody,
+        body: `${reminderBody}\n\nענו בהודעה:\nכן, אגיע\nאו\nלא, נא לבטל`,
         bookingId: doc.id,
         siteId,
         bookingRef: `sites/${siteId}/bookings/${doc.id}`,

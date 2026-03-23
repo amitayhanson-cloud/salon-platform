@@ -90,4 +90,21 @@ describe("sendWhatsApp", () => {
     expect(twilioCreateMock).toHaveBeenCalledTimes(1);
     expect(isWhatsAppAutomationEnabled).toHaveBeenCalledTimes(0);
   });
+
+  it("maps message body when sandbox mode is enabled", async () => {
+    vi.mocked(isWhatsAppAutomationEnabled).mockResolvedValue(true);
+    process.env.TWILIO_WHATSAPP_SANDBOX_MODE = "true";
+
+    await sendWhatsApp({
+      toE164: "+972501234567",
+      body: "היי בדיקה",
+      siteId: "site1",
+      meta: { automation: "owner_broadcast" },
+    });
+
+    expect(twilioCreateMock).toHaveBeenCalledTimes(1);
+    const arg = twilioCreateMock.mock.calls[0]?.[0] as { body?: string };
+    expect(arg.body).toContain("*Sandbox*");
+    expect(arg.body).toContain("הודעה קבוצתית");
+  });
 });

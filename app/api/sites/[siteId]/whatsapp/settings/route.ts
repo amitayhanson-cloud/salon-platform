@@ -38,6 +38,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       typeof body.reminderTemplate === "string" && body.reminderTemplate.trim()
         ? String(body.reminderTemplate).trim()
         : current.reminderTemplate,
+    broadcastTemplate:
+      typeof body.broadcastTemplate === "string" && body.broadcastTemplate.trim()
+        ? String(body.broadcastTemplate).trim()
+        : current.broadcastTemplate,
+    confirmationCustomText:
+      typeof body.confirmationCustomText === "string"
+        ? String(body.confirmationCustomText)
+        : current.confirmationCustomText,
     reminderHoursBefore:
       body.reminderHoursBefore !== undefined ? clampHours(body.reminderHoursBefore) : current.reminderHoursBefore,
   };

@@ -20,6 +20,7 @@ import { getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
 import { getPublicBookingPageUrlForSite } from "@/lib/url";
 import { formatIsraelDateShort, formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
 import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
+import { refreshClientAutomatedStatusFromBooking } from "@/lib/server/clientAutomatedStatus";
 
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 const ISRAEL_TZ = "Asia/Jerusalem";
@@ -64,6 +65,14 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
 
   console.log("[BOOK_CREATE] firestore_read_ok", { siteId, bookingId, bookingPath: `sites/${siteId}/bookings/${bookingId}` });
   const data = bookingSnap.data()!;
+  const resolvedSiteIdForStatus =
+    typeof data.siteId === "string" && data.siteId.trim() ? data.siteId.trim() : siteId;
+  try {
+    await refreshClientAutomatedStatusFromBooking(db, resolvedSiteIdForStatus, data as Record<string, unknown>);
+  } catch (e) {
+    console.warn("[onBookingCreated] refreshClientAutomatedStatusFromBooking", e);
+  }
+
   const phoneResult = getBookingPhoneE164(data as Record<string, unknown>, "IL");
   if ("error" in phoneResult) {
     throw new Error(phoneResult.error);
@@ -98,6 +107,12 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
     זמן_תור: time,
     קישור_לתיאום: bookingPublicUrl,
     שם_לקוח: customerDisplayName,
+    business_name: salonName,
+    date,
+    time,
+    link: bookingPublicUrl,
+    client_name: customerDisplayName,
+    custom_text: waSettings.confirmationCustomText ?? "",
   };
 
   if (waSettings.confirmationEnabled) {
@@ -136,11 +151,16 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
         שם_לקוח: customerDisplayName,
         קישור_לתיאום: bookingPublicUrl,
         תאריך_תור: date,
+        business_name: salonName,
+        time: timeStr,
+        client_name: customerDisplayName,
+        link: bookingPublicUrl,
+        date,
       });
 
       await sendWhatsApp({
         toE164: customerPhoneE164,
-        body: reminderBody,
+        body: `${reminderBody}\n\nענו בהודעה:\nכן, אגיע\nאו\nלא, נא לבטל`,
         bookingId,
         siteId,
         bookingRef: `sites/${siteId}/bookings/${bookingId}`,
@@ -189,10 +209,15 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
           שם_לקוח: customerDisplayName,
           קישור_לתיאום: bookingPublicUrl,
           תאריך_תור: date,
+          business_name: salonName,
+          time: timeStr,
+          client_name: customerDisplayName,
+          link: bookingPublicUrl,
+          date,
         });
         await sendWhatsApp({
           toE164: customerPhoneE164,
-          body: reminderBody,
+          body: `${reminderBody}\n\nענו בהודעה:\nכן, אגיע\nאו\nלא, נא לבטל`,
           bookingId,
           siteId,
           bookingRef: `sites/${siteId}/bookings/${bookingId}`,

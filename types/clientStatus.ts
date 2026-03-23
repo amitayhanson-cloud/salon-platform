@@ -3,13 +3,16 @@ export type AutomatedClientStatus = "new" | "active" | "normal" | "sleeping";
 export type SleepingWindowUnit = "days" | "months";
 
 export type ClientStatusRules = {
-  /** "חדש" if total bookings is less than this value. */
+  /**
+   * "חדש" if the client has at least one qualifying (non-cancelled) dated visit in history,
+   * but fewer than this many **lifetime** visits. Clients with **no** qualifying history are "רדום".
+   */
   newMaxTotalBookings: number;
-  /** "פעיל" if bookings in recent window are at least this value. */
+  /** "פעיל" if at least this many **past** visits fall inside `activeWindowDays`. */
   activeMinBookings: number;
-  /** Recent window size in days for active check. */
+  /** Recent window size in days for active check (counts only visits on/before "now"). */
   activeWindowDays: number;
-  /** "רדום" if no bookings in this window. */
+  /** "רדום" if there is no **past** visit in this lookback window (and rules above don't apply). */
   sleepingNoBookingsFor: number;
   sleepingWindowUnit: SleepingWindowUnit;
 };

@@ -4,6 +4,10 @@ export type BookingForStatus = {
   date?: string | null;
   time?: string | null;
   status?: string | null;
+  /** When true, row is excluded (same idea as booking docs). */
+  cancelled?: boolean | null;
+  /** e.g. customer cancelled via WhatsApp — excluded when "cancelled". */
+  whatsappStatus?: string | null;
 };
 
 function toDate(date?: string | null, time?: string | null): Date | null {
@@ -15,10 +19,21 @@ function toDate(date?: string | null, time?: string | null): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-function isBookingQualifying(status?: string | null): boolean {
-  const s = (status ?? "").trim().toLowerCase();
+function isBookingQualifying(b: BookingForStatus): boolean {
+  if (b.cancelled === true) return false;
+  const wa = (b.whatsappStatus ?? "").trim().toLowerCase();
+  if (wa === "cancelled") return false;
+  const s = (b.status ?? "").trim().toLowerCase();
   if (!s) return true;
-  return s !== "cancelled" && s !== "canceled" && s !== "בוטל";
+  const disqualified = new Set([
+    "cancelled",
+    "canceled",
+    "בוטל",
+    "cancelled_by_salon",
+    "no_show",
+    "expired",
+  ]);
+  return !disqualified.has(s);
 }
 
 function subtractWindow(now: Date, amount: number, unit: "days" | "months"): Date {
@@ -36,21 +51,35 @@ export function calculateAutomatedClientStatus(
   rules: ClientStatusRules,
   now: Date = new Date()
 ): AutomatedClientStatus {
-  const qualifying = bookings
-    .filter((b) => isBookingQualifying(b.status))
+  const qualifyingDates = bookings
+    .filter((b) => isBookingQualifying(b))
     .map((b) => toDate(b.date, b.time))
     .filter((d): d is Date => !!d);
 
-  const totalBookings = qualifying.length;
-  if (totalBookings < rules.newMaxTotalBookings) return "new";
+  // No usable history → dormant (never booked / only cancelled / bad data)
+  if (qualifyingDates.length === 0) return "sleeping";
 
+  const nowMs = now.getTime();
+  const pastVisits = qualifyingDates.filter((d) => d.getTime() <= nowMs);
+  const totalLifetime = qualifyingDates.length;
+
+  // Only upcoming appointments: cannot be "active" from future dates; not "sleeping" if they're engaged.
+  if (pastVisits.length === 0) {
+    return totalLifetime < rules.newMaxTotalBookings ? "new" : "normal";
+  }
+
+  // Had at least one past visit — "חדש" = few lifetime visits (but not zero-history; that's sleeping above)
+  if (totalLifetime < rules.newMaxTotalBookings) return "new";
+
+  // "פעיל" = enough *past* visits in the recent window (future bookings don't count)
   const activeSince = subtractWindow(now, rules.activeWindowDays, "days");
-  const recentCount = qualifying.filter((d) => d >= activeSince).length;
-  if (recentCount >= rules.activeMinBookings) return "active";
+  const recentPastCount = pastVisits.filter((d) => d >= activeSince).length;
+  if (recentPastCount >= rules.activeMinBookings) return "active";
 
+  // "רדום" = no *past* visit in the sleeping lookback window
   const sleepingSince = subtractWindow(now, rules.sleepingNoBookingsFor, rules.sleepingWindowUnit);
-  const hasRecentBooking = qualifying.some((d) => d >= sleepingSince);
-  if (!hasRecentBooking) return "sleeping";
+  const hasPastInSleepingWindow = pastVisits.some((d) => d >= sleepingSince);
+  if (!hasPastInSleepingWindow) return "sleeping";
 
   return "normal";
 }

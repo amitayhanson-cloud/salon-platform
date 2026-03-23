@@ -36,6 +36,7 @@ import { getAllClients } from "@/lib/firestoreClients";
 import DayScheduleView from "@/components/admin/DayScheduleView";
 import MultiWorkerScheduleView from "@/components/admin/MultiWorkerScheduleView";
 import MobileDayCalendarView from "@/components/admin/MobileDayCalendarView";
+import BookingCalendarLegend from "@/components/admin/BookingCalendarLegend";
 import WorkerFilter from "@/components/admin/WorkerFilter";
 import AdminBookingFormSimple from "@/components/admin/AdminBookingFormSimple";
 import AdminCreateBookingForm from "@/components/admin/AdminCreateBookingForm";
@@ -1077,6 +1078,8 @@ export default function DaySchedulePage() {
               <p className="text-sm font-medium text-amber-800">העסק סגור בתאריך זה</p>
             </div>
           )}
+
+          <BookingCalendarLegend className="mt-3" />
         </div>
 
         {/* Calendar card: flex-1 min-h-0 so only the grid body scrolls; worker names row is fixed above. */}

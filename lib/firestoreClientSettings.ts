@@ -10,6 +10,7 @@ import { DEFAULT_CLIENT_STATUS_RULES, DEFAULT_CLIENT_STATUS_SETTINGS } from "@/t
 import type { ClientTypeEntry } from "@/types/bookingSettings";
 import { DEFAULT_CLIENT_TYPE_ENTRIES } from "@/types/bookingSettings";
 import { sanitizeForFirestore } from "@/lib/sanitizeForFirestore";
+import { firestoreClientSettingsDataNeedsBackfill } from "@/lib/clientStatusSettingsBackfill";
 
 export function clientSettingsDoc(siteId: string) {
   if (!db) throw new Error("Firestore db not initialized");
@@ -83,16 +84,19 @@ export async function saveClientStatusSettings(siteId: string, settings: ClientS
   await setDoc(clientSettingsDoc(siteId), sanitized, { merge: true });
 }
 
-export async function seedDefaultClientStatusSettings(siteId: string): Promise<void> {
+export async function seedDefaultClientStatusSettings(siteId: string): Promise<{ didWrite: boolean }> {
   if (!db) throw new Error("Firestore db not initialized");
   const ref = clientSettingsDoc(siteId);
   const snap = await getDoc(ref);
-  const data = snap.exists() ? (snap.data() as ClientSettingsData) : null;
-  if (!data?.statusRules || !Array.isArray(data.manualTags)) {
-    const payload = normalizeClientStatusSettings(data);
-    const sanitized = sanitizeForFirestore(payload) as ClientSettingsData;
-    await setDoc(ref, sanitized, { merge: true });
+  const raw = snap.exists() ? snap.data() : null;
+  if (!firestoreClientSettingsDataNeedsBackfill(raw)) {
+    return { didWrite: false };
   }
+  const data = raw as ClientSettingsData | null;
+  const payload = normalizeClientStatusSettings(data);
+  const sanitized = sanitizeForFirestore(payload) as ClientSettingsData;
+  await setDoc(ref, sanitized, { merge: true });
+  return { didWrite: true };
 }
 
 /**

@@ -363,11 +363,13 @@ export default function DayGrid({
                 style={hasNote ? { paddingLeft: "clamp(14px, 24%, 18px)" } : undefined}
               >
                 <div className="flex items-center gap-1 min-w-0">
-                  {block.isSecondary && (
-                    <span className="shrink-0 flex items-center justify-center w-4 h-4 rounded text-[9px] font-bold" style={{ backgroundColor: "rgba(255,255,255,0.3)", color: textColor }}>
-                      2
-                    </span>
-                  )}
+                  <span
+                    className="shrink-0 flex items-center justify-center w-4 h-4 rounded text-[9px] font-bold"
+                    style={{ backgroundColor: "rgba(255,255,255,0.3)", color: textColor }}
+                    aria-label={block.phase === 2 ? "שלב 2" : "שלב 1"}
+                  >
+                    {block.phase}
+                  </span>
                   {statusKey && (
                     <StatusDot statusKey={statusKey} title={statusLabel ?? undefined} />
                   )}

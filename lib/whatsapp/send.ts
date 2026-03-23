@@ -10,6 +10,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { isWhatsAppAutomationEnabled } from "@/lib/platformSettings";
 import { toWhatsAppTo } from "./e164";
+import { mapBodyForSandbox } from "./sandboxMap";
 
 /** Read env at send time so tests and runtime can set TWILIO_* after module load. */
 function getTwilioEnv(): { accountSid: string; authToken: string; from: string } {
@@ -60,12 +61,15 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
     bypassAutomationKillSwitch = false,
   } = params;
   const siteId = siteIdParam ?? salonIdParam;
+  const automationName =
+    meta && typeof meta === "object" && "automation" in meta && typeof (meta as { automation: unknown }).automation === "string"
+      ? (meta as { automation: string }).automation
+      : "outbound";
+  const sandboxMode = (process.env.TWILIO_WHATSAPP_SANDBOX_MODE ?? "").toLowerCase() === "true";
+  const outgoingBody = sandboxMode ? mapBodyForSandbox({ body, automation: automationName }) : body;
 
   const enabled = bypassAutomationKillSwitch || (await isWhatsAppAutomationEnabled());
   if (!enabled) {
-    const automationName = (meta && typeof meta === "object" && "automation" in meta && typeof (meta as { automation: unknown }).automation === "string")
-      ? (meta as { automation: string }).automation
-      : "outbound";
     if (process.env.NODE_ENV !== "test") {
       console.log("[WhatsApp] skipped (global disabled)", {
         siteId: siteId ?? undefined,
@@ -87,7 +91,7 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
   let error: string | null = null;
 
   try {
-    const message = await client.messages.create({ body, from, to });
+    const message = await client.messages.create({ body: outgoingBody, from, to });
     sid = message.sid;
   } catch (e) {
     status = "failed";
@@ -96,7 +100,7 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
     await logOutbound({
       toPhone: to,
       fromPhone: from,
-      body,
+      body: outgoingBody,
       siteId,
       bookingId,
       bookingRef,
@@ -111,7 +115,7 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
   await logOutbound({
     toPhone: to,
     fromPhone: from,
-    body,
+    body: outgoingBody,
     siteId,
     bookingId,
     bookingRef,

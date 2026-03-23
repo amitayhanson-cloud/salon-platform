@@ -14,6 +14,7 @@ import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
 type SubMenuItem = {
   label: string;
   href: string;
+  icon?: LucideIcon;
   items?: { label: string; href: string }[];
 };
 
@@ -26,7 +27,6 @@ type MenuItem = {
 };
 
 function getMenuItems(basePath: string): MenuItem[] {
-  // Top nav order (visual): … | יומן | מרכז הודעות WhatsApp | לוח בקרה | לקוחות | …
   return [
     {
       label: "יומן",
@@ -414,17 +414,22 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                     </button>
                     {openDropdown === item.label && item.items && (
                       <div className="bg-[#F8FAFC]">
-                        {item.items.map((subItem) => (
+                        {item.items.map((subItem) => {
+                          const SubIcon = subItem.icon;
+                          return (
                           <div key={subItem.href}>
                             <Link
                               href={subItem.href}
-                              className={`block px-8 py-2 text-sm transition-colors duration-200 ${
+                              className={`flex items-center gap-2 px-8 py-2 text-sm transition-colors duration-200 ${
                                 isActive(subItem.href)
                                   ? "bg-[rgba(204,238,241,0.5)] font-medium text-[#0F172A]"
                                   : "text-[#64748B] hover:bg-caleno-50"
                               }`}
                             >
-                              {subItem.label}
+                              {SubIcon ? (
+                                <SubIcon className="w-4 h-4 shrink-0 text-[#1E6F7C]" aria-hidden />
+                              ) : null}
+                              <span>{subItem.label}</span>
                             </Link>
                             {subItem.items?.map((nested) => (
                               <Link
@@ -440,7 +445,8 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                               </Link>
                             ))}
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </>
@@ -499,18 +505,23 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                 minWidth: dropdownPlacement.minWidth,
               }}
             >
-              {item.items.map((subItem) => (
+              {item.items.map((subItem) => {
+                const SubIcon = subItem.icon;
+                return (
                 <div key={subItem.href}>
                   <Link
                     href={subItem.href}
                     onClick={() => setOpenDropdown(null)}
-                    className={`block px-4 py-2 text-sm transition-colors duration-200 ${
+                    className={`flex items-center gap-2 px-4 py-2 text-sm transition-colors duration-200 ${
                       isActive(subItem.href)
                         ? "bg-[rgba(204,238,241,0.5)] font-medium text-[#0F172A]"
                         : "text-[#0F172A] hover:bg-caleno-50"
                     }`}
                   >
-                    {subItem.label}
+                    {SubIcon ? (
+                      <SubIcon className="w-4 h-4 shrink-0 text-[#1E6F7C]" aria-hidden />
+                    ) : null}
+                    <span>{subItem.label}</span>
                   </Link>
                   {subItem.items?.map((nested) => (
                     <Link
@@ -527,7 +538,8 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                     </Link>
                   ))}
                 </div>
-              ))}
+                );
+              })}
             </div>,
             document.body
           );

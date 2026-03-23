@@ -2,23 +2,15 @@ import { NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
 import { normalizeClientStatusRules } from "@/lib/clientStatusRules";
+import { firestoreClientSettingsDataNeedsBackfill } from "@/lib/clientStatusSettingsBackfill";
 import { recomputeAllClientsAutomatedStatus } from "@/lib/server/recomputeAllClientsAutomatedStatus";
-import type { ClientStatusRules, ManualClientTag } from "@/types/clientStatus";
+import { DEFAULT_CLIENT_STATUS_SETTINGS, type ClientStatusRules } from "@/types/clientStatus";
 
-function normalizeTags(raw: unknown): ManualClientTag[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .filter((t) => t && typeof t === "object")
-    .map((t, i) => {
-      const idRaw = (t as { id?: unknown }).id;
-      const labelRaw = (t as { label?: unknown }).label;
-      const id = typeof idRaw === "string" ? idRaw.trim() : "";
-      const label = typeof labelRaw === "string" ? labelRaw.trim() : "";
-      return { id, label, sortOrder: i };
-    })
-    .filter((t) => t.id && t.label);
-}
-
+/**
+ * POST /api/settings/client-status/recompute
+ * Owner-only. Backfills missing/partial `settings/clients` with defaults, then recomputes every client's
+ * `currentStatus` (same effect as Save, without requiring the admin to touch the form).
+ */
 export async function POST(request: Request) {
   try {
     const authHeader = request.headers.get("authorization");
@@ -27,10 +19,7 @@ export async function POST(request: Request) {
     const decoded = await getAdminAuth().verifyIdToken(token).catch(() => null);
     if (!decoded) return NextResponse.json({ ok: false, message: "unauthenticated" }, { status: 401 });
 
-    const body = (await request.json().catch(() => ({}))) as {
-      siteId?: string;
-      settings?: { statusRules?: Partial<ClientStatusRules>; manualTags?: ManualClientTag[] };
-    };
+    const body = (await request.json().catch(() => ({}))) as { siteId?: string };
     const siteId = typeof body.siteId === "string" ? body.siteId.trim() : "";
     if (!siteId) return NextResponse.json({ ok: false, message: "missing siteId" }, { status: 400 });
 
@@ -41,19 +30,30 @@ export async function POST(request: Request) {
     const ownerUid = (siteDoc.data() as { ownerUid?: string } | undefined)?.ownerUid;
     if (ownerUid !== decoded.uid) return NextResponse.json({ ok: false, message: "forbidden" }, { status: 403 });
 
-    const statusRules = normalizeClientStatusRules(body.settings?.statusRules);
-    const manualTags = normalizeTags(body.settings?.manualTags);
+    const settingsRef = siteRef.collection("settings").doc("clients");
+    const settingsSnap = await settingsRef.get();
+    const raw = settingsSnap.data();
 
-    await siteRef.collection("settings").doc("clients").set(
-      { statusRules, manualTags, updatedAt: Timestamp.now() },
-      { merge: true }
+    let backfilled = false;
+    if (!settingsSnap.exists || firestoreClientSettingsDataNeedsBackfill(raw)) {
+      const patch: Record<string, unknown> = {
+        statusRules: DEFAULT_CLIENT_STATUS_SETTINGS.statusRules,
+        manualTags: DEFAULT_CLIENT_STATUS_SETTINGS.manualTags,
+        updatedAt: Timestamp.now(),
+      };
+      await settingsRef.set(patch, { merge: true });
+      backfilled = true;
+    }
+
+    const afterSnap = await settingsRef.get();
+    const statusRules = normalizeClientStatusRules(
+      afterSnap.data()?.statusRules as Partial<ClientStatusRules> | undefined
     );
-
     const updatedClients = await recomputeAllClientsAutomatedStatus(db, siteId, statusRules);
 
-    return NextResponse.json({ ok: true, updatedClients });
+    return NextResponse.json({ ok: true, updatedClients, backfilled });
   } catch (e) {
-    console.error("[settings/client-status/save]", e);
+    console.error("[settings/client-status/recompute]", e);
     return NextResponse.json(
       { ok: false, message: e instanceof Error ? e.message : "server_error" },
       { status: 500 }
