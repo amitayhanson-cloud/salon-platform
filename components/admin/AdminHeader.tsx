@@ -33,11 +33,6 @@ function getMenuItems(basePath: string): MenuItem[] {
       href: `${basePath}/bookings`,
     },
     {
-      label: "מרכז הודעות WhatsApp",
-      href: `${basePath}/whatsapp`,
-      icon: MessageSquare,
-    },
-    {
       label: "לוח בקרה",
       href: basePath,
     },
@@ -46,6 +41,7 @@ function getMenuItems(basePath: string): MenuItem[] {
       items: [
         { label: "כרטיס לקוח", href: `${basePath}/clients/client-card` },
         { label: "הגדרות לקוחות", href: `${basePath}/clients/settings` },
+        { label: "מרכז הודעות WhatsApp", href: `${basePath}/whatsapp`, icon: MessageSquare },
       ],
     },
     {

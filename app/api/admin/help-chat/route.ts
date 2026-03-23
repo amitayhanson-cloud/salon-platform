@@ -14,7 +14,7 @@ const ADMIN_HELP_SYSTEM = `You are an expert assistant for the Caleno admin pane
 - "עזרה" – opens this help chat.
 - "צפייה באתר" – button that opens the public website in a new tab.
 - "יומן" – single link.
-- "לקוחות" – dropdown with two items.
+- "לקוחות" – dropdown with three items (כולל WhatsApp).
 - "צוות" – dropdown with two items.
 - "ניהול אתר" – dropdown with three items.
 - Tenant logo/name (far left) – links to admin home.
@@ -27,6 +27,7 @@ const ADMIN_HELP_SYSTEM = `You are an expert assistant for the Caleno admin pane
 **לקוחות** (dropdown)
 - "כרטיס לקוח" – דף כרטיס לקוח: חיפוש לקוח לפי טלפון/שם, צפייה בהיסטוריית תורים, סוג לקוח, מחירים אישיים, עריכה ומחיקה.
 - "הגדרות לקוחות" – ייבוא לקוחות מקובץ (Excel/CSV), הגדרות סוגי לקוחות.
+- "מרכז הודעות WhatsApp" – הגדרות תבניות, שידורים ללקוחות ומעקב הודעות.
 
 **צוות** (dropdown)
 - "עובדים" – רשימת עובדים, הוספה/עריכה/מחיקה של עובד, שיוך שירותים לעובד, שעות עבודה (availability) לכל עובד.

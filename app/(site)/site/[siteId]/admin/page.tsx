@@ -6,7 +6,7 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import CalenoLoading from "@/components/CalenoLoading";
 import { fetchSiteStats, type SiteStats } from "@/lib/fetchSiteStats";
 import { getAdminBasePathFromSiteId } from "@/lib/url";
-import { Users, Calendar, UserCircle, CalendarDays, LogOut } from "lucide-react";
+import { Users, Calendar, UserCircle, CalendarDays, LogOut, MessageSquare } from "lucide-react";
 import { AdminCard } from "@/components/admin/AdminCard";
 import { AdminStatCard } from "@/components/admin/AdminStatCard";
 
@@ -14,9 +14,11 @@ export default function AdminHomePage() {
   const params = useParams();
   const router = useRouter();
   const siteId = (params?.siteId as string) || "";
-  const { user, loading, logout } = useAuth();
+  const { user, firebaseUser, loading, logout } = useAuth();
   const [stats, setStats] = useState<SiteStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [whatsAppThisMonth, setWhatsAppThisMonth] = useState<number | null>(null);
+  const [whatsAppLoading, setWhatsAppLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
 
   const adminBasePath = getAdminBasePathFromSiteId(siteId);
@@ -42,6 +44,38 @@ export default function AdminHomePage() {
     };
   }, [siteId]);
 
+  useEffect(() => {
+    if (!siteId || !firebaseUser) {
+      setWhatsAppLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        setWhatsAppLoading(true);
+        const token = await firebaseUser.getIdToken();
+        const res = await fetch(`/api/admin/whatsapp/monthly-count?siteId=${encodeURIComponent(siteId)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = (await res.json().catch(() => ({}))) as { outboundCount?: unknown };
+        if (!cancelled && res.ok) {
+          setWhatsAppThisMonth(
+            typeof data.outboundCount === "number" && Number.isFinite(data.outboundCount)
+              ? data.outboundCount
+              : null
+          );
+        }
+      } catch {
+        if (!cancelled) setWhatsAppThisMonth(null);
+      } finally {
+        if (!cancelled) setWhatsAppLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [siteId, firebaseUser]);
+
   const statCards = [
     {
       label: "לקוחות",
@@ -66,6 +100,12 @@ export default function AdminHomePage() {
       value: stats?.upcomingBookings ?? null,
       href: `${adminBasePath}/bookings`,
       icon: Calendar,
+    },
+    {
+      label: "הודעות WhatsApp החודש",
+      value: whatsAppThisMonth,
+      href: `${adminBasePath}/whatsapp`,
+      icon: MessageSquare,
     },
   ];
 
@@ -122,9 +162,9 @@ export default function AdminHomePage() {
                   <h2 className="mb-4 text-lg font-semibold text-[#0F172A]">
                     סטטיסטיקות העסק
                   </h2>
-                  {statsLoading ? (
-                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                      {[1, 2, 3, 4].map((i) => (
+                  {statsLoading || whatsAppLoading ? (
+                    <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+                      {[1, 2, 3, 4, 5].map((i) => (
                         <div
                           key={i}
                           className="rounded-2xl border border-[#E2E8F0] bg-[rgba(30,111,124,0.06)] p-4 animate-pulse"
@@ -135,7 +175,7 @@ export default function AdminHomePage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
                       {statCards.map(({ label, value, href, icon }) => (
                         <AdminStatCard
                           key={label}
