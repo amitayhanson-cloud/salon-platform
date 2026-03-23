@@ -17,9 +17,9 @@ export type WhatsAppSettingsDoc = {
 };
 
 export const DEFAULT_CONFIRMATION_TEMPLATE =
-  "היי {client_name}, התור שלך ב-{business_name} נקבע ל-{time}. {custom_text}";
+  "היי {client_name}, התור שלך ב-{business_name} בתאריך {date} בשעה {time}. {confirmation_waze_block} {custom_text}";
 
-export const DEFAULT_REMINDER_TEMPLATE = `תזכורת: היי {client_name}, מחכים לך ב-{business_name} בתאריך {date} בשעה {time}.
+export const DEFAULT_REMINDER_TEMPLATE = `תזכורת: היי {client_name}, מחכים לך ב-{business_name} בתאריך {date} בשעה {time}. {reminder_waze_block}
 
 מגיעים? השיבו להודעה זו:
 כן, אגיע
@@ -54,4 +54,10 @@ export type WhatsAppTemplateVariables = Partial<{
   time: string;
   date: string;
   custom_text: string;
+  /** Raw Waze URL; empty if no business address — removed from output when empty. */
+  waze_link: string;
+  /** Preformatted block for confirmation (newlines + URL); empty without address. */
+  confirmation_waze_block: string;
+  /** Preformatted “מחכים לראותך” + URL for reminder; empty without address. */
+  reminder_waze_block: string;
 }>;

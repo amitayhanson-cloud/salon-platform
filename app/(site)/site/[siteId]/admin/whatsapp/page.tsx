@@ -33,10 +33,18 @@ const STATUS_OPTIONS: { value: BroadcastAutomatedStatus; label: string }[] = [
   { value: "sleeping", label: "רדום" },
 ];
 
-const INSERT_TAGS = [
+const BROADCAST_INSERT_TAGS = [
   { key: "{שם_לקוח}", label: "שם לקוח" },
   { key: "{שם_העסק}", label: "שם העסק" },
   { key: "{קישור_לתיאום}", label: "קישור לתיאום" },
+] as const;
+
+const REMINDER_INSERT_TAGS = [
+  ...BROADCAST_INSERT_TAGS,
+  { key: "{תאריך_תור}", label: "תאריך תור" },
+  { key: "{זמן_תור}", label: "שעת תור" },
+  { key: "{reminder_waze_block}", label: "בלוק וויז (תזכורת)" },
+  { key: "{waze_link}", label: "קישור וויז" },
 ] as const;
 
 function insertAtCursor(
@@ -505,7 +513,7 @@ export default function AdminWhatsAppPage() {
               <h2 className="text-lg font-semibold text-[#0F172A] mb-1">כתיבת הודעה</h2>
               <p className="text-sm text-[#64748B] mb-3">תגים דינמיים (לחצו להוספה):</p>
               <div className="flex flex-wrap gap-2 mb-4">
-                {INSERT_TAGS.map((t) => (
+                {BROADCAST_INSERT_TAGS.map((t) => (
                   <button
                     key={t.key}
                     type="button"
@@ -576,7 +584,11 @@ export default function AdminWhatsAppPage() {
                 />
               </button>
             </div>
-            <p className="text-xs text-[#64748B] mb-2">תגים: {"{שם_לקוח}"} {"{שם_העסק}"} {"{תאריך_תור}"} {"{זמן_תור}"} {"{קישור_לתיאום}"}</p>
+            <p className="text-xs text-[#64748B] mb-2">
+              תגים: {"{שם_לקוח}"} {"{שם_העסק}"} {"{תאריך_תור}"} {"{זמן_תור}"} {"{קישור_לתיאום}"}{" "}
+              {"{custom_text}"} {"{confirmation_waze_block}"} {"{waze_link}"} — הוויז ממולא מכתובת העסק בהגדרות; בלי כתובת
+              התגים הריקים נעלמים.
+            </p>
             <textarea
               ref={confirmRef}
               dir="rtl"
@@ -626,7 +638,7 @@ export default function AdminWhatsAppPage() {
               חובה לכלול בתבנית: <code className="rounded bg-[#F1F5F9] px-1">{REMINDER_REQUIRED_PLACEHOLDER}</code>
             </p>
             <div className="flex flex-wrap gap-2 mb-3">
-              {INSERT_TAGS.map((t) => (
+              {REMINDER_INSERT_TAGS.map((t) => (
                 <button
                   key={t.key}
                   type="button"

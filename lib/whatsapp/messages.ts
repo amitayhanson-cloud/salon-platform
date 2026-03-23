@@ -5,19 +5,23 @@
 
 import { DEFAULT_REMINDER_TEMPLATE } from "@/types/whatsappSettings";
 import { renderWhatsAppTemplate } from "@/lib/whatsapp/templateRender";
+import { reminderWazeBlockFromUrl } from "@/lib/whatsapp/businessWaze";
 
 /**
  * Build the 24h reminder / confirmation-request message body (default template).
  * @param salonName - e.g. from site config
  * @param timeStr - Appointment time in Israel (HH:mm), e.g. from formatIsraelTime()
  * @param dateStr - Short Israel date string (same as formatIsraelDateShort)
+ * @param wazeUrl - Full Waze navigation URL from business address; omit when unknown
  */
 export function buildReminderMessage(
   salonName: string,
   timeStr: string,
   dateStr: string,
-  clientName = "לקוח/ה"
+  clientName = "לקוח/ה",
+  wazeUrl = ""
 ): string {
+  const reminderWazeBlock = reminderWazeBlockFromUrl(wazeUrl);
   return renderWhatsAppTemplate(DEFAULT_REMINDER_TEMPLATE, {
     שם_העסק: salonName,
     זמן_תור: timeStr,
@@ -27,5 +31,7 @@ export function buildReminderMessage(
     time: timeStr,
     client_name: clientName,
     date: dateStr,
+    reminder_waze_block: reminderWazeBlock,
+    ...(wazeUrl ? { waze_link: wazeUrl } : {}),
   });
 }

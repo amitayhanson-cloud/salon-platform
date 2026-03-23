@@ -56,6 +56,14 @@ describe("renderWhatsAppTemplate", () => {
       renderWhatsAppTemplate("א\n\n\nב", {})
     ).toBe("א\n\nב");
   });
+
+  it("strips empty confirmation_waze_block (space before tag preserves sentence period)", () => {
+    expect(
+      renderWhatsAppTemplate("סיום. {confirmation_waze_block} סוף", {
+        confirmation_waze_block: "",
+      })
+    ).toBe("סיום. סוף");
+  });
 });
 
 describe("reminderTemplateHasRequiredTime", () => {

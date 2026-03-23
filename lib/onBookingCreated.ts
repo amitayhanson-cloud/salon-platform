@@ -21,6 +21,11 @@ import { getPublicBookingPageUrlForSite } from "@/lib/url";
 import { formatIsraelDateShort, formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
 import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
 import { refreshClientAutomatedStatusFromBooking } from "@/lib/server/clientAutomatedStatus";
+import {
+  buildWazeUrlFromAddress,
+  confirmationWazeBlockFromUrl,
+  reminderWazeBlockFromUrl,
+} from "@/lib/whatsapp/businessWaze";
 
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 const ISRAEL_TZ = "Asia/Jerusalem";
@@ -40,10 +45,15 @@ function getTomorrowIsrael(): string {
   );
 }
 
-async function getSiteSalonName(db: ReturnType<typeof getAdminDb>, siteId: string): Promise<string> {
+async function getSiteSalonNameAndWazeUrl(
+  db: ReturnType<typeof getAdminDb>,
+  siteId: string
+): Promise<{ salonName: string; wazeUrl: string }> {
   const siteSnap = await db.collection("sites").doc(siteId).get();
   const config = siteSnap.data()?.config;
-  return config?.salonName ?? config?.whatsappBrandName ?? "הסלון";
+  const salonName = config?.salonName ?? config?.whatsappBrandName ?? "הסלון";
+  const wazeUrl = buildWazeUrlFromAddress(config?.address);
+  return { salonName, wazeUrl };
 }
 
 /**
@@ -78,7 +88,9 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
     throw new Error(phoneResult.error);
   }
   const customerPhoneE164 = phoneResult.e164;
-  const salonName = await getSiteSalonName(db, siteId);
+  const { salonName, wazeUrl } = await getSiteSalonNameAndWazeUrl(db, siteId);
+  const confirmationWazeBlock = confirmationWazeBlockFromUrl(wazeUrl);
+  const reminderWazeBlock = reminderWazeBlockFromUrl(wazeUrl);
   const waSettings = await getSiteWhatsAppSettings(siteId);
   const bookingPublicUrl = getPublicBookingPageUrlForSite(siteId);
   const customerDisplayName = String(data.customerName ?? "").trim() || "לקוח/ה";
@@ -113,6 +125,9 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
     link: bookingPublicUrl,
     client_name: customerDisplayName,
     custom_text: waSettings.confirmationCustomText ?? "",
+    confirmation_waze_block: confirmationWazeBlock,
+    reminder_waze_block: reminderWazeBlock,
+    ...(wazeUrl ? { waze_link: wazeUrl } : {}),
   };
 
   if (waSettings.confirmationEnabled) {
@@ -156,6 +171,8 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
         client_name: customerDisplayName,
         link: bookingPublicUrl,
         date,
+        reminder_waze_block: reminderWazeBlock,
+        ...(wazeUrl ? { waze_link: wazeUrl } : {}),
       });
 
       await sendWhatsApp({
@@ -214,6 +231,8 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
           client_name: customerDisplayName,
           link: bookingPublicUrl,
           date,
+          reminder_waze_block: reminderWazeBlock,
+          ...(wazeUrl ? { waze_link: wazeUrl } : {}),
         });
         await sendWhatsApp({
           toE164: customerPhoneE164,
