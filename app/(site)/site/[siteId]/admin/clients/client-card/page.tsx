@@ -1279,7 +1279,11 @@ export default function ClientCardPage() {
 
       {/* Add Client Modal */}
       {isAddClientModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" dir="rtl">
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          data-admin-modal-overlay=""
+          dir="rtl"
+        >
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex justify-between items-center mb-6">
@@ -1479,7 +1483,11 @@ export default function ClientCardPage() {
 
       {/* Edit Client Modal */}
       {editClient && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" dir="rtl">
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          data-admin-modal-overlay=""
+          dir="rtl"
+        >
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <h2 className="text-xl font-bold text-slate-900 mb-4">עריכת לקוח</h2>
@@ -1578,7 +1586,11 @@ export default function ClientCardPage() {
 
       {/* Delete Client Modal */}
       {deleteClient && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" dir="rtl">
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          data-admin-modal-overlay=""
+          dir="rtl"
+        >
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
             <div className="p-6">
               <h2 className="text-xl font-bold text-slate-900 mb-2">מחיקת לקוח</h2>
@@ -1629,7 +1641,11 @@ export default function ClientCardPage() {
 
       {/* Bulk Delete Modal */}
       {bulkDeleteOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" dir="rtl">
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          data-admin-modal-overlay=""
+          dir="rtl"
+        >
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
             <div className="p-6">
               <h2 className="text-xl font-bold text-slate-900 mb-2">מחיקת {selectedForDelete.size} לקוחות</h2>

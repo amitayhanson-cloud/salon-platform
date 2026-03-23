@@ -38,6 +38,7 @@ export default function ConfirmModal({
   return (
     <div
       className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-[55]"
+      data-admin-modal-overlay=""
       dir="rtl"
       onClick={(e) => {
         if (e.target === e.currentTarget && !submitting) onClose();

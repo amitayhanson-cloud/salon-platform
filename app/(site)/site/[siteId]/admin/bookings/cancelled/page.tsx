@@ -381,6 +381,7 @@ export default function CancelledBookingsPage() {
       {confirmDelete && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          data-admin-modal-overlay=""
           dir="rtl"
           role="dialog"
           aria-modal="true"

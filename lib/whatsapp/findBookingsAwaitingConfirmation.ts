@@ -15,6 +15,7 @@ export type BookingChoice = {
   startAt: Timestamp;
   siteName: string;
   serviceName?: string;
+  customerName?: string;
 };
 
 /**
@@ -61,6 +62,9 @@ export async function findBookingsAwaitingConfirmationByPhoneMulti(
         : typeof data.service === "string"
           ? data.service
           : undefined;
+    const rawCustomer = data.customerName ?? data.name;
+    const customerName =
+      typeof rawCustomer === "string" && rawCustomer.trim() ? rawCustomer.trim() : undefined;
 
     choices.push({
       bookingRef: `sites/${siteId}/bookings/${doc.id}`,
@@ -69,6 +73,7 @@ export async function findBookingsAwaitingConfirmationByPhoneMulti(
       startAt,
       siteName,
       serviceName: serviceName || undefined,
+      customerName,
     });
   }
   return choices;

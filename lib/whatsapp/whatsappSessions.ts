@@ -25,6 +25,7 @@ export type WhatsAppSession = {
     startAt: Timestamp;
     siteName: string;
     serviceName?: string;
+    customerName?: string;
   }>;
   lastInboundMessageSid?: string;
   lastInboundBody?: string;
@@ -54,6 +55,7 @@ export async function createWhatsAppSession(params: {
       startAt: c.startAt,
       siteName: c.siteName,
       serviceName: c.serviceName,
+      ...(c.customerName != null && c.customerName !== "" ? { customerName: c.customerName } : {}),
     })),
     ...(params.lastInboundMessageSid != null && { lastInboundMessageSid: params.lastInboundMessageSid }),
     ...(params.lastInboundBody != null && { lastInboundBody: params.lastInboundBody }),

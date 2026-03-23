@@ -5,7 +5,6 @@
 
 import { DEFAULT_REMINDER_TEMPLATE } from "@/types/whatsappSettings";
 import { renderWhatsAppTemplate } from "@/lib/whatsapp/templateRender";
-import { reminderWazeBlockFromUrl } from "@/lib/whatsapp/businessWaze";
 
 /**
  * Build the 24h reminder / confirmation-request message body (default template).
@@ -21,7 +20,6 @@ export function buildReminderMessage(
   clientName = "לקוח/ה",
   wazeUrl = ""
 ): string {
-  const reminderWazeBlock = reminderWazeBlockFromUrl(wazeUrl);
   return renderWhatsAppTemplate(DEFAULT_REMINDER_TEMPLATE, {
     שם_העסק: salonName,
     זמן_תור: timeStr,
@@ -31,7 +29,6 @@ export function buildReminderMessage(
     time: timeStr,
     client_name: clientName,
     date: dateStr,
-    reminder_waze_block: reminderWazeBlock,
     ...(wazeUrl ? { waze_link: wazeUrl } : {}),
   });
 }

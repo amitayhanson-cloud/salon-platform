@@ -400,8 +400,8 @@ export default function AdminLayout({
       )}
       <UnsavedChangesProvider>
         <div className="relative z-10 w-full overflow-x-hidden">
-          {/* Header below modals (z-40) so edit modals (z-50) appear on top */}
-          <div className="relative z-40">
+          {/* z-40 keeps header above scrolling main; modals use data-admin-modal-overlay + globals.css to hide header while open */}
+          <div className="relative z-40 admin-layout-header-root">
             <AdminHeader onOpenHelp={() => setHelpOpen(true)} />
           </div>
           <AdminHelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} />

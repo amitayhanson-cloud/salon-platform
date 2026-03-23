@@ -1130,7 +1130,11 @@ export default function ServicesPage() {
 
       {/* Combo Create/Edit Modal — rule builder: trigger set + ordered sequence */}
       {comboModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 overflow-y-auto" dir="rtl">
+        <div
+          className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 overflow-y-auto"
+          data-admin-modal-overlay=""
+          dir="rtl"
+        >
           <div className="bg-white rounded-t-2xl sm:rounded-3xl shadow-xl border border-[#E2E8F0] w-full max-w-lg max-h-[90vh] flex flex-col mt-auto sm:mt-0">
             <div className="sticky top-0 bg-white border-b border-slate-200 px-4 sm:px-6 py-4 flex justify-between items-center shrink-0">
               <h3 className="text-base sm:text-lg font-bold text-slate-900">
@@ -1290,7 +1294,11 @@ export default function ServicesPage() {
 
       {/* Service Modal (create + edit) */}
       {editingService && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 overflow-y-auto" dir="rtl">
+        <div
+          className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 overflow-y-auto"
+          data-admin-modal-overlay=""
+          dir="rtl"
+        >
           <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl border border-slate-200 w-full max-w-md max-h-[90vh] sm:max-h-[85vh] flex flex-col mt-auto sm:mt-0">
             <div className="sticky top-0 bg-white border-b border-slate-200 px-4 sm:px-6 py-4 flex justify-between items-center shrink-0">
               <h3 className="text-base sm:text-lg font-bold text-slate-900">{isServiceCreateMode ? "הוסף שירות" : "ערוך שירות"}</h3>
@@ -1418,7 +1426,11 @@ export default function ServicesPage() {
 
       {/* Edit Item Modal */}
       {editingItem && (
-        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 overflow-y-auto" dir="rtl">
+        <div
+          className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 overflow-y-auto"
+          data-admin-modal-overlay=""
+          dir="rtl"
+        >
           <div className="bg-white rounded-t-2xl sm:rounded-3xl shadow-xl border border-[#E2E8F0] w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col mt-auto sm:mt-0">
             <div className="sticky top-0 bg-white border-b border-slate-200 px-4 sm:px-6 py-4 flex justify-between items-center shrink-0">
               <h3 className="text-base sm:text-lg font-bold text-slate-900">

@@ -10,10 +10,10 @@ import { assertSiteOwner } from "@/lib/server/assertSiteOwner";
 import { checkRateLimit } from "@/lib/server/rateLimit";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { listBroadcastRecipients } from "@/lib/whatsapp/broadcastRecipients";
-import { MAX_BROADCAST_RECIPIENTS } from "@/lib/whatsapp/broadcastConstants";
+import { MAX_BROADCAST_CUSTOM_TEXT_LEN, MAX_BROADCAST_RECIPIENTS } from "@/lib/whatsapp/broadcastConstants";
 import { parseBroadcastFiltersFromBody } from "@/lib/whatsapp/parseBroadcastBody";
 import { renderWhatsAppTemplate } from "@/lib/whatsapp/templateRender";
-import { getPublicBookingPageAbsoluteUrlForSite } from "@/lib/url";
+import { getPublicLandingPageAbsoluteUrlForSite } from "@/lib/url";
 import { getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
 
 const RATE_WINDOW_MS = 60 * 60 * 1000;
@@ -36,13 +36,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const filters = parseBroadcastFiltersFromBody(body);
   if (filters instanceof NextResponse) return filters;
 
-  const messageTemplate =
+  const customSegment =
     typeof (body as { message?: string }).message === "string" ? (body as { message: string }).message.trim() : "";
-  if (!messageTemplate) {
-    return NextResponse.json({ ok: false, error: "הזינו תוכן להודעה" }, { status: 400 });
+  if (!customSegment) {
+    return NextResponse.json({ ok: false, error: "כתבו את תוכן ההודעה המותאמת (החלק האמצעי)" }, { status: 400 });
   }
-  if (messageTemplate.length > MAX_MESSAGE_LEN) {
-    return NextResponse.json({ ok: false, error: `ההודעה ארוכה מדי (מקסימום ${MAX_MESSAGE_LEN} תווים)` }, { status: 400 });
+  if (customSegment.length > MAX_BROADCAST_CUSTOM_TEXT_LEN) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `הטקסט המותאם ארוך מדי (מקסימום ${MAX_BROADCAST_CUSTOM_TEXT_LEN} תווים)`,
+      },
+      { status: 400 }
+    );
   }
 
   const { allowed, retryAfterMs } = await checkRateLimit(
@@ -100,7 +106,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const tenantSlug =
     (typeof raw?.slug === "string" && raw.slug.trim() ? raw.slug.trim() : null) ??
     (typeof config?.slug === "string" && config.slug.trim() ? config.slug.trim() : null);
-  const bookingUrl = getPublicBookingPageAbsoluteUrlForSite(id, tenantSlug);
+  const landingUrl = getPublicLandingPageAbsoluteUrlForSite(id, tenantSlug);
   const waSettings = await getSiteWhatsAppSettings(id);
   const broadcastTemplate = waSettings.broadcastTemplate;
 
@@ -112,12 +118,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const bodyRendered = renderWhatsAppTemplate(broadcastTemplate, {
       שם_לקוח: r.name,
       שם_העסק: salonName,
-      קישור_לתיאום: bookingUrl,
+      קישור_לתיאום: landingUrl,
       client_name: r.name,
       business_name: salonName,
-      link: bookingUrl,
-      custom_text: messageTemplate,
+      link: landingUrl,
+      custom_text: customSegment,
     });
+    if (bodyRendered.length > MAX_MESSAGE_LEN) {
+      return NextResponse.json(
+        { ok: false, error: `ההודעה המלאה ארוכה מדי אחרי מילוי השמות והקישור (מקסימום ${MAX_MESSAGE_LEN} תווים). קצרו את הטקסט המותאם.` },
+        { status: 400 }
+      );
+    }
     try {
       await sendWhatsApp({
         toE164: r.e164,

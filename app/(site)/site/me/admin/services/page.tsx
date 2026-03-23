@@ -755,7 +755,11 @@ export default function ServicesPage() {
 
       {/* Edit Service Modal */}
       {editingService && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" dir="rtl">
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
+          data-admin-modal-overlay=""
+          dir="rtl"
+        >
           <div className="bg-white rounded-2xl shadow-xl border border-[#E2E8F0] w-full max-w-md">
             <div className="sticky top-0 bg-white border-b border-[#E2E8F0] px-6 py-4 flex justify-between items-center">
               <h3 className="text-lg font-bold text-[#0F172A]">ערוך שירות</h3>
@@ -816,7 +820,11 @@ export default function ServicesPage() {
 
       {/* Edit Item Modal */}
       {editingItem && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" dir="rtl">
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
+          data-admin-modal-overlay=""
+          dir="rtl"
+        >
           <div className="bg-white rounded-2xl shadow-xl border border-[#E2E8F0] w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-[#E2E8F0] px-6 py-4 flex justify-between items-center">
               <h3 className="text-lg font-bold text-[#0F172A]">

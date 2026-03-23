@@ -21,11 +21,7 @@ import { getPublicBookingPageUrlForSite } from "@/lib/url";
 import { formatIsraelDateShort, formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
 import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
 import { refreshClientAutomatedStatusFromBooking } from "@/lib/server/clientAutomatedStatus";
-import {
-  buildWazeUrlFromAddress,
-  confirmationWazeBlockFromUrl,
-  reminderWazeBlockFromUrl,
-} from "@/lib/whatsapp/businessWaze";
+import { buildWazeUrlFromAddress } from "@/lib/whatsapp/businessWaze";
 
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 const ISRAEL_TZ = "Asia/Jerusalem";
@@ -89,8 +85,6 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
   }
   const customerPhoneE164 = phoneResult.e164;
   const { salonName, wazeUrl } = await getSiteSalonNameAndWazeUrl(db, siteId);
-  const confirmationWazeBlock = confirmationWazeBlockFromUrl(wazeUrl);
-  const reminderWazeBlock = reminderWazeBlockFromUrl(wazeUrl);
   const waSettings = await getSiteWhatsAppSettings(siteId);
   const bookingPublicUrl = getPublicBookingPageUrlForSite(siteId);
   const customerDisplayName = String(data.customerName ?? "").trim() || "לקוח/ה";
@@ -124,9 +118,6 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
     time,
     link: bookingPublicUrl,
     client_name: customerDisplayName,
-    custom_text: waSettings.confirmationCustomText ?? "",
-    confirmation_waze_block: confirmationWazeBlock,
-    reminder_waze_block: reminderWazeBlock,
     ...(wazeUrl ? { waze_link: wazeUrl } : {}),
   };
 
@@ -171,8 +162,7 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
         client_name: customerDisplayName,
         link: bookingPublicUrl,
         date,
-        reminder_waze_block: reminderWazeBlock,
-        ...(wazeUrl ? { waze_link: wazeUrl } : {}),
+        waze_link: "",
       });
 
       await sendWhatsApp({
@@ -231,8 +221,7 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
           client_name: customerDisplayName,
           link: bookingPublicUrl,
           date,
-          reminder_waze_block: reminderWazeBlock,
-          ...(wazeUrl ? { waze_link: wazeUrl } : {}),
+          waze_link: "",
         });
         await sendWhatsApp({
           toE164: customerPhoneE164,

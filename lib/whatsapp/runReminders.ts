@@ -13,7 +13,6 @@ import { renderWhatsAppTemplate } from "@/lib/whatsapp/templateRender";
 import { getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
 import { formatIsraelDateShort, formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
 import { getRelatedBookingIds } from "@/lib/whatsapp/relatedBookings";
-import { buildWazeUrlFromAddress, reminderWazeBlockFromUrl } from "@/lib/whatsapp/businessWaze";
 
 export type ReminderDetail = {
   bookingRef: string;
@@ -129,16 +128,13 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
     }
 
     let salonName = "הסלון";
-    let wazeUrl = "";
     try {
       const siteSnap = await db.collection("sites").doc(siteId).get();
       const config = siteSnap.data()?.config;
       salonName = config?.salonName ?? config?.whatsappBrandName ?? salonName;
-      wazeUrl = buildWazeUrlFromAddress(config?.address);
     } catch {
       // keep default
     }
-    const reminderWazeBlock = reminderWazeBlockFromUrl(wazeUrl);
 
     const waSettings = await getSiteWhatsAppSettings(siteId);
     if (!waSettings.reminderEnabled) {
@@ -163,8 +159,8 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
       time: timeStr,
       client_name: customerDisplayName,
       date: dateStr,
-      reminder_waze_block: reminderWazeBlock,
-      ...(wazeUrl ? { waze_link: wazeUrl } : {}),
+      // Reminder messages intentionally omit Waze (even if an old template still contains {waze_link})
+      waze_link: "",
     });
 
     try {

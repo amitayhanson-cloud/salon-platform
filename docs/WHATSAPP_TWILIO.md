@@ -9,12 +9,11 @@ One WhatsApp sender number for the whole platform. Every message includes the sa
 2. **Last-minute booking** (start time &lt; 24h from now): the same reminder/confirmation-request message is sent immediately after the confirmation (so the customer gets confirmation + “מגיעים? … כן, אגיע / לא...” in one go). The cron will not send it again because `reminder24hSentAt` is set.
 3. **24 hours before** (for bookings not already sent above) → reminder WhatsApp:  
    `{SalonName} ✂️ Reminder: your appointment is tomorrow at {time}. Reply YES to confirm.`
-4. **Customer replies YES** (כן / yes / אגיע etc.) → booking `whatsappStatus: "confirmed"`, `confirmationReceivedAt` set; reply:  
-   `אושר ✅ נתראה ב-{time} ב-{salonName}.`  
+4. **Customer replies YES** (כן / yes / אגיע etc.) → booking `whatsappStatus: "confirmed"`, `confirmationReceivedAt` set; auto-reply uses **Admin → WhatsApp → אוטומציות → “תשובה לאחר אישור הלקוח”** (`sites/{siteId}/settings/whatsapp`: `clientConfirmReplyTemplate`, toggle `clientConfirmReplyEnabled`). Same placeholders as other templates (`{time}`, `{date}`, `{business_name}` / `{שם_העסק}`, `{client_name}`, `{waze_link}`, `{link}` / `{קישור_לתיאום}`, etc.). If that automation is **off**, the system sends the legacy line plus optional Waze URL (same as before templates).  
    UI shows booking as מאושר (green).
 5. **Customer replies NO** (לא / no / בטל etc.) → booking is **cancelled** (not deleted):  
    `whatsappStatus: "cancelled"`, `status: "cancelled"`, `cancelledAt`, `archivedAt`, `archivedReason: "customer_cancelled_via_whatsapp"`.  
-   Reply: `הבנתי, ביטלתי את התור.`  
+   Auto-reply uses **“תשובה לאחר ביטול הלקוח”** (`clientCancelReplyTemplate`, `clientCancelReplyEnabled`). If **off**, the legacy short cancel message is sent.  
    Booking is **removed from calendar** and **shown in client history** as בוטל (cancelled).
 
 6. **Multiple bookings awaiting confirmation** (e.g. recurring): When the customer replies YES or NO and **more than one** booking matches (same phone, `whatsappStatus: "awaiting_confirmation"`, `startAt` in the future), the webhook sends a **numbered menu** (earliest 5 only). Example:  
@@ -45,7 +44,7 @@ One WhatsApp sender number for the whole platform. Every message includes the sa
   - Use to confirm production is receiving webhooks even if the UI doesn’t update (e.g. Vercel logs show `[WA_WEBHOOK] start` and a doc appears in **whatsapp_inbound**). When the customer gets “Something went wrong” or “System needs a database index”, check Vercel logs for `[WA_WEBHOOK] error` (or `[WA_WEBHOOK] missing_index`) and the **whatsapp_inbound** doc for this `inboundId`: `status`, `errorMessage`, `errorCode`, `errorStack`.
 
 - **whatsapp_sessions/{phoneE164}** (top-level; selection menu state)  
-  - When multiple bookings match YES/NO, the webhook creates a session: `phoneE164`, `status: "awaiting_selection"`, `intent: "confirm"` | `"cancel"`, `createdAt`, `expiresAt` (now + 10 minutes), `choices` (array of `{ bookingRef`, `siteId`, `bookingId`, `startAt`, `siteName`, `serviceName? }`), optional `lastInboundMessageSid`, `lastInboundBody`.  
+  - When multiple bookings match YES/NO, the webhook creates a session: `phoneE164`, `status: "awaiting_selection"`, `intent: "confirm"` | `"cancel"`, `createdAt`, `expiresAt` (now + 10 minutes), `choices` (array of `{ bookingRef`, `siteId`, `bookingId`, `startAt`, `siteName`, `serviceName?`, `customerName? }`), optional `lastInboundMessageSid`, `lastInboundBody`.  
   - After the user replies with a number (1–N), the webhook applies the action and deletes the session. If the user doesn't reply in time, the session expires and a later "1"/"2" gets "לא מצאתי בחירה פעילה".
 
 ## Required env vars

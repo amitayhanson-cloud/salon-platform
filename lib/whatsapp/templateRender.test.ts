@@ -57,12 +57,12 @@ describe("renderWhatsAppTemplate", () => {
     ).toBe("א\n\nב");
   });
 
-  it("strips empty confirmation_waze_block (space before tag preserves sentence period)", () => {
+  it("strips empty waze_link", () => {
     expect(
-      renderWhatsAppTemplate("סיום. {confirmation_waze_block} סוף", {
-        confirmation_waze_block: "",
+      renderWhatsAppTemplate("סיום.\n{waze_link}\nסוף", {
+        waze_link: "",
       })
-    ).toBe("סיום. סוף");
+    ).toBe("סיום.\nסוף");
   });
 });
 

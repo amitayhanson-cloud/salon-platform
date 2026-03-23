@@ -33,7 +33,11 @@ import {
   writeInboundSignatureFailed,
   updateInboundDoc,
 } from "@/lib/whatsapp/inboundLog";
-import { formatIsraelTime, formatIsraelDateTime } from "@/lib/datetime/formatIsraelTime";
+import { formatIsraelDateTime } from "@/lib/datetime/formatIsraelTime";
+import {
+  buildClientCancelReplyMessage,
+  buildClientConfirmReplyMessage,
+} from "@/lib/whatsapp/buildClientInboundReply";
 
 const WEBHOOK_PATH = "/api/webhooks/twilio/whatsapp";
 
@@ -304,8 +308,11 @@ export async function POST(request: NextRequest) {
           bookingRef: chosen.bookingRef,
           action: "confirmed",
         });
-        const timeStr = formatIsraelTime(booking.startAt);
-        const reply = `אושר ✅ נתראה ב-${timeStr} אצל ${booking.salonName}.`;
+        const reply = await buildClientConfirmReplyMessage(booking.siteId, {
+          startAt: booking.startAt,
+          businessName: booking.salonName,
+          customerName: booking.customerName,
+        });
         await deleteWhatsAppSession(fromE164);
         return recordAndReturnReply(reply, "matched_yes", chosen.bookingRef, "confirmed");
       }
@@ -314,7 +321,11 @@ export async function POST(request: NextRequest) {
         bookingRef: chosen.bookingRef,
         action: "cancelled",
       });
-      const reply = `בוטל ✅. אם תרצה/י לקבוע מחדש, דבר/י עם ${booking.salonName}.`;
+      const reply = await buildClientCancelReplyMessage(booking.siteId, {
+        businessName: booking.salonName,
+        startAt: booking.startAt,
+        customerName: booking.customerName,
+      });
       await deleteWhatsAppSession(fromE164);
       return recordAndReturnReply(reply, "matched_no", chosen.bookingRef, "cancelled");
     }
@@ -352,8 +363,11 @@ export async function POST(request: NextRequest) {
             bookingRef,
             action: "confirmed",
           });
-          const timeStr = formatIsraelTime(choice.startAt.toDate());
-          const reply = `אושר ✅ נתראה ב-${timeStr} ב-${choice.siteName}.`;
+          const reply = await buildClientConfirmReplyMessage(choice.siteId, {
+            startAt: choice.startAt.toDate(),
+            businessName: choice.siteName,
+            customerName: choice.customerName,
+          });
           return recordAndReturnReply(reply, "matched_yes", bookingRef, "confirmed");
         }
         await cancelGroupByMatchedBooking(choice.siteId, choice.bookingId);
@@ -362,7 +376,11 @@ export async function POST(request: NextRequest) {
           bookingRef,
           action: "cancelled",
         });
-        const reply = "הבנתי, ביטלתי את התור.";
+        const reply = await buildClientCancelReplyMessage(choice.siteId, {
+          businessName: choice.siteName,
+          startAt: choice.startAt.toDate(),
+          customerName: choice.customerName,
+        });
         return recordAndReturnReply(reply, "matched_no", bookingRef, "cancelled");
       }
 

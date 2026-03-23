@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/server/requireAuth";
 import { assertSiteOwner } from "@/lib/server/assertSiteOwner";
 import { saveSiteWhatsAppSettings, getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
+import { stripConfirmationCustomTextPlaceholder } from "@/lib/whatsapp/whatsappSettingsNormalize";
 import type { WhatsAppSettingsDoc } from "@/types/whatsappSettings";
 import { reminderTemplateHasRequiredTime } from "@/lib/whatsapp/templateRender";
 import { REMINDER_REQUIRED_PLACEHOLDER } from "@/types/whatsappSettings";
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       typeof body.confirmationEnabled === "boolean" ? body.confirmationEnabled : current.confirmationEnabled,
     confirmationTemplate:
       typeof body.confirmationTemplate === "string" && body.confirmationTemplate.trim()
-        ? String(body.confirmationTemplate).trim()
+        ? stripConfirmationCustomTextPlaceholder(String(body.confirmationTemplate).trim())
         : current.confirmationTemplate,
     reminderEnabled: typeof body.reminderEnabled === "boolean" ? body.reminderEnabled : current.reminderEnabled,
     reminderTemplate:
@@ -42,12 +43,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       typeof body.broadcastTemplate === "string" && body.broadcastTemplate.trim()
         ? String(body.broadcastTemplate).trim()
         : current.broadcastTemplate,
-    confirmationCustomText:
-      typeof body.confirmationCustomText === "string"
-        ? String(body.confirmationCustomText)
-        : current.confirmationCustomText,
     reminderHoursBefore:
       body.reminderHoursBefore !== undefined ? clampHours(body.reminderHoursBefore) : current.reminderHoursBefore,
+    clientConfirmReplyEnabled:
+      typeof body.clientConfirmReplyEnabled === "boolean"
+        ? body.clientConfirmReplyEnabled
+        : current.clientConfirmReplyEnabled,
+    clientConfirmReplyTemplate:
+      typeof body.clientConfirmReplyTemplate === "string" && body.clientConfirmReplyTemplate.trim()
+        ? String(body.clientConfirmReplyTemplate).trim()
+        : current.clientConfirmReplyTemplate,
+    clientCancelReplyEnabled:
+      typeof body.clientCancelReplyEnabled === "boolean"
+        ? body.clientCancelReplyEnabled
+        : current.clientCancelReplyEnabled,
+    clientCancelReplyTemplate:
+      typeof body.clientCancelReplyTemplate === "string" && body.clientCancelReplyTemplate.trim()
+        ? String(body.clientCancelReplyTemplate).trim()
+        : current.clientCancelReplyTemplate,
   };
 
   if (!reminderTemplateHasRequiredTime(next.reminderTemplate)) {
@@ -62,6 +75,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   if (!next.confirmationTemplate.trim()) {
     return NextResponse.json({ ok: false, error: "תבנית אישור התור לא יכולה להיות ריקה" }, { status: 400 });
+  }
+
+  if (next.clientConfirmReplyEnabled && !next.clientConfirmReplyTemplate.trim()) {
+    return NextResponse.json(
+      { ok: false, error: "תבנית תשובה לאחר אישור הלקוח לא יכולה להיות ריקה כשהאוטומציה פעילה" },
+      { status: 400 }
+    );
+  }
+
+  if (next.clientCancelReplyEnabled && !next.clientCancelReplyTemplate.trim()) {
+    return NextResponse.json(
+      { ok: false, error: "תבנית תשובה לאחר ביטול הלקוח לא יכולה להיות ריקה כשהאוטומציה פעילה" },
+      { status: 400 }
+    );
   }
 
   await saveSiteWhatsAppSettings(id, next);

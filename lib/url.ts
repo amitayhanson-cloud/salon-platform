@@ -63,6 +63,26 @@ export function getPublicBookingPageAbsoluteUrlForSite(siteId: string, slug?: st
 }
 
 /**
+ * Server / API: absolute public site (landing) URL — no `/book`.
+ * With slug: `https://slug.caleno.co`; else `https://<origin>/site/<id>`.
+ */
+export function getPublicLandingPageAbsoluteUrlForSite(siteId: string, slug?: string | null): string {
+  const id = siteId.trim();
+  if (!id) return "";
+  const path = getSiteUrl(slug ?? null, id, "");
+  if (path.startsWith("http")) return path;
+  const fromEnv = typeof process !== "undefined" && process.env?.NEXT_PUBLIC_APP_URL?.trim();
+  if (fromEnv) {
+    try {
+      return `${new URL(fromEnv).origin}${path}`;
+    } catch {
+      return `${fromEnv.replace(/\/$/, "")}${path}`;
+    }
+  }
+  return `https://${getRootHost()}${path}`;
+}
+
+/**
  * Client: public booking URL for preview (and UI). Uses tenant slug when set (same as getSiteUrl);
  * otherwise `/site/<siteId>/book` on current origin in dev, or NEXT_PUBLIC_APP_URL / root host.
  */
@@ -75,6 +95,28 @@ export function getPublicBookingPageUrlForSiteClient(siteId: string, slug?: stri
     return `${window.location.origin}${path}`;
   }
   return getPublicBookingPageUrlForSite(id);
+}
+
+/**
+ * Client: public landing URL for a site (no `/book`), for previews and share links.
+ */
+export function getPublicLandingPageUrlForSiteClient(siteId: string, slug?: string | null): string {
+  const id = siteId.trim();
+  if (!id) return "";
+  const path = getSiteUrl(slug ?? null, id, "");
+  if (path.startsWith("http")) return path;
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return `${window.location.origin}${path}`;
+  }
+  const fromEnv = typeof process !== "undefined" && process.env?.NEXT_PUBLIC_APP_URL?.trim();
+  if (fromEnv) {
+    try {
+      return `${new URL(fromEnv).origin}/site/${encodeURIComponent(id)}`;
+    } catch {
+      return `${fromEnv.replace(/\/$/, "")}/site/${encodeURIComponent(id)}`;
+    }
+  }
+  return `https://${getRootHost()}/site/${encodeURIComponent(id)}`;
 }
 
 /** User doc shape for slug resolution. Prefer primarySlug; fallback is from sites/<siteId>.slug (API). */

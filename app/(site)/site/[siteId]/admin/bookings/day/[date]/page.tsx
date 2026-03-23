@@ -1119,6 +1119,7 @@ export default function DaySchedulePage() {
       {selectedBooking && (
         <div 
           className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" 
+          data-admin-modal-overlay=""
           dir="rtl"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
@@ -1350,6 +1351,7 @@ export default function DaySchedulePage() {
       {showBookingForm && formMode === "create" && (
         <div
           className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-[100]"
+          data-admin-modal-overlay=""
           dir="rtl"
           onClick={(e) => {
             if (e.target === e.currentTarget) handleBookingFormCancel();
@@ -1372,6 +1374,7 @@ export default function DaySchedulePage() {
       {showBookingForm && formMode === "edit" && (
         <div
           className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
+          data-admin-modal-overlay=""
           dir="rtl"
           onClick={(e) => {
             if (e.target === e.currentTarget) handleBookingFormCancel();

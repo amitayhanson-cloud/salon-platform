@@ -35,6 +35,12 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
+/* Site admin: sticky header stacks above in-page modals; hide header while a full-screen overlay is open. */
+body:has([data-admin-modal-overlay]) .admin-layout-header-root {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .container {
   max-width: 1200px;
   margin: 0 auto;

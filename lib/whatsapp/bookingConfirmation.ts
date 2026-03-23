@@ -181,6 +181,7 @@ export async function getBookingByRefIfAwaitingConfirmation(bookingRef: string):
   bookingId: string;
   salonName: string;
   startAt: Date;
+  customerName?: string;
 } | null> {
   const match = /^sites\/([^/]+)\/bookings\/([^/]+)$/.exec(bookingRef);
   if (!match) return null;
@@ -198,7 +199,10 @@ export async function getBookingByRefIfAwaitingConfirmation(bookingRef: string):
   const siteSnap = await db.collection("sites").doc(siteId).get();
   const config = siteSnap.data()?.config;
   salonName = config?.salonName ?? config?.whatsappBrandName ?? salonName;
-  return { siteId, bookingId, salonName, startAt };
+  const rawName = data.customerName ?? data.name;
+  const customerName =
+    typeof rawName === "string" && rawName.trim() ? rawName.trim() : undefined;
+  return { siteId, bookingId, salonName, startAt, customerName };
 }
 
 /** Cancel/archive payload applied to all group members (NO reply). Same as root cancel; no hard delete. */

@@ -139,6 +139,7 @@ export function AdminHelpPanel({
     <>
       <div
         className="fixed inset-0 z-[200] bg-caleno-ink/20 backdrop-blur-sm transition-opacity"
+        data-admin-modal-overlay=""
         aria-hidden
         onClick={onClose}
       />

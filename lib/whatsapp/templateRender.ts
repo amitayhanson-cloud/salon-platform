@@ -7,9 +7,15 @@ const ALIASES: Record<string, readonly string[]> = {
   זמן_תור: ["זמן_תור", "time"],
   תאריך_תור: ["תאריך_תור", "date"],
   custom_text: ["custom_text"],
-  waze_link: ["waze_link", "קישור_וויז"],
-  confirmation_waze_block: ["confirmation_waze_block", "בלוק_וויז_אישור"],
-  reminder_waze_block: ["reminder_waze_block", "בלוק_וויז_תזכורת"],
+  waze_link: [
+    "waze_link",
+    "קישור_וויז",
+    // Legacy (same URL as waze_link; “block” wording removed from product copy)
+    "confirmation_waze_block",
+    "reminder_waze_block",
+    "בלוק_וויז_אישור",
+    "בלוק_וויז_תזכורת",
+  ],
 };
 
 function placeholderKeyToCanonical(key: string): string | null {

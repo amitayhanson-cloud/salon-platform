@@ -73,6 +73,7 @@ export default function DeleteAccountButton({
       {isOpen && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+          data-admin-modal-overlay=""
           onClick={(e) => {
             // Close modal when clicking outside
             if (e.target === e.currentTarget && !isDeleting) {
