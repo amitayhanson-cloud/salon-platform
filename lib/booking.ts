@@ -164,6 +164,8 @@ export async function saveBooking(
       notes: booking.note,
     });
 
+    const createdAtClientMs = Date.now();
+
     const [y, m, d] = booking.date.split("-").map(Number);
     const [hh, mm] = booking.time.split(":").map(Number);
     const phase1StartAt = new Date(y, m - 1, d, hh, mm, 0, 0);
@@ -228,6 +230,7 @@ export async function saveBooking(
       price: booking.price ?? null,
       priceSource: booking.priceSource ?? null,
       createdAt: serverTimestamp(),
+      createdAtClientMs,
       updatedAt: serverTimestamp(),
       ...(hasFollowUp && { waitMinutes: waitMin }),
     };
@@ -283,6 +286,7 @@ export async function saveBooking(
         status: deriveBookingStatusForWrite({ status: "booked" }, "create"),
         phase: 2,
         parentBookingId: bookingAId,
+        createdAtClientMs,
         note: booking.note ?? null,
         serviceColor: serviceColor ?? booking.serviceColor ?? null,
         price:
@@ -516,6 +520,8 @@ export async function saveMultiServiceBooking(
     notes: client.note,
   });
 
+  const createdAtClientMs = Date.now();
+
   const bookingsRef = bookingsCollection(siteId);
   let firstBookingId = "";
   let lastPhase1DocId: string | null = null;
@@ -562,6 +568,7 @@ export async function saveMultiServiceBooking(
       price: item.resolvedPrice ?? null,
       priceSource: item.resolvedPrice != null ? "default" : null,
       createdAt: serverTimestamp(),
+      createdAtClientMs,
       updatedAt: serverTimestamp(),
     };
     if (item.phase === 2 && lastPhase1DocId) {

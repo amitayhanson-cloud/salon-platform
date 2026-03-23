@@ -19,12 +19,15 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { Timestamp } from "firebase-admin/firestore";
+import { Timestamp, type DocumentReference } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { onBookingCreated } from "@/lib/onBookingCreated";
 import { checkRateLimit, getClientIp } from "@/lib/server/rateLimit";
 
-const CREATED_WITHIN_MS = 2 * 60 * 1000; // 2 minutes
+const CREATED_WITHIN_MS = 2 * 60 * 1000; // 2 minutes (server `createdAt`)
+/** When only client-written millis exist (before serverTimestamp resolves), allow a looser window + clock skew. */
+const CREATED_CLIENT_MS_WINDOW = 10 * 60 * 1000;
+const CREATED_CLOCK_SKEW_MS = 2 * 60 * 1000;
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000; // 10 min
 const RATE_LIMIT_PER_IP = 20; // 20 confirm attempts per IP per 10 min
 const RATE_LIMIT_PER_BOOKING = 2; // 2 per booking (retries)
@@ -38,6 +41,45 @@ function toMillis(v: unknown): number | null {
   if (typeof withSeconds.seconds === "number") return withSeconds.seconds * 1000;
   if (typeof v === "number") return v;
   return null;
+}
+
+function isFreshBooking(data: Record<string, unknown>, now: number): boolean {
+  const serverMs = toMillis(data.createdAt);
+  if (serverMs != null) {
+    if (serverMs > now + 60_000) return false;
+    return now - serverMs <= CREATED_WITHIN_MS;
+  }
+  const clientMsRaw = data.createdAtClientMs;
+  const clientMs =
+    typeof clientMsRaw === "number" && Number.isFinite(clientMsRaw) ? clientMsRaw : null;
+  if (clientMs == null) return false;
+  if (clientMs > now + CREATED_CLOCK_SKEW_MS) return false;
+  return now - clientMs <= CREATED_CLIENT_MS_WINDOW;
+}
+
+/**
+ * Re-fetch briefly: right after client `addDoc`, `createdAt: serverTimestamp()` is often still missing on read.
+ * `createdAtClientMs` (written by the client) makes the first read sufficient when present.
+ */
+async function loadBookingForConfirm(
+  bookingRef: DocumentReference,
+  now: number,
+  maxAttempts = 15,
+  delayMs = 100
+): Promise<Record<string, unknown> | null> {
+  for (let i = 0; i < maxAttempts; i++) {
+    const snap = await bookingRef.get();
+    if (!snap.exists) return null;
+    const data = snap.data() as Record<string, unknown>;
+    if (isFreshBooking(data, now)) return data;
+    const hasAnyCreatedMarker =
+      toMillis(data.createdAt) != null || typeof data.createdAtClientMs === "number";
+    if (hasAnyCreatedMarker) return data;
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
+  const snap = await bookingRef.get();
+  if (!snap.exists) return null;
+  return snap.data() as Record<string, unknown>;
 }
 
 export async function POST(request: NextRequest) {
@@ -80,20 +122,18 @@ export async function POST(request: NextRequest) {
     const db = getAdminDb();
     const bookingRef = db.collection("sites").doc(siteId).collection("bookings").doc(bookingId);
 
-    const snap = await bookingRef.get();
-    if (!snap.exists) {
+    const now = Date.now();
+    const data = await loadBookingForConfirm(bookingRef, now);
+    if (!data) {
       return NextResponse.json({ ok: false, error: "Booking not found" }, { status: 404 });
     }
 
-    const data = snap.data()!;
     const docSiteId = typeof data.siteId === "string" ? data.siteId : null;
     if (docSiteId != null && docSiteId !== siteId) {
       return NextResponse.json({ ok: false, error: "Booking does not belong to this site" }, { status: 403 });
     }
 
-    const createdMs = toMillis(data.createdAt);
-    const now = Date.now();
-    if (createdMs == null || now - createdMs > CREATED_WITHIN_MS) {
+    if (!isFreshBooking(data, now)) {
       return NextResponse.json(
         { ok: false, error: "Booking too old or missing createdAt" },
         { status: 403 }

@@ -160,7 +160,7 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
 
       await sendWhatsApp({
         toE164: customerPhoneE164,
-        body: `${reminderBody}\n\nענו בהודעה:\nכן, אגיע\nאו\nלא, נא לבטל`,
+        body: reminderBody,
         bookingId,
         siteId,
         bookingRef: `sites/${siteId}/bookings/${bookingId}`,
@@ -217,7 +217,7 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
         });
         await sendWhatsApp({
           toE164: customerPhoneE164,
-          body: `${reminderBody}\n\nענו בהודעה:\nכן, אגיע\nאו\nלא, נא לבטל`,
+          body: reminderBody,
           bookingId,
           siteId,
           bookingRef: `sites/${siteId}/bookings/${bookingId}`,

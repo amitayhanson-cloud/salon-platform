@@ -10,15 +10,26 @@ export type SandboxAutomation =
   | "cancellation_confirmation"
   | "outbound";
 
-function compact(text: string): string {
-  return (text ?? "").replace(/\s+/g, " ").trim();
+/**
+ * Normalize for sandbox: trim ends, collapse spaces within a line, preserve newlines
+ * (Twilio Sandbox prefix + readable Yes/No blocks). Avoid merging paragraphs into one line.
+ */
+function normalizeSandboxBody(text: string): string {
+  const raw = text ?? "";
+  return raw
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trimEnd())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 export function mapBodyForSandbox(input: {
   body: string;
   automation?: string | null;
 }): string {
-  const body = compact(input.body);
+  const body = normalizeSandboxBody(input.body);
   const automation = (input.automation ?? "outbound") as SandboxAutomation;
   if (!body) return "";
 

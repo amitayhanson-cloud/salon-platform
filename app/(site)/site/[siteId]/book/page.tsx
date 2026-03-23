@@ -1691,8 +1691,10 @@ export default function BookingPage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const bookingSubmitLockRef = useRef(false);
 
   const handleSubmit = async () => {
+    if (bookingSubmitLockRef.current || isSubmitting) return;
     if (
       !clientName.trim() ||
       !clientPhone.trim() ||
@@ -1730,6 +1732,7 @@ export default function BookingPage() {
       return;
     }
 
+    bookingSubmitLockRef.current = true;
     setIsSubmitting(true);
     setSubmitError(null);
 
@@ -1922,6 +1925,7 @@ export default function BookingPage() {
       const errorMessage = err instanceof Error ? err.message : String(err);
       setSubmitError(`שגיאה בשמירת ההזמנה: ${errorMessage}`);
     } finally {
+      bookingSubmitLockRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -2008,13 +2012,19 @@ export default function BookingPage() {
     bookingSettings,
   ]);
 
+  // Keep selected hour in sync when date/worker/slots change — do NOT depend on `selectedTime`
+  // (including it re-ran after every click and could fight the user's pick while slots recomputed).
   useEffect(() => {
-    if (!selectedTime) return;
-    if (availableTimeSlots.length === 0 || !availableTimeSlots.includes(selectedTime)) {
-      setSelectedTime(availableTimeSlots[0] ?? "");
-      setTimeUpdatedByWorkerMessage(true);
+    if (availableTimeSlots.length === 0) {
+      setSelectedTime("");
+      return;
     }
-  }, [selectedWorker, selectedDate, availableTimeSlots, selectedTime]);
+    setSelectedTime((prev) => {
+      if (prev && availableTimeSlots.includes(prev)) return prev;
+      if (prev) setTimeUpdatedByWorkerMessage(true);
+      return availableTimeSlots[0] ?? "";
+    });
+  }, [selectedWorker, selectedDate, availableTimeSlots]);
 
   if (loading || !config) {
     return (

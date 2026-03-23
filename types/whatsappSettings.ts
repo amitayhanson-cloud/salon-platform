@@ -19,19 +19,18 @@ export type WhatsAppSettingsDoc = {
 export const DEFAULT_CONFIRMATION_TEMPLATE =
   "היי {client_name}, התור שלך ב-{business_name} נקבע ל-{time}. {custom_text}";
 
-export const DEFAULT_REMINDER_TEMPLATE = `{שם_העסק} ✂️
-תזכורת: התור שלך מחר בשעה {זמן_תור}.
-מגיע/ה?
-השב/השיבי:
+export const DEFAULT_REMINDER_TEMPLATE = `תזכורת: היי {client_name}, מחכים לך ב-{business_name} בתאריך {date} בשעה {time}.
+
+מגיע/ה? השב/י להודעה זו:
 כן, אגיע
 או
-לא, בסוף לא אוכל להגיע`;
+לא, נא לבטל`;
 
 export const DEFAULT_BROADCAST_TEMPLATE =
   "היי {client_name}! הודעה מ-{business_name}: {custom_text}. לפרטים: {link}";
 
-/** Required in reminder template for validation */
-export const REMINDER_REQUIRED_PLACEHOLDER = "{זמן_תור}";
+/** Shown in admin / API errors; validation accepts either tag (see reminderTemplateHasRequiredTime). */
+export const REMINDER_REQUIRED_PLACEHOLDER = "{זמן_תור} או {time}";
 
 export const DEFAULT_WHATSAPP_SETTINGS: WhatsAppSettingsDoc = {
   confirmationEnabled: true,

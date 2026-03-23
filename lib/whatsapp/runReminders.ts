@@ -11,7 +11,7 @@ import { sendWhatsApp, normalizeE164 } from "@/lib/whatsapp";
 import { getTomorrowReminderWindow } from "@/lib/whatsapp/reminderWindow";
 import { renderWhatsAppTemplate } from "@/lib/whatsapp/templateRender";
 import { getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
-import { formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
+import { formatIsraelDateShort, formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
 import { getRelatedBookingIds } from "@/lib/whatsapp/relatedBookings";
 
 export type ReminderDetail = {
@@ -148,17 +148,23 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
     }
 
     const timeStr = startAt ? formatIsraelTime(startAt) : "";
+    const dateStr = startAt ? formatIsraelDateShort(startAt) : "";
+    const customerDisplayName = String(data.customerName ?? "").trim() || "לקוח/ה";
     const reminderBody = renderWhatsAppTemplate(waSettings.reminderTemplate, {
       שם_העסק: salonName,
       זמן_תור: timeStr,
+      שם_לקוח: customerDisplayName,
+      תאריך_תור: dateStr,
       business_name: salonName,
       time: timeStr,
+      client_name: customerDisplayName,
+      date: dateStr,
     });
 
     try {
       await sendWhatsApp({
         toE164: customerPhoneE164,
-        body: `${reminderBody}\n\nענו בהודעה:\nכן, אגיע\nאו\nלא, נא לבטל`,
+        body: reminderBody,
         bookingId: doc.id,
         siteId,
         bookingRef: `sites/${siteId}/bookings/${doc.id}`,
