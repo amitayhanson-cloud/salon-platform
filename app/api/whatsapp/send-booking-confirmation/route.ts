@@ -14,12 +14,10 @@
  * - Verify token, extract uid
  * - Load booking by siteId + bookingId; derive siteId from booking (validate match)
  * - assertSiteOwner(uid, siteId)
- * - Atomic: transaction checks confirmationSentAt is null, sets it
- * - Call onBookingCreated
+ * - Call onBookingCreated (it sets confirmationSentAt after WhatsApp send)
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { onBookingCreated } from "@/lib/onBookingCreated";
 import { requireAuth } from "@/lib/server/requireAuth";
@@ -81,27 +79,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await db.runTransaction(async (tx) => {
-      const tSnap = await tx.get(bookingRef);
-      if (!tSnap.exists) throw new Error("Booking not found");
-      const tData = tSnap.data()!;
-      if (tData.confirmationSentAt != null) {
-        throw new Error("CONFLICT"); // Will map to 409
-      }
-      tx.update(bookingRef, {
-        confirmationSentAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      });
-    });
-
     await onBookingCreated(resolvedSiteId, bookingId);
 
     return NextResponse.json({ ok: true, bookingId, siteId: resolvedSiteId });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg === "CONFLICT") {
-      return NextResponse.json({ ok: false, error: "Confirmation already sent" }, { status: 409 });
-    }
     console.error("[send-booking-confirmation]", msg);
     return NextResponse.json({ ok: false, error: "Failed to send confirmation" }, { status: 500 });
   }

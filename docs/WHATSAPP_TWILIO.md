@@ -6,7 +6,7 @@ One WhatsApp sender number for the whole platform. Every message includes the sa
 
 1. **Booking created** (public or admin) → immediate confirmation WhatsApp:  
    `{SalonName} ✂️ Thanks for booking! Your appointment is {date} at {time}. We'll remind you 24 hours before.`
-2. **Last-minute booking** (start time &lt; 24h from now): the same reminder/confirmation-request message is sent immediately after the confirmation (so the customer gets confirmation + “מגיע/ה? כן, אגיע / לא...” in one go). The cron will not send it again because `reminder24hSentAt` is set.
+2. **Last-minute booking** (start time &lt; 24h from now): the same reminder/confirmation-request message is sent immediately after the confirmation (so the customer gets confirmation + “מגיעים? … כן, אגיע / לא...” in one go). The cron will not send it again because `reminder24hSentAt` is set.
 3. **24 hours before** (for bookings not already sent above) → reminder WhatsApp:  
    `{SalonName} ✂️ Reminder: your appointment is tomorrow at {time}. Reply YES to confirm.`
 4. **Customer replies YES** (כן / yes / אגיע etc.) → booking `whatsappStatus: "confirmed"`, `confirmationReceivedAt` set; reply:  
@@ -249,7 +249,7 @@ Bookings are nested under `sites/{siteId}/bookings/{bookingId}`; collection grou
 
 ### Last-minute bookings (start &lt; 24h from now)
 
-When a booking is created with **startAt** less than 24 hours in the future (and in the future), `onBookingCreated` sends the confirmation WhatsApp and then **immediately** sends the same reminder/confirmation-request message (“מגיע/ה? כן, אגיע / לא...”). It then sets `reminder24hSentAt`, `confirmationRequestedAt`, and `whatsappStatus: "awaiting_confirmation"` so the cron will not send the reminder again. All times use server timestamps (UTC) for the 24h check; displayed times in messages use Asia/Jerusalem.
+When a booking is created with **startAt** less than 24 hours in the future (and in the future), `onBookingCreated` sends the confirmation WhatsApp and then **immediately** sends the same reminder/confirmation-request message (“מגיעים? … כן, אגיע / לא...”). It then sets `reminder24hSentAt`, `confirmationRequestedAt`, and `whatsappStatus: "awaiting_confirmation"` so the cron will not send the reminder again. All times use server timestamps (UTC) for the 24h check; displayed times in messages use Asia/Jerusalem.
 
 **Local verification:**
 

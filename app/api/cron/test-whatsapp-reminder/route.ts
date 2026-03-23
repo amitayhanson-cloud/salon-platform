@@ -142,11 +142,11 @@ export async function POST(request: NextRequest) {
         toE164: customerPhoneE164,
         body: `${salonName} ✂️
 תזכורת: התור שלך מחר בשעה ${timeStr}.
-מגיע/ה?
-השב/השיבי:
+
+מגיעים? השיבו להודעה זו:
 כן, אגיע
 או
-לא, בסוף לא אוכל להגיע`,
+לא, נא לבטל`,
         bookingId,
         siteId,
         bookingRef: `sites/${siteId}/bookings/${bookingId}`,

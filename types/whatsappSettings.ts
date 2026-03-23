@@ -21,7 +21,7 @@ export const DEFAULT_CONFIRMATION_TEMPLATE =
 
 export const DEFAULT_REMINDER_TEMPLATE = `תזכורת: היי {client_name}, מחכים לך ב-{business_name} בתאריך {date} בשעה {time}.
 
-מגיע/ה? השב/י להודעה זו:
+מגיעים? השיבו להודעה זו:
 כן, אגיע
 או
 לא, נא לבטל`;

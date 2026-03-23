@@ -15,11 +15,13 @@
  * - createdAt <= 2 minutes
  * - confirmationSentAt must be null (not already sent)
  * - status must be "booked" or similar (pending)
- * - Atomic transaction: set confirmationSentAt, then send
+ *
+ * Note: Do not set confirmationSentAt here — onBookingCreated sets it after WhatsApp send.
+ * Pre-setting it caused onBookingCreated to exit early and skip all messages.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { Timestamp, type DocumentReference } from "firebase-admin/firestore";
+import { type DocumentReference } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { onBookingCreated } from "@/lib/onBookingCreated";
 import { checkRateLimit, getClientIp } from "@/lib/server/rateLimit";
@@ -157,26 +159,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await db.runTransaction(async (tx) => {
-      const tSnap = await tx.get(bookingRef);
-      if (!tSnap.exists) throw new Error("Booking not found");
-      const tData = tSnap.data()!;
-      if (tData.confirmationSentAt != null) throw new Error("CONFLICT");
-      tx.update(bookingRef, {
-        confirmationSentAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      });
-    });
-
     const resolvedSiteId = docSiteId ?? siteId;
     await onBookingCreated(resolvedSiteId, bookingId);
 
     return NextResponse.json({ ok: true, bookingId, siteId: resolvedSiteId });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg === "CONFLICT") {
-      return NextResponse.json({ ok: false, error: "Confirmation already sent" }, { status: 403 });
-    }
     console.error("[confirm-after-create]", msg);
     return NextResponse.json({ ok: false, error: "Failed to send confirmation" }, { status: 500 });
   }
