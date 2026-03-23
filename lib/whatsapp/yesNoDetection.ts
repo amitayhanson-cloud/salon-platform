@@ -89,18 +89,16 @@ export type InboundIntent = "yes" | "no" | null;
 
 /**
  * Normalize inbound text and detect intent or numeric selection.
- * - Trim, lowercase, collapse spaces.
+ * - Optional `buttonPayload`: Twilio quick-reply / template button value (checked before body text).
  * - If body is only digits -> selection (1-based index).
  * - Else if matches YES phrases -> intent "yes".
  * - Else if matches NO phrases -> intent "no".
  * - Else -> intent null, selection null.
  */
-export function normalizeInbound(body: string): {
-  normalized: string;
-  intent: InboundIntent;
-  selection: number | null;
-}
-export function normalizeInbound(body: string, buttonPayload?: string | null): {
+export function normalizeInbound(
+  body: string,
+  buttonPayload?: string | null
+): {
   normalized: string;
   intent: InboundIntent;
   selection: number | null;
