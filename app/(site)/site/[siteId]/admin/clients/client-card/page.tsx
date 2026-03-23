@@ -13,9 +13,10 @@ import AdminTabs from "@/components/ui/AdminTabs";
 import { AdminPageHero } from "@/components/admin/AdminPageHero";
 import { AdminCard } from "@/components/admin/AdminCard";
 import { createClient, checkClientExists, type ClientData } from "@/lib/firestoreClients";
-import { subscribeClientTypes } from "@/lib/firestoreClientSettings";
-import { DEFAULT_CLIENT_TYPE_ENTRIES, REGULAR_CLIENT_TYPE_ID } from "@/types/bookingSettings";
-import type { ClientTypeEntry } from "@/types/bookingSettings";
+import { subscribeClientStatusSettings } from "@/lib/firestoreClientSettings";
+import type { AutomatedClientStatus, ManualClientTag } from "@/types/clientStatus";
+import { CLIENT_STATUS_LABELS_HE } from "@/types/clientStatus";
+import { automatedStatusBadgeClass } from "@/lib/clientStatusBadgeStyles";
 import { getLastQualifyingBooking } from "@/lib/lastConfirmedAppointment";
 import { getDisplayStatus } from "@/lib/bookingRootStatus";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -32,6 +33,8 @@ interface Client {
   /** Client type id (e.g. "regular"). Default when missing is regular. */
   clientTypeId?: string;
   clientNotes?: string;
+  manualTagIds?: string[];
+  currentStatus?: AutomatedClientStatus;
   lastVisit?: string; // ISO date string
   createdAt?: string; // ISO date string
 }
@@ -103,6 +106,7 @@ export default function ClientCardPage() {
   const [bookingsError, setBookingsError] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | AutomatedClientStatus>("all");
 
   // Tab state for client details sections
   type TabType = "chemistry" | "bookings" | "pricing";
@@ -121,7 +125,7 @@ export default function ClientCardPage() {
 
   // Edit modal
   const [editClient, setEditClient] = useState<Client | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", email: "", clientTypeId: "", clientNotes: "" });
+  const [editForm, setEditForm] = useState({ name: "", email: "", clientNotes: "", manualTagIds: [] as string[] });
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -146,16 +150,15 @@ export default function ClientCardPage() {
     name: "",
     phone: "",
     email: "",
-    clientTypeId: "",
     clientNotes: "",
+    manualTagIds: [] as string[],
   });
   const [isSubmittingClient, setIsSubmittingClient] = useState(false);
   const [clientFormError, setClientFormError] = useState<string | null>(null);
   const [clientFormSuccess, setClientFormSuccess] = useState(false);
   const [existingClientData, setExistingClientData] = useState<ClientData | null>(null);
 
-  /** Site client types for dropdown (from settings). */
-  const [clientTypes, setClientTypes] = useState<ClientTypeEntry[]>(() => DEFAULT_CLIENT_TYPE_ENTRIES);
+  const [manualTags, setManualTags] = useState<ManualClientTag[]>([]);
 
   // Extract clientId from URL as a primitive (stable dependency)
   const clientIdFromUrl = searchParams.get("clientId");
@@ -203,8 +206,10 @@ export default function ClientCardPage() {
             email: data.email || undefined,
             notes: data.notes || undefined,
             clientType: clientTypeRaw || "רגיל",
-            clientTypeId: typeId || REGULAR_CLIENT_TYPE_ID,
+            clientTypeId: typeId || "regular",
             clientNotes: data.clientNotes != null ? String(data.clientNotes).trim() || undefined : (data.notes != null ? String(data.notes).trim() || undefined : undefined),
+            manualTagIds: Array.isArray(data.manualTagIds) ? (data.manualTagIds as unknown[]).filter((t) => typeof t === "string").map((t) => String(t)) : [],
+            currentStatus: typeof data.currentStatus === "string" ? (data.currentStatus as AutomatedClientStatus) : "normal",
             lastVisit: undefined,
             createdAt: (data.createdAt as { toDate?: () => Date } | undefined)?.toDate?.()?.toISOString?.() ?? (typeof data.createdAt === "string" ? data.createdAt : undefined),
           };
@@ -224,18 +229,13 @@ export default function ClientCardPage() {
     return () => unsubscribe();
   }, [siteId]);
 
-  // Subscribe to client types (sites/{siteId}/settings/clients only)
   useEffect(() => {
     if (!siteId) return;
-    const unsub = subscribeClientTypes(siteId, (list) => setClientTypes(list));
+    const unsub = subscribeClientStatusSettings(siteId, (settings) => {
+      setManualTags(settings.manualTags);
+    });
     return () => unsub();
   }, [siteId]);
-
-  const getTypeLabel = useCallback((client: Client): string => {
-    const id = client.clientTypeId || REGULAR_CLIENT_TYPE_ID;
-    const entry = clientTypes.find((t) => t.id === id);
-    return entry ? entry.labelHe : "רגיל";
-  }, [clientTypes]);
 
   // Load bookings for selected client (one-time getDocs; no realtime listener to reduce reads)
   useEffect(() => {
@@ -438,13 +438,17 @@ export default function ClientCardPage() {
 
   // Filter clients by search query
   const filteredClients = useMemo(() => {
-    if (!searchQuery.trim()) return clients;
     const query = searchQuery.toLowerCase();
-    return clients.filter((client) =>
-      client.name.toLowerCase().includes(query) ||
-      client.phone.includes(query)
-    );
-  }, [clients, searchQuery]);
+    return clients.filter((client) => {
+      const matchesSearch =
+        !query.trim() ||
+        client.name.toLowerCase().includes(query) ||
+        client.phone.includes(query);
+      const clientStatus = client.currentStatus || "normal";
+      const matchesStatus = statusFilter === "all" ? true : clientStatus === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [clients, searchQuery, statusFilter]);
 
 
   // Build tabs array with proper typing - "chemistry" is first (default)
@@ -482,8 +486,7 @@ export default function ClientCardPage() {
   // Handle Add Client Modal
   const handleOpenAddClientModal = () => {
     setIsAddClientModalOpen(true);
-    const defaultId = clientTypes.some((t) => t.id === REGULAR_CLIENT_TYPE_ID) ? REGULAR_CLIENT_TYPE_ID : (clientTypes[0]?.id ?? REGULAR_CLIENT_TYPE_ID);
-    setNewClientForm({ name: "", phone: "", email: "", clientTypeId: defaultId, clientNotes: "" });
+    setNewClientForm({ name: "", phone: "", email: "", clientNotes: "", manualTagIds: [] });
     setClientFormError(null);
     setClientFormSuccess(false);
     setExistingClientData(null);
@@ -491,7 +494,7 @@ export default function ClientCardPage() {
 
   const handleCloseAddClientModal = () => {
     setIsAddClientModalOpen(false);
-    setNewClientForm({ name: "", phone: "", email: "", clientTypeId: "", clientNotes: "" });
+    setNewClientForm({ name: "", phone: "", email: "", clientNotes: "", manualTagIds: [] });
     setClientFormError(null);
     setClientFormSuccess(false);
     setExistingClientData(null);
@@ -555,13 +558,12 @@ export default function ClientCardPage() {
         return;
       }
 
-      const typeIdToSave = clientTypes.some((t) => t.id === newClientForm.clientTypeId) ? newClientForm.clientTypeId : REGULAR_CLIENT_TYPE_ID;
       await createClient(siteId, {
         name: newClientForm.name.trim(),
         phone: normalizedPhone,
         email: newClientForm.email.trim() || undefined,
-        clientTypeId: typeIdToSave,
         clientNotes: newClientForm.clientNotes.trim() || undefined,
+        manualTagIds: newClientForm.manualTagIds,
       });
 
       setClientFormSuccess(true);
@@ -613,15 +615,14 @@ export default function ClientCardPage() {
   const openEditModal = useCallback((client: Client) => {
     closeActionsMenu();
     setEditClient(client);
-    const resolvedId = client.clientTypeId || REGULAR_CLIENT_TYPE_ID;
     setEditForm({
       name: client.name,
       email: client.email ?? "",
-      clientTypeId: clientTypes.some((t) => t.id === resolvedId) ? resolvedId : REGULAR_CLIENT_TYPE_ID,
       clientNotes: client.clientNotes ?? client.notes ?? "",
+      manualTagIds: client.manualTagIds ?? [],
     });
     setEditError(null);
-  }, [closeActionsMenu, clientTypes]);
+  }, [closeActionsMenu]);
 
   const closeEditModal = useCallback(() => {
     setEditClient(null);
@@ -638,7 +639,6 @@ export default function ClientCardPage() {
     setEditError(null);
     try {
       const token = await firebaseUser.getIdToken();
-      const typeIdToSave = clientTypes.some((t) => t.id === editForm.clientTypeId) ? editForm.clientTypeId : REGULAR_CLIENT_TYPE_ID;
       const res = await fetch("/api/clients/update", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -648,8 +648,8 @@ export default function ClientCardPage() {
           updates: {
             name: editForm.name.trim(),
             email: editForm.email.trim() || undefined,
-            clientTypeId: typeIdToSave,
             clientNotes: editForm.clientNotes.trim() || undefined,
+            manualTagIds: editForm.manualTagIds,
           },
         }),
       });
@@ -666,7 +666,7 @@ export default function ClientCardPage() {
     } finally {
       setEditSaving(false);
     }
-  }, [firebaseUser, siteId, editClient, editForm, clientTypes, closeEditModal, showToast]);
+  }, [firebaseUser, siteId, editClient, editForm, closeEditModal, showToast]);
 
   const openDeleteModal = useCallback((client: Client) => {
     closeActionsMenu();
@@ -843,7 +843,7 @@ export default function ClientCardPage() {
               </div>
               
               {/* Search Input */}
-              <div className="mb-4">
+              <div className="mb-4 grid grid-cols-1 gap-2">
                 <input
                   type="text"
                   placeholder="חפש לפי שם או טלפון..."
@@ -851,6 +851,17 @@ export default function ClientCardPage() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep text-sm"
                 />
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter((e.target.value as "all" | AutomatedClientStatus))}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep text-sm"
+                >
+                  <option value="all">כל סוגי הלקוחות</option>
+                  <option value="new">חדש</option>
+                  <option value="active">פעיל</option>
+                  <option value="normal">רגיל</option>
+                  <option value="sleeping">רדום</option>
+                </select>
               </div>
 
               {clientsLoading ? (
@@ -858,9 +869,9 @@ export default function ClientCardPage() {
               ) : filteredClients.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-sm text-slate-500 mb-2">
-                    {searchQuery ? "לא נמצאו לקוחות התואמים לחיפוש" : "אין לקוחות רשומים"}
+                    {(searchQuery || statusFilter !== "all") ? "לא נמצאו לקוחות התואמים לסינון" : "אין לקוחות רשומים"}
                   </p>
-                  {!searchQuery && (
+                  {!searchQuery && statusFilter === "all" && (
                     <p className="text-xs text-slate-400">
                       לקוחות יופיעו כאן לאחר יצירת תורים
                     </p>
@@ -871,14 +882,20 @@ export default function ClientCardPage() {
                   {filteredClients.map((client) => (
                     <div
                       key={client.id}
-                      className={`relative w-full text-right rounded-lg border transition-colors flex items-center gap-2 md:block md:py-3 py-2.5 px-2.5 md:px-3 md:gap-0 ${
+                      role="presentation"
+                      onClick={() => handleClientSelect(client.id)}
+                      className={`relative w-full cursor-pointer text-right rounded-lg border transition-colors flex items-center gap-2 md:block md:py-3 py-2.5 px-2.5 md:px-3 md:gap-0 ${
                         selectedClientId === client.id
                           ? "border-[#1E6F7C] bg-[rgba(30,111,124,0.08)]"
                           : "border-slate-200 hover:border-slate-300 hover:bg-slate-50 active:bg-slate-100"
                       }`}
                     >
                       {/* Drag / actions handle — start in RTL (⋮) */}
-                      <div className="flex-shrink-0 md:absolute md:left-2 md:top-1/2 md:-translate-y-1/2 order-1 md:order-none">
+                      <div
+                        className="relative z-10 flex-shrink-0 md:absolute md:left-2 md:top-1/2 md:-translate-y-1/2 order-1 md:order-none"
+                        onClick={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
                         <button
                           type="button"
                           onClick={(e) => {
@@ -902,20 +919,53 @@ export default function ClientCardPage() {
                           <MoreVertical className="w-5 h-5" />
                         </button>
                       </div>
-                      {/* Tappable main area: Name + Phone */}
-                      <button
-                        type="button"
-                        onClick={() => handleClientSelect(client.id)}
-                        className="flex-1 min-w-0 text-right block py-0.5 pr-1 md:pr-10 md:py-0 order-2 touch-manipulation"
-                      >
+                      {/* Main area: Name + Phone + status (row click opens card) */}
+                      <div className="flex-1 min-w-0 text-right block py-0.5 pr-1 md:pr-10 md:py-0 order-2 touch-manipulation">
                         <h3 className="font-bold text-slate-900 text-base md:font-semibold md:text-[inherit] truncate">{client.name || "—"}</h3>
                         <p className="text-xs text-slate-500 mt-0.5 md:mt-1">{client.phone}</p>
-                      </button>
+                        <div
+                          className="mt-1 flex w-full flex-row flex-wrap items-center justify-end gap-2"
+                          dir="ltr"
+                        >
+                          {(client.manualTagIds ?? []).length > 0 && (
+                            <div className="flex min-w-0 flex-wrap justify-end gap-1.5">
+                              {(client.manualTagIds ?? []).slice(0, 3).map((id) => {
+                                const tag = manualTags.find((t) => t.id === id);
+                                return (
+                                  <span
+                                    key={`${client.id}-${id}`}
+                                    className="inline-flex max-w-full shrink rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700"
+                                    dir="auto"
+                                  >
+                                    {tag?.label ?? id}
+                                  </span>
+                                );
+                              })}
+                              {(client.manualTagIds ?? []).length > 3 && (
+                                <span className="inline-flex shrink-0 rounded-full border border-slate-300 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                                  +{(client.manualTagIds ?? []).length - 3}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          <span
+                            className={`shrink-0 ${automatedStatusBadgeClass(client.currentStatus || "normal")} text-xs`}
+                            dir="rtl"
+                          >
+                            {CLIENT_STATUS_LABELS_HE[client.currentStatus || "normal"]}
+                          </span>
+                        </div>
+                      </div>
                       {/* Checkbox — right in RTL (✓) */}
+                      <div
+                        className="relative z-10 flex-shrink-0 md:absolute md:right-2 md:top-1/2 md:-translate-y-1/2 order-3 md:order-none"
+                        onClick={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); toggleSelectForDelete(client.id); }}
-                        className="flex-shrink-0 p-1.5 md:p-1 rounded touch-manipulation hover:bg-slate-200 text-slate-500 md:absolute md:right-2 md:top-1/2 md:-translate-y-1/2 order-3 md:order-none"
+                        className="p-1.5 md:p-1 rounded touch-manipulation hover:bg-slate-200 text-slate-500 w-full h-full flex items-center justify-center"
                         aria-label={selectedForDelete.has(client.id) ? "בטל בחירה" : "בחר למחיקה"}
                       >
                         {selectedForDelete.has(client.id) ? (
@@ -924,6 +974,7 @@ export default function ClientCardPage() {
                           <Square className="w-5 h-5" />
                         )}
                       </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -949,12 +1000,29 @@ export default function ClientCardPage() {
                       <p className="text-sm font-semibold text-slate-900 md:font-normal md:text-base">{selectedClient.phone}</p>
                     </div>
                     <div className="space-y-0.5">
-                      <p className="text-xs text-slate-500 font-medium md:text-sm md:text-slate-700">סוג לקוח</p>
+                      <p className="text-xs text-slate-500 font-medium md:text-sm md:text-slate-700">סטטוס אוטומטי</p>
                       <p className="text-sm font-semibold text-slate-900 md:font-normal md:text-base">
-                        <span className="inline-block px-2 py-0.5 rounded text-sm font-medium bg-slate-100 text-slate-800">
-                          {clientTypes.some((t) => t.id === (selectedClient.clientTypeId || REGULAR_CLIENT_TYPE_ID)) ? getTypeLabel(selectedClient) : "רגיל"}
+                        <span
+                          className={`${automatedStatusBadgeClass(selectedClient.currentStatus || "normal")} text-sm`}
+                        >
+                          {CLIENT_STATUS_LABELS_HE[selectedClient.currentStatus || "normal"]}
                         </span>
                       </p>
+                    </div>
+                    <div className="space-y-0.5 md:col-span-2">
+                      <p className="text-xs text-slate-500 font-medium md:text-sm md:text-slate-700">תגיות ידניות</p>
+                      <div className="flex flex-wrap gap-2">
+                        {(selectedClient.manualTagIds ?? []).length > 0
+                          ? (selectedClient.manualTagIds ?? []).map((id) => {
+                              const tag = manualTags.find((t) => t.id === id);
+                              return (
+                                <span key={id} className="inline-flex rounded-full border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-700">
+                                  {tag?.label ?? id}
+                                </span>
+                              );
+                            })
+                          : <span className="text-sm text-slate-500">ללא תגיות</span>}
+                      </div>
                     </div>
                     {selectedClient.email && (
                       <div className="space-y-0.5">
@@ -1290,20 +1358,30 @@ export default function ClientCardPage() {
                 </div>
 
                 <div>
-                  <label htmlFor="clientType" className="block text-sm font-medium text-slate-700 mb-1">
-                    סוג לקוח
-                  </label>
-                  <select
-                    id="clientType"
-                    name="clientTypeId"
-                    value={newClientForm.clientTypeId || REGULAR_CLIENT_TYPE_ID}
-                    onChange={(e) => setNewClientForm((p) => ({ ...p, clientTypeId: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep text-sm"
-                  >
-                    {clientTypes.map((t) => (
-                      <option key={t.id} value={t.id}>{t.labelHe}</option>
-                    ))}
-                  </select>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">תגיות ידניות</label>
+                  <div className="rounded-lg border border-slate-300 p-3 space-y-2 max-h-32 overflow-y-auto">
+                    {manualTags.length === 0 && <p className="text-xs text-slate-500">אין תגיות מוגדרות בהגדרות לקוחות.</p>}
+                    {manualTags.map((tag) => {
+                      const checked = newClientForm.manualTagIds.includes(tag.id);
+                      return (
+                        <label key={tag.id} className="flex items-center gap-2 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) =>
+                              setNewClientForm((prev) => ({
+                                ...prev,
+                                manualTagIds: e.target.checked
+                                  ? [...prev.manualTagIds, tag.id]
+                                  : prev.manualTagIds.filter((id) => id !== tag.id),
+                              }))
+                            }
+                          />
+                          <span>{tag.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div>
@@ -1434,16 +1512,30 @@ export default function ClientCardPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">סוג לקוח</label>
-                  <select
-                    value={editForm.clientTypeId || REGULAR_CLIENT_TYPE_ID}
-                    onChange={(e) => setEditForm((p) => ({ ...p, clientTypeId: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right"
-                  >
-                    {clientTypes.map((t) => (
-                      <option key={t.id} value={t.id}>{t.labelHe}</option>
-                    ))}
-                  </select>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">תגיות ידניות</label>
+                  <div className="rounded-lg border border-slate-300 p-3 space-y-2 max-h-32 overflow-y-auto">
+                    {manualTags.length === 0 && <p className="text-xs text-slate-500">אין תגיות מוגדרות בהגדרות לקוחות.</p>}
+                    {manualTags.map((tag) => {
+                      const checked = editForm.manualTagIds.includes(tag.id);
+                      return (
+                        <label key={tag.id} className="flex items-center gap-2 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) =>
+                              setEditForm((prev) => ({
+                                ...prev,
+                                manualTagIds: e.target.checked
+                                  ? [...prev.manualTagIds, tag.id]
+                                  : prev.manualTagIds.filter((id) => id !== tag.id),
+                              }))
+                            }
+                          />
+                          <span>{tag.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">הערות לקוח</label>

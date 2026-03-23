@@ -1,8 +1,8 @@
 /**
  * POST /api/clients/update
- * Update client fields (name, email, clientTypeId, clientNotes). Phone is read-only (clientId).
+ * Update client fields (name, email, clientTypeId, clientNotes, manualTagIds). Phone is read-only (clientId).
  * clientTypeId defaults to "regular" when missing or invalid; we always persist a value.
- * Body: { siteId, clientId, updates: { name?, email?, clientTypeId?, clientNotes? } }
+ * Body: { siteId, clientId, updates: { name?, email?, clientTypeId?, clientNotes?, manualTagIds? } }
  * Requires Firebase ID token. Site owner only.
  */
 
@@ -69,6 +69,7 @@ export async function POST(request: Request) {
     const email = updates.email;
     const clientTypeId = updates.clientTypeId;
     const clientNotes = updates.clientNotes;
+    const manualTagIds = updates.manualTagIds;
 
     if (name !== undefined && (typeof name !== "string" || !name.trim())) {
       return NextResponse.json({ ok: false, message: "name is required and must be non-empty" }, { status: 400 });
@@ -89,6 +90,11 @@ export async function POST(request: Request) {
       typeof clientTypeId === "string" && clientTypeId.trim() ? clientTypeId.trim() : REGULAR_CLIENT_TYPE_ID;
     data.clientTypeId = typeId;
     if (clientNotes !== undefined) data.clientNotes = clientNotes == null || String(clientNotes).trim() === "" ? null : String(clientNotes).trim();
+    if (manualTagIds !== undefined) {
+      data.manualTagIds = Array.isArray(manualTagIds)
+        ? manualTagIds.filter((t: unknown) => typeof t === "string" && t.trim()).map((t: string) => t.trim())
+        : [];
+    }
 
     await clientRef.set(data, { merge: true });
 

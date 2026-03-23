@@ -11,7 +11,7 @@ import type { ParsedClientRow } from "@/lib/import/parse";
 import type { ExecuteResult } from "@/lib/import/types";
 import { Upload, CheckCircle, AlertCircle } from "lucide-react";
 import { getAdminBasePathFromSiteId } from "@/lib/url";
-import AdminClientsTab from "@/components/admin/AdminClientsTab";
+import AdminClientStatusSettings from "@/components/admin/AdminClientStatusSettings";
 import { AdminPageHero } from "@/components/admin/AdminPageHero";
 import { AdminCard } from "@/components/admin/AdminCard";
 
@@ -124,12 +124,12 @@ export default function ClientSettingsPage() {
     <div dir="rtl" className="space-y-8 max-w-4xl">
       <AdminPageHero
         title="הגדרות לקוחות"
-        subtitle="סוגי לקוחות וייבוא מקובץ CSV / Excel"
+        subtitle="סטטוסים אוטומטיים, תגיות ידניות וייבוא מקובץ CSV / Excel"
       />
 
-      {/* Client types section */}
+      {/* Client status rules + manual tags */}
       <section>
-        <AdminClientsTab siteId={siteId} />
+        <AdminClientStatusSettings siteId={siteId} />
       </section>
 
       {/* CSV / Excel import section */}

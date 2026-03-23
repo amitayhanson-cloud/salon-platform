@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useParams, useRouter } from "next/navigation";
-import { ChevronDown, Menu, X, ExternalLink, Sparkles } from "lucide-react";
+import { ChevronDown, Menu, X, ExternalLink, Sparkles, MessageSquare, type LucideIcon } from "lucide-react";
 import { HoverBorderGradient } from "@/components/ui/hover-border-gradient";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { isOnTenantSubdomainClient, getAdminBasePath } from "@/lib/url";
@@ -20,19 +20,26 @@ type SubMenuItem = {
 type MenuItem = {
   label: string;
   href?: string;
+  /** Optional icon for top-level nav links */
+  icon?: LucideIcon;
   items?: SubMenuItem[];
 };
 
 function getMenuItems(basePath: string): MenuItem[] {
-  // Nav order (LTR): View Website first, then these. Desired RTL: User logo | ניהול אתר | צוות | לקוחות | יומן | לוח בקרה | צפייה באתר
+  // Top nav order (visual): … | יומן | מרכז הודעות WhatsApp | לוח בקרה | לקוחות | …
   return [
-    {
-      label: "לוח בקרה",
-      href: basePath,
-    },
     {
       label: "יומן",
       href: `${basePath}/bookings`,
+    },
+    {
+      label: "מרכז הודעות WhatsApp",
+      href: `${basePath}/whatsapp`,
+      icon: MessageSquare,
+    },
+    {
+      label: "לוח בקרה",
+      href: basePath,
     },
     {
       label: "לקוחות",
@@ -279,17 +286,25 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
               {menuItems.map((item) => (
                 <div key={item.label} className="relative">
                       {item.href ? (
+                    (() => {
+                      const NavIcon = item.icon;
+                      return (
                     <Link
                       href={item.href}
-                      className={`rounded-full px-4 py-2 text-sm font-medium transition-[background-color,border-color,box-shadow] duration-200 backdrop-blur-md ${
+                      className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-[background-color,border-color,box-shadow] duration-200 backdrop-blur-md ${
                         isActive(item.href)
                           ? "text-[#0F172A] bg-[rgba(204,238,241,0.7)] border border-[rgba(30,111,124,0.25)] shadow-[0_2px_10px_-2px_rgba(30,111,124,0.15),0_0_0_1px_rgba(255,255,255,0.4)_inset]"
                           : "text-[#0F172A] hover:bg-caleno-100/70 hover:shadow-[0_1px_8px_-2px_rgba(9,137,155,0.12)]"
                       }`}
                       style={isActive(item.href) ? { WebkitBackdropFilter: "blur(12px)" } : undefined}
                     >
-                      {item.label}
+                      {NavIcon ? (
+                        <NavIcon className="w-4 h-4 shrink-0 opacity-90 text-[#1E6F7C]" aria-hidden />
+                      ) : null}
+                      <span>{item.label}</span>
                     </Link>
+                      );
+                    })()
                   ) : (
                     <>
                       <button
@@ -362,16 +377,24 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
             {menuItems.map((item) => (
               <div key={item.label} className="border-b border-[#E2E8F0] last:border-0">
                 {item.href ? (
+                  (() => {
+                    const NavIcon = item.icon;
+                    return (
                   <Link
                     href={item.href}
-                    className={`block px-4 py-3 text-sm font-medium transition-colors duration-200 ${
+                    className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors duration-200 ${
                       isActive(item.href)
                         ? "bg-[rgba(204,238,241,0.5)] text-[#0F172A]"
                         : "text-[#0F172A] hover:bg-caleno-100/50"
                     }`}
                   >
-                    {item.label}
+                    {NavIcon ? (
+                      <NavIcon className="w-4 h-4 shrink-0 text-[#1E6F7C]" aria-hidden />
+                    ) : null}
+                    <span>{item.label}</span>
                   </Link>
+                    );
+                  })()
                 ) : (
                   <>
                     <button

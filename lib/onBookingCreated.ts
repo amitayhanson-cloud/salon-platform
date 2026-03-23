@@ -15,7 +15,9 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { sendWhatsApp, getBookingPhoneE164 } from "@/lib/whatsapp";
-import { buildReminderMessage } from "@/lib/whatsapp/messages";
+import { renderWhatsAppTemplate } from "@/lib/whatsapp/templateRender";
+import { getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
+import { getPublicBookingPageUrlForSite } from "@/lib/url";
 import { formatIsraelDateShort, formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
 import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
 
@@ -68,6 +70,9 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
   }
   const customerPhoneE164 = phoneResult.e164;
   const salonName = await getSiteSalonName(db, siteId);
+  const waSettings = await getSiteWhatsAppSettings(siteId);
+  const bookingPublicUrl = getPublicBookingPageUrlForSite(siteId);
+  const customerDisplayName = String(data.customerName ?? "").trim() || "לקוח/ה";
 
   // Idempotent: skip sending if we already sent (avoid duplicate WhatsApp on retries)
   const alreadySent =
@@ -87,18 +92,25 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
   const date = formatIsraelDateShort(startAt);
   const time = formatIsraelTime(startAt);
 
-  const messageBody = `${salonName} ✂️
-תודה שקבעת תור!
-התור שלך בתאריך ${date} בשעה ${time}.
-נשלח לך תזכורת 24 שעות לפני.`;
+  const templateVars = {
+    שם_העסק: salonName,
+    תאריך_תור: date,
+    זמן_תור: time,
+    קישור_לתיאום: bookingPublicUrl,
+    שם_לקוח: customerDisplayName,
+  };
 
-  await sendWhatsApp({
-    toE164: customerPhoneE164,
-    body: messageBody,
-    bookingId,
-    siteId,
-    bookingRef: `sites/${siteId}/bookings/${bookingId}`,
-  });
+  if (waSettings.confirmationEnabled) {
+    const messageBody = renderWhatsAppTemplate(waSettings.confirmationTemplate, templateVars);
+    await sendWhatsApp({
+      toE164: customerPhoneE164,
+      body: messageBody,
+      bookingId,
+      siteId,
+      bookingRef: `sites/${siteId}/bookings/${bookingId}`,
+      meta: { automation: "booking_confirmation" },
+    });
+  }
 
   await bookingRef.update({
     customerPhoneE164,
@@ -117,37 +129,45 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
 
   if (diffMs > 0 && diffMs <= TWENTY_FOUR_HOURS_MS) {
     const timeStr = formatIsraelTime(startAt);
-    const reminderBody = buildReminderMessage(salonName, timeStr);
+    if (waSettings.reminderEnabled) {
+      const reminderBody = renderWhatsAppTemplate(waSettings.reminderTemplate, {
+        שם_העסק: salonName,
+        זמן_תור: timeStr,
+        שם_לקוח: customerDisplayName,
+        קישור_לתיאום: bookingPublicUrl,
+        תאריך_תור: date,
+      });
 
-    await sendWhatsApp({
-      toE164: customerPhoneE164,
-      body: reminderBody,
-      bookingId,
-      siteId,
-      bookingRef: `sites/${siteId}/bookings/${bookingId}`,
-      meta: { reminder_sent_immediately_due_to_last_minute_booking: true },
-    });
+      await sendWhatsApp({
+        toE164: customerPhoneE164,
+        body: reminderBody,
+        bookingId,
+        siteId,
+        bookingRef: `sites/${siteId}/bookings/${bookingId}`,
+        meta: { reminder_sent_immediately_due_to_last_minute_booking: true, automation: "reminder_24h" },
+      });
 
-    const statusBefore = (data.status as string) ?? "booked";
-    if (process.env.NODE_ENV === "development") {
-      console.log("[pendingStage] bookingId=" + bookingId + " status before=" + statusBefore + " (not writing status; only setting whatsappStatus=awaiting_confirmation)");
+      const statusBefore = (data.status as string) ?? "booked";
+      if (process.env.NODE_ENV === "development") {
+        console.log("[pendingStage] bookingId=" + bookingId + " status before=" + statusBefore + " (not writing status; only setting whatsappStatus=awaiting_confirmation)");
+      }
+      await bookingRef.update({
+        whatsappStatus: "awaiting_confirmation",
+        reminder24hSentAt: Timestamp.now(),
+        confirmationRequestedAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
+      if (process.env.NODE_ENV === "development") {
+        console.log("[pendingStage] bookingId=" + bookingId + " status after=unchanged (still " + statusBefore + ")");
+      }
     }
-    // Do NOT write Firestore `status` here. Pending is UI-derived from whatsappStatus.
-    await bookingRef.update({
-      whatsappStatus: "awaiting_confirmation",
-      reminder24hSentAt: Timestamp.now(),
-      confirmationRequestedAt: Timestamp.now(),
-      updatedAt: Timestamp.now(),
-    });
-    if (process.env.NODE_ENV === "development") {
-      console.log("[pendingStage] bookingId=" + bookingId + " status after=unchanged (still " + statusBefore + ")");
-    }
 
-    console.log("[onBookingCreated] reminder_sent_immediately_due_to_last_minute_booking: true", {
+    console.log("[onBookingCreated] reminder_sent_immediately_due_to_last_minute_booking", {
       siteId,
       bookingId,
       startAt: startAt.toISOString(),
       diffHours: (diffMs / (60 * 60 * 1000)).toFixed(2),
+      sent: waSettings.reminderEnabled,
     });
   } else {
     console.log("[onBookingCreated] reminder_sent_immediately_due_to_last_minute_booking: false", {
@@ -161,16 +181,22 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
     if (diffMs > 0 && data.reminder24hSentAt == null) {
       const tomorrowIsrael = getTomorrowIsrael();
       const bookingDateIsrael = getDateYMDInTimezone(startAt, ISRAEL_TZ);
-      if (bookingDateIsrael === tomorrowIsrael) {
+      if (bookingDateIsrael === tomorrowIsrael && waSettings.reminderEnabled) {
         const timeStr = formatIsraelTime(startAt);
-        const reminderBody = buildReminderMessage(salonName, timeStr);
+        const reminderBody = renderWhatsAppTemplate(waSettings.reminderTemplate, {
+          שם_העסק: salonName,
+          זמן_תור: timeStr,
+          שם_לקוח: customerDisplayName,
+          קישור_לתיאום: bookingPublicUrl,
+          תאריך_תור: date,
+        });
         await sendWhatsApp({
           toE164: customerPhoneE164,
           body: reminderBody,
           bookingId,
           siteId,
           bookingRef: `sites/${siteId}/bookings/${bookingId}`,
-          meta: { reminder_sent_immediately_tomorrow_catchup: true },
+          meta: { reminder_sent_immediately_tomorrow_catchup: true, automation: "reminder_24h" },
         });
         await bookingRef.update({
           whatsappStatus: "awaiting_confirmation",

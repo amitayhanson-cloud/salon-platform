@@ -9,6 +9,7 @@
  */
 
 import type { NextRequest } from "next/server";
+import { getSiteUrl } from "@/lib/tenant";
 
 /** Root hostname (e.g. "caleno.co"). Uses NEXT_PUBLIC_APP_URL when available. */
 export function getRootHost(): string {
@@ -22,6 +23,58 @@ export function getRootHost(): string {
     }
   }
   return "caleno.co";
+}
+
+/**
+ * Public booking page for a site (uses NEXT_PUBLIC_APP_URL when set; else https://<root>/site/<siteId>/book).
+ */
+export function getPublicBookingPageUrlForSite(siteId: string): string {
+  const id = siteId.trim();
+  const fromEnv = typeof process !== "undefined" && process.env?.NEXT_PUBLIC_APP_URL?.trim();
+  if (fromEnv) {
+    try {
+      return `${new URL(fromEnv).origin}/site/${encodeURIComponent(id)}/book`;
+    } catch {
+      const base = fromEnv.replace(/\/$/, "");
+      return `${base}/site/${encodeURIComponent(id)}/book`;
+    }
+  }
+  const root = getRootHost();
+  return `https://${root}/site/${encodeURIComponent(id)}/book`;
+}
+
+/**
+ * Server / API: absolute booking URL; uses subdomain slug when set (getSiteUrl), else /site/<id>/book on app origin.
+ */
+export function getPublicBookingPageAbsoluteUrlForSite(siteId: string, slug?: string | null): string {
+  const id = siteId.trim();
+  if (!id) return "";
+  const path = getSiteUrl(slug ?? null, id, "/book");
+  if (path.startsWith("http")) return path;
+  const fromEnv = typeof process !== "undefined" && process.env?.NEXT_PUBLIC_APP_URL?.trim();
+  if (fromEnv) {
+    try {
+      return `${new URL(fromEnv).origin}${path}`;
+    } catch {
+      return `${fromEnv.replace(/\/$/, "")}${path}`;
+    }
+  }
+  return `https://${getRootHost()}${path}`;
+}
+
+/**
+ * Client: public booking URL for preview (and UI). Uses tenant slug when set (same as getSiteUrl);
+ * otherwise `/site/<siteId>/book` on current origin in dev, or NEXT_PUBLIC_APP_URL / root host.
+ */
+export function getPublicBookingPageUrlForSiteClient(siteId: string, slug?: string | null): string {
+  const id = siteId.trim();
+  if (!id) return "";
+  const path = getSiteUrl(slug ?? null, id, "/book");
+  if (path.startsWith("http")) return path;
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return `${window.location.origin}${path}`;
+  }
+  return getPublicBookingPageUrlForSite(id);
 }
 
 /** User doc shape for slug resolution. Prefer primarySlug; fallback is from sites/<siteId>.slug (API). */

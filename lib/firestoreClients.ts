@@ -31,6 +31,8 @@ export interface ClientData {
   clientTypeId?: string;
   /** הערות לקוח – free-text, optional, multi-line. */
   clientNotes?: string;
+  manualTagIds?: string[];
+  currentStatus?: "new" | "active" | "normal" | "sleeping";
   chemicalCard?: any;
   personalPricing?: Record<string, number>;
   createdAt?: string | Timestamp;
@@ -66,6 +68,8 @@ export async function checkClientExists(
           clientType: raw || "רגיל",
           clientTypeId: typeId || REGULAR_CLIENT_TYPE_ID,
           clientNotes: data.clientNotes != null ? String(data.clientNotes).trim() || undefined : undefined,
+          manualTagIds: Array.isArray(data.manualTagIds) ? data.manualTagIds.filter((t: unknown) => typeof t === "string").map((t: string) => t) : undefined,
+          currentStatus: typeof data.currentStatus === "string" ? data.currentStatus as ClientData["currentStatus"] : undefined,
           chemicalCard: data.chemicalCard,
           personalPricing: data.personalPricing,
           createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || undefined,
@@ -194,6 +198,8 @@ export async function createClient(
     };
     if (client.clientType !== undefined) payload.clientType = (typeof client.clientType === "string" && client.clientType.trim()) ? client.clientType.trim() : null;
     if (client.clientNotes !== undefined) payload.clientNotes = client.clientNotes?.trim() || null;
+    if (client.manualTagIds !== undefined) payload.manualTagIds = Array.isArray(client.manualTagIds) ? client.manualTagIds : [];
+    if (client.currentStatus !== undefined) payload.currentStatus = client.currentStatus;
     await setDoc(docRef, sanitizeForFirestore(payload), { merge: true });
 
     console.log("[createClient] Created client", {
@@ -251,6 +257,12 @@ export async function updateClient(
     if (updates.clientNotes !== undefined) {
       updateData.clientNotes = updates.clientNotes?.trim() || null;
     }
+    if (updates.manualTagIds !== undefined) {
+      updateData.manualTagIds = Array.isArray(updates.manualTagIds) ? updates.manualTagIds : [];
+    }
+    if (updates.currentStatus !== undefined) {
+      updateData.currentStatus = updates.currentStatus;
+    }
 
     await setDoc(docRef, sanitizeForFirestore(updateData), { merge: true });
 
@@ -291,6 +303,8 @@ export async function getClient(
       clientType: raw || "רגיל",
       clientTypeId: typeId || REGULAR_CLIENT_TYPE_ID,
       clientNotes: data.clientNotes != null ? String(data.clientNotes).trim() || undefined : undefined,
+      manualTagIds: Array.isArray(data.manualTagIds) ? data.manualTagIds.filter((t: unknown) => typeof t === "string").map((t: string) => t) : undefined,
+      currentStatus: typeof data.currentStatus === "string" ? data.currentStatus as ClientData["currentStatus"] : undefined,
       chemicalCard: data.chemicalCard,
       personalPricing: data.personalPricing,
       createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || undefined,
@@ -401,6 +415,8 @@ export async function getAllClients(siteId: string): Promise<ClientData[]> {
         clientType: raw || "רגיל",
         clientTypeId: typeId || REGULAR_CLIENT_TYPE_ID,
         clientNotes: data.clientNotes != null ? String(data.clientNotes).trim() || undefined : undefined,
+        manualTagIds: Array.isArray(data.manualTagIds) ? data.manualTagIds.filter((t: unknown) => typeof t === "string").map((t: string) => t) : undefined,
+        currentStatus: typeof data.currentStatus === "string" ? data.currentStatus as ClientData["currentStatus"] : undefined,
         chemicalCard: data.chemicalCard,
         personalPricing: data.personalPricing,
         createdAt: data.createdAt?.toDate?.()?.toISOString() || data.createdAt || undefined,
@@ -413,6 +429,32 @@ export async function getAllClients(siteId: string): Promise<ClientData[]> {
     console.error("[getAllClients] Error getting clients", error);
     throw error;
   }
+}
+
+/** Row for WhatsApp broadcast picker: `id` is Firestore doc id (= phone). */
+export type ClientBroadcastPickerRow = {
+  id: string;
+  name: string;
+  phone: string;
+};
+
+/**
+ * All non-archived clients for broadcast recipient picker (sorted by name).
+ */
+export async function getClientsForBroadcastPicker(siteId: string): Promise<ClientBroadcastPickerRow[]> {
+  const clientsRef = clientsCollection(siteId);
+  const snapshot = await getDocs(clientsRef);
+  const rows: ClientBroadcastPickerRow[] = [];
+  snapshot.docs.forEach((docSnap) => {
+    const data = docSnap.data();
+    if (data.archived === true) return;
+    const phone = typeof data.phone === "string" && data.phone.trim() ? data.phone.trim() : docSnap.id;
+    const name =
+      typeof data.name === "string" && data.name.trim() ? data.name.trim() : "ללא שם";
+    rows.push({ id: docSnap.id, name, phone });
+  });
+  rows.sort((a, b) => a.name.localeCompare(b.name, "he"));
+  return rows;
 }
 
 /**

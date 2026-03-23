@@ -1,21 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import CalenoLoading from "@/components/CalenoLoading";
 import { fetchSiteStats, type SiteStats } from "@/lib/fetchSiteStats";
 import { getAdminBasePathFromSiteId } from "@/lib/url";
-import { Users, Calendar, UserCircle, CalendarDays } from "lucide-react";
+import { Users, Calendar, UserCircle, CalendarDays, LogOut } from "lucide-react";
 import { AdminCard } from "@/components/admin/AdminCard";
 import { AdminStatCard } from "@/components/admin/AdminStatCard";
 
 export default function AdminHomePage() {
   const params = useParams();
+  const router = useRouter();
   const siteId = (params?.siteId as string) || "";
-  const { user, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
   const [stats, setStats] = useState<SiteStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const adminBasePath = getAdminBasePathFromSiteId(siteId);
 
@@ -67,6 +69,17 @@ export default function AdminHomePage() {
     },
   ];
 
+  const handleLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await logout();
+      router.push("/login");
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
   return (
     <div dir="rtl" className="min-h-screen">
       <div className="mx-auto max-w-4xl">
@@ -88,6 +101,15 @@ export default function AdminHomePage() {
             </div>
           ) : (
             <>
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="absolute left-6 top-6 z-20 inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white/90 px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <LogOut className="h-4 w-4" />
+                {loggingOut ? "מתנתק..." : "התנתקות"}
+              </button>
               <div className="relative z-10">
                 <h1 className="mb-2 text-2xl font-extrabold tracking-tight text-[#0F172A] md:text-3xl">
                   {welcomeMessage}

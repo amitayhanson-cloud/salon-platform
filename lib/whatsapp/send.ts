@@ -11,16 +11,17 @@ import { getAdminDb } from "@/lib/firebaseAdmin";
 import { isWhatsAppAutomationEnabled } from "@/lib/platformSettings";
 import { toWhatsAppTo } from "./e164";
 
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const fromRaw = process.env.TWILIO_WHATSAPP_FROM?.trim() || "";
-
-function getFrom(): string {
+/** Read env at send time so tests and runtime can set TWILIO_* after module load. */
+function getTwilioEnv(): { accountSid: string; authToken: string; from: string } {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID ?? "";
+  const authToken = process.env.TWILIO_AUTH_TOKEN ?? "";
+  const fromRaw = process.env.TWILIO_WHATSAPP_FROM?.trim() || "";
   if (!accountSid || !authToken) {
     throw new Error("TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN are required");
   }
   if (!fromRaw) throw new Error("TWILIO_WHATSAPP_FROM is required (e.g. whatsapp:+14155238886)");
-  return fromRaw.startsWith("whatsapp:") ? fromRaw : `whatsapp:${fromRaw}`;
+  const from = fromRaw.startsWith("whatsapp:") ? fromRaw : `whatsapp:${fromRaw}`;
+  return { accountSid, authToken, from };
 }
 
 export type SendWhatsAppParams = {
@@ -36,6 +37,11 @@ export type SendWhatsAppParams = {
   salonId?: string | null;
   /** Optional metadata stored in whatsapp_messages (e.g. reminder_sent_immediately_due_to_last_minute_booking) */
   meta?: Record<string, unknown> | null;
+  /**
+   * Manual broadcast / owner-initiated sends: bypass platform automation kill-switch.
+   * Automated flows (confirmation, reminders) must leave this false/undefined.
+   */
+  bypassAutomationKillSwitch?: boolean;
 };
 
 /**
@@ -51,10 +57,11 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
     bookingRef = null,
     salonId: salonIdParam = null,
     meta = null,
+    bypassAutomationKillSwitch = false,
   } = params;
   const siteId = siteIdParam ?? salonIdParam;
 
-  const enabled = await isWhatsAppAutomationEnabled();
+  const enabled = bypassAutomationKillSwitch || (await isWhatsAppAutomationEnabled());
   if (!enabled) {
     const automationName = (meta && typeof meta === "object" && "automation" in meta && typeof (meta as { automation: unknown }).automation === "string")
       ? (meta as { automation: string }).automation
@@ -71,10 +78,10 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
     return { sid: "skipped-global-disabled" };
   }
 
-  const from = getFrom();
+  const { accountSid, authToken, from } = getTwilioEnv();
   const to = toWhatsAppTo(toE164);
 
-  const client = twilio(accountSid!, authToken!);
+  const client = twilio(accountSid, authToken);
   let sid: string;
   let status: "sent" | "failed" = "sent";
   let error: string | null = null;

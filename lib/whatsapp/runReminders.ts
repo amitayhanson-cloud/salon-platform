@@ -9,7 +9,8 @@ import { getAdminDb } from "@/lib/firebaseAdmin";
 import { assertNoAwaitingConfirmationWithConfirmed } from "@/lib/bookingStatusForWrite";
 import { sendWhatsApp, normalizeE164 } from "@/lib/whatsapp";
 import { getTomorrowReminderWindow } from "@/lib/whatsapp/reminderWindow";
-import { buildReminderMessage } from "@/lib/whatsapp/messages";
+import { renderWhatsAppTemplate } from "@/lib/whatsapp/templateRender";
+import { getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
 import { formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
 import { getRelatedBookingIds } from "@/lib/whatsapp/relatedBookings";
 
@@ -135,15 +136,31 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
       // keep default
     }
 
+    const waSettings = await getSiteWhatsAppSettings(siteId);
+    if (!waSettings.reminderEnabled) {
+      details.push({
+        bookingRef,
+        startAt: startAtISO,
+        phone: customerPhoneE164 || "(no phone)",
+        result: "skipped: reminder disabled in site settings",
+      });
+      continue;
+    }
+
     const timeStr = startAt ? formatIsraelTime(startAt) : "";
+    const reminderBody = renderWhatsAppTemplate(waSettings.reminderTemplate, {
+      שם_העסק: salonName,
+      זמן_תור: timeStr,
+    });
 
     try {
       await sendWhatsApp({
         toE164: customerPhoneE164,
-        body: buildReminderMessage(salonName, timeStr),
+        body: reminderBody,
         bookingId: doc.id,
         siteId,
         bookingRef: `sites/${siteId}/bookings/${doc.id}`,
+        meta: { automation: "reminder_24h" },
       });
 
       const { bookingIds, groupKey: gk } = await getRelatedBookingIds(siteId, doc.id);
