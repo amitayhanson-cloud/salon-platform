@@ -106,6 +106,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // WhatsApp opt-in pointer (Admin SDK only). Deny all client access.
+    match /wa_opt_in_pending/{docId} {
+      allow read, write: if false;
+    }
+
     // Tenants (subdomain slug -> siteId): public read for routing; create only when ownerUid == auth; update/delete only owner; no changing ownerUid/siteId on update.
     match /tenants/{slug} {
       allow read: if true;

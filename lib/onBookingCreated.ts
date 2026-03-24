@@ -18,6 +18,7 @@ import { sendWhatsApp, getBookingPhoneE164, WHATSAPP_SKIPPED_USAGE_LIMIT_SID } f
 import { renderWhatsAppTemplate } from "@/lib/whatsapp/templateRender";
 import { renderBookingConfirmationMessageFromBookingData } from "@/lib/whatsapp/renderBookingConfirmationMessage";
 import { getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
+import { setWaOptInPending } from "@/lib/whatsapp/waOptInPending";
 import { getPublicBookingPageUrlForSite } from "@/lib/url";
 import { formatIsraelDateShort, formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
 import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
@@ -116,6 +117,11 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
         customerPhoneE164,
         waOptInConfirmationRegisteredAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
+      });
+      await setWaOptInPending({
+        customerPhoneE164,
+        siteId,
+        bookingId,
       });
     }
   } else {

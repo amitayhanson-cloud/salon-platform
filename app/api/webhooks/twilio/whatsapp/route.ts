@@ -52,6 +52,7 @@ import {
 } from "@/lib/whatsapp/renderBookingConfirmationMessage";
 import { fetchWazeUrlForSite } from "@/lib/whatsapp/fetchWazeUrlForSite";
 import { getPublicBookingPageAbsoluteUrlForSite } from "@/lib/url";
+import { clearWaOptInPending } from "@/lib/whatsapp/waOptInPending";
 
 const WEBHOOK_PATH = "/api/webhooks/twilio/whatsapp";
 
@@ -174,7 +175,9 @@ export async function POST(request: NextRequest) {
   const Body = String(twilioParams["Body"] ?? "").trim();
   const ButtonText = String(twilioParams["ButtonText"] ?? "").trim();
   const ButtonPayload = String(twilioParams["ButtonPayload"] ?? "").trim();
-  const MessageSid = String(twilioParams["MessageSid"] ?? "").trim();
+  const MessageSid = String(
+    twilioParams["MessageSid"] ?? twilioParams["SmsMessageSid"] ?? twilioParams["SmsSid"] ?? ""
+  ).trim();
   const NumMedia = String(twilioParams["NumMedia"] ?? "").trim();
 
   const fromE164 = normalizeE164(From.replace(/^whatsapp:/, ""), "IL");
@@ -208,7 +211,8 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const inboundBody = ButtonText || Body;
+  /** Prefer `Body` over `ButtonText` so the full prefilled opt-in line is not replaced by a short button label. */
+  const inboundBody = Body || ButtonText;
   console.log("[WA_WEBHOOK] parsed", { messageSid: docId, from: From, body: inboundBody, buttonPayload: ButtonPayload || undefined });
 
   try {
@@ -217,7 +221,10 @@ export async function POST(request: NextRequest) {
     const errObj = err as { code?: number; message?: string; name?: string; stack?: string };
     const errCode = errObj?.code;
     const errMessage = errObj?.message ?? String(err);
-    const isIndexError = errCode === 9 && /index/i.test(errMessage);
+    const isIndexError =
+      /the query requires an index/i.test(errMessage) ||
+      (/FAILED_PRECONDITION/i.test(errMessage) && /index|collection group|composite/i.test(errMessage)) ||
+      (errCode === 9 && /index|collection group|composite/i.test(errMessage));
 
     console.error("[WA_WEBHOOK] error", {
       messageSid: docId,
@@ -374,8 +381,14 @@ export async function POST(request: NextRequest) {
       const optInMatch = await findRecentBookingForWaOptInConfirmation(fromE164);
       if (optInMatch) {
         const { siteId: optSiteId, bookingId: optBookingId, data: bookingData } = optInMatch;
-        const waSettings = await getSiteWhatsAppSettings(optSiteId);
-        if (waSettings.confirmationEnabled) {
+        try {
+          const waSettings = await getSiteWhatsAppSettings(optSiteId);
+          if (!waSettings.confirmationEnabled) {
+            return recordAndReturnReply(
+              "אישור אוטומטי בווטסאפ אינו פעיל אצל העסק. אנא פנה/י למספרה לפרטים.",
+              "opt_in_confirmation_disabled"
+            );
+          }
           const startAt = bookingStartAtFromFirestore(bookingData);
           if (!startAt) {
             console.error("[WA_WEBHOOK] opt_in_missing_startAt", { optSiteId, optBookingId });
@@ -384,52 +397,56 @@ export async function POST(request: NextRequest) {
               "opt_in_bad_startat"
             );
           }
-          try {
-            const db = getAdminDb();
-            const bookingRef = db
-              .collection("sites")
-              .doc(optSiteId)
-              .collection("bookings")
-              .doc(optBookingId);
-            const fresh = (await bookingRef.get()).data() as Record<string, unknown> | undefined;
-            if (fresh?.confirmationSentAt != null) {
-              return recordAndReturnReply("כבר נשלח אישור לתור. תודה!", "opt_in_already_sent");
-            }
-            const siteSnap = await db.collection("sites").doc(optSiteId).get();
-            const cfg = siteSnap.data()?.config as { salonName?: string; whatsappBrandName?: string } | undefined;
-            const salonName = cfg?.salonName ?? cfg?.whatsappBrandName ?? "הסלון";
-            const slug = typeof siteSnap.data()?.slug === "string" ? siteSnap.data()?.slug : null;
-            const [wazeUrl] = await Promise.all([fetchWazeUrlForSite(optSiteId)]);
-            const bookingPublicUrl = getPublicBookingPageAbsoluteUrlForSite(optSiteId, slug);
-            const customerDisplayName = String(bookingData.customerName ?? "").trim() || "לקוח/ה";
-            const replyBody = renderBookingConfirmationMessageFromBookingData(waSettings, {
-              salonName,
-              bookingPublicUrl,
-              customerDisplayName,
-              startAt,
-              wazeUrl: wazeUrl ?? "",
-            });
-            await bookingRef.update({
-              confirmationSentAt: Timestamp.now(),
-              whatsappStatus: "booked",
-              updatedAt: Timestamp.now(),
-            });
-            return recordAndReturnReply(
-              replyBody,
-              "opt_in_booking_confirmation",
-              `sites/${optSiteId}/bookings/${optBookingId}`,
-              null
-            );
-          } catch (optErr) {
-            const msg = optErr instanceof Error ? optErr.message : String(optErr);
-            console.error("[WA_WEBHOOK] opt_in_handler_error", { optSiteId, optBookingId, msg });
-            return recordAndReturnReply(
-              "לא הצלחנו לשלוח את פרטי האישור כרגע. אנא פנו לעסק.",
-              "opt_in_handler_error"
-            );
+          const db = getAdminDb();
+          const bookingRef = db
+            .collection("sites")
+            .doc(optSiteId)
+            .collection("bookings")
+            .doc(optBookingId);
+          const fresh = (await bookingRef.get()).data() as Record<string, unknown> | undefined;
+          if (fresh?.confirmationSentAt != null) {
+            await clearWaOptInPending(From);
+            return recordAndReturnReply("כבר נשלח אישור לתור. תודה!", "opt_in_already_sent");
           }
+          const siteSnap = await db.collection("sites").doc(optSiteId).get();
+          const cfg = siteSnap.data()?.config as { salonName?: string; whatsappBrandName?: string } | undefined;
+          const salonName = cfg?.salonName ?? cfg?.whatsappBrandName ?? "הסלון";
+          const slug = typeof siteSnap.data()?.slug === "string" ? siteSnap.data()?.slug : null;
+          const [wazeUrl] = await Promise.all([fetchWazeUrlForSite(optSiteId)]);
+          const bookingPublicUrl = getPublicBookingPageAbsoluteUrlForSite(optSiteId, slug);
+          const customerDisplayName = String(bookingData.customerName ?? "").trim() || "לקוח/ה";
+          const replyBody = renderBookingConfirmationMessageFromBookingData(waSettings, {
+            salonName,
+            bookingPublicUrl,
+            customerDisplayName,
+            startAt,
+            wazeUrl: wazeUrl ?? "",
+          });
+          await bookingRef.update({
+            confirmationSentAt: Timestamp.now(),
+            whatsappStatus: "booked",
+            updatedAt: Timestamp.now(),
+          });
+          await clearWaOptInPending(From);
+          return recordAndReturnReply(
+            replyBody,
+            "opt_in_booking_confirmation",
+            `sites/${optSiteId}/bookings/${optBookingId}`,
+            null
+          );
+        } catch (optErr) {
+          const msg = optErr instanceof Error ? optErr.message : String(optErr);
+          console.error("[WA_WEBHOOK] opt_in_handler_error", { optSiteId, optBookingId, msg });
+          return recordAndReturnReply(
+            "לא הצלחנו לשלוח את פרטי האישור כרגע. אנא פנו לעסק.",
+            "opt_in_handler_error"
+          );
         }
       }
+      return recordAndReturnReply(
+        "לא מצאנו הזמנה חדשה לאישור מהמספר הזה. אם עברו יותר מיום מההזמנה, פנה/י למספרה. אחרת נסה/י שוב מיד לאחר סיום התיאום.",
+        "opt_in_no_booking_match"
+      );
     }
 
     if (intent === "yes" || intent === "no") {

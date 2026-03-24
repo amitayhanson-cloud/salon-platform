@@ -20,10 +20,28 @@ export type WhatsAppUsageSnapshot = {
   totalUsed: number;
 };
 
+/** Parse counter from Firestore (number, numeric string, or Integer-like). */
+function coerceUsageInt(raw: unknown): number {
+  if (typeof raw === "number" && Number.isFinite(raw)) return Math.max(0, Math.floor(raw));
+  if (typeof raw === "string" && raw.trim() !== "") {
+    const n = Number(raw);
+    if (Number.isFinite(n)) return Math.max(0, Math.floor(n));
+  }
+  if (raw != null && typeof raw === "object" && "toNumber" in raw && typeof (raw as { toNumber: () => number }).toNumber === "function") {
+    try {
+      const n = (raw as { toNumber: () => number }).toNumber();
+      if (Number.isFinite(n)) return Math.max(0, Math.floor(n));
+    } catch {
+      /* ignore */
+    }
+  }
+  return 0;
+}
+
 function coerceSnapshot(data: Record<string, unknown> | undefined): WhatsAppUsageSnapshot {
   const d = data ?? {};
-  const u = typeof d.whatsappUtilitySent === "number" && Number.isFinite(d.whatsappUtilitySent) ? d.whatsappUtilitySent : 0;
-  const s = typeof d.whatsappServiceSent === "number" && Number.isFinite(d.whatsappServiceSent) ? d.whatsappServiceSent : 0;
+  const u = coerceUsageInt(d.whatsappUtilitySent);
+  const s = coerceUsageInt(d.whatsappServiceSent);
   const limit =
     typeof d.whatsappUsageLimit === "number" && Number.isFinite(d.whatsappUsageLimit) && d.whatsappUsageLimit > 0
       ? Math.floor(d.whatsappUsageLimit)
@@ -90,12 +108,27 @@ export async function incrementWhatsAppUsage(siteId: string, category: WhatsAppU
   const id = siteId.trim();
   if (!id) return;
   const field = category === "utility" ? "whatsappUtilitySent" : "whatsappServiceSent";
-  await getAdminDb()
-    .collection("sites")
-    .doc(id)
-    .update({
-      [field]: FieldValue.increment(1),
+  const db = getAdminDb();
+  const ref = db.collection("sites").doc(id);
+  try {
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) {
+        console.error("[WhatsApp usage] increment skipped: sites doc not found", { siteId: id });
+        return;
+      }
+      const d = snap.data() as Record<string, unknown>;
+      const cur = coerceUsageInt(d[field]);
+      tx.update(ref, {
+        [field]: cur + 1,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
     });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[WhatsApp usage] increment failed", { siteId: id, field, error: msg });
+    throw e;
+  }
 }
 
 /** `sites/{siteId}/bookings/{bookingId}` → siteId */
