@@ -14,8 +14,9 @@
 
 import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
-import { sendWhatsApp, getBookingPhoneE164 } from "@/lib/whatsapp";
+import { sendWhatsApp, getBookingPhoneE164, WHATSAPP_SKIPPED_USAGE_LIMIT_SID } from "@/lib/whatsapp";
 import { renderWhatsAppTemplate } from "@/lib/whatsapp/templateRender";
+import { renderBookingConfirmationMessageFromBookingData } from "@/lib/whatsapp/renderBookingConfirmationMessage";
 import { getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
 import { getPublicBookingPageUrlForSite } from "@/lib/url";
 import { formatIsraelDateShort, formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
@@ -84,19 +85,18 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
     throw new Error(phoneResult.error);
   }
   const customerPhoneE164 = phoneResult.e164;
-  const { salonName, wazeUrl } = await getSiteSalonNameAndWazeUrl(db, siteId);
+  const { salonName } = await getSiteSalonNameAndWazeUrl(db, siteId);
   const waSettings = await getSiteWhatsAppSettings(siteId);
   const bookingPublicUrl = getPublicBookingPageUrlForSite(siteId);
   const customerDisplayName = String(data.customerName ?? "").trim() || "לקוח/ה";
 
-  // Idempotent: skip sending if we already sent (avoid duplicate WhatsApp on retries)
-  const alreadySent =
+  // Idempotent: skip if confirmation already sent, opt-in already registered, or reminder flow advanced
+  const alreadyProcessed =
     data.confirmationSentAt != null ||
-    (data.customerPhoneE164 && data.whatsappStatus) ||
-    data.whatsappStatus === "booked" ||
+    data.waOptInConfirmationRegisteredAt != null ||
     data.whatsappStatus === "awaiting_confirmation" ||
     data.whatsappStatus === "confirmed";
-  if (alreadySent) {
+  if (alreadyProcessed) {
     return;
   }
 
@@ -107,38 +107,50 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
   const date = formatIsraelDateShort(startAt);
   const time = formatIsraelTime(startAt);
 
-  const templateVars = {
-    שם_העסק: salonName,
-    תאריך_תור: date,
-    זמן_תור: time,
-    קישור_לתיאום: bookingPublicUrl,
-    שם_לקוח: customerDisplayName,
-    business_name: salonName,
-    date,
-    time,
-    link: bookingPublicUrl,
-    client_name: customerDisplayName,
-    ...(wazeUrl ? { waze_link: wazeUrl } : {}),
-  };
+  const postMode = waSettings.postBookingConfirmationMode ?? "auto";
+  const useWhatsAppOptIn = postMode === "whatsapp_opt_in";
 
-  if (waSettings.confirmationEnabled) {
-    const messageBody = renderWhatsAppTemplate(waSettings.confirmationTemplate, templateVars);
-    await sendWhatsApp({
-      toE164: customerPhoneE164,
-      body: messageBody,
-      bookingId,
-      siteId,
-      bookingRef: `sites/${siteId}/bookings/${bookingId}`,
-      meta: { automation: "booking_confirmation" },
-    });
+  if (useWhatsAppOptIn) {
+    if (waSettings.confirmationEnabled) {
+      await bookingRef.update({
+        customerPhoneE164,
+        waOptInConfirmationRegisteredAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
+    }
+  } else {
+    let confirmationSentOk = !waSettings.confirmationEnabled;
+    if (waSettings.confirmationEnabled) {
+      const messageBody = renderBookingConfirmationMessageFromBookingData(waSettings, {
+        salonName,
+        bookingPublicUrl,
+        customerDisplayName,
+        startAt,
+        wazeUrl: "",
+      });
+      const { sid } = await sendWhatsApp({
+        toE164: customerPhoneE164,
+        body: messageBody,
+        bookingId,
+        siteId,
+        bookingRef: `sites/${siteId}/bookings/${bookingId}`,
+        meta: { automation: "booking_confirmation" },
+      });
+      confirmationSentOk = sid !== WHATSAPP_SKIPPED_USAGE_LIMIT_SID && sid !== "skipped-global-disabled";
+      if (sid === WHATSAPP_SKIPPED_USAGE_LIMIT_SID) {
+        console.warn("[onBookingCreated] confirmation not sent — monthly WhatsApp usage limit", { siteId, bookingId });
+      }
+    }
+    const autoUpdate: Record<string, unknown> = {
+      customerPhoneE164,
+      whatsappStatus: "booked",
+      updatedAt: Timestamp.now(),
+    };
+    if (confirmationSentOk) {
+      autoUpdate.confirmationSentAt = Timestamp.now();
+    }
+    await bookingRef.update(autoUpdate);
   }
-
-  await bookingRef.update({
-    customerPhoneE164,
-    whatsappStatus: "booked",
-    confirmationSentAt: Timestamp.now(),
-    updatedAt: Timestamp.now(),
-  });
 
   // Last-minute booking: if start is within 24h from now, send reminder immediately
   // so customer can confirm without waiting for the cron. Idempotent: we just set
@@ -162,10 +174,11 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
         client_name: customerDisplayName,
         link: bookingPublicUrl,
         date,
+        custom_text: waSettings.reminderCustomText ?? "",
         waze_link: "",
       });
 
-      await sendWhatsApp({
+      const { sid: reminderSid } = await sendWhatsApp({
         toE164: customerPhoneE164,
         body: reminderBody,
         bookingId,
@@ -174,18 +187,25 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
         meta: { reminder_sent_immediately_due_to_last_minute_booking: true, automation: "reminder_24h" },
       });
 
-      const statusBefore = (data.status as string) ?? "booked";
-      if (process.env.NODE_ENV === "development") {
-        console.log("[pendingStage] bookingId=" + bookingId + " status before=" + statusBefore + " (not writing status; only setting whatsappStatus=awaiting_confirmation)");
-      }
-      await bookingRef.update({
-        whatsappStatus: "awaiting_confirmation",
-        reminder24hSentAt: Timestamp.now(),
-        confirmationRequestedAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      });
-      if (process.env.NODE_ENV === "development") {
-        console.log("[pendingStage] bookingId=" + bookingId + " status after=unchanged (still " + statusBefore + ")");
+      if (reminderSid === WHATSAPP_SKIPPED_USAGE_LIMIT_SID) {
+        console.warn("[onBookingCreated] last-minute reminder not sent — monthly WhatsApp usage limit", {
+          siteId,
+          bookingId,
+        });
+      } else if (reminderSid !== "skipped-global-disabled") {
+        const statusBefore = (data.status as string) ?? "booked";
+        if (process.env.NODE_ENV === "development") {
+          console.log("[pendingStage] bookingId=" + bookingId + " status before=" + statusBefore + " (not writing status; only setting whatsappStatus=awaiting_confirmation)");
+        }
+        await bookingRef.update({
+          whatsappStatus: "awaiting_confirmation",
+          reminder24hSentAt: Timestamp.now(),
+          confirmationRequestedAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+        });
+        if (process.env.NODE_ENV === "development") {
+          console.log("[pendingStage] bookingId=" + bookingId + " status after=unchanged (still " + statusBefore + ")");
+        }
       }
     }
 
@@ -221,9 +241,10 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
           client_name: customerDisplayName,
           link: bookingPublicUrl,
           date,
+          custom_text: waSettings.reminderCustomText ?? "",
           waze_link: "",
         });
-        await sendWhatsApp({
+        const { sid: catchupSid } = await sendWhatsApp({
           toE164: customerPhoneE164,
           body: reminderBody,
           bookingId,
@@ -231,17 +252,24 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
           bookingRef: `sites/${siteId}/bookings/${bookingId}`,
           meta: { reminder_sent_immediately_tomorrow_catchup: true, automation: "reminder_24h" },
         });
-        await bookingRef.update({
-          whatsappStatus: "awaiting_confirmation",
-          reminder24hSentAt: Timestamp.now(),
-          confirmationRequestedAt: Timestamp.now(),
-          updatedAt: Timestamp.now(),
-        });
-        console.log("[onBookingCreated] reminder_sent_tomorrow_catchup: true", {
-          siteId,
-          bookingId,
-          bookingDateIsrael,
-        });
+        if (catchupSid === WHATSAPP_SKIPPED_USAGE_LIMIT_SID) {
+          console.warn("[onBookingCreated] tomorrow catch-up reminder not sent — monthly WhatsApp usage limit", {
+            siteId,
+            bookingId,
+          });
+        } else if (catchupSid !== "skipped-global-disabled") {
+          await bookingRef.update({
+            whatsappStatus: "awaiting_confirmation",
+            reminder24hSentAt: Timestamp.now(),
+            confirmationRequestedAt: Timestamp.now(),
+            updatedAt: Timestamp.now(),
+          });
+          console.log("[onBookingCreated] reminder_sent_tomorrow_catchup: true", {
+            siteId,
+            bookingId,
+            bookingDateIsrael,
+          });
+        }
       }
     }
   }

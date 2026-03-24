@@ -13,5 +13,5 @@ export function buildClientConfirmSystemFallbackText(params: {
 }
 
 export function buildClientCancelSystemFallbackText(businessName: string): string {
-  return `בוטל ✅. אם תרצה/י לקבוע מחדש, דבר/י עם ${businessName}.`;
+  return `בוטל ✅. אם תרצו לקבוע מחדש, דברו עם ${businessName}.`;
 }

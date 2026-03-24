@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { Loader2 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import {
   seedDefaultClientStatusSettings,
@@ -11,6 +12,12 @@ import { DEFAULT_CLIENT_STATUS_SETTINGS } from "@/types/clientStatus";
 import { automatedStatusBadgeClass } from "@/lib/clientStatusBadgeStyles";
 import { useUnsavedChanges } from "@/components/admin/UnsavedChangesContext";
 import { triggerClientStatusRecomputeOncePerSession } from "@/lib/triggerClientStatusRecompute";
+
+const SAVE_PROGRESS_MESSAGES = [
+  "שומרים את חוקי הסטטוס והתגיות…",
+  "מחשבים מחדש סטטוס אוטומטי לכל לקוח (לפי היסטוריית התורים)…",
+  "מעדכנים את כרטיסי הלקוחות — במספרות גדולות זה עשוי לקחת עד דקה. אל תסגרו את העמוד.",
+] as const;
 
 /** Stable JSON for dirty comparison (tag order normalized). */
 function canonicalSettingsJson(s: ClientStatusSettings): string {
@@ -38,6 +45,7 @@ export default function AdminClientStatusSettings({ siteId }: { siteId: string }
   const [settings, setSettings] = useState<ClientStatusSettings>(DEFAULT_CLIENT_STATUS_SETTINGS);
   const [newTag, setNewTag] = useState("");
   const [saving, setSaving] = useState(false);
+  const [saveProgressStep, setSaveProgressStep] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,8 +98,22 @@ export default function AdminClientStatusSettings({ siteId }: { siteId: string }
     );
   }, [settings, syncTick]);
 
+  useEffect(() => {
+    if (!saving) {
+      setSaveProgressStep(0);
+      return;
+    }
+    setSaveProgressStep(0);
+    const intervalMs = 3200;
+    const id = window.setInterval(() => {
+      setSaveProgressStep((s) => Math.min(s + 1, SAVE_PROGRESS_MESSAGES.length - 1));
+    }, intervalMs);
+    return () => window.clearInterval(id);
+  }, [saving]);
+
   const performSave = useCallback(async () => {
     setSaving(true);
+    setSaveProgressStep(0);
     setError(null);
     setMessage(null);
     try {
@@ -313,15 +335,48 @@ export default function AdminClientStatusSettings({ siteId }: { siteId: string }
       {error && <p className="text-sm text-red-600">{error}</p>}
       {message && <p className="text-sm text-emerald-700">{message}</p>}
       {hasDirty && (
-        <div>
-          <button
-            type="button"
-            onClick={() => void performSave()}
-            disabled={saving}
-            className="rounded-lg bg-caleno-ink px-5 py-2 text-white text-sm font-medium shadow-sm transition-all hover:bg-[#1E293B] disabled:opacity-50"
-          >
-            {saving ? "שומר..." : "שמור ועדכן סטטוסים לכל הלקוחות"}
-          </button>
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void performSave()}
+              disabled={saving}
+              aria-busy={saving}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-caleno-ink px-5 py-2.5 text-white text-sm font-medium shadow-sm transition-all hover:bg-[#1E293B] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                  שומרים ומעדכנים…
+                </>
+              ) : (
+                "שמור ועדכן סטטוסים לכל הלקוחות"
+              )}
+            </button>
+            {saving && (
+              <span className="text-xs font-medium text-slate-500 tabular-nums">
+                שלב {saveProgressStep + 1} מתוך {SAVE_PROGRESS_MESSAGES.length}
+              </span>
+            )}
+          </div>
+          {saving && (
+            <div
+              className="rounded-lg border border-slate-200 bg-slate-50/90 px-4 py-3 text-sm text-slate-700"
+              aria-live="polite"
+              role="status"
+            >
+              <div className="mb-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                <div
+                  className="h-full rounded-full bg-caleno-deep transition-[width] duration-500 ease-out"
+                  style={{
+                    // Keep the bar from reaching the end before the request actually resolves.
+                    width: `${((saveProgressStep + 1) / SAVE_PROGRESS_MESSAGES.length) * 90}%`,
+                  }}
+                />
+              </div>
+              <p className="leading-relaxed">{SAVE_PROGRESS_MESSAGES[saveProgressStep]}</p>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -12,6 +12,8 @@ export type BroadcastRecipient = {
   e164: string;
   /** Display name for template {שם_לקוח} */
   name: string;
+  currentStatus?: BroadcastAutomatedStatus;
+  manualTagIds?: string[];
 };
 
 /**
@@ -21,6 +23,7 @@ function passesSegmentRules(
   data: Record<string, unknown>,
   filters: BroadcastRecipientFilters
 ): boolean {
+  if (filters.includeEveryone) return true;
   if (filters.statuses.length > 0) {
     const st = typeof data.currentStatus === "string" ? data.currentStatus : "";
     if (!filters.statuses.includes(st as BroadcastAutomatedStatus)) return false;
@@ -50,10 +53,18 @@ function tryAddClientDoc(
   if (!isValidE164(e164)) return;
 
   const name = typeof data.name === "string" && data.name.trim() ? data.name.trim() : "לקוח";
+  const currentStatus =
+    typeof data.currentStatus === "string" &&
+    ["new", "active", "normal", "sleeping"].includes(data.currentStatus)
+      ? (data.currentStatus as BroadcastAutomatedStatus)
+      : undefined;
+  const manualTagIds = Array.isArray(data.manualTagIds)
+    ? data.manualTagIds.filter((t: unknown): t is string => typeof t === "string" && t.trim().length > 0)
+    : [];
 
   if (!seen.has(e164)) {
     seen.add(e164);
-    out.push({ e164, name });
+    out.push({ e164, name, currentStatus, manualTagIds });
   }
 }
 
@@ -83,7 +94,7 @@ export async function listBroadcastRecipients(
     }
   }
 
-  const needSegmentScan = filters.statuses.length > 0 || filters.tagIds.length > 0;
+  const needSegmentScan = filters.includeEveryone || filters.statuses.length > 0 || filters.tagIds.length > 0;
   if (needSegmentScan) {
     const snap = await clientsRef.get();
     for (const d of snap.docs) {

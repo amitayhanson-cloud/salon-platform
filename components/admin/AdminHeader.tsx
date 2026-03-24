@@ -5,7 +5,19 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useParams, useRouter } from "next/navigation";
-import { ChevronDown, Menu, X, ExternalLink, Sparkles, MessageSquare, type LucideIcon } from "lucide-react";
+import {
+  ChevronDown,
+  Menu,
+  X,
+  ExternalLink,
+  Sparkles,
+  CalendarDays,
+  LayoutDashboard,
+  Users,
+  UsersRound,
+  Settings2,
+  type LucideIcon,
+} from "lucide-react";
 import { HoverBorderGradient } from "@/components/ui/hover-border-gradient";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { isOnTenantSubdomainClient, getAdminBasePath } from "@/lib/url";
@@ -31,21 +43,25 @@ function getMenuItems(basePath: string): MenuItem[] {
     {
       label: "יומן",
       href: `${basePath}/bookings`,
+      icon: CalendarDays,
     },
     {
       label: "לוח בקרה",
       href: basePath,
+      icon: LayoutDashboard,
     },
     {
       label: "לקוחות",
+      icon: Users,
       items: [
         { label: "כרטיס לקוח", href: `${basePath}/clients/client-card` },
         { label: "הגדרות לקוחות", href: `${basePath}/clients/settings` },
-        { label: "מרכז הודעות WhatsApp", href: `${basePath}/whatsapp`, icon: MessageSquare },
+        { label: "מרכז הודעות WhatsApp", href: `${basePath}/whatsapp` },
       ],
     },
     {
       label: "צוות",
+      icon: UsersRound,
       items: [
         { label: "עובדים", href: `${basePath}/team/workers` },
         { label: "ביצועי צוות", href: `${basePath}/team/salary` },
@@ -53,6 +69,7 @@ function getMenuItems(basePath: string): MenuItem[] {
     },
     {
       label: "ניהול אתר",
+      icon: Settings2,
       items: [
         { label: "אתר", href: `${basePath}/site` },
         { label: "הגדרות", href: `${basePath}/settings` },
@@ -303,6 +320,9 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                     })()
                   ) : (
                     <>
+                    {(() => {
+                      const NavIcon = item.icon;
+                      return (
                       <button
                         type="button"
                         ref={(el) => {
@@ -317,6 +337,9 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                         }`}
                         style={isParentActive(item) ? { WebkitBackdropFilter: "blur(12px)" } : undefined}
                       >
+                        {NavIcon ? (
+                          <NavIcon className="w-4 h-4 shrink-0 opacity-90 text-[#1E6F7C]" aria-hidden />
+                        ) : null}
                         {item.label}
                         <ChevronDown
                           className={`w-4 h-4 transition-transform ${
@@ -324,6 +347,8 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                           }`}
                         />
                       </button>
+                      );
+                    })()}
                     </>
                   )}
                 </div>
@@ -378,10 +403,10 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                     return (
                   <Link
                     href={item.href}
-                    className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors duration-200 ${
+                    className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold transition-colors duration-200 ${
                       isActive(item.href)
-                        ? "bg-[rgba(204,238,241,0.5)] text-[#0F172A]"
-                        : "text-[#0F172A] hover:bg-caleno-100/50"
+                        ? "bg-[#DBF4F7] text-[#0B5E6A]"
+                        : "text-[#1E6F7C] hover:bg-[#EEF8FA]"
                     }`}
                   >
                     {NavIcon ? (
@@ -393,21 +418,29 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                   })()
                 ) : (
                   <>
+                    {(() => {
+                      const NavIcon = item.icon;
+                      return (
                     <button
                       onClick={() => toggleDropdown(item.label)}
-                      className={`flex w-full items-center justify-between px-4 py-3 text-sm font-medium transition-colors duration-200 ${
+                      className={`flex w-full items-center justify-between px-4 py-3 text-sm font-semibold transition-colors duration-200 ${
                         isParentActive(item)
-                          ? "bg-[rgba(204,238,241,0.5)] text-[#0F172A]"
-                          : "text-[#0F172A] hover:bg-caleno-100/50"
+                          ? "bg-[#DBF4F7] text-[#0B5E6A]"
+                          : "text-[#1E6F7C] hover:bg-[#EEF8FA]"
                       }`}
                     >
-                      {item.label}
+                      <span className="flex items-center gap-2">
+                        {NavIcon ? <NavIcon className="w-4 h-4 shrink-0 text-[#1E6F7C]" aria-hidden /> : null}
+                        <span>{item.label}</span>
+                      </span>
                       <ChevronDown
                         className={`w-4 h-4 transition-transform ${
                           openDropdown === item.label ? "rotate-180" : ""
                         }`}
                       />
                     </button>
+                      );
+                    })()}
                     {openDropdown === item.label && item.items && (
                       <div className="bg-[#F8FAFC]">
                         {item.items.map((subItem) => {
@@ -418,8 +451,8 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                               href={subItem.href}
                               className={`flex items-center gap-2 px-8 py-2 text-sm transition-colors duration-200 ${
                                 isActive(subItem.href)
-                                  ? "bg-[rgba(204,238,241,0.5)] font-medium text-[#0F172A]"
-                                  : "text-[#64748B] hover:bg-caleno-50"
+                                  ? "bg-[#EEF2FF] font-medium text-[#3730A3]"
+                                  : "text-[#4F46E5] hover:bg-[#EEF2FF]/70"
                               }`}
                             >
                               {SubIcon ? (
@@ -433,8 +466,8 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                                 href={nested.href}
                                 className={`block px-12 py-2 text-sm transition-colors duration-200 ${
                                   isActive(nested.href)
-                                    ? "bg-[rgba(204,238,241,0.5)] font-medium text-[#0F172A]"
-                                    : "text-[#64748B] hover:bg-caleno-50"
+                                    ? "bg-[#EEF2FF] font-medium text-[#3730A3]"
+                                    : "text-[#4F46E5] hover:bg-[#EEF2FF]/70"
                                 }`}
                               >
                                 {nested.label}

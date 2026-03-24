@@ -15,6 +15,7 @@ import { parseBroadcastFiltersFromBody } from "@/lib/whatsapp/parseBroadcastBody
 import { renderWhatsAppTemplate } from "@/lib/whatsapp/templateRender";
 import { getPublicLandingPageAbsoluteUrlForSite } from "@/lib/url";
 import { getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
+import { assertSiteWithinWhatsAppLimit } from "@/lib/whatsapp/usage";
 
 const RATE_WINDOW_MS = 60 * 60 * 1000;
 const RATE_MAX_SENDS_PER_SITE = 10;
@@ -64,6 +65,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         retryAfterSeconds: Math.ceil((retryAfterMs ?? 0) / 1000),
       },
       { status: 429 }
+    );
+  }
+
+  const { allowed: withinUsage } = await assertSiteWithinWhatsAppLimit(id);
+  if (!withinUsage) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "הגעתם למכסת הודעות WhatsApp החודשית. שדרגו את החבילה או נסו שוב בחודש הבא.",
+      },
+      { status: 403 }
     );
   }
 

@@ -30,6 +30,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({
       ok: true,
       count: list.length,
+      recipients: list,
       capped,
       maxRecipients: MAX_BROADCAST_RECIPIENTS,
     });

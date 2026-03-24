@@ -7,6 +7,7 @@ import { Header } from "@/components/Header";
 import { HeroBackground } from "@/components/ui/HeroBackground";
 import { LandingHeader } from "@/components/landing/LandingHeader";
 import { LandingFooter } from "@/components/landing/LandingFooter";
+import { PublicCookieBanner } from "@/components/legal/PublicCookieBanner";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -24,14 +25,19 @@ export default function MainLayoutClient({
   const currentYear = new Date().getFullYear();
 
   if (pathname === "/") {
-    return <>{children}</>;
+    return (
+      <>
+        {children}
+        <PublicCookieBanner />
+      </>
+    );
   }
 
   if (pathname === "/builder" || pathname?.startsWith("/builder/")) {
     return <>{children}</>;
   }
 
-  if (pathname === "/privacy" || pathname === "/terms" || pathname === "/pricing") {
+  if (pathname === "/privacy" || pathname === "/terms" || pathname === "/pricing" || pathname === "/cookies") {
     return (
       <div
         dir="ltr"
@@ -40,6 +46,7 @@ export default function MainLayoutClient({
         <LandingHeader />
         <main>{children}</main>
         <LandingFooter />
+        <PublicCookieBanner />
       </div>
     );
   }
@@ -60,10 +67,14 @@ export default function MainLayoutClient({
               <Link href="/terms" className="text-gray-600 hover:text-gray-900 text-sm md:text-base">
                 תנאי שימוש
               </Link>
+              <Link href="/cookies" className="text-gray-600 hover:text-gray-900 text-sm md:text-base">
+                עוגיות
+              </Link>
             </div>
           </div>
         </div>
       </footer>
+      <PublicCookieBanner />
     </>
   );
 }

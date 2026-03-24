@@ -1,4 +1,9 @@
-export { sendWhatsApp, logInboundWhatsApp, logAmbiguousWhatsApp } from "./send";
+export {
+  sendWhatsApp,
+  logInboundWhatsApp,
+  logAmbiguousWhatsApp,
+  WHATSAPP_SKIPPED_USAGE_LIMIT_SID,
+} from "./send";
 export { normalizeE164, normalizeToE164, toWhatsAppTo, isValidE164 } from "./e164";
 export { getBookingPhoneE164 } from "./getBookingPhone";
 export type { BookingLike } from "./getBookingPhone";
@@ -32,4 +37,13 @@ export {
   type SessionIntent,
 } from "./whatsappSessions";
 export type { SendWhatsAppParams } from "./send";
+export {
+  getWhatsAppUsageSnapshot,
+  assertSiteWithinWhatsAppLimit,
+  incrementWhatsAppUsage,
+  siteIdFromBookingRef,
+  DEFAULT_WHATSAPP_USAGE_LIMIT,
+  type WhatsAppUsageSnapshot,
+  type WhatsAppUsageCategory,
+} from "./usage";
 export type { BookingForConfirmation } from "./bookingConfirmation";

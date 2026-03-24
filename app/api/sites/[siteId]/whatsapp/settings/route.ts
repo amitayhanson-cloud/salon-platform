@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/server/requireAuth";
 import { assertSiteOwner } from "@/lib/server/assertSiteOwner";
 import { saveSiteWhatsAppSettings, getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
-import { stripConfirmationCustomTextPlaceholder } from "@/lib/whatsapp/whatsappSettingsNormalize";
+import {
+  clampAutomationCustomText,
+  ensureClientCancelCustomSlot,
+  ensureClientConfirmCustomSlot,
+  ensureConfirmationCustomSlot,
+  ensureReminderCustomSlot,
+} from "@/lib/whatsapp/whatsappSettingsNormalize";
 import type { WhatsAppSettingsDoc } from "@/types/whatsappSettings";
 import { reminderTemplateHasRequiredTime } from "@/lib/whatsapp/templateRender";
 import { REMINDER_REQUIRED_PLACEHOLDER } from "@/types/whatsappSettings";
@@ -30,15 +36,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const next: WhatsAppSettingsDoc = {
     confirmationEnabled:
       typeof body.confirmationEnabled === "boolean" ? body.confirmationEnabled : current.confirmationEnabled,
-    confirmationTemplate:
+    confirmationTemplate: ensureConfirmationCustomSlot(
       typeof body.confirmationTemplate === "string" && body.confirmationTemplate.trim()
-        ? stripConfirmationCustomTextPlaceholder(String(body.confirmationTemplate).trim())
-        : current.confirmationTemplate,
+        ? String(body.confirmationTemplate).trim()
+        : current.confirmationTemplate
+    ),
+    confirmationCustomText: clampAutomationCustomText(
+      body.confirmationCustomText,
+      current.confirmationCustomText
+    ),
     reminderEnabled: typeof body.reminderEnabled === "boolean" ? body.reminderEnabled : current.reminderEnabled,
-    reminderTemplate:
+    reminderTemplate: ensureReminderCustomSlot(
       typeof body.reminderTemplate === "string" && body.reminderTemplate.trim()
         ? String(body.reminderTemplate).trim()
-        : current.reminderTemplate,
+        : current.reminderTemplate
+    ),
+    reminderCustomText: clampAutomationCustomText(body.reminderCustomText, current.reminderCustomText),
     broadcastTemplate:
       typeof body.broadcastTemplate === "string" && body.broadcastTemplate.trim()
         ? String(body.broadcastTemplate).trim()
@@ -49,18 +62,32 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       typeof body.clientConfirmReplyEnabled === "boolean"
         ? body.clientConfirmReplyEnabled
         : current.clientConfirmReplyEnabled,
-    clientConfirmReplyTemplate:
+    clientConfirmReplyTemplate: ensureClientConfirmCustomSlot(
       typeof body.clientConfirmReplyTemplate === "string" && body.clientConfirmReplyTemplate.trim()
         ? String(body.clientConfirmReplyTemplate).trim()
-        : current.clientConfirmReplyTemplate,
+        : current.clientConfirmReplyTemplate
+    ),
+    clientConfirmReplyCustomText: clampAutomationCustomText(
+      body.clientConfirmReplyCustomText,
+      current.clientConfirmReplyCustomText
+    ),
     clientCancelReplyEnabled:
       typeof body.clientCancelReplyEnabled === "boolean"
         ? body.clientCancelReplyEnabled
         : current.clientCancelReplyEnabled,
-    clientCancelReplyTemplate:
+    clientCancelReplyTemplate: ensureClientCancelCustomSlot(
       typeof body.clientCancelReplyTemplate === "string" && body.clientCancelReplyTemplate.trim()
         ? String(body.clientCancelReplyTemplate).trim()
-        : current.clientCancelReplyTemplate,
+        : current.clientCancelReplyTemplate
+    ),
+    clientCancelReplyCustomText: clampAutomationCustomText(
+      body.clientCancelReplyCustomText,
+      current.clientCancelReplyCustomText
+    ),
+    postBookingConfirmationMode:
+      body.postBookingConfirmationMode === "whatsapp_opt_in" || body.postBookingConfirmationMode === "auto"
+        ? body.postBookingConfirmationMode
+        : current.postBookingConfirmationMode,
   };
 
   if (!reminderTemplateHasRequiredTime(next.reminderTemplate)) {

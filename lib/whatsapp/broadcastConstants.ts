@@ -2,7 +2,7 @@
  * Client + server safe: broadcast filter types and limits (no firebase-admin).
  */
 
-export const BROADCAST_AUTOMATED_STATUSES = ["new", "active", "sleeping"] as const;
+export const BROADCAST_AUTOMATED_STATUSES = ["new", "active", "normal", "sleeping"] as const;
 export type BroadcastAutomatedStatus = (typeof BROADCAST_AUTOMATED_STATUSES)[number];
 
 export type BroadcastRecipientFilters = {
@@ -15,6 +15,8 @@ export type BroadcastRecipientFilters = {
    * Union with segment filters: final set = selected individuals ∪ segment matches (deduped by E.164).
    */
   clientIds: string[];
+  /** When true, include all non-archived clients (still deduped by E.164). */
+  includeEveryone?: boolean;
 };
 
 export const MAX_BROADCAST_RECIPIENTS = 500;
@@ -25,5 +27,5 @@ export const MAX_BROADCAST_CLIENT_PICKS = MAX_BROADCAST_RECIPIENTS;
 export const MAX_BROADCAST_CUSTOM_TEXT_LEN = 800;
 
 export function broadcastFiltersAreEmpty(f: BroadcastRecipientFilters): boolean {
-  return f.statuses.length === 0 && f.tagIds.length === 0 && f.clientIds.length === 0;
+  return !f.includeEveryone && f.statuses.length === 0 && f.tagIds.length === 0 && f.clientIds.length === 0;
 }

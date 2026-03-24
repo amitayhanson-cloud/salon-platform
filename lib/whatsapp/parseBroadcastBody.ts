@@ -26,6 +26,7 @@ export function parseBroadcastFiltersFromBody(body: unknown): BroadcastRecipient
     }
   }
   const rawClientIds = o.clientIds;
+  const includeEveryone = o.includeEveryone === true;
   const clientIds: string[] = [];
   if (Array.isArray(rawClientIds)) {
     for (const c of rawClientIds) {
@@ -38,11 +39,11 @@ export function parseBroadcastFiltersFromBody(body: unknown): BroadcastRecipient
       { status: 400 }
     );
   }
-  if (broadcastFiltersAreEmpty({ statuses, tagIds, clientIds })) {
+  if (broadcastFiltersAreEmpty({ statuses, tagIds, clientIds, includeEveryone })) {
     return NextResponse.json(
       { ok: false, error: "נדרש לבחור לפחות אחד: סטטוס אוטומטי, תג ידני, או לקוחות ספציפיים" },
       { status: 400 }
     );
   }
-  return { statuses, tagIds, clientIds };
+  return { statuses, tagIds, clientIds, includeEveryone };
 }

@@ -21,6 +21,9 @@ import {
   deleteWhatsAppSession,
   getRelatedBookingIds,
   applyCancelledByWhatsAppToBooking,
+  assertSiteWithinWhatsAppLimit,
+  incrementWhatsAppUsage,
+  siteIdFromBookingRef,
 } from "@/lib/whatsapp";
 import { getAdminProjectId } from "@/lib/firebaseAdmin";
 import {
@@ -38,6 +41,17 @@ import {
   buildClientCancelReplyMessage,
   buildClientConfirmReplyMessage,
 } from "@/lib/whatsapp/buildClientInboundReply";
+import { getAdminDb } from "@/lib/firebaseAdmin";
+import { Timestamp } from "firebase-admin/firestore";
+import { looksLikeCustomerBookingConfirmationRequest } from "@/lib/whatsapp/optInConfirmationPattern";
+import { findRecentBookingForWaOptInConfirmation } from "@/lib/whatsapp/findRecentBookingForOptInConfirmation";
+import { getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
+import {
+  bookingStartAtFromFirestore,
+  renderBookingConfirmationMessageFromBookingData,
+} from "@/lib/whatsapp/renderBookingConfirmationMessage";
+import { fetchWazeUrlForSite } from "@/lib/whatsapp/fetchWazeUrlForSite";
+import { getPublicBookingPageAbsoluteUrlForSite } from "@/lib/url";
 
 const WEBHOOK_PATH = "/api/webhooks/twilio/whatsapp";
 
@@ -268,6 +282,30 @@ export async function POST(request: NextRequest) {
       bookingRef?: string | null,
       action?: "confirmed" | "cancelled" | null
     ): Promise<NextResponse> {
+      const usageSiteId = siteIdFromBookingRef(bookingRef ?? undefined);
+      if (usageSiteId) {
+        const { allowed } = await assertSiteWithinWhatsAppLimit(usageSiteId);
+        if (!allowed) {
+          console.warn("[WA_WEBHOOK] Limit Reached (inbound reply blocked)", {
+            siteId: usageSiteId,
+            messageSid: docId,
+          });
+          const emptyTwiml = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
+          await setInboundProcessed(docId, {
+            resultStatus: "usage_limit_blocked",
+            replyBody: "",
+            twimlResponse: emptyTwiml,
+            bookingRef,
+            action,
+          });
+          return xmlResponse(emptyTwiml, 200);
+        }
+        try {
+          await incrementWhatsAppUsage(usageSiteId, "service");
+        } catch (e) {
+          console.warn("[WA_WEBHOOK] usage increment failed", e);
+        }
+      }
       const twimlStr = buildTwimlResponse(replyBody);
       await setInboundProcessed(docId, {
         resultStatus,
@@ -328,6 +366,58 @@ export async function POST(request: NextRequest) {
       });
       await deleteWhatsAppSession(fromE164);
       return recordAndReturnReply(reply, "matched_no", chosen.bookingRef, "cancelled");
+    }
+
+    if (
+      intent === null &&
+      selection === null &&
+      looksLikeCustomerBookingConfirmationRequest(inboundBody)
+    ) {
+      const optInMatch = await findRecentBookingForWaOptInConfirmation(fromE164);
+      if (optInMatch) {
+        const { siteId: optSiteId, bookingId: optBookingId, data: bookingData } = optInMatch;
+        const waSettings = await getSiteWhatsAppSettings(optSiteId);
+        if (waSettings.confirmationEnabled) {
+          const startAt = bookingStartAtFromFirestore(bookingData);
+          if (startAt) {
+            const db = getAdminDb();
+            const bookingRef = db
+              .collection("sites")
+              .doc(optSiteId)
+              .collection("bookings")
+              .doc(optBookingId);
+            const fresh = (await bookingRef.get()).data() as Record<string, unknown> | undefined;
+            if (fresh?.confirmationSentAt != null) {
+              return recordAndReturnReply("כבר נשלח אישור לתור. תודה!", "opt_in_already_sent");
+            }
+            const siteSnap = await db.collection("sites").doc(optSiteId).get();
+            const cfg = siteSnap.data()?.config as { salonName?: string; whatsappBrandName?: string } | undefined;
+            const salonName = cfg?.salonName ?? cfg?.whatsappBrandName ?? "הסלון";
+            const slug = typeof siteSnap.data()?.slug === "string" ? siteSnap.data()?.slug : null;
+            const [wazeUrl] = await Promise.all([fetchWazeUrlForSite(optSiteId)]);
+            const bookingPublicUrl = getPublicBookingPageAbsoluteUrlForSite(optSiteId, slug);
+            const customerDisplayName = String(bookingData.customerName ?? "").trim() || "לקוח/ה";
+            const replyBody = renderBookingConfirmationMessageFromBookingData(waSettings, {
+              salonName,
+              bookingPublicUrl,
+              customerDisplayName,
+              startAt,
+              wazeUrl: wazeUrl ?? "",
+            });
+            await bookingRef.update({
+              confirmationSentAt: Timestamp.now(),
+              whatsappStatus: "booked",
+              updatedAt: Timestamp.now(),
+            });
+            return recordAndReturnReply(
+              replyBody,
+              "opt_in_booking_confirmation",
+              `sites/${optSiteId}/bookings/${optBookingId}`,
+              null
+            );
+          }
+        }
+      }
     }
 
     if (intent === "yes" || intent === "no") {

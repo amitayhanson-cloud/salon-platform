@@ -73,7 +73,10 @@ export async function buildClientConfirmReplyMessage(
     link,
     wazeUrl: waze,
   });
-  return renderWhatsAppTemplate(template, vars);
+  return renderWhatsAppTemplate(template, {
+    ...vars,
+    custom_text: settings.clientConfirmReplyCustomText ?? "",
+  });
 }
 
 export async function buildClientCancelReplyMessage(
@@ -99,5 +102,8 @@ export async function buildClientCancelReplyMessage(
     link,
     wazeUrl: waze,
   });
-  return renderWhatsAppTemplate(template, vars);
+  return renderWhatsAppTemplate(template, {
+    ...vars,
+    custom_text: settings.clientCancelReplyCustomText ?? "",
+  });
 }

@@ -25,6 +25,8 @@ import { type DocumentReference } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { onBookingCreated } from "@/lib/onBookingCreated";
 import { checkRateLimit, getClientIp } from "@/lib/server/rateLimit";
+import { getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
+import { buildBookingSuccessWhatsAppOptInUrl } from "@/lib/whatsapp/waMeOptInLink";
 
 const CREATED_WITHIN_MS = 2 * 60 * 1000; // 2 minutes (server `createdAt`)
 /** When only client-written millis exist (before serverTimestamp resolves), allow a looser window + clock skew. */
@@ -162,7 +164,34 @@ export async function POST(request: NextRequest) {
     const resolvedSiteId = docSiteId ?? siteId;
     await onBookingCreated(resolvedSiteId, bookingId);
 
-    return NextResponse.json({ ok: true, bookingId, siteId: resolvedSiteId });
+    const waSettings = await getSiteWhatsAppSettings(resolvedSiteId);
+    const mode = waSettings.postBookingConfirmationMode ?? "auto";
+    const dbSnap = await getAdminDb().collection("sites").doc(resolvedSiteId).get();
+    const cfg = dbSnap.data()?.config as { salonName?: string; whatsappBrandName?: string } | undefined;
+    const businessName = cfg?.salonName ?? cfg?.whatsappBrandName ?? "העסק";
+    const timeLabel =
+      typeof data.time === "string" && String(data.time).trim()
+        ? String(data.time).trim()
+        : typeof data.displayTime === "string" && String(data.displayTime).trim()
+          ? String(data.displayTime).trim()
+          : "";
+
+    let whatsappOptInUrl: string | null = null;
+    if (mode === "whatsapp_opt_in" && waSettings.confirmationEnabled) {
+      whatsappOptInUrl = await buildBookingSuccessWhatsAppOptInUrl({
+        siteId: resolvedSiteId,
+        businessName,
+        timeLabel: timeLabel || "—",
+      });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      bookingId,
+      siteId: resolvedSiteId,
+      postBookingConfirmationMode: mode,
+      whatsappOptInUrl,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[confirm-after-create]", msg);

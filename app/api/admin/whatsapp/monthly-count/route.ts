@@ -3,6 +3,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { requireAuth } from "@/lib/server/requireAuth";
 import { assertSiteOwner } from "@/lib/server/assertSiteOwner";
+import { getTenantForUid } from "@/lib/getTenantForUid";
 
 function monthRange(now = new Date()): { start: Date; end: Date } {
   const y = now.getUTCFullYear();
@@ -22,9 +23,17 @@ export async function GET(request: NextRequest) {
     if (authResult instanceof NextResponse) return authResult;
     const uid = authResult.uid;
 
-    const siteId = request.nextUrl.searchParams.get("siteId")?.trim() ?? "";
-    if (!siteId) {
+    const requestedSiteId = request.nextUrl.searchParams.get("siteId")?.trim() ?? "";
+    if (!requestedSiteId) {
       return NextResponse.json({ ok: false, message: "missing siteId" }, { status: 400 });
+    }
+
+    const siteId =
+      requestedSiteId === "me"
+        ? ((await getTenantForUid(uid))?.siteId ?? "")
+        : requestedSiteId;
+    if (!siteId) {
+      return NextResponse.json({ ok: false, message: "site not found" }, { status: 404 });
     }
 
     const forbidden = await assertSiteOwner(uid, siteId);
@@ -32,20 +41,37 @@ export async function GET(request: NextRequest) {
 
     const { start, end } = monthRange();
     const db = getAdminDb();
-    const countSnap = await db
-      .collection("whatsapp_messages")
-      .where("siteId", "==", siteId)
-      .where("direction", "==", "outbound")
-      .where("createdAt", ">=", Timestamp.fromDate(start))
-      .where("createdAt", "<", Timestamp.fromDate(end))
-      .count()
-      .get();
+    const startTs = Timestamp.fromDate(start);
+    const endTs = Timestamp.fromDate(end);
+
+    async function countWithFallback(field: "siteId" | "salonId", value: string): Promise<number> {
+      const queryRef = db
+        .collection("whatsapp_messages")
+        .where(field, "==", value)
+        .where("direction", "==", "outbound")
+        .where("createdAt", ">=", startTs)
+        .where("createdAt", "<", endTs);
+      try {
+        const countSnap = await queryRef.count().get();
+        return countSnap.data().count;
+      } catch {
+        const snap = await queryRef.get();
+        return snap.size;
+      }
+    }
+
+    // Primary: modern logs keyed by siteId. Legacy fallback: salonId.
+    const [countBySiteId, countBySalonIdLegacy] = await Promise.all([
+      countWithFallback("siteId", siteId),
+      countWithFallback("salonId", siteId),
+    ]);
+    const outboundCount = countBySiteId + countBySalonIdLegacy;
 
     return NextResponse.json({
       ok: true,
       siteId,
       month: start.toISOString().slice(0, 7),
-      outboundCount: countSnap.data().count,
+      outboundCount,
     });
   } catch (e) {
     console.error("[admin/whatsapp/monthly-count]", e);

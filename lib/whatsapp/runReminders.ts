@@ -7,7 +7,7 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { assertNoAwaitingConfirmationWithConfirmed } from "@/lib/bookingStatusForWrite";
-import { sendWhatsApp, normalizeE164 } from "@/lib/whatsapp";
+import { sendWhatsApp, normalizeE164, WHATSAPP_SKIPPED_USAGE_LIMIT_SID } from "@/lib/whatsapp";
 import { getTomorrowReminderWindow } from "@/lib/whatsapp/reminderWindow";
 import { renderWhatsAppTemplate } from "@/lib/whatsapp/templateRender";
 import { getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
@@ -159,12 +159,13 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
       time: timeStr,
       client_name: customerDisplayName,
       date: dateStr,
+      custom_text: waSettings.reminderCustomText ?? "",
       // Reminder messages intentionally omit Waze (even if an old template still contains {waze_link})
       waze_link: "",
     });
 
     try {
-      await sendWhatsApp({
+      const { sid } = await sendWhatsApp({
         toE164: customerPhoneE164,
         body: reminderBody,
         bookingId: doc.id,
@@ -172,6 +173,25 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
         bookingRef: `sites/${siteId}/bookings/${doc.id}`,
         meta: { automation: "reminder_24h" },
       });
+
+      if (sid === WHATSAPP_SKIPPED_USAGE_LIMIT_SID) {
+        details.push({
+          bookingRef,
+          startAt: startAtISO,
+          phone: customerPhoneE164,
+          result: "skipped: monthly WhatsApp usage limit",
+        });
+        continue;
+      }
+      if (sid === "skipped-global-disabled") {
+        details.push({
+          bookingRef,
+          startAt: startAtISO,
+          phone: customerPhoneE164,
+          result: "skipped: global WhatsApp automations disabled",
+        });
+        continue;
+      }
 
       const { bookingIds, groupKey: gk } = await getRelatedBookingIds(siteId, doc.id);
       const statusBefore = (data.status as string) ?? "booked";

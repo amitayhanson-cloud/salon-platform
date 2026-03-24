@@ -42,7 +42,9 @@ export function LandingFooter() {
           <div className="flex flex-col items-center justify-center gap-2">
             <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Powered by</span>
             <a
-              href="/"
+              href="https://www.igani.co/"
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-caleno-deep focus-visible:ring-offset-2 rounded"
               aria-label="Igani"
             >

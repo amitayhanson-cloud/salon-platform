@@ -436,6 +436,9 @@ export type ClientBroadcastPickerRow = {
   id: string;
   name: string;
   phone: string;
+  currentStatus?: "new" | "active" | "normal" | "sleeping";
+  clientTypeId?: string;
+  manualTagIds?: string[];
 };
 
 /**
@@ -451,7 +454,15 @@ export async function getClientsForBroadcastPicker(siteId: string): Promise<Clie
     const phone = typeof data.phone === "string" && data.phone.trim() ? data.phone.trim() : docSnap.id;
     const name =
       typeof data.name === "string" && data.name.trim() ? data.name.trim() : "ללא שם";
-    rows.push({ id: docSnap.id, name, phone });
+    rows.push({
+      id: docSnap.id,
+      name,
+      phone,
+      currentStatus:
+        typeof data.currentStatus === "string" ? (data.currentStatus as ClientBroadcastPickerRow["currentStatus"]) : undefined,
+      clientTypeId: typeof data.clientTypeId === "string" ? data.clientTypeId : undefined,
+      manualTagIds: Array.isArray(data.manualTagIds) ? data.manualTagIds.filter((t: unknown) => typeof t === "string") : [],
+    });
   });
   rows.sort((a, b) => a.name.localeCompare(b.name, "he"));
   return rows;

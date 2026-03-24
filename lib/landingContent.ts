@@ -230,7 +230,7 @@ export const FOOTER = {
     links: [
       { label: "מדיניות פרטיות", href: "/privacy" },
       { label: "תנאי שימוש", href: "/terms" },
-      { label: "עוגיות", href: "#" },
+      { label: "עוגיות", href: "/cookies" },
     ],
   },
   social: {

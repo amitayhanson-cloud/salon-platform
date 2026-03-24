@@ -15,11 +15,11 @@ export function HowItWorksSection() {
             {HOW_IT_WORKS_SECTION.subtitle}
           </p>
 
-          <div className="mt-12 flex flex-col gap-8 md:flex-row md:items-start md:justify-between md:gap-8 lg:gap-12">
+          <div className="mt-12 grid grid-cols-1 gap-8 md:grid-cols-3 md:gap-8 lg:gap-12">
             {HOW_IT_WORKS_STEPS.map((item) => (
               <div
                 key={item.step}
-                className="relative flex flex-1 flex-col items-center rounded-2xl border border-[#E2E8F0] bg-caleno-off/30 p-6 text-center shadow-sm md:items-start md:text-right"
+                className="relative flex h-full flex-col items-center rounded-2xl border border-[#E2E8F0] bg-caleno-off/30 p-6 text-center shadow-sm md:items-start md:text-right"
               >
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-caleno-deep bg-white text-lg font-semibold leading-tight text-caleno-deep">
                   {item.step}

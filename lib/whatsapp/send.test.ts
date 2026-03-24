@@ -20,6 +20,11 @@ vi.mock("@/lib/platformSettings", () => ({
 vi.mock("@/lib/firebaseAdmin", () => ({
   getAdminDb: vi.fn(),
 }));
+vi.mock("./usage", () => ({
+  assertSiteWithinWhatsAppLimit: vi.fn().mockResolvedValue({ allowed: true }),
+  incrementWhatsAppUsage: vi.fn().mockResolvedValue(undefined),
+  resolveOutboundUsageCategory: vi.fn().mockResolvedValue("utility"),
+}));
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { isWhatsAppAutomationEnabled } from "@/lib/platformSettings";
 import { sendWhatsApp } from "./send";

@@ -11,6 +11,12 @@ import { getAdminDb } from "@/lib/firebaseAdmin";
 import { isWhatsAppAutomationEnabled } from "@/lib/platformSettings";
 import { toWhatsAppTo } from "./e164";
 import { mapBodyForSandbox } from "./sandboxMap";
+import {
+  assertSiteWithinWhatsAppLimit,
+  incrementWhatsAppUsage,
+  resolveOutboundUsageCategory,
+  type WhatsAppUsageCategory,
+} from "./usage";
 
 /** Read env at send time so tests and runtime can set TWILIO_* after module load. */
 function getTwilioEnv(): { accountSid: string; authToken: string; from: string } {
@@ -43,7 +49,14 @@ export type SendWhatsAppParams = {
    * Automated flows (confirmation, reminders) must leave this false/undefined.
    */
   bypassAutomationKillSwitch?: boolean;
+  /**
+   * How to count toward monthly usage (utility vs service). Default `auto`: inbound from this
+   * number in the last 24h → service, else utility.
+   */
+  usageCategory?: WhatsAppUsageCategory | "auto";
 };
+
+export const WHATSAPP_SKIPPED_USAGE_LIMIT_SID = "skipped-usage-limit";
 
 /**
  * Send WhatsApp message via Twilio and log to Firestore whatsapp_messages.
@@ -59,6 +72,7 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
     salonId: salonIdParam = null,
     meta = null,
     bypassAutomationKillSwitch = false,
+    usageCategory = "auto",
   } = params;
   const siteId = siteIdParam ?? salonIdParam;
   const automationName =
@@ -80,6 +94,19 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
       });
     }
     return { sid: "skipped-global-disabled" };
+  }
+
+  if (siteId) {
+    const { allowed } = await assertSiteWithinWhatsAppLimit(siteId);
+    if (!allowed) {
+      console.warn("[WhatsApp] Limit Reached", {
+        siteId,
+        automation: automationName,
+        toE164: toE164.slice(-4) ? `***${toE164.slice(-4)}` : "***",
+        timestamp: new Date().toISOString(),
+      });
+      return { sid: WHATSAPP_SKIPPED_USAGE_LIMIT_SID };
+    }
   }
 
   const { accountSid, authToken, from } = getTwilioEnv();
@@ -124,6 +151,20 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
     error: null,
     meta,
   });
+
+  if (siteId) {
+    try {
+      const cat: WhatsAppUsageCategory =
+        usageCategory === "auto" ? await resolveOutboundUsageCategory(toE164) : usageCategory;
+      await incrementWhatsAppUsage(siteId, cat);
+    } catch (e) {
+      console.error("[WhatsApp] usage increment failed", {
+        siteId,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
   return { sid };
 }
 
