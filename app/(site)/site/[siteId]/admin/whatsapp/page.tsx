@@ -573,6 +573,7 @@ export default function AdminWhatsAppPage() {
     try {
       const token = await firebaseUser.getIdToken();
       const res = await fetch(`/api/sites/${encodeURIComponent(siteId)}/whatsapp/usage`, {
+        cache: "no-store",
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = (await res.json().catch(() => ({}))) as {

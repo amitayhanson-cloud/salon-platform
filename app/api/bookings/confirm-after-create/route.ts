@@ -27,6 +27,8 @@ import { onBookingCreated } from "@/lib/onBookingCreated";
 import { checkRateLimit, getClientIp } from "@/lib/server/rateLimit";
 import { getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
 import { buildBookingSuccessWhatsAppOptInUrl } from "@/lib/whatsapp/waMeOptInLink";
+import { bookingStartAtFromFirestore } from "@/lib/whatsapp/renderBookingConfirmationMessage";
+import { skipPostBookingConfirmationBecauseReminderCovers } from "@/lib/whatsapp/postBookingConfirmationSkip";
 
 const CREATED_WITHIN_MS = 2 * 60 * 1000; // 2 minutes (server `createdAt`)
 /** When only client-written millis exist (before serverTimestamp resolves), allow a looser window + clock skew. */
@@ -176,8 +178,20 @@ export async function POST(request: NextRequest) {
           ? String(data.displayTime).trim()
           : "";
 
+    const startAt = bookingStartAtFromFirestore(data as Record<string, unknown>);
+    const lastMinuteReminderCoversConfirmation =
+      startAt != null &&
+      skipPostBookingConfirmationBecauseReminderCovers({
+        reminderEnabled: waSettings.reminderEnabled,
+        startAt,
+      });
+
     let whatsappOptInUrl: string | null = null;
-    if (mode === "whatsapp_opt_in" && waSettings.confirmationEnabled) {
+    if (
+      mode === "whatsapp_opt_in" &&
+      waSettings.confirmationEnabled &&
+      !lastMinuteReminderCoversConfirmation
+    ) {
       whatsappOptInUrl = buildBookingSuccessWhatsAppOptInUrl({
         siteId: resolvedSiteId,
         businessName,
@@ -191,6 +205,7 @@ export async function POST(request: NextRequest) {
       siteId: resolvedSiteId,
       postBookingConfirmationMode: mode,
       whatsappOptInUrl,
+      lastMinuteReminderCoversConfirmation,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

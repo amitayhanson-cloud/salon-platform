@@ -1,7 +1,7 @@
 /**
  * POST /api/webhooks/twilio/whatsapp
- * Inbound WhatsApp webhook. Idempotent by MessageSid; always responds with TwiML and HTTP 200.
- * Validates Twilio signature, logs to whatsapp_inbound, handles YES/NO and selection menu.
+ * Inbound WhatsApp webhook. Idempotent by MessageSid; always HTTP 200 with TwiML.
+ * Unknown inbound → empty TwiML Response (no outbound message, no quota). Metered replies call incrementWhatsAppUsage(siteId, "service") only when siteId is known.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -13,7 +13,6 @@ import {
   normalizeE164,
   normalizeInbound,
   findBookingsAwaitingConfirmationByPhoneMulti,
-  findNextBookingByPhoneWithStatus,
   markBookingConfirmed,
   getBookingByRefIfAwaitingConfirmation,
   createWhatsAppSession,
@@ -56,6 +55,19 @@ import { clearWaOptInPending } from "@/lib/whatsapp/waOptInPending";
 
 const WEBHOOK_PATH = "/api/webhooks/twilio/whatsapp";
 
+/** TwiML with no outbound message — avoids spending quota on unknown inbound. */
+const EMPTY_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
+
+/** Twilio sandbox: user must send `join <code>` before messaging the sandbox number. */
+function isSandboxJoinCommand(body: string): boolean {
+  const sandbox = (process.env.TWILIO_WHATSAPP_SANDBOX_MODE ?? "").toLowerCase() === "true";
+  const code = (process.env.TWILIO_WHATSAPP_SANDBOX_JOIN_CODE ?? "").trim();
+  if (!sandbox || !code) return false;
+  const normalized = body.trim().toLowerCase().replace(/\s+/g, " ");
+  const expected = `join ${code.toLowerCase()}`;
+  return normalized === expected || normalized.startsWith(`${expected} `);
+}
+
 /**
  * NO path: cancel/archive ALL group members (same resolver as YES).
  * Resolve members FIRST, then apply cancel to each with for..of await; log per member and final counts.
@@ -97,15 +109,13 @@ function xmlResponse(body: string, status = 200): NextResponse {
   });
 }
 
-const SAFE_APOLOGY = "משהו השתבש. אנא פנה/י למספרה.";
-
 export async function POST(request: NextRequest) {
   console.log("[WA_WEBHOOK] start", { ts: new Date().toISOString() });
 
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   if (!authToken) {
     console.error("[WA_WEBHOOK] missing TWILIO_AUTH_TOKEN");
-    return xmlResponse(buildTwimlResponse(SAFE_APOLOGY), 200);
+    return xmlResponse(EMPTY_TWIML, 200);
   }
 
   let rawBody: string;
@@ -113,7 +123,7 @@ export async function POST(request: NextRequest) {
     rawBody = await request.text();
   } catch (e) {
     console.error("[WA_WEBHOOK] failed to read body", { error: e });
-    return xmlResponse(buildTwimlResponse(SAFE_APOLOGY), 200);
+    return xmlResponse(EMPTY_TWIML, 200);
   }
 
   const params = new URLSearchParams(rawBody);
@@ -166,7 +176,7 @@ export async function POST(request: NextRequest) {
       } catch (e) {
         console.error("[WA_WEBHOOK] failed to write inbound doc", e);
       }
-      return xmlResponse(buildTwimlResponse("Invalid request."), 200);
+      return xmlResponse(EMPTY_TWIML, 200);
     }
   }
 
@@ -178,8 +188,6 @@ export async function POST(request: NextRequest) {
   const MessageSid = String(
     twilioParams["MessageSid"] ?? twilioParams["SmsMessageSid"] ?? twilioParams["SmsSid"] ?? ""
   ).trim();
-  const NumMedia = String(twilioParams["NumMedia"] ?? "").trim();
-
   const fromE164 = normalizeE164(From.replace(/^whatsapp:/, ""), "IL");
   const docId = MessageSid || `no-sid-${Date.now()}`;
   if (!MessageSid) {
@@ -189,15 +197,16 @@ export async function POST(request: NextRequest) {
     if (isInboundProcessed(existing)) {
       const storedTwiml =
         existing!.twimlResponse ||
-        buildTwimlResponse(existing!.replyBody || "תשובה נשמרה.");
+        (existing!.replyBody?.trim() ? buildTwimlResponse(existing!.replyBody.trim()) : EMPTY_TWIML);
       console.log("[WA_WEBHOOK] dedupe_hit", { messageSid: MessageSid });
       return xmlResponse(storedTwiml, 200);
     }
     const claimed = await tryClaimInbound(MessageSid, { fromE164, to: To, body: Body });
     if (!claimed) {
       const again = await getInboundByMessageSid(MessageSid);
+      const replayBody = again?.replyBody?.trim();
       const storedTwiml =
-        again?.twimlResponse || buildTwimlResponse(again?.replyBody || "תשובה נשמרה.");
+        again?.twimlResponse || (replayBody ? buildTwimlResponse(replayBody) : EMPTY_TWIML);
       console.log("[WA_WEBHOOK] dedupe_hit", { messageSid: MessageSid });
       return xmlResponse(storedTwiml, 200);
     }
@@ -238,10 +247,7 @@ export async function POST(request: NextRequest) {
     if (isIndexError) {
       console.error("[WA_WEBHOOK] missing_index", { messageSid: docId, errMessage });
     }
-    const errorReply = isIndexError
-      ? "System needs a database index. Please contact the salon."
-      : SAFE_APOLOGY;
-    const twimlStr = buildTwimlResponse(errorReply);
+    const twimlStr = EMPTY_TWIML;
     try {
       await setInboundError(docId, {
         twimlResponse: twimlStr,
@@ -271,7 +277,7 @@ export async function POST(request: NextRequest) {
       } catch {
         // ignore
       }
-      return xmlResponse(buildTwimlResponse(SAFE_APOLOGY), 200);
+      return xmlResponse(EMPTY_TWIML, 200);
     }
 
     await logInboundWhatsApp({
@@ -283,69 +289,112 @@ export async function POST(request: NextRequest) {
 
     const { intent, selection } = normalizeInbound(inboundBody, ButtonPayload || null);
 
+    async function recordSilent(
+      resultStatus: string,
+      options: { bookingRef?: string | null; action?: "confirmed" | "cancelled" | null } = {}
+    ): Promise<NextResponse> {
+      await setInboundProcessed(docId, {
+        resultStatus,
+        replyBody: "",
+        twimlResponse: EMPTY_TWIML,
+        bookingRef: options.bookingRef,
+        action: options.action,
+      });
+      console.log("[WA_WEBHOOK] silent_reply", { messageSid: docId, resultStatus });
+      return xmlResponse(EMPTY_TWIML, 200);
+    }
+
+    /** Sandbox join: reply without metering (no siteId). */
+    async function recordSandboxJoinAck(): Promise<NextResponse> {
+      const msg =
+        (process.env.TWILIO_WHATSAPP_SANDBOX_JOIN_ACK ?? "").trim() ||
+        "מחוברים לסביבת הבדיקה של WhatsApp. אפשר להמשיך.";
+      const twimlStr = buildTwimlResponse(msg);
+      await setInboundProcessed(docId, {
+        resultStatus: "sandbox_join",
+        replyBody: msg,
+        twimlResponse: twimlStr,
+      });
+      console.log("[WA_WEBHOOK] sandbox_join_ack", { messageSid: docId });
+      return xmlResponse(twimlStr, 200);
+    }
+
+    /**
+     * Outbound TwiML with text: requires a resolvable siteId for limit check + incrementWhatsAppUsage(..., "service").
+     * Empty body → silent (no increment).
+     */
     async function recordAndReturnReply(
       replyBody: string,
       resultStatus: string,
-      bookingRef?: string | null,
-      action?: "confirmed" | "cancelled" | null
+      options: {
+        bookingRef?: string | null;
+        action?: "confirmed" | "cancelled" | null;
+        meterSiteId?: string | null;
+      } = {}
     ): Promise<NextResponse> {
-      const usageSiteId = siteIdFromBookingRef(bookingRef ?? undefined);
-      if (usageSiteId) {
-        const { allowed } = await assertSiteWithinWhatsAppLimit(usageSiteId);
-        if (!allowed) {
-          console.warn("[WA_WEBHOOK] Limit Reached (inbound reply blocked)", {
-            siteId: usageSiteId,
-            messageSid: docId,
-          });
-          const emptyTwiml = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
-          await setInboundProcessed(docId, {
-            resultStatus: "usage_limit_blocked",
-            replyBody: "",
-            twimlResponse: emptyTwiml,
-            bookingRef,
-            action,
-          });
-          return xmlResponse(emptyTwiml, 200);
-        }
-        try {
-          await incrementWhatsAppUsage(usageSiteId, "service");
-        } catch (e) {
-          console.warn("[WA_WEBHOOK] usage increment failed", e);
-        }
+      const text = (replyBody ?? "").trim();
+      if (!text) {
+        return recordSilent(resultStatus, options);
       }
-      const twimlStr = buildTwimlResponse(replyBody);
+      const siteId =
+        (options.meterSiteId && options.meterSiteId.trim()) ||
+        siteIdFromBookingRef(options.bookingRef ?? undefined);
+      if (!siteId) {
+        console.warn("[WA_WEBHOOK] reply_suppressed_no_site", { messageSid: docId, resultStatus });
+        return recordSilent(resultStatus, options);
+      }
+      const { allowed } = await assertSiteWithinWhatsAppLimit(siteId);
+      if (!allowed) {
+        console.warn("[WA_WEBHOOK] Limit Reached (inbound reply blocked)", {
+          siteId,
+          messageSid: docId,
+        });
+        await setInboundProcessed(docId, {
+          resultStatus: "usage_limit_blocked",
+          replyBody: "",
+          twimlResponse: EMPTY_TWIML,
+          bookingRef: options.bookingRef,
+          action: options.action,
+        });
+        return xmlResponse(EMPTY_TWIML, 200);
+      }
+      try {
+        await incrementWhatsAppUsage(siteId, "service");
+      } catch (e) {
+        console.warn("[WA_WEBHOOK] usage increment failed", e);
+      }
+      const twimlStr = buildTwimlResponse(text);
       await setInboundProcessed(docId, {
         resultStatus,
-        replyBody,
+        replyBody: text,
         twimlResponse: twimlStr,
-        bookingRef,
-        action,
+        bookingRef: options.bookingRef,
+        action: options.action,
       });
-      console.log("[WA_WEBHOOK] reply_sent", { messageSid: docId });
+      console.log("[WA_WEBHOOK] reply_sent", { messageSid: docId, siteId });
       return xmlResponse(twimlStr, 200);
+    }
+
+    if (isSandboxJoinCommand(inboundBody)) {
+      return recordSandboxJoinAck();
     }
 
     if (selection !== null) {
       const session = await getWhatsAppSession(fromE164);
       if (!session) {
-        const reply =
-          "לא מצאתי בחירה פעילה. אנא השב/י שוב על הודעת התזכורת עם כן או לא.";
-        return recordAndReturnReply(reply, "no_session");
+        return recordSilent("no_session");
       }
       const n = selection;
       const choices = session.choices;
       console.log("[WA_WEBHOOK] matched_number", { phoneE164: fromE164, n });
       if (n < 1 || n > choices.length) {
-        const reply = `מספר לא תקין. אנא השב/י עם מספר בין 1 ל-${choices.length}.`;
-        return recordAndReturnReply(reply, "invalid_selection");
+        return recordSilent("invalid_selection");
       }
       const chosen = choices[n - 1]!;
       const booking = await getBookingByRefIfAwaitingConfirmation(chosen.bookingRef);
       if (!booking) {
-        const reply =
-          "נראה שהתור הזה כבר עודכן. אם צריך עזרה, דבר/י עם העסק.";
         await deleteWhatsAppSession(fromE164);
-        return recordAndReturnReply(reply, "booking_updated");
+        return recordSilent("booking_updated");
       }
       if (session.intent === "confirm") {
         await markBookingConfirmed(booking.siteId, booking.bookingId);
@@ -359,7 +408,10 @@ export async function POST(request: NextRequest) {
           customerName: booking.customerName,
         });
         await deleteWhatsAppSession(fromE164);
-        return recordAndReturnReply(reply, "matched_yes", chosen.bookingRef, "confirmed");
+        return recordAndReturnReply(reply, "matched_yes", {
+          bookingRef: chosen.bookingRef,
+          action: "confirmed",
+        });
       }
       await cancelGroupByMatchedBooking(booking.siteId, booking.bookingId);
       console.log("[WA_WEBHOOK] firestore_updated", {
@@ -372,7 +424,10 @@ export async function POST(request: NextRequest) {
         customerName: booking.customerName,
       });
       await deleteWhatsAppSession(fromE164);
-      return recordAndReturnReply(reply, "matched_no", chosen.bookingRef, "cancelled");
+      return recordAndReturnReply(reply, "matched_no", {
+        bookingRef: chosen.bookingRef,
+        action: "cancelled",
+      });
     }
 
     // Run even when normalizeInbound guessed "yes"/"no" — prefilled opt-in text can contain
@@ -381,21 +436,16 @@ export async function POST(request: NextRequest) {
       const optInMatch = await findRecentBookingForWaOptInConfirmation(fromE164);
       if (optInMatch) {
         const { siteId: optSiteId, bookingId: optBookingId, data: bookingData } = optInMatch;
+        const optBookingRefPath = `sites/${optSiteId}/bookings/${optBookingId}`;
         try {
           const waSettings = await getSiteWhatsAppSettings(optSiteId);
           if (!waSettings.confirmationEnabled) {
-            return recordAndReturnReply(
-              "אישור אוטומטי בווטסאפ אינו פעיל אצל העסק. אנא פנה/י למספרה לפרטים.",
-              "opt_in_confirmation_disabled"
-            );
+            return recordSilent("opt_in_confirmation_disabled");
           }
           const startAt = bookingStartAtFromFirestore(bookingData);
           if (!startAt) {
             console.error("[WA_WEBHOOK] opt_in_missing_startAt", { optSiteId, optBookingId });
-            return recordAndReturnReply(
-              "לא הצלחנו לטעון את זמן התור. אנא פנו לעסק.",
-              "opt_in_bad_startat"
-            );
+            return recordSilent("opt_in_bad_startat");
           }
           const db = getAdminDb();
           const bookingRef = db
@@ -406,7 +456,7 @@ export async function POST(request: NextRequest) {
           const fresh = (await bookingRef.get()).data() as Record<string, unknown> | undefined;
           if (fresh?.confirmationSentAt != null) {
             await clearWaOptInPending(From);
-            return recordAndReturnReply("כבר נשלח אישור לתור. תודה!", "opt_in_already_sent");
+            return recordSilent("opt_in_already_sent");
           }
           const siteSnap = await db.collection("sites").doc(optSiteId).get();
           const cfg = siteSnap.data()?.config as { salonName?: string; whatsappBrandName?: string } | undefined;
@@ -428,25 +478,16 @@ export async function POST(request: NextRequest) {
             updatedAt: Timestamp.now(),
           });
           await clearWaOptInPending(From);
-          return recordAndReturnReply(
-            replyBody,
-            "opt_in_booking_confirmation",
-            `sites/${optSiteId}/bookings/${optBookingId}`,
-            null
-          );
+          return recordAndReturnReply(replyBody, "opt_in_booking_confirmation", {
+            bookingRef: optBookingRefPath,
+          });
         } catch (optErr) {
           const msg = optErr instanceof Error ? optErr.message : String(optErr);
           console.error("[WA_WEBHOOK] opt_in_handler_error", { optSiteId, optBookingId, msg });
-          return recordAndReturnReply(
-            "לא הצלחנו לשלוח את פרטי האישור כרגע. אנא פנו לעסק.",
-            "opt_in_handler_error"
-          );
+          return recordSilent("opt_in_handler_error");
         }
       }
-      return recordAndReturnReply(
-        "לא מצאנו הזמנה חדשה לאישור מהמספר הזה. אם עברו יותר מיום מההזמנה, פנה/י למספרה. אחרת נסה/י שוב מיד לאחר סיום התיאום.",
-        "opt_in_no_booking_match"
-      );
+      return recordSilent("opt_in_no_booking_match");
     }
 
     if (intent === "yes" || intent === "no") {
@@ -454,21 +495,7 @@ export async function POST(request: NextRequest) {
       console.log("[WA_WEBHOOK] matches_count", { phoneE164: fromE164, count: matches.length });
 
       if (matches.length === 0) {
-        if (intent === "yes") {
-          const alreadyConfirmed = await findNextBookingByPhoneWithStatus(fromE164, "confirmed");
-          if (alreadyConfirmed) {
-            return recordAndReturnReply("כבר מאושר ✅", "no_booking");
-          }
-        }
-        if (intent === "no") {
-          const alreadyCancelled = await findNextBookingByPhoneWithStatus(fromE164, "cancelled");
-          if (alreadyCancelled) {
-            return recordAndReturnReply("כבר בוטל ✅", "no_booking");
-          }
-        }
-        const reply =
-          "לא מצאתי תור שממתין לאישור עבור המספר הזה. אם קבעת תור, אפשר לפנות למספרה.";
-        return recordAndReturnReply(reply, "no_booking");
+        return recordSilent("no_booking");
       }
 
       if (matches.length === 1) {
@@ -487,7 +514,10 @@ export async function POST(request: NextRequest) {
             businessName: choice.siteName,
             customerName: choice.customerName,
           });
-          return recordAndReturnReply(reply, "matched_yes", bookingRef, "confirmed");
+          return recordAndReturnReply(reply, "matched_yes", {
+            bookingRef,
+            action: "confirmed",
+          });
         }
         await cancelGroupByMatchedBooking(choice.siteId, choice.bookingId);
         console.log("[WA_WEBHOOK] firestore_updated", {
@@ -500,7 +530,7 @@ export async function POST(request: NextRequest) {
           startAt: choice.startAt.toDate(),
           customerName: choice.customerName,
         });
-        return recordAndReturnReply(reply, "matched_no", bookingRef, "cancelled");
+        return recordAndReturnReply(reply, "matched_no", { bookingRef, action: "cancelled" });
       }
 
       const choices = matches.slice(0, 5);
@@ -530,10 +560,9 @@ export async function POST(request: NextRequest) {
       });
       const list = lines.join("\n");
       const reply = `יש לך כמה תורים שממתינים לאישור. על איזה מהם מדובר?\n\n${list}\n\nהשב/י עם מספר (1-${choices.length}).`;
-      return recordAndReturnReply(reply, "ambiguous");
+      return recordAndReturnReply(reply, "ambiguous", { bookingRef: choices[0]!.bookingRef });
     }
 
-    const help = 'כדי לאשר תור השב/השיבי "כן", כדי לבטל השב/השיבי "לא".';
-    return recordAndReturnReply(help, "no_match");
+    return recordSilent("no_match");
   }
 }

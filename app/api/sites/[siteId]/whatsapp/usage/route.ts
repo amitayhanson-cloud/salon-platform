@@ -21,15 +21,18 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   try {
     const snapshot = await getWhatsAppUsageSnapshot(id);
-    return NextResponse.json({
-      ok: true,
-      siteId: id,
-      whatsappUtilitySent: snapshot.whatsappUtilitySent,
-      whatsappServiceSent: snapshot.whatsappServiceSent,
-      totalUsed: snapshot.totalUsed,
-      whatsappUsageLimit: snapshot.whatsappUsageLimit,
-      whatsappLastUsageResetAt: snapshot.whatsappLastUsageResetAt?.toMillis() ?? null,
-    });
+    return NextResponse.json(
+      {
+        ok: true,
+        siteId: id,
+        whatsappUtilitySent: snapshot.whatsappUtilitySent,
+        whatsappServiceSent: snapshot.whatsappServiceSent,
+        totalUsed: snapshot.totalUsed,
+        whatsappUsageLimit: snapshot.whatsappUsageLimit,
+        whatsappLastUsageResetAt: snapshot.whatsappLastUsageResetAt?.toMillis() ?? null,
+      },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (e) {
     console.error("[whatsapp/usage]", e);
     return NextResponse.json(

@@ -19,6 +19,7 @@ import { renderWhatsAppTemplate } from "@/lib/whatsapp/templateRender";
 import { renderBookingConfirmationMessageFromBookingData } from "@/lib/whatsapp/renderBookingConfirmationMessage";
 import { getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
 import { setWaOptInPending } from "@/lib/whatsapp/waOptInPending";
+import { skipPostBookingConfirmationBecauseReminderCovers } from "@/lib/whatsapp/postBookingConfirmationSkip";
 import { getPublicBookingPageUrlForSite } from "@/lib/url";
 import { formatIsraelDateShort, formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
 import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
@@ -110,23 +111,35 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
 
   const postMode = waSettings.postBookingConfirmationMode ?? "auto";
   const useWhatsAppOptIn = postMode === "whatsapp_opt_in";
+  const skipDuplicatePostBookingConfirmation = skipPostBookingConfirmationBecauseReminderCovers({
+    reminderEnabled: waSettings.reminderEnabled,
+    startAt,
+  });
 
   if (useWhatsAppOptIn) {
     if (waSettings.confirmationEnabled) {
-      await bookingRef.update({
-        customerPhoneE164,
-        waOptInConfirmationRegisteredAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      });
-      await setWaOptInPending({
-        customerPhoneE164,
-        siteId,
-        bookingId,
-      });
+      if (!skipDuplicatePostBookingConfirmation) {
+        await bookingRef.update({
+          customerPhoneE164,
+          waOptInConfirmationRegisteredAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+        });
+        await setWaOptInPending({
+          customerPhoneE164,
+          siteId,
+          bookingId,
+        });
+      } else {
+        await bookingRef.update({
+          customerPhoneE164,
+          whatsappStatus: "booked",
+          updatedAt: Timestamp.now(),
+        });
+      }
     }
   } else {
     let confirmationSentOk = !waSettings.confirmationEnabled;
-    if (waSettings.confirmationEnabled) {
+    if (waSettings.confirmationEnabled && !skipDuplicatePostBookingConfirmation) {
       const messageBody = renderBookingConfirmationMessageFromBookingData(waSettings, {
         salonName,
         bookingPublicUrl,

@@ -1696,6 +1696,8 @@ export default function BookingPage() {
   const [postBookingWhatsApp, setPostBookingWhatsApp] = useState<{
     mode: "auto" | "whatsapp_opt_in";
     url: string | null;
+    /** True when appointment is within 24h and reminder replaces separate confirmation / wa.me CTA. */
+    lastMinuteReminderCoversConfirmation: boolean;
   } | null>(null);
 
   const handleSubmit = async () => {
@@ -1927,9 +1929,13 @@ export default function BookingPage() {
       const mode: "auto" | "whatsapp_opt_in" =
         modeRaw === "whatsapp_opt_in" ? "whatsapp_opt_in" : "auto";
       const waUrl = (confirmData as { whatsappOptInUrl?: unknown }).whatsappOptInUrl;
+      const lastMinuteReminderCoversConfirmation =
+        (confirmData as { lastMinuteReminderCoversConfirmation?: unknown })
+          .lastMinuteReminderCoversConfirmation === true;
       setPostBookingWhatsApp({
         mode,
         url: typeof waUrl === "string" && waUrl.startsWith("http") ? waUrl : null,
+        lastMinuteReminderCoversConfirmation,
       });
       setPhase2WorkerAssigned(null);
       setStep(6);
@@ -2135,9 +2141,11 @@ export default function BookingPage() {
                 ההזמנה נקלטה
               </h1>
               <p className="text-sm" style={{ color: "var(--muted)" }}>
-                {postBookingWhatsApp?.mode === "whatsapp_opt_in"
-                  ? "לבקשת אישור ופרטי הגעה בוואטסאפ — לחצו על הכפתור למטה."
-                  : "נחזור אליך בקרוב לאישור התור"}
+                {postBookingWhatsApp?.lastMinuteReminderCoversConfirmation
+                  ? "בקרוב תישלח אליכם הודעת וואטסאפ עם פרטי התור והאישור."
+                  : postBookingWhatsApp?.mode === "whatsapp_opt_in"
+                    ? "לבקשת אישור ופרטי הגעה בוואטסאפ — לחצו על הכפתור למטה."
+                    : "נחזור אליך בקרוב לאישור התור"}
               </p>
             </div>
 
@@ -2193,7 +2201,8 @@ export default function BookingPage() {
               </div>
             </div>
 
-            {postBookingWhatsApp?.mode === "whatsapp_opt_in" && (
+            {postBookingWhatsApp?.mode === "whatsapp_opt_in" &&
+              !postBookingWhatsApp.lastMinuteReminderCoversConfirmation && (
               <div className="mb-6 flex flex-col items-center gap-2" dir="rtl">
                 {postBookingWhatsApp.url ? (
                   <a

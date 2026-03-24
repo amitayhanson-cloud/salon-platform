@@ -7,8 +7,8 @@ import { getAdminDb } from "@/lib/firebaseAdmin";
 import { normalizeE164 } from "@/lib/whatsapp/e164";
 import { getWaOptInPending } from "@/lib/whatsapp/waOptInPending";
 
-/** Customers often send the prefilled wa.me message minutes or hours after booking; keep a generous window. */
-const DEFAULT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+/** Opt-in confirmation text is only honored for bookings created within this window (product rule). */
+const DEFAULT_MAX_AGE_MS = 10 * 60 * 1000;
 
 function toMillisFromUnknown(v: unknown): number | null {
   if (!v) return null;
