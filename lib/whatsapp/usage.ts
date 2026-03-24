@@ -5,8 +5,9 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { normalizeE164 } from "@/lib/whatsapp/e164";
+import { DEFAULT_WHATSAPP_USAGE_LIMIT } from "@/lib/whatsapp/constants";
 
-export const DEFAULT_WHATSAPP_USAGE_LIMIT = 250;
+export { DEFAULT_WHATSAPP_USAGE_LIMIT };
 
 const INBOUND_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 

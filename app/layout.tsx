@@ -8,6 +8,10 @@ import { getHostKind, isPlatformHost, normalizeHost } from "@/lib/tenant";
 import { getTenantSiteId } from "@/lib/tenant-data";
 import { getSiteIdByDomain } from "@/lib/firestoreCustomDomain";
 import { getAdminDb } from "@/lib/firebaseAdmin";
+import {
+  calenoDefaultIcons,
+  tenantIconsFromLogoAbsoluteUrl,
+} from "@/lib/metadataTenantIcons";
 
 const ROOT_METADATA: Metadata = {
   title: "Caleno | מערכת ניהול מתקדמת לעסקים – זימון תורים ובניית אתרים",
@@ -38,6 +42,8 @@ type SiteMetaInfo = {
   salonName: string;
   description: string;
   imageUrl: string;
+  /** Absolute logo URL for favicon only when tenant uploaded a logo; otherwise null → Caleno favicon */
+  faviconUrl: string | null;
 };
 
 async function getSiteMetaInfoForHost(hostHeader: string, origin: string): Promise<SiteMetaInfo | null> {
@@ -71,9 +77,11 @@ async function getSiteMetaInfoForHost(hostHeader: string, origin: string): Promi
     (salonName !== "Business"
       ? `Book your next appointment at ${salonName} via Caleno.`
       : "Schedule your next visit easily online.");
-  const imageUrl = toAbsoluteUrl(origin, siteData?.config?.branding?.logoUrl?.trim() || "");
+  const rawLogo = siteData?.config?.branding?.logoUrl?.trim() || "";
+  const imageUrl = toAbsoluteUrl(origin, rawLogo);
+  const faviconUrl = rawLogo ? toAbsoluteUrl(origin, rawLogo) : null;
 
-  return { salonName, description, imageUrl };
+  return { salonName, description, imageUrl, faviconUrl };
 }
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -103,22 +111,16 @@ export async function generateMetadata(): Promise<Metadata> {
         description,
         images: [siteMeta.imageUrl],
       },
-      icons: {
-        icon: "/favicon.ico",
-        shortcut: "/favicon.ico",
-        apple: "/apple-touch-icon.png",
-      },
+      icons: siteMeta.faviconUrl
+        ? tenantIconsFromLogoAbsoluteUrl(siteMeta.faviconUrl)
+        : calenoDefaultIcons(),
     };
   }
 
   return {
     ...(isRoot ? ROOT_METADATA : DEFAULT_METADATA),
     metadataBase: new URL(origin),
-    icons: {
-      icon: "/favicon.ico",
-      shortcut: "/favicon.ico",
-      apple: "/apple-touch-icon.png",
-    },
+    icons: calenoDefaultIcons(),
   };
 }
 

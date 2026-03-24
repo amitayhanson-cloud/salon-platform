@@ -49,6 +49,8 @@ export async function GET(request: NextRequest) {
       siteId,
       month: currentMonthLabel(),
       outboundCount: snapshot.totalUsed,
+      /** Monthly cap (same field as sites/{siteId}.whatsappUsageLimit, default 250) */
+      usageLimit: snapshot.whatsappUsageLimit,
       whatsappLastUsageResetAt: snapshot.whatsappLastUsageResetAt?.toMillis() ?? null,
     });
   } catch (e) {

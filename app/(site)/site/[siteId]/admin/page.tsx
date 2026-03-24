@@ -9,6 +9,7 @@ import { getAdminBasePathFromSiteId } from "@/lib/url";
 import { Users, Calendar, UserCircle, CalendarDays, LogOut, MessageSquare } from "lucide-react";
 import { AdminCard } from "@/components/admin/AdminCard";
 import { AdminStatCard } from "@/components/admin/AdminStatCard";
+import { DEFAULT_WHATSAPP_USAGE_LIMIT } from "@/lib/whatsapp/constants";
 
 export default function AdminHomePage() {
   const params = useParams();
@@ -17,7 +18,10 @@ export default function AdminHomePage() {
   const { user, firebaseUser, loading, logout } = useAuth();
   const [stats, setStats] = useState<SiteStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
-  const [whatsAppThisMonth, setWhatsAppThisMonth] = useState<number | null>(null);
+  const [whatsAppThisMonth, setWhatsAppThisMonth] = useState<{
+    used: number;
+    limit: number;
+  } | null>(null);
   const [whatsAppLoading, setWhatsAppLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -57,13 +61,24 @@ export default function AdminHomePage() {
         const res = await fetch(`/api/admin/whatsapp/monthly-count?siteId=${encodeURIComponent(siteId)}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        const data = (await res.json().catch(() => ({}))) as { outboundCount?: unknown };
+        const data = (await res.json().catch(() => ({}))) as {
+          outboundCount?: unknown;
+          usageLimit?: unknown;
+        };
         if (!cancelled && res.ok) {
-          setWhatsAppThisMonth(
+          const used =
             typeof data.outboundCount === "number" && Number.isFinite(data.outboundCount)
-              ? data.outboundCount
-              : null
-          );
+              ? Math.max(0, Math.floor(data.outboundCount))
+              : null;
+          const limit =
+            typeof data.usageLimit === "number" && Number.isFinite(data.usageLimit) && data.usageLimit > 0
+              ? Math.floor(data.usageLimit)
+              : DEFAULT_WHATSAPP_USAGE_LIMIT;
+          if (used !== null) {
+            setWhatsAppThisMonth({ used, limit });
+          } else {
+            setWhatsAppThisMonth(null);
+          }
         }
       } catch {
         if (!cancelled) setWhatsAppThisMonth(null);
@@ -103,7 +118,10 @@ export default function AdminHomePage() {
     },
     {
       label: "הודעות WhatsApp החודש",
-      value: whatsAppThisMonth,
+      value:
+        whatsAppThisMonth != null
+          ? `${whatsAppThisMonth.used.toLocaleString("he-IL")} מתוך ${whatsAppThisMonth.limit.toLocaleString("he-IL")}`
+          : null,
       href: `${adminBasePath}/whatsapp`,
       icon: MessageSquare,
     },

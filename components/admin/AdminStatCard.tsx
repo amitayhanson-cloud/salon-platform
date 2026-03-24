@@ -27,13 +27,15 @@ export function AdminStatCard({ label, value, href, icon: Icon, className }: Adm
         className
       )}
     >
-      <div className="flex items-center gap-2 text-caleno-deep mb-2">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[rgba(30,111,124,0.12)] text-caleno-deep">
-          <Icon className="h-4 w-4" aria-hidden />
+      <div className="mb-2 flex items-start gap-2 text-caleno-deep">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[rgba(30,111,124,0.12)] text-caleno-deep">
+          <Icon className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
         </span>
-        <span className="text-sm font-medium text-[#0F172A]/80">{label}</span>
+        <span className="min-w-0 flex-1 pt-0.5 text-sm font-medium leading-snug text-[#0F172A]/80">
+          {label}
+        </span>
       </div>
-      <p className="text-2xl font-bold text-[#0F172A] tabular-nums">
+      <p className="text-2xl font-bold leading-tight text-[#0F172A] tabular-nums">
         {value !== null && value !== undefined ? value : "—"}
       </p>
     </Link>
