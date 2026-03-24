@@ -1,21 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Timestamp } from "firebase-admin/firestore";
-import { getAdminDb } from "@/lib/firebaseAdmin";
 import { requireAuth } from "@/lib/server/requireAuth";
 import { assertSiteOwner } from "@/lib/server/assertSiteOwner";
 import { getTenantForUid } from "@/lib/getTenantForUid";
+import { getWhatsAppUsageSnapshot } from "@/lib/whatsapp/usage";
 
-function monthRange(now = new Date()): { start: Date; end: Date } {
+function currentMonthLabel(): string {
+  const now = new Date();
   const y = now.getUTCFullYear();
-  const m = now.getUTCMonth();
-  const start = new Date(Date.UTC(y, m, 1, 0, 0, 0, 0));
-  const end = new Date(Date.UTC(y, m + 1, 1, 0, 0, 0, 0));
-  return { start, end };
+  const m = now.getUTCMonth() + 1;
+  return `${y}-${m < 10 ? "0" : ""}${m}`;
 }
 
 /**
  * GET /api/admin/whatsapp/monthly-count?siteId=...
- * Returns outbound WhatsApp count for the current month for this site.
+ * Returns outbound WhatsApp usage counted toward the site’s monthly limit.
+ *
+ * Uses the same counters as `/api/sites/.../whatsapp/usage` (sites/{siteId}:
+ * whatsappUtilitySent + whatsappServiceSent). That includes replies sent via
+ * Twilio TwiML from the inbound webhook, which are not written to
+ * `whatsapp_messages` as outbound API sends are.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -39,39 +42,14 @@ export async function GET(request: NextRequest) {
     const forbidden = await assertSiteOwner(uid, siteId);
     if (forbidden) return forbidden;
 
-    const { start, end } = monthRange();
-    const db = getAdminDb();
-    const startTs = Timestamp.fromDate(start);
-    const endTs = Timestamp.fromDate(end);
-
-    async function countWithFallback(field: "siteId" | "salonId", value: string): Promise<number> {
-      const queryRef = db
-        .collection("whatsapp_messages")
-        .where(field, "==", value)
-        .where("direction", "==", "outbound")
-        .where("createdAt", ">=", startTs)
-        .where("createdAt", "<", endTs);
-      try {
-        const countSnap = await queryRef.count().get();
-        return countSnap.data().count;
-      } catch {
-        const snap = await queryRef.get();
-        return snap.size;
-      }
-    }
-
-    // Primary: modern logs keyed by siteId. Legacy fallback: salonId.
-    const [countBySiteId, countBySalonIdLegacy] = await Promise.all([
-      countWithFallback("siteId", siteId),
-      countWithFallback("salonId", siteId),
-    ]);
-    const outboundCount = countBySiteId + countBySalonIdLegacy;
+    const snapshot = await getWhatsAppUsageSnapshot(siteId);
 
     return NextResponse.json({
       ok: true,
       siteId,
-      month: start.toISOString().slice(0, 7),
-      outboundCount,
+      month: currentMonthLabel(),
+      outboundCount: snapshot.totalUsed,
+      whatsappLastUsageResetAt: snapshot.whatsappLastUsageResetAt?.toMillis() ?? null,
     });
   } catch (e) {
     console.error("[admin/whatsapp/monthly-count]", e);

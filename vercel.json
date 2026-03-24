@@ -1,1 +1,8 @@
-{}
+{
+  "crons": [
+    {
+      "path": "/api/cron/reset-whatsapp-usage",
+      "schedule": "0 0 1 * *"
+    }
+  ]
+}

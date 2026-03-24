@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { getReminderWindow } from "@/lib/whatsapp/reminderWindow";
-import { sendWhatsApp, normalizeE164 } from "@/lib/whatsapp";
+import { sendWhatsApp, normalizeE164, isWhatsAppOutboundDelivered } from "@/lib/whatsapp";
 
 export const maxDuration = 60;
 
@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
     const timeStr =
       startAt?.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" }) ?? "";
     try {
-      await sendWhatsApp({
+      const { sid } = await sendWhatsApp({
         toE164: customerPhoneE164,
         body: `${salonName} ✂️
 תזכורת: התור שלך מחר בשעה ${timeStr}.
@@ -151,6 +151,10 @@ export async function POST(request: NextRequest) {
         siteId,
         bookingRef: `sites/${siteId}/bookings/${bookingId}`,
       });
+      if (!isWhatsAppOutboundDelivered(sid)) {
+        result.forceSendSkipped = `sendWhatsApp returned synthetic sid: ${sid}`;
+        return NextResponse.json(result);
+      }
       const statusBefore = (data.status as string) ?? "booked";
       if (process.env.NODE_ENV === "development") {
         console.log("[pendingStage] bookingId=" + bookingId + " status before=" + statusBefore + " (test endpoint; not writing status)");

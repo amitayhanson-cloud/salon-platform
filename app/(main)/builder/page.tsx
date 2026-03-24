@@ -25,7 +25,7 @@ import { BuilderCheckoutStep } from "@/components/builder/BuilderCheckoutStep";
  * Manual test steps (signup wizard + subdomain):
  * 1. Sign up through wizard; at step "בחר תת-דומיין" enter slug "testamitay", check availability, continue and complete.
  * 2. Firestore: tenants/testamitay exists with correct siteId; sites/<siteId> has slug "testamitay"; users/<uid>.siteId set.
- * 3. GET /api/tenants/resolve?slug=testamitay returns 200 { siteId: "..." }.
+ * 3. Slug availability: GET /api/tenants/check-slug?slug=… returns 200 { available: true|false }.
  * 4. Open https://testamitay.caleno.co/admin (or localhost /admin?tenant=testamitay); should load and prompt login if needed.
  */
 
@@ -270,10 +270,12 @@ export default function BuilderPage() {
     setSlugAvailable(null);
     try {
       const res = await fetch(
-        `/api/tenants/resolve?slug=${encodeURIComponent(trimmed)}`
+        `/api/tenants/check-slug?slug=${encodeURIComponent(trimmed)}`
       );
-      if (res.status === 404) setSlugAvailable(true);
-      else setSlugAvailable(false);
+      const data = (await res.json().catch(() => ({}))) as { available?: boolean };
+      if (res.ok && data.available === true) setSlugAvailable(true);
+      else if (res.ok && data.available === false) setSlugAvailable(false);
+      else setSlugAvailable(null);
     } catch {
       setSlugAvailable(null);
     } finally {

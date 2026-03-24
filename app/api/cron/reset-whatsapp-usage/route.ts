@@ -1,31 +1,16 @@
 /**
- * POST /api/cron/reset-whatsapp-usage
- * Resets per-site WhatsApp usage counters monthly. Call from cron on the 1st (e.g. Vercel cron).
- * Authorization: Bearer ${CRON_SECRET}
+ * GET/POST /api/cron/reset-whatsapp-usage
+ * Resets per-site WhatsApp usage counters monthly. Vercel Cron invokes with GET + Bearer CRON_SECRET.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
+import { verifyCronBearerSecret } from "@/lib/server/verifyCronBearer";
 
 export const maxDuration = 300;
 
-function checkCronAuth(request: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return process.env.NODE_ENV !== "production";
-  const auth = request.headers.get("authorization");
-  const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
-  if (token === secret) return true;
-  const ua = request.headers.get("user-agent") ?? "";
-  if (ua.includes("vercel-cron")) return true;
-  return false;
-}
-
-export async function POST(request: NextRequest) {
-  if (!checkCronAuth(request)) {
-    return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
-  }
-
+async function runReset(): Promise<NextResponse> {
   const db = getAdminDb();
   const now = Timestamp.now();
   let batch = db.batch();
@@ -60,4 +45,38 @@ export async function POST(request: NextRequest) {
     sitesReset: sites,
     resetAt: now.toDate().toISOString(),
   });
+}
+
+function unauthorized(): NextResponse {
+  return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+}
+
+export async function GET(request: NextRequest) {
+  if (!verifyCronBearerSecret(request)) {
+    return unauthorized();
+  }
+  try {
+    return await runReset();
+  } catch (e) {
+    console.error("[cron/reset-whatsapp-usage]", e);
+    return NextResponse.json(
+      { ok: false, error: e instanceof Error ? e.message : "server_error" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  if (!verifyCronBearerSecret(request)) {
+    return unauthorized();
+  }
+  try {
+    return await runReset();
+  } catch (e) {
+    console.error("[cron/reset-whatsapp-usage]", e);
+    return NextResponse.json(
+      { ok: false, error: e instanceof Error ? e.message : "server_error" },
+      { status: 500 }
+    );
+  }
 }

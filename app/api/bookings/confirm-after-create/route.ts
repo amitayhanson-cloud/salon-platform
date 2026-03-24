@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
 
     let whatsappOptInUrl: string | null = null;
     if (mode === "whatsapp_opt_in" && waSettings.confirmationEnabled) {
-      whatsappOptInUrl = await buildBookingSuccessWhatsAppOptInUrl({
+      whatsappOptInUrl = buildBookingSuccessWhatsAppOptInUrl({
         siteId: resolvedSiteId,
         businessName,
         timeLabel: timeLabel || "—",

@@ -58,6 +58,18 @@ export type SendWhatsAppParams = {
 
 export const WHATSAPP_SKIPPED_USAGE_LIMIT_SID = "skipped-usage-limit";
 
+/** Synthetic SID when global platform WhatsApp automations are disabled (no Twilio send). */
+export const WHATSAPP_SKIPPED_GLOBAL_AUTOMATIONS_SID = "skipped-global-disabled";
+
+/** True when Twilio accepted an outbound message (not skipped by limit or global kill-switch). */
+export function isWhatsAppOutboundDelivered(sid: string): boolean {
+  return (
+    Boolean(sid) &&
+    sid !== WHATSAPP_SKIPPED_USAGE_LIMIT_SID &&
+    sid !== WHATSAPP_SKIPPED_GLOBAL_AUTOMATIONS_SID
+  );
+}
+
 /**
  * Send WhatsApp message via Twilio and log to Firestore whatsapp_messages.
  * Returns Twilio message SID. If global WhatsApp automations are disabled, skips send and returns synthetic sid.
@@ -93,7 +105,7 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
         timestamp: new Date().toISOString(),
       });
     }
-    return { sid: "skipped-global-disabled" };
+    return { sid: WHATSAPP_SKIPPED_GLOBAL_AUTOMATIONS_SID };
   }
 
   if (siteId) {

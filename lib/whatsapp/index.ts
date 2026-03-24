@@ -1,8 +1,10 @@
 export {
   sendWhatsApp,
+  isWhatsAppOutboundDelivered,
+  WHATSAPP_SKIPPED_GLOBAL_AUTOMATIONS_SID,
+  WHATSAPP_SKIPPED_USAGE_LIMIT_SID,
   logInboundWhatsApp,
   logAmbiguousWhatsApp,
-  WHATSAPP_SKIPPED_USAGE_LIMIT_SID,
 } from "./send";
 export { normalizeE164, normalizeToE164, toWhatsAppTo, isValidE164 } from "./e164";
 export { getBookingPhoneE164 } from "./getBookingPhone";

@@ -8,7 +8,12 @@ import { getAdminDb } from "@/lib/firebaseAdmin";
 import { requireAuth } from "@/lib/server/requireAuth";
 import { assertSiteOwner } from "@/lib/server/assertSiteOwner";
 import { checkRateLimit } from "@/lib/server/rateLimit";
-import { sendWhatsApp } from "@/lib/whatsapp";
+import {
+  sendWhatsApp,
+  isWhatsAppOutboundDelivered,
+  WHATSAPP_SKIPPED_GLOBAL_AUTOMATIONS_SID,
+  WHATSAPP_SKIPPED_USAGE_LIMIT_SID,
+} from "@/lib/whatsapp";
 import { listBroadcastRecipients } from "@/lib/whatsapp/broadcastRecipients";
 import { MAX_BROADCAST_CUSTOM_TEXT_LEN, MAX_BROADCAST_RECIPIENTS } from "@/lib/whatsapp/broadcastConstants";
 import { parseBroadcastFiltersFromBody } from "@/lib/whatsapp/parseBroadcastBody";
@@ -143,14 +148,28 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       );
     }
     try {
-      await sendWhatsApp({
+      const { sid } = await sendWhatsApp({
         toE164: r.e164,
         body: bodyRendered,
         siteId: id,
         bypassAutomationKillSwitch: true,
         meta: { automation: "owner_broadcast" },
       });
-      sent += 1;
+      if (isWhatsAppOutboundDelivered(sid)) {
+        sent += 1;
+      } else {
+        failed += 1;
+        if (errors.length < 5) {
+          if (sid === WHATSAPP_SKIPPED_USAGE_LIMIT_SID) {
+            errors.push("מכסה חודשית — ההודעה לא נשלחה");
+          } else if (sid === WHATSAPP_SKIPPED_GLOBAL_AUTOMATIONS_SID) {
+            errors.push("אוטומציות WhatsApp כבויות בפלטפורמה");
+          } else {
+            errors.push("הודעה לא נשלחה");
+          }
+        }
+        break;
+      }
     } catch (err) {
       failed += 1;
       const m = err instanceof Error ? err.message : String(err);
