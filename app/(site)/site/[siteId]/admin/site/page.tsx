@@ -76,6 +76,12 @@ export default function AdminSitePage() {
         };
         handleConfigChange(merged);
         await handleSaveConfig(merged);
+        // Ref can be null after await (tab switch, unmount, Strict Mode) — still clear dirty state
+        if (designEditorRef.current) {
+          designEditorRef.current.markSaved();
+        } else {
+          setDesignDirty(false);
+        }
         return;
       }
     }
@@ -249,9 +255,9 @@ export default function AdminSitePage() {
               ref={designEditorRef}
               siteId={siteId}
               baselineConfig={siteConfig}
-              onSave={(config) => {
+              onSave={async (config) => {
                 handleConfigChange(config);
-                void handleSaveConfig(config);
+                await handleSaveConfig(config);
               }}
               isSaving={isSaving}
               saveMessage={saveMessage ?? undefined}

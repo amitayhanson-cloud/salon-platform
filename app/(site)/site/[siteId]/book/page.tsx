@@ -119,7 +119,7 @@ function normalizePhases(value: unknown): PhaseForDate[] | undefined {
   return out.length ? out : undefined;
 }
 
-type BookingStep = 1 | 2 | 3 | 4 | 5 | 6; // 6 = success
+type BookingStep = 1 | 2 | 3 | 4 | 5 | 6 | 7; // 6 = review, 7 = success
 
 /** Payload from last-for-phone API + UI for repeat booking */
 type RepeatBookingPayload = {
@@ -598,6 +598,44 @@ export default function BookingPage() {
   /** Don't clear selectedWorker when roster says "can't do service" — same worker as last visit */
   const [repeatPrefillWorkerId, setRepeatPrefillWorkerId] = useState<string | null>(null);
   const repeatApplyPricingItemIdRef = useRef<string | null>(null);
+
+  /** Brief green glow before auto-advance so the choice feels confirmed */
+  const SELECTION_FLASH_MS = 480;
+  const selectionGlowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [selectionGlowKey, setSelectionGlowKey] = useState<string | null>(null);
+
+  function flashSelectionThen(key: string, runAfterFlash: () => void) {
+    if (selectionGlowTimerRef.current) clearTimeout(selectionGlowTimerRef.current);
+    setSelectionGlowKey(key);
+    selectionGlowTimerRef.current = setTimeout(() => {
+      selectionGlowTimerRef.current = null;
+      setSelectionGlowKey(null);
+      runAfterFlash();
+    }, SELECTION_FLASH_MS);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (selectionGlowTimerRef.current) clearTimeout(selectionGlowTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (selectionGlowTimerRef.current) {
+      clearTimeout(selectionGlowTimerRef.current);
+      selectionGlowTimerRef.current = null;
+    }
+    setSelectionGlowKey(null);
+  }, [step]);
+
+  const prevBookingStepRef = useRef<BookingStep>(step);
+  useEffect(() => {
+    const prev = prevBookingStepRef.current;
+    prevBookingStepRef.current = step;
+    if (step !== 2 || prev === 2) return;
+    const openId = selectedServices[0]?.service?.id;
+    if (openId) setExpandingServiceId(openId);
+  }, [step, selectedServices]);
 
   // Date picker navigation state
   const [dateWindowStart, setDateWindowStart] = useState<Date>(() => {
@@ -1451,6 +1489,16 @@ export default function BookingPage() {
         return selectedDate !== null;
       case 5:
         return selectedTime !== "";
+      case 6:
+        return (
+          clientName.trim() !== "" &&
+          clientPhone.trim() !== "" &&
+          selectedServices.length >= 1 &&
+          (!isMultiBooking || selectedServices.length < 2 || hasValidMultiBookingCombo) &&
+          selectedDate !== null &&
+          selectedTime !== "" &&
+          eligibleWorkers.length > 0
+        );
       default:
         return false;
     }
@@ -1677,8 +1725,9 @@ export default function BookingPage() {
       if (isStepValid()) void continueFromDetailsStep();
       return;
     }
-    if (isStepValid() && step < 5) {
-      setStep((step + 1) as BookingStep);
+    if (step === 2 && isMultiBooking && isStepValid()) {
+      setStep(3);
+      return;
     }
   };
 
@@ -1705,7 +1754,7 @@ export default function BookingPage() {
     if (
       !clientName.trim() ||
       !clientPhone.trim() ||
-      step !== 5 ||
+      step !== 6 ||
       selectedServices.length === 0 ||
       !selectedDate ||
       !selectedTime ||
@@ -1938,7 +1987,7 @@ export default function BookingPage() {
         lastMinuteReminderCoversConfirmation,
       });
       setPhase2WorkerAssigned(null);
-      setStep(6);
+      setStep(7);
     } catch (err) {
       console.error("Failed to save booking", err);
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -2059,9 +2108,10 @@ export default function BookingPage() {
     { num: 3, label: "איש צוות" },
     { num: 4, label: "תאריך" },
     { num: 5, label: "שעה" },
+    { num: 6, label: "סיכום" },
   ];
 
-  if (step === 6) {
+  if (step === 7) {
     // Success screen
     return (
       <div 
@@ -2140,7 +2190,7 @@ export default function BookingPage() {
               <h1 className="text-2xl sm:text-3xl font-bold mb-2" style={{ color: "var(--text)" }}>
                 ההזמנה נקלטה
               </h1>
-              <p className="text-sm" style={{ color: "var(--muted)" }}>
+              <p className="text-sm max-w-md mx-auto" style={{ color: "var(--muted)" }}>
                 {postBookingWhatsApp?.lastMinuteReminderCoversConfirmation
                   ? "בקרוב תישלח אליכם הודעת וואטסאפ עם פרטי התור והאישור."
                   : postBookingWhatsApp?.mode === "whatsapp_opt_in"
@@ -2149,15 +2199,15 @@ export default function BookingPage() {
               </p>
             </div>
 
-            {/* Appointment details: RTL, right-aligned so text flows right-to-left */}
+            {/* Appointment details — same RTL row layout as סיכום ההזמנה (justify-start under dir=rtl) */}
             <div
-              className="rounded-2xl p-6 mb-6 w-full space-y-3 text-right"
+              className="rounded-2xl p-6 mb-6 w-full space-y-3 text-right border"
               style={{ backgroundColor: "var(--bg)", borderColor: "var(--border)" }}
               dir="rtl"
             >
-              <div className="flex justify-end items-start gap-3 pb-3 border-b" style={{ borderColor: "var(--border)" }}>
-                <span className="text-sm shrink-0 order-2" style={{ color: "var(--muted)" }}>שירות{selectedServices.length > 1 ? "ים" : ""}:</span>
-                <div className="flex flex-col items-end gap-0.5 min-w-0 order-1">
+              <div className="flex justify-start items-start gap-3 pb-3 border-b" style={{ borderColor: "var(--border)" }}>
+                <span className="text-sm shrink-0" style={{ color: "var(--muted)" }}>שירות{selectedServices.length > 1 ? "ים" : ""}:</span>
+                <div className="flex flex-col gap-0.5 min-w-0 flex-1 text-right">
                   <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
                     {selectedServices.length === 1
                       ? selectedService?.name
@@ -2173,29 +2223,29 @@ export default function BookingPage() {
                   )}
                 </div>
               </div>
-              <div className="flex justify-end items-center gap-3 pb-3 border-b" style={{ borderColor: "var(--border)" }}>
+              <div className="flex justify-start items-center gap-3 pb-3 border-b" style={{ borderColor: "var(--border)" }}>
                 <span className="text-sm shrink-0" style={{ color: "var(--muted)" }}>מעצב:</span>
-                <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                <span className="text-sm font-semibold min-w-0 text-right" style={{ color: "var(--text)" }}>
                   {selectedWorker ? selectedWorker.name : "ללא העדפה"}
                 </span>
               </div>
               {phase2WorkerAssigned && (
-                <div className="flex justify-end items-center gap-3 pb-3 border-b" style={{ borderColor: "var(--border)" }}>
+                <div className="flex justify-start items-center gap-3 pb-3 border-b" style={{ borderColor: "var(--border)" }}>
                   <span className="text-sm shrink-0" style={{ color: "var(--muted)" }}>המשך טיפול יבוצע על ידי:</span>
-                  <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                  <span className="text-sm font-semibold min-w-0 text-right" style={{ color: "var(--text)" }}>
                     {phase2WorkerAssigned.name}
                   </span>
                 </div>
               )}
-              <div className="flex justify-end items-center gap-3 pb-3 border-b" style={{ borderColor: "var(--border)" }}>
+              <div className="flex justify-start items-center gap-3 pb-3 border-b" style={{ borderColor: "var(--border)" }}>
                 <span className="text-sm shrink-0" style={{ color: "var(--muted)" }}>תאריך:</span>
-                <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                <span className="text-sm font-semibold min-w-0 text-right" style={{ color: "var(--text)" }}>
                   {selectedDate ? formatDateForDisplay(selectedDate) : ""}
                 </span>
               </div>
-              <div className="flex justify-end items-center gap-3">
+              <div className="flex justify-start items-center gap-3">
                 <span className="text-sm shrink-0" style={{ color: "var(--muted)" }}>שעה:</span>
-                <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                <span className="text-sm font-semibold min-w-0 text-right" style={{ color: "var(--text)" }}>
                   {selectedTime}
                 </span>
               </div>
@@ -2714,10 +2764,10 @@ export default function BookingPage() {
                   </p>
                 </div>
               )}
-              {selectedServices.length > 0 && (
+              {isMultiBooking && selectedServices.length > 0 && (
                 <div className="mb-4 p-4 rounded-xl border" style={{ borderColor: "var(--border)", backgroundColor: "var(--bg)" }}>
                   <p className="text-xs font-medium mb-2 text-right" style={{ color: "var(--muted)" }}>
-                    {isMultiBooking ? "השירותים שנבחרו" : "השירות שנבחר"}
+                    השירותים שנבחרו
                   </p>
                   <ul className="space-y-2">
                     {selectedServices.map((s, idx) => {
@@ -2824,20 +2874,40 @@ export default function BookingPage() {
                       <div key={service.id} className="space-y-3">
                         <button
                           type="button"
+                          aria-expanded={isExpanded}
                           onClick={() => setExpandingServiceId((prev) => (prev === service.id ? null : service.id))}
                           className="w-full text-right p-4 rounded-2xl border-2 transition-all hover:opacity-90"
                           style={{
-                            borderColor: isExpanded ? "var(--primary)" : "var(--border)",
+                            borderColor: "var(--border)",
                             backgroundColor: isExpanded ? "var(--bg)" : "var(--surface)",
                           }}
                         >
-                          <div className="flex justify-between items-center">
-                            <h3 className="font-semibold text-lg" style={{ color: "var(--text)" }}>
+                          <div className="flex justify-between items-center gap-3 w-full">
+                            <h3 className="font-semibold text-lg min-w-0 flex-1 truncate text-right" style={{ color: "var(--text)" }}>
                               {service.name}
                             </h3>
-                            <span className="text-sm" style={{ color: "var(--muted)" }}>
-                              {servicePricingItems.length} אפשרויות
-                            </span>
+                            <div className="flex flex-row items-center gap-1.5 shrink-0" dir="ltr">
+                              <span
+                                className="flex items-center justify-center w-7 h-7 rounded-full transition-transform duration-200"
+                                style={{
+                                  color: "var(--muted)",
+                                  transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)",
+                                }}
+                              >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                                  <path
+                                    d="M6 9l6 6 6-6"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                </svg>
+                              </span>
+                              <span className="text-sm whitespace-nowrap" style={{ color: "var(--muted)" }}>
+                                {servicePricingItems.length} אפשרויות
+                              </span>
+                            </div>
                           </div>
                         </button>
                         
@@ -2878,6 +2948,11 @@ export default function BookingPage() {
                                 : `${item.durationMinMinutes}-${item.durationMaxMinutes} דק'`;
                               const itemNotes = item.notes?.trim();
                               
+                              const pricingFlashKey = `pricing:${service.id}:${item.id}`;
+                              const isPricingGlowing = selectionGlowKey === pricingFlashKey;
+                              const isPricingSelected = selectedServices.some(
+                                (s) => s.service.id === service.id && s.pricingItem.id === item.id
+                              );
                               return (
                                 <button
                                   key={item.id}
@@ -2885,13 +2960,24 @@ export default function BookingPage() {
                                   onClick={() => {
                                     if (!isMultiBooking) {
                                       setSelectedServices([{ service, pricingItem: item }]);
+                                      flashSelectionThen(pricingFlashKey, () => setStep(3));
                                     } else {
                                       setSelectedServices((prev) => [...prev, { service, pricingItem: item }]);
+                                      setExpandingServiceId(null);
                                     }
-                                    setExpandingServiceId(null);
                                   }}
-                                  className="w-full text-right p-3 rounded-xl border transition-all hover:opacity-90"
-                                  style={{ borderColor: "var(--border)", backgroundColor: "var(--surface)" }}
+                                  className="w-full text-right p-3 rounded-xl border-2 transition-all hover:opacity-90"
+                                  style={{
+                                    borderColor: isPricingGlowing
+                                      ? "#22c55e"
+                                      : isPricingSelected
+                                        ? "var(--primary)"
+                                        : "var(--border)",
+                                    backgroundColor: isPricingSelected ? "var(--bg)" : "var(--surface)",
+                                    boxShadow: isPricingGlowing
+                                      ? "0 0 0 3px rgba(34, 197, 94, 0.45), 0 8px 28px rgba(34, 197, 94, 0.22)"
+                                      : undefined,
+                                  }}
                                 >
                                   <div className="flex justify-between items-start">
                                     <div className="text-right min-w-0">
@@ -2966,11 +3052,21 @@ export default function BookingPage() {
                         repeatApplyPricingItemIdRef.current = null;
                         setSelectedWorker(null);
                         setTimeUpdatedByWorkerMessage(false);
+                        flashSelectionThen("worker:none", () => setStep(4));
                       }}
                       className="w-full text-right p-4 rounded-2xl border-2 transition-all hover:opacity-90"
                       style={{
-                        borderColor: selectedWorker === null ? "var(--primary)" : "var(--border)",
+                        borderColor:
+                          selectionGlowKey === "worker:none"
+                            ? "#22c55e"
+                            : selectedWorker === null
+                              ? "var(--primary)"
+                              : "var(--border)",
                         backgroundColor: selectedWorker === null ? "var(--bg)" : "var(--surface)",
+                        boxShadow:
+                          selectionGlowKey === "worker:none"
+                            ? "0 0 0 3px rgba(34, 197, 94, 0.45), 0 8px 28px rgba(34, 197, 94, 0.22)"
+                            : undefined,
                       }}
                     >
                       <div className="flex items-center gap-3">
@@ -2988,7 +3084,10 @@ export default function BookingPage() {
                       </div>
                     </button>
                     {/* Eligible workers */}
-                    {eligibleWorkers.map((worker) => (
+                    {eligibleWorkers.map((worker) => {
+                      const workerFlashKey = `worker:${worker.id}`;
+                      const isWorkerGlowing = selectionGlowKey === workerFlashKey;
+                      return (
                       <button
                         key={worker.id}
                         type="button"
@@ -2999,11 +3098,19 @@ export default function BookingPage() {
                           }
                           setSelectedWorker({ id: worker.id, name: worker.name });
                           setTimeUpdatedByWorkerMessage(false);
+                          flashSelectionThen(workerFlashKey, () => setStep(4));
                         }}
                         className="w-full text-right p-4 rounded-2xl border-2 transition-all hover:opacity-90"
                         style={{
-                          borderColor: selectedWorker?.id === worker.id ? "var(--primary)" : "var(--border)",
+                          borderColor: isWorkerGlowing
+                            ? "#22c55e"
+                            : selectedWorker?.id === worker.id
+                              ? "var(--primary)"
+                              : "var(--border)",
                           backgroundColor: selectedWorker?.id === worker.id ? "var(--bg)" : "var(--surface)",
+                          boxShadow: isWorkerGlowing
+                            ? "0 0 0 3px rgba(34, 197, 94, 0.45), 0 8px 28px rgba(34, 197, 94, 0.22)"
+                            : undefined,
                         }}
                       >
                         <div className="flex items-center gap-3">
@@ -3020,7 +3127,8 @@ export default function BookingPage() {
                           </div>
                         </div>
                       </button>
-                    ))}
+                    );
+                    })}
                     {/* No phase 2 worker picker — phase 2 is auto-assigned at booking time */}
                   </>
                 )}
@@ -3106,6 +3214,8 @@ export default function BookingPage() {
                   const isSelected =
                     selectedDate &&
                     ymdLocal(selectedDate) === ymdLocal(date);
+                  const dateFlashKey = `date:${ymdLocal(date)}`;
+                  const isDateGlowing = selectionGlowKey === dateFlashKey;
 
                   return (
                     <button
@@ -3115,14 +3225,24 @@ export default function BookingPage() {
                         if (available) {
                           setSelectedDate(date);
                           setTimeUpdatedByWorkerMessage(false);
+                          flashSelectionThen(dateFlashKey, () => setStep(5));
                         }
                       }}
                       disabled={!available}
                       className="p-3 rounded-xl border-2 text-sm transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                       style={{
-                        borderColor: isSelected ? "var(--primary)" : available ? "var(--border)" : "var(--border)",
+                        borderColor: isDateGlowing
+                          ? "#22c55e"
+                          : isSelected
+                            ? "var(--primary)"
+                            : available
+                              ? "var(--border)"
+                              : "var(--border)",
                         backgroundColor: isSelected ? "var(--bg)" : available ? "var(--surface)" : "var(--bg)",
                         color: isSelected ? "var(--text)" : available ? "var(--text)" : "var(--muted)",
+                        boxShadow: isDateGlowing
+                          ? "0 0 0 3px rgba(34, 197, 94, 0.45), 0 8px 28px rgba(34, 197, 94, 0.22)"
+                          : undefined,
                       }}
                     >
                       <div className="font-semibold mb-1">
@@ -3203,6 +3323,8 @@ export default function BookingPage() {
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                   {availableTimeSlots.map((time) => {
                     const isSelected = selectedTime === time;
+                    const timeFlashKey = `time:${time}`;
+                    const isTimeGlowing = selectionGlowKey === timeFlashKey;
 
                     return (
                       <button
@@ -3211,12 +3333,16 @@ export default function BookingPage() {
                         onClick={() => {
                           setSelectedTime(time);
                           setTimeUpdatedByWorkerMessage(false);
+                          flashSelectionThen(timeFlashKey, () => setStep(6));
                         }}
                         className="p-3 rounded-xl border-2 text-sm font-medium transition-all hover:opacity-90"
                         style={{
-                          borderColor: isSelected ? "var(--primary)" : "var(--border)",
+                          borderColor: isTimeGlowing ? "#22c55e" : isSelected ? "var(--primary)" : "var(--border)",
                           backgroundColor: isSelected ? "var(--bg)" : "var(--surface)",
                           color: "var(--text)",
+                          boxShadow: isTimeGlowing
+                            ? "0 0 0 3px rgba(34, 197, 94, 0.45), 0 8px 28px rgba(34, 197, 94, 0.22)"
+                            : undefined,
                         }}
                       >
                         {time}
@@ -3228,6 +3354,75 @@ export default function BookingPage() {
             </div>
           )}
 
+          {step === 6 && (
+            <div className="space-y-4" dir="rtl">
+              <h2 className="text-xl font-bold mb-2 text-right" style={{ color: "var(--text)" }}>
+                סיכום ההזמנה
+              </h2>
+              <p className="text-sm text-right mb-4" style={{ color: "var(--muted)" }}>
+                בדקו את הפרטים. לאישור סופי לחצו &quot;אשר הזמנה&quot;.
+              </p>
+              <div
+                className="rounded-2xl p-6 w-full space-y-3 text-right border"
+                style={{ backgroundColor: "var(--bg)", borderColor: "var(--border)" }}
+                dir="rtl"
+              >
+                <div className="flex justify-start items-center gap-3 pb-3 border-b" style={{ borderColor: "var(--border)" }}>
+                  <span className="text-sm shrink-0" style={{ color: "var(--muted)" }}>שם:</span>
+                  <span className="text-sm font-semibold min-w-0 text-right" style={{ color: "var(--text)" }}>{clientName.trim() || "—"}</span>
+                </div>
+                <div className="flex justify-start items-center gap-3 pb-3 border-b" style={{ borderColor: "var(--border)" }}>
+                  <span className="text-sm shrink-0" style={{ color: "var(--muted)" }}>טלפון:</span>
+                  <span className="text-sm font-semibold min-w-0 text-right" style={{ color: "var(--text)" }} dir="ltr">
+                    {clientPhone.trim() || "—"}
+                  </span>
+                </div>
+                {clientNote.trim() ? (
+                  <div className="flex justify-start items-start gap-3 pb-3 border-b" style={{ borderColor: "var(--border)" }}>
+                    <span className="text-sm shrink-0" style={{ color: "var(--muted)" }}>הערה:</span>
+                    <span className="text-sm font-semibold min-w-0 flex-1 whitespace-pre-wrap text-right" style={{ color: "var(--text)" }}>
+                      {clientNote.trim()}
+                    </span>
+                  </div>
+                ) : null}
+                <div className="flex justify-start items-start gap-3 pb-3 border-b" style={{ borderColor: "var(--border)" }}>
+                  <span className="text-sm shrink-0" style={{ color: "var(--muted)" }}>שירות{selectedServices.length > 1 ? "ים" : ""}:</span>
+                  <span className="text-sm font-semibold min-w-0 flex-1 text-right" style={{ color: "var(--text)" }}>
+                    {selectedServices.length === 1
+                      ? selectedService?.name
+                      : selectedServices
+                          .map((s) =>
+                            s.pricingItem.type?.trim() ? `${s.service.name} — ${s.pricingItem.type}` : s.service.name
+                          )
+                          .join(" → ")}
+                  </span>
+                </div>
+                <div className="flex justify-start items-center gap-3 pb-3 border-b" style={{ borderColor: "var(--border)" }}>
+                  <span className="text-sm shrink-0" style={{ color: "var(--muted)" }}>מעצב:</span>
+                  <span className="text-sm font-semibold min-w-0 text-right" style={{ color: "var(--text)" }}>
+                    {selectedWorker ? selectedWorker.name : "ללא העדפה"}
+                  </span>
+                </div>
+                {phase2WorkerAssigned && (
+                  <div className="flex justify-start items-center gap-3 pb-3 border-b" style={{ borderColor: "var(--border)" }}>
+                    <span className="text-sm shrink-0" style={{ color: "var(--muted)" }}>המשך טיפול:</span>
+                    <span className="text-sm font-semibold min-w-0 text-right" style={{ color: "var(--text)" }}>{phase2WorkerAssigned.name}</span>
+                  </div>
+                )}
+                <div className="flex justify-start items-center gap-3 pb-3 border-b" style={{ borderColor: "var(--border)" }}>
+                  <span className="text-sm shrink-0" style={{ color: "var(--muted)" }}>תאריך:</span>
+                  <span className="text-sm font-semibold min-w-0 text-right" style={{ color: "var(--text)" }}>
+                    {selectedDate ? formatDateForDisplay(selectedDate) : "—"}
+                  </span>
+                </div>
+                <div className="flex justify-start items-center gap-3">
+                  <span className="text-sm shrink-0" style={{ color: "var(--muted)" }}>שעה:</span>
+                  <span className="text-sm font-semibold min-w-0 text-right" style={{ color: "var(--text)" }}>{selectedTime || "—"}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Navigation buttons */}
           <div className="mt-8 pt-6 border-t flex justify-between gap-4" style={{ borderColor: "var(--border)" }}>
             <button
@@ -3235,7 +3430,7 @@ export default function BookingPage() {
               onClick={handleBack}
               disabled={step === 1}
               className="px-6 py-3 border rounded-xl font-medium transition-colors hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ 
+              style={{
                 borderColor: "var(--border)",
                 color: "var(--text)",
                 backgroundColor: "transparent",
@@ -3243,33 +3438,50 @@ export default function BookingPage() {
             >
               חזור
             </button>
-            {step < 5 ? (
-              <button
-                type="button"
-                onClick={handleNext}
-                disabled={!isStepValid() || checkingLastBooking}
-                className="px-6 py-3 rounded-xl font-semibold transition-colors hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ 
-                  backgroundColor: "var(--primary)",
-                  color: "var(--primaryText)",
-                }}
-              >
-                {checkingLastBooking ? "בודק…" : "המשך"}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={!isStepValid() || isSubmitting}
-                className="px-6 py-3 rounded-xl font-semibold transition-colors hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ 
-                  backgroundColor: "#10b981",
-                  color: "var(--primaryText)",
-                }}
-              >
-                {isSubmitting ? "שומר…" : "אשר הזמנה"}
-              </button>
-            )}
+            <div className="flex gap-3">
+              {step === 1 && (
+                <button
+                  type="button"
+                  onClick={handleNext}
+                  disabled={!isStepValid() || checkingLastBooking}
+                  className="px-6 py-3 rounded-xl font-semibold transition-colors hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{
+                    backgroundColor: "var(--primary)",
+                    color: "var(--primaryText)",
+                  }}
+                >
+                  {checkingLastBooking ? "בודק…" : "המשך"}
+                </button>
+              )}
+              {step === 2 && isMultiBooking && (
+                <button
+                  type="button"
+                  onClick={handleNext}
+                  disabled={!isStepValid()}
+                  className="px-6 py-3 rounded-xl font-semibold transition-colors hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{
+                    backgroundColor: "var(--primary)",
+                    color: "var(--primaryText)",
+                  }}
+                >
+                  המשך
+                </button>
+              )}
+              {step === 6 && (
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={!isStepValid() || isSubmitting}
+                  className="px-6 py-3 rounded-xl font-semibold transition-colors hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{
+                    backgroundColor: "#10b981",
+                    color: "var(--primaryText)",
+                  }}
+                >
+                  {isSubmitting ? "שומר…" : "אשר הזמנה"}
+                </button>
+              )}
+            </div>
           </div>
 
           {submitError && (
@@ -3278,7 +3490,7 @@ export default function BookingPage() {
             </div>
           )}
 
-          {!isStepValid() && step < 6 && step !== 1 && (
+          {!isStepValid() && step < 7 && step !== 1 && step !== 6 && (
             <div className="mt-4 p-3 border rounded-xl text-right" style={{ backgroundColor: "#fef2f2", borderColor: "#fecaca" }}>
               <p className="text-sm" style={{ color: "#991b1b" }}>
                 יש למלא את כל השדות הנדרשים לפני המשך

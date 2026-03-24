@@ -816,8 +816,6 @@ export default function AdminWhatsAppPage() {
         </div>
       </AdminPageHero>
 
-      <AdminTabs tabs={TABS} activeKey={tab} onChange={setTab} />
-
       <AdminCard className="p-5 sm:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -872,6 +870,8 @@ export default function AdminWhatsAppPage() {
           <p className="mt-4 text-sm text-[#64748B]">לא ניתן לטעון את נתוני השימוש כרגע.</p>
         )}
       </AdminCard>
+
+      <AdminTabs tabs={TABS} activeKey={tab} onChange={setTab} />
 
       {tab === "broadcast" && localSettings && (
         <div className="space-y-6">

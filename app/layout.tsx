@@ -84,7 +84,8 @@ export async function generateMetadata(): Promise<Metadata> {
   const siteMeta = isRoot ? null : await getSiteMetaInfoForHost(host, origin).catch(() => null);
 
   if (siteMeta) {
-    const title = `${siteMeta.salonName} - Book an Appointment`;
+    /** Booking page sets its own title via `app/(site)/site/[siteId]/book/layout.tsx` */
+    const title = `${siteMeta.salonName} · Caleno`;
     const description = siteMeta.description || "Schedule your next visit easily online.";
     return {
       metadataBase: new URL(origin),

@@ -87,7 +87,19 @@ export default function SalonHeader({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pillRef = useRef<HTMLElement>(null);
   const [mobileMenuTop, setMobileMenuTop] = useState(0);
+  /** Broken URL / failed load: show salon name like when there is no logo */
+  const [logoLoadFailed, setLogoLoadFailed] = useState(false);
   const edit = editorMode ? (key: keyof typeof EDITOR_ATTRS) => EDITOR_ATTRS[key] : () => ({});
+
+  useEffect(() => {
+    setLogoLoadFailed(false);
+  }, [logoUrl]);
+
+  const showLogoImage = Boolean(logoUrl?.trim()) && !logoLoadFailed;
+  const logoAltResolved =
+    logoAlt?.trim() && logoAlt.trim().toLowerCase() !== "logo"
+      ? logoAlt.trim()
+      : salonName;
 
   const navLabel = (key: keyof NonNullable<SiteContent["header"]>) =>
     contentHeader?.[key]?.trim() ? contentHeader[key]! : DEFAULT_CONTENT.header[key];
@@ -155,28 +167,30 @@ export default function SalonHeader({
           </button>
           <div
             className="absolute right-4 top-1/2 flex max-w-[min(70%,calc(100%-4rem))] -translate-y-1/2 items-center justify-end lg:right-8"
-            {...(logoUrl ? {} : edit("headerText"))}
+            {...(showLogoImage ? {} : edit("headerText"))}
           >
-            {logoUrl ? (
+            {showLogoImage ? (
               <Link
                 href={getSiteUrl(slug, siteId, "")}
                 className="flex shrink-0 items-center rounded-full focus:outline-none focus-visible:bg-white/10 active:outline-none"
                 style={{ height: LOGO_HEIGHT }}
-                aria-label={logoAlt || salonName || "דף הבית"}
+                aria-label={logoAltResolved || "דף הבית"}
               >
                 <img
-                  src={logoUrl}
-                  alt={logoAlt || salonName || "לוגו"}
+                  src={logoUrl!}
+                  alt=""
+                  role="presentation"
+                  onError={() => setLogoLoadFailed(true)}
                   className="h-full w-auto object-contain"
                   style={{ height: LOGO_HEIGHT, maxHeight: LOGO_HEIGHT }}
                 />
               </Link>
             ) : (
               <span
-                dir="ltr"
-                lang="en"
+                dir="rtl"
+                lang="he"
                 className="truncate text-right text-xl font-semibold tracking-wide"
-                style={{ unicodeBidi: "isolate", color: textColor }}
+                style={{ unicodeBidi: "plaintext", color: textColor }}
               >
                 {salonName}
               </span>
@@ -186,13 +200,13 @@ export default function SalonHeader({
 
         {/* Desktop: 3-column grid, menu centered */}
         <div className="mx-auto hidden h-16 max-w-6xl grid-cols-3 items-center gap-4 px-4 lg:px-8 md:grid">
-          <div className="flex min-w-0 items-center justify-start" {...(logoUrl ? {} : edit("headerText"))}>
-            {!logoUrl && (
+          <div className="flex min-w-0 items-center justify-start" {...(showLogoImage ? {} : edit("headerText"))}>
+            {!showLogoImage && (
               <span
-                dir="ltr"
-                lang="en"
+                dir="rtl"
+                lang="he"
                 className="text-xl font-semibold tracking-wide"
-                style={{ unicodeBidi: "isolate", color: textColor }}
+                style={{ unicodeBidi: "plaintext", color: textColor }}
               >
                 {salonName}
               </span>
@@ -237,16 +251,18 @@ export default function SalonHeader({
           </div>
 
           <div className="flex min-w-0 items-center justify-end">
-            {logoUrl ? (
+            {showLogoImage ? (
               <Link
                 href={getSiteUrl(slug, siteId, "")}
                 className="flex shrink-0 items-center rounded-full focus:outline-none focus-visible:bg-white/10 active:outline-none"
                 style={{ height: LOGO_HEIGHT }}
-                aria-label={logoAlt || salonName || "דף הבית"}
+                aria-label={logoAltResolved || "דף הבית"}
               >
                 <img
-                  src={logoUrl}
-                  alt={logoAlt || salonName || "לוגו"}
+                  src={logoUrl!}
+                  alt=""
+                  role="presentation"
+                  onError={() => setLogoLoadFailed(true)}
                   className="h-full w-auto object-contain"
                   style={{ height: LOGO_HEIGHT, maxHeight: LOGO_HEIGHT }}
                 />
@@ -274,22 +290,28 @@ export default function SalonHeader({
               backdropFilter: "saturate(180%) blur(16px)",
             }}
           >
-          {logoUrl ? (
+          {showLogoImage ? (
             <Link
               href={getSiteUrl(slug, siteId, "")}
               onClick={() => setMobileMenuOpen(false)}
               className="flex justify-start rounded-full py-3 focus:outline-none focus-visible:bg-white/10 active:outline-none"
               style={{ height: LOGO_HEIGHT }}
-              aria-label={logoAlt || salonName || "דף הבית"}
+              aria-label={logoAltResolved || "דף הבית"}
             >
               <img
-                src={logoUrl}
-                alt={logoAlt || salonName || "לוגו"}
+                src={logoUrl!}
+                alt=""
+                role="presentation"
+                onError={() => setLogoLoadFailed(true)}
                 className="h-full w-auto object-contain object-left max-w-full"
                 style={{ height: LOGO_HEIGHT, maxHeight: LOGO_HEIGHT }}
               />
             </Link>
-          ) : null}
+          ) : (
+            <p className="py-3 text-right text-lg font-semibold" style={{ color: textColor }}>
+              {salonName}
+            </p>
+          )}
           <nav className="flex flex-col gap-1" aria-label="ניווט ראשי (נייד)">
             {NAV_IDS.map(({ key, id }) => (
               <button

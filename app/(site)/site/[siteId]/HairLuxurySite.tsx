@@ -471,6 +471,7 @@ export default function HairLuxurySite({
         topColor="var(--heroBase)"
         bottomColor="var(--bg)"
         heightClassName="h-[clamp(64px,9vw,120px)]"
+        className="relative z-[1] max-md:-mt-[2px]"
       />
 
       {/* About Section: section-scoped colors */}

@@ -14,12 +14,13 @@ const TEMPLATE_KEY = "hair1";
 
 export interface VisualSiteEditorHandle {
   getDraft: () => SiteConfig | null;
+  markSaved: () => void;
 }
 
 interface VisualSiteEditorProps {
   siteId: string;
   baselineConfig: SiteConfig;
-  onSave: (config: SiteConfig) => void;
+  onSave: (config: SiteConfig) => void | Promise<void>;
   onBack?: () => void;
   isSaving?: boolean;
   saveMessage?: string;
@@ -49,7 +50,8 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
   const [selected, setSelected] = useState<SelectedTarget | null>(null);
   const [services, setServices] = useState<SiteService[]>([]);
   const previewContainerRef = useRef<HTMLDivElement>(null);
-  const userHasEditedDraftRef = useRef(false);
+  /** State (not ref) so clearing dirty after save re-renders and updates leave guards */
+  const [draftDirty, setDraftDirty] = useState(false);
 
   // Load services for WebsiteRenderer
   useEffect(() => {
@@ -72,12 +74,12 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
   }, [siteId]);
 
   const handlePathChange = useCallback((path: string, value: unknown) => {
-    userHasEditedDraftRef.current = true;
+    setDraftDirty(true);
     setDraft((prev) => setByPath(prev, path, value) as SiteConfig);
   }, []);
 
   const handleDraftChange = useCallback((updates: Partial<SiteConfig>) => {
-    userHasEditedDraftRef.current = true;
+    setDraftDirty(true);
     setDraft((prev) => (prev ? { ...prev, ...updates } : prev));
   }, []);
 
@@ -90,7 +92,7 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
   );
 
   const handleDiscard = useCallback(() => {
-    userHasEditedDraftRef.current = false;
+    setDraftDirty(false);
     setDraft({
       ...baselineConfig,
       themeColors: baselineConfig.themeColors ?? defaultThemeColors,
@@ -99,25 +101,36 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
   }, [baselineConfig]);
 
   const hasUnsavedChanges = useMemo(() => {
-    if (!userHasEditedDraftRef.current) return false;
+    if (!draftDirty) return false;
     const base = {
       ...baselineConfig,
       themeColors: baselineConfig.themeColors ?? defaultThemeColors,
     };
     return JSON.stringify(draft) !== JSON.stringify(base);
-  }, [draft, baselineConfig]);
+  }, [draftDirty, draft, baselineConfig]);
 
   useEffect(() => {
     onDirtyChange?.(hasUnsavedChanges);
   }, [hasUnsavedChanges, onDirtyChange]);
 
-  const handleSave = useCallback(() => {
-    onSave(draft);
+  const handleSave = useCallback(async () => {
+    try {
+      await Promise.resolve(onSave(draft));
+      setDraftDirty(false);
+    } catch {
+      /* parent save failed — keep dirty */
+    }
   }, [draft, onSave]);
 
-  useImperativeHandle(ref, () => ({
-    getDraft: () => draft ?? null,
-  }), [draft]);
+  useImperativeHandle(
+    ref,
+    () => ({
+      getDraft: () => draft ?? null,
+      /** Call after a successful save from the parent (e.g. top bar) so leave guards clear */
+      markSaved: () => setDraftDirty(false),
+    }),
+    [draft]
+  );
 
   /** Find deepest element with data-edit-id (walk from target up to container). */
   const findDeepestEditable = useCallback(
@@ -289,7 +302,7 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
             )}
             <button
               type="button"
-              onClick={handleSave}
+              onClick={() => void handleSave()}
               disabled={isSaving}
               className="px-4 py-2 rounded-lg bg-caleno-ink text-white text-sm font-semibold shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
             >

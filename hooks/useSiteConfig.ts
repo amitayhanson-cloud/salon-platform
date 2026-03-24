@@ -190,6 +190,7 @@ export function useSiteConfig(siteId: string) {
     } catch (e) {
       console.error("Failed to save admin state", e);
       setSaveMessage("אירעה שגיאה בשמירה");
+      throw e;
     } finally {
       setIsSaving(false);
       setTimeout(() => setSaveMessage(""), 2500);
