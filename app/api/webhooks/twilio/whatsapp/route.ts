@@ -368,18 +368,23 @@ export async function POST(request: NextRequest) {
       return recordAndReturnReply(reply, "matched_no", chosen.bookingRef, "cancelled");
     }
 
-    if (
-      intent === null &&
-      selection === null &&
-      looksLikeCustomerBookingConfirmationRequest(inboundBody)
-    ) {
+    // Run even when normalizeInbound guessed "yes"/"no" — prefilled opt-in text can contain
+    // words that overlap YES/NO heuristics (e.g. "אישור", or "כן" inside longer phrases).
+    if (selection === null && looksLikeCustomerBookingConfirmationRequest(inboundBody)) {
       const optInMatch = await findRecentBookingForWaOptInConfirmation(fromE164);
       if (optInMatch) {
         const { siteId: optSiteId, bookingId: optBookingId, data: bookingData } = optInMatch;
         const waSettings = await getSiteWhatsAppSettings(optSiteId);
         if (waSettings.confirmationEnabled) {
           const startAt = bookingStartAtFromFirestore(bookingData);
-          if (startAt) {
+          if (!startAt) {
+            console.error("[WA_WEBHOOK] opt_in_missing_startAt", { optSiteId, optBookingId });
+            return recordAndReturnReply(
+              "לא הצלחנו לטעון את זמן התור. אנא פנו לעסק.",
+              "opt_in_bad_startat"
+            );
+          }
+          try {
             const db = getAdminDb();
             const bookingRef = db
               .collection("sites")
@@ -414,6 +419,13 @@ export async function POST(request: NextRequest) {
               "opt_in_booking_confirmation",
               `sites/${optSiteId}/bookings/${optBookingId}`,
               null
+            );
+          } catch (optErr) {
+            const msg = optErr instanceof Error ? optErr.message : String(optErr);
+            console.error("[WA_WEBHOOK] opt_in_handler_error", { optSiteId, optBookingId, msg });
+            return recordAndReturnReply(
+              "לא הצלחנו לשלוח את פרטי האישור כרגע. אנא פנו לעסק.",
+              "opt_in_handler_error"
             );
           }
         }

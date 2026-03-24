@@ -104,12 +104,23 @@ export function normalizeInbound(
   intent: InboundIntent;
   selection: number | null;
 } {
-  const payloadNorm = normalizeForMatch((buttonPayload ?? "").trim().toLowerCase());
-  if (payloadNorm === "yes" || payloadNorm === "confirm" || payloadNorm.includes("כן")) {
-    return { normalized: payloadNorm || "yes", intent: "yes", selection: null };
-  }
-  if (payloadNorm === "no" || payloadNorm === "cancel" || payloadNorm.includes("לא")) {
-    return { normalized: payloadNorm || "no", intent: "no", selection: null };
+  const rawPayload = (buttonPayload ?? "").trim();
+  if (rawPayload) {
+    const payloadNorm = normalizeForMatch(rawPayload.toLowerCase());
+    if (payloadNorm === "yes" || payloadNorm === "confirm") {
+      return { normalized: payloadNorm || "yes", intent: "yes", selection: null };
+    }
+    if (payloadNorm === "no" || payloadNorm === "cancel") {
+      return { normalized: payloadNorm || "no", intent: "no", selection: null };
+    }
+    // Do not use payloadNorm.includes("כן"/"לא") — long payloads (e.g. echoed template text)
+    // can contain those substrings and steal the opt-in booking-confirmation path.
+    if (isYes(rawPayload)) {
+      return { normalized: normalizeInboundBody(rawPayload), intent: "yes", selection: null };
+    }
+    if (isNo(rawPayload)) {
+      return { normalized: normalizeInboundBody(rawPayload), intent: "no", selection: null };
+    }
   }
   const rawStr = (body ?? "").trim();
   const normalized = rawStr.replace(/\s+/g, " ").toLowerCase().trim();

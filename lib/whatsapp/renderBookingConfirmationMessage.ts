@@ -40,9 +40,34 @@ export function renderBookingConfirmationMessageFromBookingData(
 
 export function bookingStartAtFromFirestore(data: Record<string, unknown>): Date | null {
   const s = data.startAt;
+  if (s == null) return null;
   if (s instanceof Timestamp) return s.toDate();
-  if (s && typeof s === "object" && "seconds" in s && typeof (s as { seconds: number }).seconds === "number") {
-    return new Date((s as { seconds: number }).seconds * 1000);
+  if (typeof s === "object") {
+    const o = s as Record<string, unknown>;
+    const sec =
+      typeof o.seconds === "number"
+        ? o.seconds
+        : typeof o._seconds === "number"
+          ? o._seconds
+          : null;
+    if (sec != null) {
+      const ns =
+        typeof o.nanoseconds === "number"
+          ? o.nanoseconds
+          : typeof o._nanoseconds === "number"
+            ? o._nanoseconds
+            : 0;
+      return new Date(sec * 1000 + Math.floor(ns / 1e6));
+    }
+    const toMillis = (o as { toMillis?: () => number }).toMillis;
+    if (typeof toMillis === "function") {
+      try {
+        const ms = toMillis.call(s);
+        if (typeof ms === "number" && Number.isFinite(ms)) return new Date(ms);
+      } catch {
+        /* ignore */
+      }
+    }
   }
   return null;
 }
