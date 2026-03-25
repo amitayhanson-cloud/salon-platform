@@ -1,6 +1,24 @@
 {
   "indexes": [
     {
+      "collectionGroup": "archivedServiceTypes",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "archiveSiteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "cancellationMonthKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "archivedReason",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "whatsapp_messages",
       "queryScope": "COLLECTION",
       "fields": [

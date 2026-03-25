@@ -2,10 +2,13 @@ import type { MainGoal } from "./siteConfig";
 
 export type User = {
   id: string;
+  /** Empty for phone-primary accounts (see primaryLoginMethod). */
   email: string;
   name?: string;
   /** E.164 or normalized phone; required for profile to be "complete" */
   phone?: string | null;
+  /** Set for new phone+OTP signups; Google/email users may omit (legacy). */
+  primaryLoginMethod?: "phone" | "email" | "google";
   siteId: string | null; // Reference to the user's site (null = no site yet, needs wizard)
   primarySlug?: string | null; // Tenant subdomain; prefer for dashboard links
   /** Saved from builder step "מה המטרה העיקרית של האתר" before site is created */
@@ -19,12 +22,14 @@ export type User = {
   updatedAt?: Date;
 };
 
-/** True when user has name, email, and phone (needed before builder/site creation). */
+/** True when profile has name, phone, and (for non-phone-primary) email. */
 export function isUserProfileComplete(user: User): boolean {
   const hasName = typeof user.name === "string" && user.name.trim().length > 0;
   const hasEmail = typeof user.email === "string" && user.email.trim().length > 0;
   const hasPhone = typeof user.phone === "string" && user.phone.trim().length > 0;
-  return hasName && hasEmail && hasPhone;
+  if (!hasName || !hasPhone) return false;
+  if (user.primaryLoginMethod === "phone") return true;
+  return hasEmail;
 }
 
 export type SetupStatus = "not_started" | "in_progress" | "completed";

@@ -1246,15 +1246,23 @@ export default function SettingsPage() {
             <div className="space-y-6">
               <div>
                 <h2 className="text-base sm:text-lg font-bold text-[#0F172A] mb-1">אבטחה</h2>
-                <p className="text-sm text-slate-500 mb-4">
-                  שנה את הסיסמה של החשבון שלך.
-                </p>
-                <ChangePasswordCard
-                  firebaseUser={firebaseUser}
-                  onToast={(msg, isError) => setSecurityToast({ message: msg, isError })}
-                  logSecurityEvent={logSecurityEvent}
-                  tenantId={siteId ?? undefined}
-                />
+                {firebaseUser?.providerData?.some((p) => p.providerId === "password") ? (
+                  <>
+                    <p className="text-sm text-slate-500 mb-4">
+                      שנה את הסיסמה של החשבון שלך.
+                    </p>
+                    <ChangePasswordCard
+                      firebaseUser={firebaseUser}
+                      onToast={(msg, isError) => setSecurityToast({ message: msg, isError })}
+                      logSecurityEvent={logSecurityEvent}
+                      tenantId={siteId ?? undefined}
+                    />
+                  </>
+                ) : (
+                  <p className="text-sm text-slate-500 mb-4">
+                    החשבון שלך מקושר ל-Google או לטלפון (קוד SMS) — אין סיסמה לשנות כאן.
+                  </p>
+                )}
               </div>
               {securityToast && (
                 <div

@@ -439,7 +439,7 @@ export function buildServiceItemsFromChain(chainSlots: ChainSlotForSave[]): Serv
 export async function saveMultiServiceBooking(
   siteId: string,
   chainSlots: ChainSlotForSave[],
-  client: { name: string; phone: string; note?: string },
+  client: { name: string; phone: string; note?: string; trafficSource?: string | null },
   options?: { workers?: WorkersForValidation; multiPayload?: MultiBookingSelectionPayload }
 ): Promise<{ visitGroupId: string; firstBookingId: string }> {
   if (!db) throw new Error("Firestore db not initialized");
@@ -521,6 +521,10 @@ export async function saveMultiServiceBooking(
   });
 
   const createdAtClientMs = Date.now();
+  const bookingTrafficSource = String(client.trafficSource ?? "")
+    .trim()
+    .toLowerCase()
+    .slice(0, 64);
 
   const bookingsRef = bookingsCollection(siteId);
   let firstBookingId = "";
@@ -570,6 +574,7 @@ export async function saveMultiServiceBooking(
       createdAt: serverTimestamp(),
       createdAtClientMs,
       updatedAt: serverTimestamp(),
+      ...(bookingTrafficSource ? { bookingTrafficSource } : {}),
     };
     if (item.phase === 2 && lastPhase1DocId) {
       payload.parentBookingId = lastPhase1DocId;

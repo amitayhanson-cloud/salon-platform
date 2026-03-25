@@ -1,15 +1,36 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import CalenoLoading from "@/components/CalenoLoading";
 import { fetchSiteStats, type SiteStats } from "@/lib/fetchSiteStats";
 import { getAdminBasePathFromSiteId } from "@/lib/url";
-import { Users, Calendar, UserCircle, CalendarDays, LogOut, MessageSquare } from "lucide-react";
+import {
+  Users,
+  Calendar,
+  CalendarDays,
+  LogOut,
+  MessageSquare,
+  UserPlus,
+  Banknote,
+  XCircle,
+  Percent,
+  Link2,
+} from "lucide-react";
 import { AdminCard } from "@/components/admin/AdminCard";
 import { AdminStatCard } from "@/components/admin/AdminStatCard";
 import { DEFAULT_WHATSAPP_USAGE_LIMIT } from "@/lib/whatsapp/constants";
+
+type DashboardMetrics = {
+  ok?: boolean;
+  cancellationsThisMonth?: number | null;
+  cancellationsNote?: string;
+  utilizationPercent?: number | null;
+  bookedHoursThisMonth?: number;
+  availableHoursThisMonth?: number;
+  trafficBySource?: { source: string; count: number }[];
+};
 
 export default function AdminHomePage() {
   const params = useParams();
@@ -23,6 +44,8 @@ export default function AdminHomePage() {
     limit: number;
   } | null>(null);
   const [whatsAppLoading, setWhatsAppLoading] = useState(true);
+  const [dashMetrics, setDashMetrics] = useState<DashboardMetrics | null>(null);
+  const [dashLoading, setDashLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
 
   const adminBasePath = getAdminBasePathFromSiteId(siteId);
@@ -91,41 +114,124 @@ export default function AdminHomePage() {
     };
   }, [siteId, firebaseUser]);
 
-  const statCards = [
-    {
-      label: "לקוחות",
-      value: stats?.clientsCount ?? null,
-      href: `${adminBasePath}/clients/client-card`,
-      icon: Users,
-    },
-    {
-      label: "אנשי צוות",
-      value: stats?.workersCount ?? null,
-      href: `${adminBasePath}/team/workers`,
-      icon: UserCircle,
-    },
-    {
-      label: "תורים השבוע",
-      value: stats?.bookingsThisWeek ?? null,
-      href: `${adminBasePath}/bookings`,
-      icon: CalendarDays,
-    },
-    {
-      label: "תורים קרובים",
-      value: stats?.upcomingBookings ?? null,
-      href: `${adminBasePath}/bookings`,
-      icon: Calendar,
-    },
-    {
-      label: "הודעות WhatsApp החודש",
-      value:
-        whatsAppThisMonth != null
-          ? `${whatsAppThisMonth.used.toLocaleString("he-IL")} מתוך ${whatsAppThisMonth.limit.toLocaleString("he-IL")}`
-          : null,
-      href: `${adminBasePath}/whatsapp`,
-      icon: MessageSquare,
-    },
-  ];
+  useEffect(() => {
+    if (!siteId || !firebaseUser) {
+      setDashLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        setDashLoading(true);
+        const month = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+        const token = await firebaseUser.getIdToken();
+        const res = await fetch(
+          `/api/admin/dashboard-metrics?siteId=${encodeURIComponent(siteId)}&month=${encodeURIComponent(month)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const data = (await res.json().catch(() => ({}))) as DashboardMetrics & { ok?: boolean };
+        if (!cancelled && res.ok && data?.ok) {
+          setDashMetrics(data);
+        } else if (!cancelled) {
+          setDashMetrics(null);
+        }
+      } catch {
+        if (!cancelled) setDashMetrics(null);
+      } finally {
+        if (!cancelled) setDashLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [siteId, firebaseUser]);
+
+  const revenueFormatted =
+    stats?.revenueThisMonth != null
+      ? `\u200E${new Intl.NumberFormat("he-IL", {
+          style: "currency",
+          currency: "ILS",
+          maximumFractionDigits: 0,
+        }).format(stats.revenueThisMonth)}`
+      : null;
+
+  const statCards = useMemo(() => {
+    const trafficTop = (dashMetrics?.trafficBySource ?? []).slice(0, 3);
+    const trafficValue =
+      trafficTop.length > 0 ? trafficTop.map((t) => `${t.source}: ${t.count}`).join(" · ") : null;
+
+    const dm = dashMetrics;
+    const utilPct = dm?.utilizationPercent;
+    const utilValue =
+      dm != null && utilPct != null && Number.isFinite(utilPct)
+        ? `\u200E${utilPct}%${
+            dm.bookedHoursThisMonth != null && dm.availableHoursThisMonth != null
+              ? ` (${dm.bookedHoursThisMonth}/${dm.availableHoursThisMonth} ש׳)`
+              : ""
+          }`
+        : null;
+
+    return [
+      {
+        label: "לקוחות",
+        value: stats?.clientsCount ?? null,
+        href: `${adminBasePath}/clients/client-card`,
+        icon: Users,
+      },
+      {
+        label: "לקוחות חדשים החודש",
+        value: stats?.newCustomersThisMonth ?? null,
+        href: `${adminBasePath}/clients/client-card`,
+        icon: UserPlus,
+      },
+      {
+        label: "תורים היום",
+        value: stats?.bookingsToday ?? null,
+        href: `${adminBasePath}/bookings`,
+        icon: Calendar,
+      },
+      {
+        label: "תורים החודש",
+        value: stats?.bookingsThisMonth ?? null,
+        href: `${adminBasePath}/bookings`,
+        icon: CalendarDays,
+      },
+      {
+        label: "הכנסות החודש",
+        value: revenueFormatted,
+        href: `${adminBasePath}/bookings`,
+        icon: Banknote,
+      },
+      {
+        label: "ביטולים החודש",
+        value: dashMetrics?.cancellationsThisMonth ?? null,
+        href: `${adminBasePath}/bookings`,
+        icon: XCircle,
+        title: dashMetrics?.cancellationsNote,
+      },
+      {
+        label: "ניצולת זמן",
+        value: utilValue,
+        href: `${adminBasePath}/bookings`,
+        icon: Percent,
+      },
+      {
+        label: "מקור הגעה (קישור)",
+        value: trafficValue,
+        href: `${adminBasePath}/site`,
+        icon: Link2,
+      },
+      {
+        label: "הודעות WhatsApp החודש",
+        value:
+          whatsAppThisMonth != null
+            ? `\u200E${whatsAppThisMonth.used}/${whatsAppThisMonth.limit}`
+            : null,
+        href: `${adminBasePath}/whatsapp`,
+        icon: MessageSquare,
+      },
+    ];
+  }, [adminBasePath, dashMetrics, revenueFormatted, stats, whatsAppThisMonth]);
 
   const handleLogout = async () => {
     if (loggingOut) return;
@@ -180,12 +286,12 @@ export default function AdminHomePage() {
                   <h2 className="mb-4 text-lg font-semibold text-[#0F172A]">
                     סטטיסטיקות העסק
                   </h2>
-                  {statsLoading || whatsAppLoading ? (
-                    <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-                      {[1, 2, 3, 4, 5].map((i) => (
+                  {statsLoading || whatsAppLoading || dashLoading ? (
+                    <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
                         <div
                           key={i}
-                          className="rounded-2xl border border-[#E2E8F0] bg-[rgba(30,111,124,0.06)] p-4 animate-pulse"
+                          className="flex min-h-[7.5rem] flex-col rounded-2xl border border-[#E2E8F0] bg-[rgba(30,111,124,0.06)] p-4 animate-pulse"
                         >
                           <div className="mb-3 h-4 w-16 rounded bg-[#E2E8F0]" />
                           <div className="h-8 w-12 rounded bg-[#E2E8F0]" />
@@ -193,14 +299,15 @@ export default function AdminHomePage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-                      {statCards.map(({ label, value, href, icon }) => (
+                    <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+                      {statCards.map(({ label, value, href, icon, title }) => (
                         <AdminStatCard
                           key={label}
                           label={label}
                           value={value}
                           href={href}
                           icon={icon}
+                          title={title}
                         />
                       ))}
                     </div>

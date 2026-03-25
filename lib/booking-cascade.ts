@@ -11,6 +11,9 @@ import { getRelatedBookingIds } from "@/lib/whatsapp/relatedBookings";
 import { MAX_RELATED_BOOKINGS } from "@/lib/whatsapp/relatedBookings";
 import { getDeterministicArchiveDocId } from "@/lib/archiveReplaceAdmin";
 import { isFollowUpBooking } from "@/lib/normalizeBooking";
+import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
+
+const ISRAEL_TZ = "Asia/Jerusalem";
 
 const serverTimestamp = () => admin.firestore.FieldValue.serverTimestamp();
 
@@ -21,6 +24,7 @@ export type CascadeCancelReason =
   | "manual"
   | "auto"
   | "customer_cancelled_via_whatsapp"
+  | "customer_cancelled_via_public_booking"
   | "admin_delete";
 
 /**
@@ -114,6 +118,7 @@ export async function cancelBookingsCascade(
   }
   const db = getAdminDb();
   const isWhatsApp = reason === "customer_cancelled_via_whatsapp";
+  const isPublicBooking = reason === "customer_cancelled_via_public_booking";
   const isAdminDelete = reason === "admin_delete";
   const base: Record<string, unknown> = isAdminDelete
     ? {
@@ -122,14 +127,16 @@ export async function cancelBookingsCascade(
         archivedReason: "admin_delete" as const,
         updatedAt: serverTimestamp(),
       }
-    : isWhatsApp
+    : isWhatsApp || isPublicBooking
     ? {
         whatsappStatus: "cancelled" as const,
         status: "cancelled" as const,
         cancelledAt: serverTimestamp(),
         isArchived: true,
         archivedAt: serverTimestamp(),
-        archivedReason: "customer_cancelled_via_whatsapp" as const,
+        archivedReason: (isWhatsApp
+          ? "customer_cancelled_via_whatsapp"
+          : "customer_cancelled_via_public_booking") as const,
         updatedAt: serverTimestamp(),
       }
     : {
@@ -195,7 +202,9 @@ export async function cancelBookingsCascade(
     const statusAtArchive =
       reason === "admin_delete" || reason === "auto"
         ? (originalStatus ?? "booked")
-        : reason === "manual" || reason === "customer_cancelled_via_whatsapp"
+        : reason === "manual" ||
+            reason === "customer_cancelled_via_whatsapp" ||
+            reason === "customer_cancelled_via_public_booking"
           ? "cancelled"
           : (originalStatus ?? "booked");
     if (process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
@@ -208,7 +217,10 @@ export async function cancelBookingsCascade(
         : (d?.serviceType != null && String(d.serviceType).trim() !== "" ? String(d.serviceType).trim() : null);
     const customerPhone = (d?.customerPhone ?? d?.phone ?? "").trim() || "";
     const dateStr = (d?.date ?? d?.dateISO ?? "") as string;
+    const cancellationMonthKey = getDateYMDInTimezone(new Date(), ISRAEL_TZ).slice(0, 7);
     const minimal: Record<string, unknown> = {
+      archiveSiteId: siteId,
+      cancellationMonthKey,
       date: dateStr,
       serviceName: (d?.serviceName as string) ?? "",
       serviceType: (d?.serviceType as string) ?? null,

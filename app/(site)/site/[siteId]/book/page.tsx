@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -58,6 +58,16 @@ import {
   getJsDow,
   jsDayToWeekdayKey,
 } from "@/lib/scheduleDayMapping";
+import { normalizeE164, isValidE164 } from "@/lib/whatsapp/e164";
+
+const BOOKING_TRAFFIC_SOURCE_SESSION_KEY = "caleno_booking_traffic_source";
+
+/** Israeli / E.164 mobile — same rules as WhatsApp reminders */
+function isBookingClientPhoneValid(raw: string): boolean {
+  const t = raw.trim();
+  if (!t) return false;
+  return isValidE164(normalizeE164(t, "IL"));
+}
 
 type TimestampLike = { toDate: () => Date };
 
@@ -135,6 +145,39 @@ type RepeatBookingPayload = {
   workerName: string | null;
   siteServiceId: string | null;
 };
+
+/** Upcoming visit from active-for-phone (edit / cancel before repeat-last prompt). */
+type ActiveBookingPayload = {
+  cancelAnchorBookingId: string;
+  dateISO: string;
+  timeHHmm: string;
+  dateLabel: string;
+  timeLabel: string;
+  displayTitle: string;
+  displaySubtitle: string | null;
+  workerId: string | null;
+  workerName: string | null;
+  siteServiceId: string | null;
+  orderedPricingItemIds: string[];
+  siteServiceIds: string[];
+  isMultiBooking: boolean;
+  multiBookingComboId: string | null;
+};
+
+function repeatPayloadFromActive(a: ActiveBookingPayload): RepeatBookingPayload {
+  const firstPid = a.orderedPricingItemIds[0] || "";
+  return {
+    pricingItemId: firstPid,
+    serviceName: a.displayTitle,
+    serviceType: a.displaySubtitle,
+    displayTitle: a.displayTitle,
+    displaySubtitle: a.displaySubtitle,
+    dateLabel: a.dateLabel,
+    workerId: a.workerId,
+    workerName: a.workerName,
+    siteServiceId: a.siteServiceId,
+  };
+}
 
 /** Admin saves pricingItem.serviceId as site service id (e.g. svc_…) or legacy name — match both */
 function pricingItemMatchesSiteService(item: PricingItem, service: SiteService): boolean {
@@ -529,6 +572,24 @@ export default function BookingPage() {
   const router = useRouter();
   const siteId = params?.siteId as string;
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const raw =
+        sp.get("source") ||
+        sp.get("utm_source") ||
+        sp.get("utm_campaign") ||
+        sp.get("ref");
+      const t = raw?.trim();
+      if (t) {
+        sessionStorage.setItem(BOOKING_TRAFFIC_SOURCE_SESSION_KEY, t.toLowerCase().slice(0, 64));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [siteId]);
+
   const [config, setConfig] = useState<SiteConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<BookingStep>(1);
@@ -598,6 +659,15 @@ export default function BookingPage() {
   /** Don't clear selectedWorker when roster says "can't do service" — same worker as last visit */
   const [repeatPrefillWorkerId, setRepeatPrefillWorkerId] = useState<string | null>(null);
   const repeatApplyPricingItemIdRef = useRef<string | null>(null);
+  /** Upcoming booking: edit (full flow) or cancel from step 1 */
+  const [activeBookingModal, setActiveBookingModal] = useState<ActiveBookingPayload | null>(null);
+  const [pendingActiveEdit, setPendingActiveEdit] = useState<ActiveBookingPayload | null>(null);
+  /** Root booking id: cancel old visit after confirm on step 6 */
+  const [customerEditCancelAnchorId, setCustomerEditCancelAnchorId] = useState<string | null>(null);
+  const [cancellingActiveBooking, setCancellingActiveBooking] = useState(false);
+  /** After successful cancel: popup then redirect home */
+  const [cancelSuccessModal, setCancelSuccessModal] = useState(false);
+  const cancelSuccessRedirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /** Brief green glow before auto-advance so the choice feels confirmed */
   const SELECTION_FLASH_MS = 480;
@@ -1475,10 +1545,129 @@ export default function BookingPage() {
     return findMatchingCombo(multiBookingCombos, selectedTypeIdsForCombo) != null;
   }, [isMultiBooking, selectedServices.length, multiBookingCombos, selectedTypeIdsForCombo]);
 
+  const finishActiveEditPrefill = useCallback(
+    (a: ActiveBookingPayload) => {
+      setCustomerEditCancelAnchorId(a.cancelAnchorBookingId);
+      repeatApplyPricingItemIdRef.current = null;
+      const ymd = a.dateISO?.trim();
+      if (ymd && /^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+        const [y, m, d] = ymd.split("-").map(Number);
+        setSelectedDate(new Date(y, m - 1, d));
+      } else {
+        setSelectedDate(null);
+      }
+      setSelectedTime((a.timeHHmm || "").trim());
+      setPhase2WorkerAssigned(null);
+
+      const modalLike = repeatPayloadFromActive(a);
+      const primary = allSiteServices.length > 0 ? allSiteServices : services;
+
+      let firstServiceForWorker: SiteService | null = null;
+
+      if (a.isMultiBooking && a.orderedPricingItemIds.length > 1) {
+        const combo = findMatchingCombo(multiBookingCombos, a.orderedPricingItemIds);
+        const orderIds =
+          combo && Array.isArray(combo.orderedServiceTypeIds) && combo.orderedServiceTypeIds.length > 0
+            ? combo.orderedServiceTypeIds
+            : a.orderedPricingItemIds;
+        const pairs: Array<{ service: SiteService; pricingItem: PricingItem }> = [];
+        for (const typeId of orderIds) {
+          const item = pricingItems.find((p) => String(p.id) === String(typeId));
+          if (!item) continue;
+          const sid = String(item.serviceId ?? item.service ?? "").trim();
+          const svc =
+            services.find((s) => String(s.id) === sid || (s.name || "").trim() === sid) ||
+            allSiteServices.find((s) => String(s.id) === sid || (s.name || "").trim() === sid);
+          if (svc && svc.enabled !== false) {
+            const svcFull = services.find((s) => String(s.id) === String(svc.id)) ?? svc;
+            pairs.push({ service: svcFull, pricingItem: item });
+          }
+        }
+        if (pairs.length >= 2 && combo) {
+          setIsMultiBooking(true);
+          setSelectedServices(pairs);
+          firstServiceForWorker = pairs[0]!.service;
+        } else if (pairs.length >= 1) {
+          setIsMultiBooking(false);
+          setSelectedServices([pairs[0]!]);
+          firstServiceForWorker = pairs[0]!.service;
+        } else {
+          setIsMultiBooking(false);
+          const resolved = findPricingAndServiceForRepeat(modalLike, pricingItems, primary);
+          if (resolved) {
+            const svcFull =
+              services.find((s) => String(s.id) === String(resolved.service.id)) ?? resolved.service;
+            setSelectedServices([{ service: svcFull, pricingItem: resolved.item }]);
+            repeatApplyPricingItemIdRef.current = resolved.item.id;
+            firstServiceForWorker = svcFull;
+          } else {
+            setSelectedServices([]);
+            setSubmitError(
+              "לא הצלחנו לטעון את פרטי התור לעריכה. אנא בחרו שירות מהרשימה."
+            );
+          }
+        }
+      } else {
+        setIsMultiBooking(false);
+        let resolved = findPricingAndServiceForRepeat(modalLike, pricingItems, primary);
+        if (!resolved && a.orderedPricingItemIds[0]) {
+          const pid = a.orderedPricingItemIds[0];
+          const item = pricingItems.find((p) => String(p.id) === String(pid));
+          const sid = item ? String(item.serviceId ?? item.service ?? "").trim() : "";
+          const svc = sid
+            ? services.find((s) => String(s.id) === sid || (s.name || "").trim() === sid) ||
+              allSiteServices.find((s) => String(s.id) === sid || (s.name || "").trim() === sid)
+            : null;
+          if (item && svc && svc.enabled !== false) {
+            resolved = {
+              item,
+              service: services.find((s) => String(s.id) === String(svc.id)) ?? svc,
+            };
+          }
+        }
+        if (resolved) {
+          const svcFull =
+            services.find((s) => String(s.id) === String(resolved.service.id)) ?? resolved.service;
+          setSelectedServices([{ service: svcFull, pricingItem: resolved.item }]);
+          repeatApplyPricingItemIdRef.current = resolved.item.id;
+          firstServiceForWorker = svcFull;
+        } else {
+          setSelectedServices([]);
+          setSubmitError(
+            "לא הצלחנו לטעון את פרטי התור לעריכה. אנא בחרו שירות מהרשימה."
+          );
+        }
+      }
+
+      if (firstServiceForWorker) {
+        if (workersLoading) {
+          setPendingRepeatWorker(modalLike);
+          setSelectedWorker(null);
+          setRepeatPrefillWorkerId(null);
+        } else {
+          const picked = pickWorkerFromLastBooking(modalLike, firstServiceForWorker, workers);
+          setSelectedWorker(picked);
+          setRepeatPrefillWorkerId(picked?.id ?? null);
+          setPendingRepeatWorker(null);
+        }
+      } else {
+        setPendingRepeatWorker(null);
+        setSelectedWorker(null);
+        setRepeatPrefillWorkerId(null);
+      }
+      setStep(2);
+    },
+    [allSiteServices, pricingItems, services, multiBookingCombos, workers, workersLoading]
+  );
+
   const isStepValid = (): boolean => {
     switch (step) {
       case 1:
-        return clientName.trim() !== "" && clientPhone.trim() !== "";
+        return (
+          clientName.trim() !== "" &&
+          clientPhone.trim() !== "" &&
+          isBookingClientPhoneValid(clientPhone)
+        );
       case 2:
         if (selectedServices.length < 1) return false;
         if (isMultiBooking && selectedServices.length > 1 && !hasValidMultiBookingCombo) return false;
@@ -1493,6 +1682,7 @@ export default function BookingPage() {
         return (
           clientName.trim() !== "" &&
           clientPhone.trim() !== "" &&
+          isBookingClientPhoneValid(clientPhone) &&
           selectedServices.length >= 1 &&
           (!isMultiBooking || selectedServices.length < 2 || hasValidMultiBookingCombo) &&
           selectedDate !== null &&
@@ -1504,57 +1694,175 @@ export default function BookingPage() {
     }
   };
 
+  /** תור פעיל קודם; רק אם אין — מודל «כמו בפעם שעברה» או מעבר לשלב 2 */
+  const probeActiveBookingThenLastVisitPrompt = async () => {
+    if (!siteId) return;
+    const activeRes = await fetch("/api/bookings/active-for-phone", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ siteId, phone: clientPhone.trim() }),
+    });
+    const activeData = (await activeRes.json()) as {
+      ok?: boolean;
+      active?: ActiveBookingPayload | null;
+    };
+    if (activeRes.ok && activeData.ok && activeData.active) {
+      setActiveBookingModal(activeData.active);
+      return;
+    }
+    await fetchLastBookingPrompt();
+  };
+
+  const fetchLastBookingPrompt = async () => {
+    if (!siteId) return;
+    const res = await fetch("/api/bookings/last-for-phone", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ siteId, phone: clientPhone.trim() }),
+    });
+    const data = (await res.json()) as {
+      ok?: boolean;
+      booking?: RepeatBookingPayload | null;
+    };
+    const b = data.booking;
+    if (!data.ok || !b) {
+      setStep(2);
+      return;
+    }
+    const bPid = String(b.pricingItemId || "").trim();
+    const bSn = String(b.serviceName || "").trim();
+    const bSt =
+      b.serviceType != null && String(b.serviceType).trim() !== ""
+        ? String(b.serviceType).trim()
+        : "";
+    /** שירות first, סוג second (matches API displayTitle/displaySubtitle) */
+    const bTitle =
+      typeof b.displayTitle === "string" && b.displayTitle.trim()
+        ? b.displayTitle.trim()
+        : bSn || bSt || "השירות האחרון";
+    const bSub =
+      b.displaySubtitle != null && String(b.displaySubtitle).trim() !== ""
+        ? String(b.displaySubtitle).trim()
+        : bSn && bSt && bSn !== bSt
+          ? bSt
+          : null;
+    if (bPid || bSn || bSt) {
+      setRepeatBookingModal({
+        pricingItemId: bPid,
+        serviceName: bSn,
+        serviceType: bSt || null,
+        displayTitle: bTitle,
+        displaySubtitle: bSub,
+        dateLabel: b.dateLabel,
+        workerId: b.workerId ?? null,
+        workerName: b.workerName ?? null,
+        siteServiceId: b.siteServiceId ?? null,
+      });
+    } else {
+      setStep(2);
+    }
+  };
+
   const continueFromDetailsStep = async () => {
-    if (!clientName.trim() || !clientPhone.trim() || !siteId) return;
+    if (!clientName.trim() || !clientPhone.trim() || !isBookingClientPhoneValid(clientPhone) || !siteId) return;
     setCheckingLastBooking(true);
     setSubmitError(null);
     try {
-      const res = await fetch("/api/bookings/last-for-phone", {
+      await probeActiveBookingThenLastVisitPrompt();
+    } catch {
+      setStep(2);
+    } finally {
+      setCheckingLastBooking(false);
+    }
+  };
+
+  const applyActiveBookingEdit = () => {
+    if (!activeBookingModal) return;
+    const a = activeBookingModal;
+    setActiveBookingModal(null);
+    setSubmitError(null);
+    if (pricingItems.length === 0 || services.length === 0) {
+      setPendingActiveEdit(a);
+      return;
+    }
+    finishActiveEditPrefill(a);
+  };
+
+  const navigateToSalonLanding = useCallback(() => {
+    const home = getSiteUrl(config?.slug, siteId, "");
+    if (typeof window !== "undefined" && home.startsWith("http")) {
+      window.location.assign(home);
+    } else {
+      router.replace(home);
+    }
+  }, [config?.slug, siteId, router]);
+
+  useEffect(() => {
+    if (!cancelSuccessModal) return;
+    cancelSuccessRedirectTimerRef.current = window.setTimeout(() => {
+      cancelSuccessRedirectTimerRef.current = null;
+      setCancelSuccessModal(false);
+      navigateToSalonLanding();
+    }, 2800);
+    return () => {
+      if (cancelSuccessRedirectTimerRef.current) {
+        clearTimeout(cancelSuccessRedirectTimerRef.current);
+        cancelSuccessRedirectTimerRef.current = null;
+      }
+    };
+  }, [cancelSuccessModal, navigateToSalonLanding]);
+
+  const dismissCancelSuccessAndGoHome = () => {
+    if (cancelSuccessRedirectTimerRef.current) {
+      clearTimeout(cancelSuccessRedirectTimerRef.current);
+      cancelSuccessRedirectTimerRef.current = null;
+    }
+    setCancelSuccessModal(false);
+    navigateToSalonLanding();
+  };
+
+  const handleCancelActiveBooking = async () => {
+    if (!activeBookingModal || !siteId) return;
+    setCancellingActiveBooking(true);
+    setSubmitError(null);
+    try {
+      const res = await fetch("/api/bookings/customer-cancel-by-phone", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ siteId, phone: clientPhone.trim() }),
+        body: JSON.stringify({
+          siteId,
+          phone: clientPhone.trim(),
+          bookingId: activeBookingModal.cancelAnchorBookingId,
+        }),
       });
-      const data = (await res.json()) as {
-        ok?: boolean;
-        booking?: RepeatBookingPayload | null;
-      };
-      const b = data.booking;
-      if (!data.ok || !b) {
-        setStep(2);
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || data.ok !== true) {
+        const er = data.error || "";
+        if (er === "phone_mismatch") {
+          setSubmitError("הביטול נכשל: מספר הטלפון אינו תואם לתור.");
+        } else {
+          setSubmitError("לא ניתן לבטל את התור כעת. נסו שוב או צרו קשר עם העסק.");
+        }
         return;
       }
-      const bPid = String(b.pricingItemId || "").trim();
-      const bSn = String(b.serviceName || "").trim();
-      const bSt =
-        b.serviceType != null && String(b.serviceType).trim() !== ""
-          ? String(b.serviceType).trim()
-          : "";
-      /** שירות first, סוג second (matches API displayTitle/displaySubtitle) */
-      const bTitle =
-        typeof b.displayTitle === "string" && b.displayTitle.trim()
-          ? b.displayTitle.trim()
-          : bSn || bSt || "השירות האחרון";
-      const bSub =
-        b.displaySubtitle != null && String(b.displaySubtitle).trim() !== ""
-          ? String(b.displaySubtitle).trim()
-          : bSn && bSt && bSn !== bSt
-            ? bSt
-            : null;
-      if (bPid || bSn || bSt) {
-        setRepeatBookingModal({
-          pricingItemId: bPid,
-          serviceName: bSn,
-          serviceType: bSt || null,
-          displayTitle: bTitle,
-          displaySubtitle: bSub,
-          dateLabel: b.dateLabel,
-          workerId: b.workerId ?? null,
-          workerName: b.workerName ?? null,
-          siteServiceId: b.siteServiceId ?? null,
-        });
-      } else {
-        setStep(2);
-      }
+      setActiveBookingModal(null);
+      setCancelSuccessModal(true);
+    } finally {
+      setCancellingActiveBooking(false);
+    }
+  };
+
+  /**
+   * אם עדיין יש תור עתידי — שוב מודל תור פעיל.
+   * אחרת בלבד: מודל «כמו בפעם שעברה» או שלב 2 (אין תור עבר).
+   */
+  const handleContinueBookAnotherAppointment = async () => {
+    if (!siteId) return;
+    setActiveBookingModal(null);
+    setSubmitError(null);
+    setCheckingLastBooking(true);
+    try {
+      await probeActiveBookingThenLastVisitPrompt();
     } catch {
       setStep(2);
     } finally {
@@ -1712,6 +2020,14 @@ export default function BookingPage() {
     }
   }, [pendingRepeatWorker, workersLoading, workers, selectedServices]);
 
+  useEffect(() => {
+    if (!pendingActiveEdit) return;
+    if (pricingItems.length === 0 || services.length === 0) return;
+    const a = pendingActiveEdit;
+    setPendingActiveEdit(null);
+    finishActiveEditPrefill(a);
+  }, [pendingActiveEdit, pricingItems.length, services.length, finishActiveEditPrefill]);
+
   const dismissRepeatModalPickService = () => {
     setRepeatBookingModal(null);
     setPendingRepeatWorker(null);
@@ -1733,8 +2049,13 @@ export default function BookingPage() {
 
   const handleBack = () => {
     setRepeatBookingModal(null);
+    setActiveBookingModal(null);
     if (step > 1) {
-      setStep((step - 1) as BookingStep);
+      const next = (step - 1) as BookingStep;
+      setStep(next);
+      if (next === 1) {
+        setCustomerEditCancelAnchorId(null);
+      }
     }
   };
 
@@ -1754,6 +2075,7 @@ export default function BookingPage() {
     if (
       !clientName.trim() ||
       !clientPhone.trim() ||
+      !isBookingClientPhoneValid(clientPhone) ||
       step !== 6 ||
       selectedServices.length === 0 ||
       !selectedDate ||
@@ -1761,6 +2083,9 @@ export default function BookingPage() {
       !db
     ) {
       if (!db) setSubmitError("Firebase לא מאותחל. אנא רענן את הדף.");
+      else if (clientPhone.trim() && !isBookingClientPhoneValid(clientPhone)) {
+        setSubmitError("מספר הטלפון אינו תקין. בדקו את המספר — אליו נשלחות תזכורות לתור.");
+      }
       return;
     }
 
@@ -1793,6 +2118,33 @@ export default function BookingPage() {
     setSubmitError(null);
 
     try {
+      if (customerEditCancelAnchorId) {
+        const cancelRes = await fetch("/api/bookings/customer-cancel-by-phone", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            siteId,
+            phone: clientPhone.trim(),
+            bookingId: customerEditCancelAnchorId,
+          }),
+        });
+        const cancelData = (await cancelRes.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: string;
+        };
+        if (!cancelRes.ok || cancelData.ok !== true) {
+          const er = cancelData.error || "";
+          setSubmitError(
+            er === "phone_mismatch"
+              ? "לא ניתן לבטל את התור הקיים עם מספר זה."
+              : "לא ניתן לבטל את התור הקיים. נסו שוב או צרו קשר עם העסק."
+          );
+          bookingSubmitLockRef.current = false;
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
       const bookingDate = ymdLocal(selectedDate);
       const [hh, mm] = selectedTime.split(":").map(Number);
       const startAt = new Date(selectedDate);
@@ -1949,10 +2301,17 @@ export default function BookingPage() {
         });
       }
       const repairedWithPrices = attachCatalogPricesToChainSlots(repaired, pricingItems);
+      let trafficSource: string | undefined;
+      try {
+        trafficSource = sessionStorage.getItem(BOOKING_TRAFFIC_SOURCE_SESSION_KEY) ?? undefined;
+      } catch {
+        trafficSource = undefined;
+      }
       const { firstBookingId, visitGroupId } = await saveMultiServiceBooking(siteId, repairedWithPrices, {
         name: clientName.trim(),
         phone: clientPhone.trim(),
         note: clientNote.trim() || undefined,
+        trafficSource,
       }, { workers, multiPayload });
       console.log("[BOOK_CREATE] client_write_ok", { siteId, firstBookingId, visitGroupId, bookingPath: `sites/${siteId}/bookings/${firstBookingId}` });
       if (!firstBookingId) {
@@ -1987,6 +2346,7 @@ export default function BookingPage() {
         lastMinuteReminderCoversConfirmation,
       });
       setPhase2WorkerAssigned(null);
+      setCustomerEditCancelAnchorId(null);
       setStep(7);
     } catch (err) {
       console.error("Failed to save booking", err);
@@ -2660,32 +3020,55 @@ export default function BookingPage() {
                 <div>
                   <label
                     htmlFor="clientPhone"
-                    className="block text-sm font-medium mb-2 text-right"
+                    className="block text-sm font-medium mb-1 text-right"
                     style={{ color: "var(--text)" }}
                   >
                     טלפון *
                   </label>
+                  <p
+                    className="text-xs mb-2 text-right leading-relaxed"
+                    style={{ color: "var(--muted)" }}
+                  >
+                    חשוב לוודא שהמספר נכון — אליו נשלחות תזכורות לתור (למשל בוואטסאפ).
+                  </p>
                   <input
                     type="tel"
                     id="clientPhone"
                     value={clientPhone}
-                    onChange={(e) => setClientPhone(e.target.value)}
-                    className="w-full rounded-xl border px-4 py-3 text-right focus:outline-none focus:ring-2"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    maxLength={22}
+                    aria-invalid={clientPhone.trim() !== "" && !isBookingClientPhoneValid(clientPhone)}
+                    onChange={(e) =>
+                      setClientPhone(e.target.value.replace(/[^\d+\s\-]/g, "").slice(0, 22))
+                    }
+                    className="w-full rounded-xl border px-4 py-3 focus:outline-none focus:ring-2"
+                    dir="ltr"
                     style={{
-                      borderColor: "var(--border)",
+                      borderColor:
+                        clientPhone.trim() !== "" && !isBookingClientPhoneValid(clientPhone)
+                          ? "#f87171"
+                          : "var(--border)",
                       backgroundColor: "var(--surface)",
                       color: "var(--text)",
+                      textAlign: "left",
                     }}
                     onFocus={(e) => {
                       e.target.style.borderColor = "var(--primary)";
                       e.target.style.boxShadow = "0 0 0 2px rgba(0, 0, 0, 0.1)";
                     }}
                     onBlur={(e) => {
-                      e.target.style.borderColor = "var(--border)";
+                      const invalid = clientPhone.trim() !== "" && !isBookingClientPhoneValid(clientPhone);
+                      e.target.style.borderColor = invalid ? "#f87171" : "var(--border)";
                       e.target.style.boxShadow = "none";
                     }}
-                    placeholder="050-1234567"
+                    placeholder="050-1234567 או +972501234567"
                   />
+                  {clientPhone.trim() !== "" && !isBookingClientPhoneValid(clientPhone) && (
+                    <p className="mt-1.5 text-xs text-right" style={{ color: "#b91c1c" }}>
+                      נא להזין מספר נייד תקין בישראל (למשל 05XXXXXXXX או +9725XXXXXXXX).
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -3500,8 +3883,129 @@ export default function BookingPage() {
           {!isStepValid() && step === 1 && (
             <div className="mt-4 p-3 border rounded-xl text-right" style={{ backgroundColor: "#fef2f2", borderColor: "#fecaca" }}>
               <p className="text-sm" style={{ color: "#991b1b" }}>
-                נא למלא שם מלא ומספר טלפון כדי להמשיך
+                {!clientName.trim()
+                  ? "נא להזין שם מלא כדי להמשיך."
+                  : !clientPhone.trim()
+                    ? "נא להזין מספר טלפון כדי להמשיך."
+                    : !isBookingClientPhoneValid(clientPhone)
+                      ? "מספר הטלפון אינו תקין. בדקו שזה המספר הנכון — אליו נשלחות תזכורות לתור."
+                      : "נא למלא את כל השדות הנדרשים כדי להמשיך."}
               </p>
+            </div>
+          )}
+
+          {cancelSuccessModal && (
+            <div
+              className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/50"
+              dir="rtl"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="cancel-success-title"
+            >
+              <div
+                className="rounded-2xl border p-6 max-w-md w-full shadow-xl text-right"
+                style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3
+                  id="cancel-success-title"
+                  className="text-xl font-bold mb-2 text-center"
+                  style={{ color: "var(--text)" }}
+                  dir="ltr"
+                >
+                  Booking cancelled
+                </h3>
+                <p className="text-sm mb-1 text-center" style={{ color: "var(--muted)" }}>
+                  התור בוטל בהצלחה
+                </p>
+                <p className="text-xs mb-5 text-center" style={{ color: "var(--muted)" }}>
+                  מיד תועברו לדף הבית של העסק
+                </p>
+                <button
+                  type="button"
+                  onClick={dismissCancelSuccessAndGoHome}
+                  className="w-full py-3 rounded-xl font-semibold"
+                  style={{ backgroundColor: "var(--primary)", color: "var(--primaryText)" }}
+                >
+                  המשך לאתר
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeBookingModal && (
+            <div
+              className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50"
+              dir="rtl"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="active-booking-title"
+              onClick={() => {
+                if (!cancellingActiveBooking) setActiveBookingModal(null);
+              }}
+            >
+              <div
+                className="rounded-2xl border p-6 max-w-md w-full shadow-xl text-right"
+                style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 id="active-booking-title" className="text-lg font-bold mb-2" style={{ color: "var(--text)" }}>
+                  יש לך תור פעיל
+                </h3>
+                <p className="text-sm mb-2" style={{ color: "var(--muted)" }}>
+                  {activeBookingModal.dateLabel} בשעה {activeBookingModal.timeLabel}
+                </p>
+                <p className="text-xs font-medium mb-0.5" style={{ color: "var(--muted)" }}>
+                  שירות
+                </p>
+                <p className="text-base font-semibold mb-2" style={{ color: "var(--text)" }}>
+                  {activeBookingModal.displayTitle}
+                </p>
+                {activeBookingModal.displaySubtitle ? (
+                  <p className="text-sm mb-2" style={{ color: "var(--text)" }}>
+                    {activeBookingModal.displaySubtitle}
+                  </p>
+                ) : null}
+                {activeBookingModal.workerName ? (
+                  <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
+                    עם {activeBookingModal.workerName}
+                  </p>
+                ) : (
+                  <div className="mb-4" />
+                )}
+                <p className="text-sm mb-4" style={{ color: "var(--text)" }}>
+                  לערוך את התור (תאריך, שעה או שירות), לבטל אותו, או להמשיך לקבוע תור נוסף?
+                </p>
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={applyActiveBookingEdit}
+                    disabled={cancellingActiveBooking}
+                    className="w-full py-3 rounded-xl font-semibold disabled:opacity-60"
+                    style={{ backgroundColor: "var(--primary)", color: "var(--primaryText)" }}
+                  >
+                    ערוך תור
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleCancelActiveBooking()}
+                    disabled={cancellingActiveBooking}
+                    className="w-full py-3 rounded-xl border font-medium disabled:opacity-60"
+                    style={{ borderColor: "var(--border)", color: "var(--text)" }}
+                  >
+                    {cancellingActiveBooking ? "מבטל…" : "לבטל את התור"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={cancellingActiveBooking}
+                    onClick={() => void handleContinueBookAnotherAppointment()}
+                    className="w-full py-3 rounded-xl border font-medium disabled:opacity-60"
+                    style={{ borderColor: "var(--border)", color: "var(--text)" }}
+                  >
+                    להמשיך לקבוע תור נוסף
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 

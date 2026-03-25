@@ -3,18 +3,14 @@
 import { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from "react";
 import { auth, isFirebaseConfigValid, getFirebaseError, getFirebaseConfigStatus } from "@/lib/firebaseClient";
 import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
+  signInWithCustomToken,
   signInWithPopup,
   GoogleAuthProvider,
-  signInWithPhoneNumber,
   signOut,
   onAuthStateChanged,
   type User as FirebaseUser,
-  type RecaptchaVerifier,
-  type ConfirmationResult,
 } from "firebase/auth";
-import { getUserDocument, createUserDocument, updateUserProfile } from "@/lib/firestoreUsers";
+import { getUserDocument, createUserDocument } from "@/lib/firestoreUsers";
 import { normalizeFirebaseError, logFirebaseError } from "@/lib/firebaseErrors";
 import { getActiveListenerCount } from "@/lib/firestoreListeners";
 import type { User } from "@/types/user";
@@ -48,15 +44,47 @@ async function getUserDocumentWithRetry(uid: string, maxRetries = 2): Promise<Us
   return null;
 }
 
+function heMessageForPhoneOtpError(code: string | undefined): string {
+  switch (code) {
+    case "invalid_phone":
+    case "invalid_input":
+      return "מספר הטלפון או הקוד אינם תקינים.";
+    case "misconfigured":
+      return "שירות אימות הטלפון אינו מוגדר בשרת. פנה לתמיכה.";
+    case "send_failed":
+    case "verify_failed":
+      return "שליחת או אימות הקוד נכשלו. נסה שוב בעוד רגע.";
+    case "code_invalid":
+      return "הקוד שגוי או שפג תוקפו. נסה שוב או שלח קוד חדש.";
+    case "phone_already_registered":
+      return "מספר זה כבר רשום. התחבר עם אותו מספר.";
+    case "phone_not_registered":
+      return "לא נמצא חשבון עם מספר זה. הירשם תחילה.";
+    case "invalid_name":
+      return "נא להזין שם מלא (לפחות 2 תווים).";
+    case "invalid_intent":
+    case "no_token":
+    case "auth_lookup_failed":
+    case "server_error":
+    default:
+      return "אירעה שגיאה. נסה שוב מאוחר יותר.";
+  }
+}
+
 type AuthContextType = {
   user: User | null;
   firebaseUser: FirebaseUser | null;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; redirectPath?: string }>;
   loginWithGoogle: () => Promise<{ success: boolean; error?: string; redirectPath?: string }>;
-  signup: (email: string, password: string, name?: string, phone?: string) => Promise<{ success: boolean; error?: string; userId?: string }>;
   signupWithGoogle: () => Promise<{ success: boolean; error?: string; userId?: string; needsProfile?: boolean }>;
-  signupWithPhoneNumberSend: (phoneNumber: string, recaptchaVerifier: RecaptchaVerifier) => Promise<{ success: boolean; error?: string; confirmationResult?: ConfirmationResult }>;
-  signupWithPhoneNumberConfirm: (confirmationResult: ConfirmationResult, code: string) => Promise<{ success: boolean; error?: string; userId?: string; needsProfile?: boolean }>;
+  /** Twilio Verify: send 6-digit SMS OTP */
+  sendPhoneOtp: (rawPhone: string) => Promise<{ success: boolean; error?: string; errorCode?: string }>;
+  /** After OTP verified server-side, signs in with Firebase custom token */
+  verifyPhoneOtp: (params: {
+    rawPhone: string;
+    code: string;
+    intent: "signup" | "login";
+    fullName?: string;
+  }) => Promise<{ success: boolean; error?: string; errorCode?: string }>;
   refreshUser: () => Promise<void>;
   logout: () => Promise<void>;
   loading: boolean;
@@ -204,11 +232,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               });
             }
             try {
+              const phone = firebaseUser.phoneNumber || null;
+              const email = firebaseUser.email || "";
               userDoc = await createUserDocument(
                 firebaseUser.uid,
-                firebaseUser.email || "",
+                email,
                 firebaseUser.displayName || undefined,
-                firebaseUser.phoneNumber || null
+                phone,
+                phone && !email ? { primaryLoginMethod: "phone" } : email ? { primaryLoginMethod: "google" } : undefined
               );
             } catch (createError) {
               console.error("[AuthProvider] Error creating user document:", createError);
@@ -270,63 +301,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [configValid]); // Only re-run if configValid changes
 
-  const login = useCallback(async (
-    email: string,
-    password: string
-  ): Promise<{ success: boolean; error?: string; redirectPath?: string }> => {
-    if (!auth) {
-      console.error("Firebase Auth not initialized");
-      return { success: false, error: "Firebase לא מאותחל. אנא בדוק את הגדרות Firebase שלך." };
-    }
-
-    try {
-      if (process.env.NODE_ENV === "development") {
-        console.log("[AuthProvider.login] Attempting email/password login", { email, provider: "password" });
-      }
-      
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      
-      if (process.env.NODE_ENV === "development") {
-        console.log("[AuthProvider.login] Login successful", { uid: userCredential.user.uid, provider: userCredential.user.providerData[0]?.providerId || "password" });
-      }
-      
-      // Ensure Firestore user doc exists
-      let userDoc = await getUserDocument(userCredential.user.uid);
-      if (!userDoc) {
-        // Create user doc if missing (shouldn't happen for email/password, but handle gracefully)
-        if (process.env.NODE_ENV === "development") {
-          console.log("[AuthProvider.login] User doc missing, creating...", { uid: userCredential.user.uid });
-        }
-        userDoc = await createUserDocument(
-          userCredential.user.uid,
-          userCredential.user.email || email,
-          userCredential.user.displayName || undefined,
-          userCredential.user.phoneNumber || null
-        );
-      }
-      
-      setUser(userDoc);
-
-      // Send user to login with returnTo=admin; login page will redirect to tenant admin.
-      if (process.env.NODE_ENV === "development") {
-        console.log(`[AuthProvider.login] uid=${userCredential.user.uid} -> redirectPath=/login?returnTo=admin`);
-      }
-      return { success: true, redirectPath: "/login?returnTo=admin" };
-    } catch (error: unknown) {
-      // Log full error details for debugging
-      const errorInfo = logFirebaseError("login", error);
-      
-      // Normalize error to get user-friendly message
-      const normalized = normalizeFirebaseError(error);
-      
-      if (process.env.NODE_ENV === "development") {
-        console.log("[AuthProvider.login] Login failed", { errorCode: normalized.code, errorMessage: normalized.message, provider: "password" });
-      }
-      
-      return { success: false, error: normalized.message };
-    }
-  }, []);
-
   const loginWithGoogle = useCallback(async (): Promise<{ success: boolean; error?: string; redirectPath?: string }> => {
     if (!auth) {
       console.error("Firebase Auth not initialized");
@@ -360,7 +334,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           userCredential.user.uid,
           userCredential.user.email || "",
           userCredential.user.displayName || undefined,
-          userCredential.user.phoneNumber || null
+          userCredential.user.phoneNumber || null,
+          userCredential.user.email ? { primaryLoginMethod: "google" } : undefined
         );
       }
       
@@ -386,49 +361,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const signup = useCallback(async (
-    email: string,
-    password: string,
-    name?: string,
-    phone?: string
-  ): Promise<{ success: boolean; error?: string; userId?: string }> => {
-    if (!auth) {
-      console.error("Firebase Auth not initialized");
-      return { success: false, error: "Firebase לא מאותחל. אנא בדוק את הגדרות Firebase שלך." };
-    }
-
-    // Validate password length before sending to Firebase
-    if (password.length < 6) {
-      return { success: false, error: "הסיסמה חייבת להכיל לפחות 6 תווים" };
-    }
-
-    try {
-      // Create Firebase auth user
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      
-      // Create Firestore user document with siteId=null (no site yet)
-      const userDoc = await createUserDocument(
-        userCredential.user.uid,
-        email,
-        name,
-        phone?.trim() || null
-      );
-      
-      setUser(userDoc);
-      
-      // Return userId - signup page will redirect to wizard
-      return { success: true, userId: userCredential.user.uid };
-    } catch (error: unknown) {
-      // Log full error details for debugging
-      logFirebaseError("signup", error);
-      
-      // Normalize error to get user-friendly message
-      const normalized = normalizeFirebaseError(error);
-      
-      return { success: false, error: normalized.message };
-    }
-  }, []);
-
   const signupWithGoogle = useCallback(async (): Promise<{ success: boolean; error?: string; userId?: string; needsProfile?: boolean }> => {
     if (!auth) {
       return { success: false, error: "Firebase לא מאותחל. אנא בדוק את הגדרות Firebase שלך." };
@@ -443,7 +375,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           fbUser.uid,
           fbUser.email || "",
           fbUser.displayName || undefined,
-          fbUser.phoneNumber || null
+          fbUser.phoneNumber || null,
+          fbUser.email ? { primaryLoginMethod: "google" } : undefined
         );
       }
       setUser(userDoc);
@@ -457,56 +390,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const signupWithPhoneNumberSend = useCallback(async (
-    phoneNumber: string,
-    recaptchaVerifier: RecaptchaVerifier
-  ): Promise<{ success: boolean; error?: string; confirmationResult?: ConfirmationResult }> => {
-    if (!auth) {
-      return { success: false, error: "Firebase לא מאותחל. אנא בדוק את הגדרות Firebase שלך." };
-    }
+  const sendPhoneOtp = useCallback(async (rawPhone: string): Promise<{ success: boolean; error?: string; errorCode?: string }> => {
     try {
-      const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
-      return { success: true, confirmationResult };
-    } catch (error: unknown) {
-      logFirebaseError("signupWithPhoneNumberSend", error);
-      const normalized = normalizeFirebaseError(error);
-      return { success: false, error: normalized.message };
+      const res = await fetch("/api/auth/phone-otp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: rawPhone }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        const code = typeof data.error === "string" ? data.error : "server_error";
+        return { success: false, errorCode: code, error: heMessageForPhoneOtpError(code) };
+      }
+      return { success: true };
+    } catch {
+      return { success: false, errorCode: "network", error: heMessageForPhoneOtpError("server_error") };
     }
   }, []);
 
-  const signupWithPhoneNumberConfirm = useCallback(async (
-    confirmationResult: ConfirmationResult,
-    code: string
-  ): Promise<{ success: boolean; error?: string; userId?: string; needsProfile?: boolean }> => {
-    if (!auth) {
-      return { success: false, error: "Firebase לא מאותחל." };
-    }
-    try {
-      const userCredential = await confirmationResult.confirm(code);
-      const fbUser = userCredential.user;
-      const phone = fbUser.phoneNumber || "";
-      let userDoc = await getUserDocument(fbUser.uid);
-      if (!userDoc) {
-        userDoc = await createUserDocument(
-          fbUser.uid,
-          fbUser.email || "",
-          fbUser.displayName || undefined,
-          phone || null
-        );
-      } else if (phone && !(typeof userDoc.phone === "string" && userDoc.phone.trim().length > 0)) {
-        await updateUserProfile(fbUser.uid, { phone });
-        const merged = await getUserDocument(fbUser.uid);
-        if (merged) userDoc = merged;
+  const verifyPhoneOtp = useCallback(
+    async (params: {
+      rawPhone: string;
+      code: string;
+      intent: "signup" | "login";
+      fullName?: string;
+    }): Promise<{ success: boolean; error?: string; errorCode?: string }> => {
+      if (!auth) {
+        return { success: false, error: "Firebase לא מאותחל.", errorCode: "no_auth" };
       }
-      setUser(userDoc);
-      setFirebaseUser(fbUser);
-      return { success: true, userId: fbUser.uid, needsProfile: true };
-    } catch (error: unknown) {
-      logFirebaseError("signupWithPhoneNumberConfirm", error);
-      const normalized = normalizeFirebaseError(error);
-      return { success: false, error: normalized.message };
-    }
-  }, []);
+      try {
+        const body: Record<string, string> = {
+          phone: params.rawPhone,
+          code: params.code,
+          intent: params.intent,
+        };
+        if (params.intent === "signup" && params.fullName) {
+          body.fullName = params.fullName;
+        }
+        const res = await fetch("/api/auth/phone-otp/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = (await res.json().catch(() => ({}))) as { error?: string; customToken?: string };
+        if (!res.ok) {
+          const code = typeof data.error === "string" ? data.error : "server_error";
+          return { success: false, errorCode: code, error: heMessageForPhoneOtpError(code) };
+        }
+        const token = data.customToken;
+        if (typeof token !== "string" || !token) {
+          return { success: false, errorCode: "no_token", error: heMessageForPhoneOtpError("no_token") };
+        }
+        await signInWithCustomToken(auth, token);
+        return { success: true };
+      } catch (error: unknown) {
+        logFirebaseError("verifyPhoneOtp", error);
+        const normalized = normalizeFirebaseError(error);
+        return { success: false, error: normalized.message, errorCode: "firebase" };
+      }
+    },
+    []
+  );
 
   const refreshUser = useCallback(async () => {
     if (!firebaseUser) return;
@@ -535,12 +479,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       firebaseUser,
-      login,
       loginWithGoogle,
-      signup,
       signupWithGoogle,
-      signupWithPhoneNumberSend,
-      signupWithPhoneNumberConfirm,
+      sendPhoneOtp,
+      verifyPhoneOtp,
       refreshUser,
       logout,
       loading,
@@ -549,12 +491,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       user,
       firebaseUser,
-      login,
       loginWithGoogle,
-      signup,
       signupWithGoogle,
-      signupWithPhoneNumberSend,
-      signupWithPhoneNumberConfirm,
+      sendPhoneOtp,
+      verifyPhoneOtp,
       refreshUser,
       logout,
       loading,
@@ -565,7 +505,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Show fallback UI if Firebase config is invalid
   if (!configValid) {
     return (
-      <AuthContext.Provider value={{ user: null, firebaseUser: null, login, loginWithGoogle, signup, signupWithGoogle: async () => ({ success: false, error: "Firebase לא מוגדר" }), signupWithPhoneNumberSend: async () => ({ success: false, error: "Firebase לא מוגדר" }), signupWithPhoneNumberConfirm: async () => ({ success: false, error: "Firebase לא מוגדר" }), refreshUser: async () => {}, logout, loading: false, authReady: true }}>
+      <AuthContext.Provider
+        value={{
+          user: null,
+          firebaseUser: null,
+          loginWithGoogle: async () => ({ success: false, error: "Firebase לא מוגדר" }),
+          signupWithGoogle: async () => ({ success: false, error: "Firebase לא מוגדר" }),
+          sendPhoneOtp: async () => ({ success: false, error: "Firebase לא מוגדר" }),
+          verifyPhoneOtp: async () => ({ success: false, error: "Firebase לא מוגדר" }),
+          refreshUser: async () => {},
+          logout,
+          loading: false,
+          authReady: true,
+        }}
+      >
         <FirebaseConfigErrorBanner />
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg shadow-lg p-6 max-w-md text-right">

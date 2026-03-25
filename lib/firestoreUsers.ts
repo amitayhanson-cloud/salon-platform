@@ -50,7 +50,8 @@ export async function createUserDocument(
   userId: string,
   email: string,
   name?: string,
-  phone?: string | null
+  phone?: string | null,
+  meta?: { primaryLoginMethod?: User["primaryLoginMethod"] }
 ): Promise<User> {
   const db = getDb(); // Always get a fresh, valid Firestore instance
   const userRef = doc(db, USERS_COLLECTION, userId);
@@ -63,6 +64,7 @@ export async function createUserDocument(
     email: email || "",
     name: trimmedName,
     phone: normalizedPhone,
+    primaryLoginMethod: meta?.primaryLoginMethod,
     siteId: null, // No siteId at signup - will be set after wizard completion
     createdAt: new Date(),
   };
@@ -77,6 +79,7 @@ export async function createUserDocument(
     phone: normalizedPhone,
   };
   if (trimmedName !== undefined) payload.name = trimmedName;
+  if (meta?.primaryLoginMethod) payload.primaryLoginMethod = meta.primaryLoginMethod;
 
   await setDoc(userRef, payload);
 
@@ -94,11 +97,15 @@ export async function getUserDocument(userId: string): Promise<User | null> {
   }
 
   const data = userSnap.data();
+  const plm = data.primaryLoginMethod;
+  const primaryLoginMethod =
+    plm === "phone" || plm === "email" || plm === "google" ? plm : undefined;
   return {
     id: userSnap.id,
     email: data.email ?? "",
     name: data.name,
     phone: typeof data.phone === "string" && data.phone ? data.phone : null,
+    primaryLoginMethod,
     siteId: data.siteId || null,
     primarySlug: typeof data.primarySlug === "string" && data.primarySlug ? data.primarySlug : null,
     onboardingMainGoals: parseOnboardingMainGoals(data.onboardingMainGoals),

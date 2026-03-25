@@ -6,25 +6,7 @@
  */
 import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
-
-function phoneVariants(raw: string): string[] {
-  const d = String(raw).replace(/\D/g, "");
-  if (!d || d.length < 9) return [];
-  const v = new Set<string>([d]);
-  if (d.startsWith("0")) v.add("972" + d.slice(1));
-  if (d.startsWith("972") && d.length > 3) v.add("0" + d.slice(3));
-  return [...v];
-}
-
-function isCancelledStatus(status: string | undefined): boolean {
-  const s = (status ?? "").toLowerCase();
-  return (
-    s === "cancelled" ||
-    s === "canceled" ||
-    s === "cancelled_by_salon" ||
-    s === "no_show"
-  );
-}
+import { isCancelledBookingStatus, phoneVariants } from "@/lib/bookingCustomerPhone";
 
 export async function POST(request: Request) {
   try {
@@ -66,7 +48,7 @@ export async function POST(request: Request) {
         if (seen.has(d.id)) continue;
         seen.add(d.id);
         const data = d.data();
-        if (isCancelledStatus(data.status as string | undefined)) continue;
+        if (isCancelledBookingStatus(data.status as string | undefined)) continue;
         /** Skip phase-2 follow-up rows; legacy docs without phase are kept */
         const ph = data.phase;
         if (ph != null && Number(ph) === 2) continue;

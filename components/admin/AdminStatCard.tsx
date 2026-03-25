@@ -10,18 +10,21 @@ export interface AdminStatCardProps {
   href: string;
   icon: LucideIcon;
   className?: string;
+  /** e.g. tooltip when value is incomplete */
+  title?: string;
 }
 
 /**
  * Stat card for dashboard: rounded-2xl, Caleno tint background, icon + label + value.
  * Hover state for engagement. Renders as Link.
  */
-export function AdminStatCard({ label, value, href, icon: Icon, className }: AdminStatCardProps) {
+export function AdminStatCard({ label, value, href, icon: Icon, className, title }: AdminStatCardProps) {
   return (
     <Link
       href={href}
+      title={title}
       className={cn(
-        "flex flex-col rounded-2xl border border-[#E2E8F0] p-4 transition-all duration-200",
+        "flex h-full min-h-[7.5rem] flex-col rounded-2xl border border-[#E2E8F0] p-4 transition-all duration-200",
         "bg-[rgba(30,111,124,0.06)] hover:bg-[rgba(30,111,124,0.1)] hover:border-caleno-deep/30 hover:shadow-md",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-caleno-deep focus-visible:ring-offset-2",
         className
@@ -35,7 +38,7 @@ export function AdminStatCard({ label, value, href, icon: Icon, className }: Adm
           {label}
         </span>
       </div>
-      <p className="text-2xl font-bold leading-tight text-[#0F172A] tabular-nums">
+      <p className="mt-auto text-2xl font-bold leading-tight text-[#0F172A] tabular-nums">
         {value !== null && value !== undefined ? value : "—"}
       </p>
     </Link>
