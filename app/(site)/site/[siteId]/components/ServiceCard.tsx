@@ -117,7 +117,7 @@ export default function ServiceCard({
         onClick={() => {
           startNav(() => router.push(bookHref));
         }}
-        className={`${cardClassName} relative w-full text-right disabled:cursor-wait`}
+        className={`${cardClassName} relative w-full text-right`}
         style={cardStyle}
       >
         {navPending ? (

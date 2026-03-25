@@ -427,7 +427,7 @@ export default function HairLuxurySite({
             {bookingEnabled(config) && (
               <BookNowNavButton
                 href={getSiteUrl(config?.slug, siteId, "/book")}
-                className="inline-flex items-center justify-center min-h-[48px] px-8 sm:px-10 py-3.5 sm:py-4 rounded-full text-base sm:text-lg font-semibold shadow-xl transition-all duration-200 hover:opacity-95 hover:scale-[1.02] active:scale-[0.98] disabled:cursor-wait disabled:hover:scale-100"
+                className="inline-flex items-center justify-center min-h-[48px] px-8 sm:px-10 py-3.5 sm:py-4 rounded-full text-base sm:text-lg font-semibold shadow-xl transition-all duration-200 hover:opacity-95 hover:scale-[1.02] active:scale-[0.98] disabled:hover:scale-100"
                 style={{
                   backgroundColor: "var(--hero-primaryBtnBg)",
                   color: "var(--hero-primaryBtnText)",

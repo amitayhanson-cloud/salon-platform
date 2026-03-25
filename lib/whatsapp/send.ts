@@ -8,6 +8,8 @@
 import twilio from "twilio";
 import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
+import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
+import { fireAndForgetLiveStats, updateLiveStats } from "@/lib/liveStatsScorekeeper";
 import { isWhatsAppAutomationEnabled } from "@/lib/platformSettings";
 import { toWhatsAppTo } from "./e164";
 import { mapBodyForSandbox } from "./sandboxMap";
@@ -175,6 +177,9 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
         error: e instanceof Error ? e.message : String(e),
       });
     }
+    const ymd = getDateYMDInTimezone(new Date(), "Asia/Jerusalem");
+    const db = getAdminDb();
+    fireAndForgetLiveStats(() => updateLiveStats(db, siteId, ymd, { whatsappCount: 1 }));
   }
 
   return { sid };

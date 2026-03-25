@@ -231,7 +231,7 @@ export default function SalonHeader({
               {isBookingEnabled ? (
                 <BookNowNavButton
                   href={getSiteUrl(slug, siteId, "/book")}
-                  className="whitespace-nowrap rounded-full px-5 py-2.5 text-sm font-semibold transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/45 focus-visible:ring-offset-0 active:outline-none disabled:cursor-wait disabled:opacity-90"
+                  className="whitespace-nowrap rounded-full px-5 py-2.5 text-sm font-semibold transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/45 focus-visible:ring-offset-0 active:outline-none disabled:opacity-90"
                   style={{ backgroundColor: ctaBg, color: ctaText }}
                   {...edit("headerCtaButton")}
                 >
@@ -330,7 +330,7 @@ export default function SalonHeader({
               <BookNowNavButton
                 href={getSiteUrl(slug, siteId, "/book")}
                 onClick={() => setMobileMenuOpen(false)}
-                className="mt-2 w-full whitespace-nowrap rounded-full px-5 py-3 text-center text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-white/45 focus-visible:ring-offset-0 active:outline-none disabled:cursor-wait"
+                className="mt-2 w-full whitespace-nowrap rounded-full px-5 py-3 text-center text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-white/45 focus-visible:ring-offset-0 active:outline-none"
                 style={{ backgroundColor: ctaBg, color: ctaText }}
                 {...edit("headerCtaButton")}
               >

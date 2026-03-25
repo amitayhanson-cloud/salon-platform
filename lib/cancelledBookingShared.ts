@@ -30,10 +30,22 @@ export function isDocCancelled(data: Record<string, unknown>): boolean {
   );
 }
 
+/** Padded YYYY-MM-DD from `dateISO` / `date`, or null if not parseable (handles unpadded months/days). */
+export function normalizeBookingYmd(data: Record<string, unknown>): string | null {
+  const raw = String((data.dateISO as string) || (data.date as string) || "").trim();
+  if (!raw) return null;
+  const m = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (!Number.isFinite(y) || mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
 /** Appointment calendar day YYYY-MM-DD from booking or archive doc */
 export function appointmentYmd(data: Record<string, unknown>): string {
-  const raw = String((data.dateISO as string) || (data.date as string) || "").trim();
-  return raw.length >= 10 ? raw.slice(0, 10) : raw;
+  return normalizeBookingYmd(data) ?? "";
 }
 
 /**
@@ -54,8 +66,8 @@ export async function countArchivedCancelledInAppointmentMonthAdmin(
       const data = d.data() as Record<string, unknown>;
       if (isFollowUpBooking(data)) continue;
       if (!isDocCancelled(data)) continue;
-      const ymd = appointmentYmd(data);
-      if (ymd.length < 10 || ymd < monthStart || ymd > monthEnd) continue;
+      const ymd = normalizeBookingYmd(data);
+      if (!ymd || ymd < monthStart || ymd > monthEnd) continue;
       n++;
     }
   }

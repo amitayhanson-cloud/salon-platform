@@ -14,6 +14,12 @@ import { getDeterministicArchiveDocId } from "@/lib/archiveReplaceAdmin";
 import { getServiceTypeKey } from "@/lib/archiveReplace";
 import { isFollowUpBooking } from "@/lib/normalizeBooking";
 import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
+import { prepareDashboardBatchIncrement, type LiveStatsBookingEffect } from "@/lib/liveStatsScorekeeper";
+import {
+  liveStatsDeltaForActiveCancellation,
+  liveStatsDeltaUndoCreatedOnly,
+  liveStatsDeltaUndoFollowUpOnly,
+} from "@/lib/liveStatsBookingDeltas";
 
 const ISRAEL_TZ = "Asia/Jerusalem";
 
@@ -183,16 +189,18 @@ export async function cancelBookingsCascade(
     customerPhone: string;
     serviceTypeId: string | null;
     minimal: Record<string, unknown>;
+    fullData: Record<string, unknown>;
   }[] = [];
-  const followUpIdsToDeleteOnly: string[] = [];
+  const followUpsToDelete: { id: string; data: Record<string, unknown> }[] = [];
   for (const id of bookingIds) {
     const ref = col.doc(id);
     const snap = await ref.get();
     if (!snap.exists) continue;
     if ((snap.data() as { isArchived?: boolean })?.isArchived === true) continue;
     const d = snap.data() as DocData;
+    const full = snap.data() as Record<string, unknown>;
     if (isFollowUpBooking(d as Record<string, unknown>)) {
-      followUpIdsToDeleteOnly.push(id);
+      followUpsToDelete.push({ id, data: full });
       if (process.env.NODE_ENV === "development") {
         console.log("[booking-cascade] Skipping archive for follow-up booking", id);
       }
@@ -241,10 +249,10 @@ export async function cancelBookingsCascade(
       statusAtArchive,
       ...(statusAtArchive === "cancelled" && { status: "cancelled" as const }),
     };
-    toUpdate.push({ ref, clientId, customerPhone, serviceTypeId, minimal });
+    toUpdate.push({ ref, clientId, customerPhone, serviceTypeId, minimal, fullData: full });
   }
 
-  if (toUpdate.length === 0 && followUpIdsToDeleteOnly.length === 0) {
+  if (toUpdate.length === 0 && followUpsToDelete.length === 0) {
     return { successCount: 0, failCount: 0 };
   }
 
@@ -262,7 +270,7 @@ export async function cancelBookingsCascade(
     archiveWrites.push({ clientKey, docId, minimal, serviceTypeKey });
   }
   const mainIdsToDelete = new Set(toUpdate.map((u) => u.ref.id));
-  const allToDelete = new Set([...mainIdsToDelete, ...followUpIdsToDeleteOnly]);
+  const allToDelete = new Set([...mainIdsToDelete, ...followUpsToDelete.map((f) => f.id)]);
 
   const clientsRef = db.collection("sites").doc(siteId).collection("clients");
   const archiveByClient = new Map<string, QueryDocumentSnapshot[]>();
@@ -286,6 +294,21 @@ export async function cancelBookingsCascade(
     }
   }
 
+  const liveEffects: LiveStatsBookingEffect[] = [];
+  if (reason !== "auto") {
+    for (const row of toUpdate) {
+      const pack = liveStatsDeltaForActiveCancellation(row.fullData);
+      if (pack) liveEffects.push(pack);
+    }
+    for (const { data } of followUpsToDelete) {
+      const pack = liveStatsDeltaUndoFollowUpOnly(data);
+      if (pack) liveEffects.push(pack);
+    }
+  }
+  const dashPatch =
+    liveEffects.length > 0 ? await prepareDashboardBatchIncrement(db, siteId, liveEffects) : null;
+  const dashRef = db.collection("sites").doc(siteId).collection("analytics").doc("dashboardCurrent");
+
   const batch = db.batch();
   for (const ref of staleRefs) {
     batch.delete(ref);
@@ -296,6 +319,9 @@ export async function cancelBookingsCascade(
   for (const { clientKey, docId, minimal } of archiveWrites) {
     const archiveRef = clientsRef.doc(clientKey).collection("archivedServiceTypes").doc(docId);
     batch.set(archiveRef, minimal, { merge: false });
+  }
+  if (dashPatch && Object.keys(dashPatch).length > 0) {
+    batch.set(dashRef, dashPatch, { merge: true });
   }
   try {
     await batch.commit();
@@ -328,9 +354,28 @@ export async function permanentDeleteBookingGroupDocs(
   const col = db.collection("sites").doc(siteId).collection("bookings");
   let successCount = 0;
   let failCount = 0;
+  const dashRef = db.collection("sites").doc(siteId).collection("analytics").doc("dashboardCurrent");
   for (let i = 0; i < bookingIds.length; i += FIRESTORE_BATCH_DELETE_LIMIT) {
     const chunk = bookingIds.slice(i, i + FIRESTORE_BATCH_DELETE_LIMIT);
+    const liveEffects: LiveStatsBookingEffect[] = [];
+    for (const id of chunk) {
+      const snap = await col.doc(id).get();
+      if (!snap.exists) continue;
+      const d = snap.data() as Record<string, unknown>;
+      const fu = liveStatsDeltaUndoFollowUpOnly(d);
+      if (fu) {
+        liveEffects.push(fu);
+        continue;
+      }
+      const undo = liveStatsDeltaUndoCreatedOnly(d);
+      if (undo) liveEffects.push(undo);
+    }
+    const dashPatch =
+      liveEffects.length > 0 ? await prepareDashboardBatchIncrement(db, siteId, liveEffects) : null;
     const batch = db.batch();
+    if (dashPatch && Object.keys(dashPatch).length > 0) {
+      batch.set(dashRef, dashPatch, { merge: true });
+    }
     for (const id of chunk) {
       batch.delete(col.doc(id));
     }

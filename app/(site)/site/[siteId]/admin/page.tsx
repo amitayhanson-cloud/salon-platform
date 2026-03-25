@@ -377,6 +377,17 @@ export default function AdminHomePage() {
         icon: Banknote,
       },
       {
+        key: "whatsapp",
+        metricKind: "whatsapp",
+        label: "הודעות WhatsApp החודש",
+        value:
+          whatsAppThisMonth != null
+            ? `\u200E${whatsAppThisMonth.used}/${whatsAppThisMonth.limit}`
+            : null,
+        href: `${adminBasePath}/whatsapp`,
+        icon: MessageSquare,
+      },
+      {
         key: "cancellations",
         metricKind: "cancellations" as const,
         label: "ביטולים היום",
@@ -384,14 +395,6 @@ export default function AdminHomePage() {
         href: `${adminBasePath}/bookings`,
         icon: XCircle,
         title: dashMetrics?.cancellationsNote,
-      },
-      {
-        key: "util",
-        metricKind: "utilization" as const,
-        label: "ניצולת זמן היום",
-        value: utilValue,
-        href: `${adminBasePath}/bookings`,
-        icon: Percent,
       },
       {
         key: "traffic",
@@ -402,15 +405,12 @@ export default function AdminHomePage() {
         icon: Link2,
       },
       {
-        key: "whatsapp",
-        metricKind: "whatsapp",
-        label: "הודעות WhatsApp החודש",
-        value:
-          whatsAppThisMonth != null
-            ? `\u200E${whatsAppThisMonth.used}/${whatsAppThisMonth.limit}`
-            : null,
-        href: `${adminBasePath}/whatsapp`,
-        icon: MessageSquare,
+        key: "util",
+        metricKind: "utilization" as const,
+        label: "ניצולת זמן היום",
+        value: utilValue,
+        href: `${adminBasePath}/bookings`,
+        icon: Percent,
       },
     ];
   }, [adminBasePath, dashMetrics, revenueFormatted, stats, whatsAppThisMonth]);
@@ -455,7 +455,15 @@ export default function AdminHomePage() {
     }
   };
 
-  const showStatsAndCharts = !statsLoading && !whatsAppLoading && !dashLoading;
+  // UX: show stat cards first, then mount graphs (charts are heavier).
+  // This prevents the whole dashboard from waiting on dash metrics / chart SWR.
+  const [showCharts, setShowCharts] = useState(false);
+  useEffect(() => {
+    setShowCharts(false);
+  }, [siteId]);
+  useEffect(() => {
+    if (!statsLoading) setShowCharts(true);
+  }, [statsLoading]);
 
   return (
     <div dir="rtl" className="min-h-screen">
@@ -499,7 +507,7 @@ export default function AdminHomePage() {
                   <h2 className="mb-4 text-lg font-semibold text-[#0F172A]">
                     סטטיסטיקות העסק
                   </h2>
-                  {statsLoading || whatsAppLoading || dashLoading ? (
+                  {statsLoading ? (
                     <DashboardStatsLoading />
                   ) : (
                     <motion.div layout className="grid grid-cols-2 gap-4 md:grid-cols-3">
@@ -526,7 +534,7 @@ export default function AdminHomePage() {
           )}
         </AdminCard>
 
-        {loading ? null : showStatsAndCharts ? (
+        {loading ? null : showCharts ? (
           <div className="mt-8">
             <h2 className="mb-2 text-lg font-semibold text-[#0F172A]">מגמות וגרפים</h2>
             <p className="mb-8 text-sm text-slate-500">

@@ -306,14 +306,35 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
-  // 9) Final summary
+  // 9) Reset dashboards: analytics/dashboardCurrent → zeros for every remaining site
+  // -------------------------------------------------------------------------
+  if (!DRY_RUN) {
+    const { resetDashboardCurrentForSite } = await import("../lib/liveStatsScorekeeper");
+    const sitesRemaining = await db.collection("sites").get();
+    for (const doc of sitesRemaining.docs) {
+      try {
+        await resetDashboardCurrentForSite(db, doc.id);
+        console.log(`[RESET] dashboardCurrent cleared: sites/${doc.id}`);
+      } catch (e) {
+        console.error(`[ERR] dashboardCurrent reset failed sites/${doc.id}`, e);
+      }
+    }
+  } else {
+    const sitesRemaining = await db.collection("sites").get();
+    for (const doc of sitesRemaining.docs) {
+      console.log(`[DRY] Would reset analytics/dashboardCurrent for sites/${doc.id}`);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 10) Final summary
   // -------------------------------------------------------------------------
   console.log("\n" + "=".repeat(70));
   if (DRY_RUN) {
     console.log("DRY RUN complete. No changes made.");
     console.log("To execute: npx tsx scripts/cleanSlate.ts --execute");
   } else {
-    console.log("Clean slate complete. Protected users and their tenants preserved.");
+    console.log("Clean slate complete. Protected users and their tenants preserved. Dashboard scoreboards reset.");
     console.log(`  - Deleted Auth users: ${deletedAuthUsers.length}`);
     console.log(`  - Deleted Firestore sites: ${deletedSiteIds.length}`);
     console.log(`  - Deleted Storage folders: ${deletedStorageFolders.length}`);

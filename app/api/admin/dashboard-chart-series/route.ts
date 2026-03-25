@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
-import { computeDashboardChartSeriesForSite } from "@/lib/dashboardAnalyticsAdmin";
+import { loadDashboardChartSeriesForSite } from "@/lib/dashboardAnalyticsAdmin";
 
 export async function GET(request: Request) {
   try {
@@ -29,8 +29,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
 
-    // Fresh numbers from Firestore reads, no dashboardCurrent write (avoids lag; persistence is cron / rollover).
-    const series = await computeDashboardChartSeriesForSite(db, siteId, now);
+    const series = await loadDashboardChartSeriesForSite(db, siteId, now);
 
     return NextResponse.json(
       { ok: true, ...series },

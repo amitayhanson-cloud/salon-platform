@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { verifyCronBearerSecret } from "@/lib/server/verifyCronBearer";
-import { rolloverAndRecomputeCurrentMonth } from "@/lib/dashboardAnalyticsAdmin";
+import { rolloverDashboardAnalyticsForSite } from "@/lib/dashboardAnalyticsAdmin";
 
 export const maxDuration = 300;
 
@@ -16,7 +16,7 @@ async function runRollover(): Promise<NextResponse> {
   let processed = 0;
 
   for (const site of sitesSnap.docs) {
-    await rolloverAndRecomputeCurrentMonth(db, site.id, now);
+    await rolloverDashboardAnalyticsForSite(db, site.id, now);
     processed += 1;
   }
 

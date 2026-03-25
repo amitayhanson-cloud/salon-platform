@@ -4,10 +4,18 @@
  * - runExpiredCleanupForSite: callable for dev/test (admin only)
  * - deleteArchivedBookings: callable to delete cancelled (+ legacy expired) bookings (admin only)
  * - scheduledArchiveCleanup: weekly scheduled deletion per site archiveRetention
+ * - liveStatsOnBookingWrite / liveStatsOnClientCreate: increment dashboardCurrent (FieldValue.increment)
  */
 
 import * as functions from "firebase-functions/v1";
 import * as admin from "firebase-admin";
+import { updateLiveStats } from "./liveStatsScorekeeper";
+import {
+  liveStatsDeltaForBookingCreated,
+  liveStatsDeltaForActiveCancellation,
+  isDocCancelled,
+} from "./liveBookingAnalytics";
+import { getDateYMDInTimezone } from "./expiredCleanupUtilsForFunctions";
 
 admin.initializeApp();
 
@@ -505,3 +513,59 @@ export const scheduledArchiveCleanup = functions.pubsub
     return null;
   }
 );
+
+/**
+ * Booking writes (public + admin): mirrors lib/liveStatsBookingDeltas — must stay in sync.
+ */
+export const liveStatsOnBookingWrite = functions.firestore
+  .document("sites/{siteId}/bookings/{bookingId}")
+  .onWrite(async (change, context) => {
+    const siteId = context.params.siteId as string;
+    const before = change.before.exists ? (change.before.data() as Record<string, unknown>) : null;
+    const after = change.after.exists ? (change.after.data() as Record<string, unknown>) : null;
+
+    try {
+      if (!before && after) {
+        const pack = liveStatsDeltaForBookingCreated(after);
+        if (pack) await updateLiveStats(db, siteId, pack.ymd, pack.delta, pack.trafficSourceDeltas);
+        return;
+      }
+
+      if (before && after) {
+        const wasCancelled = isDocCancelled(before);
+        const nowCancelled = isDocCancelled(after);
+        if (!wasCancelled && nowCancelled) {
+          const pack = liveStatsDeltaForActiveCancellation(before);
+          if (pack) {
+            await updateLiveStats(db, siteId, pack.ymd, pack.delta, pack.trafficSourceDeltas);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("[liveStatsOnBookingWrite]", { siteId, error: e });
+    }
+  });
+
+/** New client profile (phone doc created). */
+export const liveStatsOnClientCreate = functions.firestore
+  .document("sites/{siteId}/clients/{clientId}")
+  .onCreate(async (snap, context) => {
+    const siteId = context.params.siteId as string;
+    const data = snap.data() as Record<string, unknown>;
+    let ymd: string;
+    const ca = data.createdAt as admin.firestore.Timestamp | undefined;
+    if (ca && typeof ca.toDate === "function") {
+      try {
+        ymd = getDateYMDInTimezone(ca.toDate(), TZ);
+      } catch {
+        ymd = getDateYMDInTimezone(new Date(), TZ);
+      }
+    } else {
+      ymd = getDateYMDInTimezone(new Date(), TZ);
+    }
+    try {
+      await updateLiveStats(db, siteId, ymd, { newClients: 1 });
+    } catch (e) {
+      console.error("[liveStatsOnClientCreate]", { siteId, error: e });
+    }
+  });

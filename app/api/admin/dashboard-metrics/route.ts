@@ -130,7 +130,9 @@ export async function GET(request: Request) {
     const dim = daysInCalendarMonth(year, month1);
     const monthEnd = `${year}-${String(month1).padStart(2, "0")}-${String(dim).padStart(2, "0")}`;
 
-    const [settingsSnap, workersSnap, bookingsSnap, cancellationsFromArchive] = await Promise.all([
+    const dashboardCurrentRef = db.collection("sites").doc(siteId).collection("analytics").doc("dashboardCurrent");
+
+    const [settingsSnap, workersSnap, bookingsSnap, cancellationsFromArchive, dashboardCurrentSnap] = await Promise.all([
       db.collection("sites").doc(siteId).collection("settings").doc("booking").get(),
       db.collection("sites").doc(siteId).collection("workers").get(),
       db
@@ -141,7 +143,14 @@ export async function GET(request: Request) {
         .where("dateISO", "<=", monthEnd)
         .get(),
       countArchivedCancelledInAppointmentMonthAdmin(db, siteId, monthStart, monthEnd),
+      dashboardCurrentRef.get(),
     ]);
+
+    const liveDash = dashboardCurrentSnap.exists
+      ? (dashboardCurrentSnap.data() as Record<string, unknown>)
+      : null;
+    const liveMonthKey = typeof liveDash?.monthKey === "string" ? liveDash.monthKey : null;
+    const useLiveScoreboard = liveMonthKey === monthKey;
 
     /** Same cancellation rules as /admin/.../cancelled; appointment date in this month */
     const cancellationsFromLiveBookings = countCancelledInBookingsMonthSnapshot(bookingsSnap.docs);
@@ -191,18 +200,32 @@ export async function GET(request: Request) {
     let bookedMinutes = 0;
     const trafficMap = new Map<string, number>();
 
-    for (const doc of bookingsSnap.docs) {
-      const d = doc.data() as Record<string, unknown>;
-      if (isDocCancelled(d)) continue;
+    if (useLiveScoreboard) {
+      const totals = liveDash?.totals as Record<string, unknown> | undefined;
+      const bm = totals?.bookedMinutes;
+      bookedMinutes = typeof bm === "number" && Number.isFinite(bm) ? Math.max(0, bm) : 0;
+      const tsRaw = liveDash?.trafficSources as Record<string, unknown> | undefined;
+      if (tsRaw && typeof tsRaw === "object") {
+        for (const [k, v] of Object.entries(tsRaw)) {
+          if (typeof v === "number" && Number.isFinite(v) && v > 0) {
+            trafficMap.set(k, v);
+          }
+        }
+      }
+    } else {
+      for (const doc of bookingsSnap.docs) {
+        const d = doc.data() as Record<string, unknown>;
+        if (isDocCancelled(d)) continue;
 
-      const dm = typeof d.durationMin === "number" && Number.isFinite(d.durationMin) ? d.durationMin : 60;
-      bookedMinutes += Math.max(0, dm);
+        const dm = typeof d.durationMin === "number" && Number.isFinite(d.durationMin) ? d.durationMin : 60;
+        bookedMinutes += Math.max(0, dm);
 
-      if (isFollowUpBooking(d)) continue;
+        if (isFollowUpBooking(d)) continue;
 
-      const src = typeof d.bookingTrafficSource === "string" ? d.bookingTrafficSource.trim().toLowerCase() : "";
-      if (src) {
-        trafficMap.set(src, (trafficMap.get(src) ?? 0) + 1);
+        const src = typeof d.bookingTrafficSource === "string" ? d.bookingTrafficSource.trim().toLowerCase() : "";
+        if (src) {
+          trafficMap.set(src, (trafficMap.get(src) ?? 0) + 1);
+        }
       }
     }
 
@@ -219,14 +242,21 @@ export async function GET(request: Request) {
     }
 
     let bookedTodayMinutes = 0;
-    for (const doc of bookingsSnap.docs) {
-      const d = doc.data() as Record<string, unknown>;
-      if (isDocCancelled(d)) continue;
-      const dateKey =
-        typeof d.dateISO === "string" && d.dateISO.length >= 10 ? d.dateISO.slice(0, 10) : "";
-      if (dateKey !== todayYmd) continue;
-      const dm = typeof d.durationMin === "number" && Number.isFinite(d.durationMin) ? d.durationMin : 60;
-      bookedTodayMinutes += Math.max(0, dm);
+    if (useLiveScoreboard) {
+      const days = liveDash?.days as Record<string, Record<string, unknown>> | undefined;
+      const dayRow = days?.[todayYmd];
+      const dm = dayRow?.bookedMinutes;
+      bookedTodayMinutes = typeof dm === "number" && Number.isFinite(dm) ? Math.max(0, dm) : 0;
+    } else {
+      for (const doc of bookingsSnap.docs) {
+        const d = doc.data() as Record<string, unknown>;
+        if (isDocCancelled(d)) continue;
+        const dateKey =
+          typeof d.dateISO === "string" && d.dateISO.length >= 10 ? d.dateISO.slice(0, 10) : "";
+        if (dateKey !== todayYmd) continue;
+        const dm = typeof d.durationMin === "number" && Number.isFinite(d.durationMin) ? d.durationMin : 60;
+        bookedTodayMinutes += Math.max(0, dm);
+      }
     }
 
     const utilizationPercentToday =
@@ -239,11 +269,15 @@ export async function GET(request: Request) {
       .sort((a, b) => b.count - a.count);
 
     const totalAttributed = trafficBySource.reduce((s, x) => s + x.count, 0);
-    const totalBookingsForTraffic = bookingsSnap.docs.filter((doc) => {
+    let totalBookingsForTraffic = bookingsSnap.docs.filter((doc) => {
       const d = doc.data() as Record<string, unknown>;
       if (isFollowUpBooking(d)) return false;
       return !isDocCancelled(d);
     }).length;
+    if (useLiveScoreboard) {
+      const tb = (liveDash?.totals as Record<string, unknown> | undefined)?.bookings;
+      totalBookingsForTraffic = typeof tb === "number" && Number.isFinite(tb) ? Math.max(0, tb) : 0;
+    }
 
     return NextResponse.json({
       ok: true,

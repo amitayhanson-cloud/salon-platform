@@ -5,6 +5,7 @@
  * - runExpiredCleanupForSite: callable for dev/test (admin only)
  * - deleteArchivedBookings: callable to delete cancelled (+ legacy expired) bookings (admin only)
  * - scheduledArchiveCleanup: weekly scheduled deletion per site archiveRetention
+ * - liveStatsOnBookingWrite / liveStatsOnClientCreate: increment dashboardCurrent (FieldValue.increment)
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -40,9 +41,12 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.scheduledArchiveCleanup = exports.deleteArchivedBookings = exports.runExpiredCleanupForSite = exports.expiredBookingsCleanup = void 0;
+exports.liveStatsOnClientCreate = exports.liveStatsOnBookingWrite = exports.scheduledArchiveCleanup = exports.deleteArchivedBookings = exports.runExpiredCleanupForSite = exports.expiredBookingsCleanup = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
+const liveStatsScorekeeper_1 = require("./liveStatsScorekeeper");
+const liveBookingAnalytics_1 = require("./liveBookingAnalytics");
+const expiredCleanupUtilsForFunctions_1 = require("./expiredCleanupUtilsForFunctions");
 admin.initializeApp();
 const db = admin.firestore();
 const BATCH_SIZE = 400;
@@ -462,4 +466,61 @@ exports.scheduledArchiveCleanup = functions.pubsub
         console.log("[scheduledArchiveCleanup]", { siteId, deleted, mode: "scheduled" });
     }
     return null;
+});
+/**
+ * Booking writes (public + admin): mirrors lib/liveStatsBookingDeltas — must stay in sync.
+ */
+exports.liveStatsOnBookingWrite = functions.firestore
+    .document("sites/{siteId}/bookings/{bookingId}")
+    .onWrite(async (change, context) => {
+    const siteId = context.params.siteId;
+    const before = change.before.exists ? change.before.data() : null;
+    const after = change.after.exists ? change.after.data() : null;
+    try {
+        if (!before && after) {
+            const pack = (0, liveBookingAnalytics_1.liveStatsDeltaForBookingCreated)(after);
+            if (pack)
+                await (0, liveStatsScorekeeper_1.updateLiveStats)(db, siteId, pack.ymd, pack.delta, pack.trafficSourceDeltas);
+            return;
+        }
+        if (before && after) {
+            const wasCancelled = (0, liveBookingAnalytics_1.isDocCancelled)(before);
+            const nowCancelled = (0, liveBookingAnalytics_1.isDocCancelled)(after);
+            if (!wasCancelled && nowCancelled) {
+                const pack = (0, liveBookingAnalytics_1.liveStatsDeltaForActiveCancellation)(before);
+                if (pack) {
+                    await (0, liveStatsScorekeeper_1.updateLiveStats)(db, siteId, pack.ymd, pack.delta, pack.trafficSourceDeltas);
+                }
+            }
+        }
+    }
+    catch (e) {
+        console.error("[liveStatsOnBookingWrite]", { siteId, error: e });
+    }
+});
+/** New client profile (phone doc created). */
+exports.liveStatsOnClientCreate = functions.firestore
+    .document("sites/{siteId}/clients/{clientId}")
+    .onCreate(async (snap, context) => {
+    const siteId = context.params.siteId;
+    const data = snap.data();
+    let ymd;
+    const ca = data.createdAt;
+    if (ca && typeof ca.toDate === "function") {
+        try {
+            ymd = (0, expiredCleanupUtilsForFunctions_1.getDateYMDInTimezone)(ca.toDate(), TZ);
+        }
+        catch {
+            ymd = (0, expiredCleanupUtilsForFunctions_1.getDateYMDInTimezone)(new Date(), TZ);
+        }
+    }
+    else {
+        ymd = (0, expiredCleanupUtilsForFunctions_1.getDateYMDInTimezone)(new Date(), TZ);
+    }
+    try {
+        await (0, liveStatsScorekeeper_1.updateLiveStats)(db, siteId, ymd, { newClients: 1 });
+    }
+    catch (e) {
+        console.error("[liveStatsOnClientCreate]", { siteId, error: e });
+    }
 });
