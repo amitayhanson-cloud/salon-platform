@@ -8,9 +8,8 @@
 import twilio from "twilio";
 import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
-import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
-import { fireAndForgetLiveStats, updateLiveStats } from "@/lib/liveStatsScorekeeper";
 import { isWhatsAppAutomationEnabled } from "@/lib/platformSettings";
+import { inferAuditTypeFromSend, writeWhatsAppAuditLog, type WhatsAppAuditLogType } from "./auditLog";
 import { toWhatsAppTo } from "./e164";
 import { mapBodyForSandbox } from "./sandboxMap";
 import {
@@ -56,6 +55,8 @@ export type SendWhatsAppParams = {
    * number in the last 24h → service, else utility.
    */
   usageCategory?: WhatsAppUsageCategory | "auto";
+  /** Overrides type stored on whatsapp_logs (dashboard auditor). */
+  auditType?: WhatsAppAuditLogType;
 };
 
 export const WHATSAPP_SKIPPED_USAGE_LIMIT_SID = "skipped-usage-limit";
@@ -87,6 +88,7 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
     meta = null,
     bypassAutomationKillSwitch = false,
     usageCategory = "auto",
+    auditType: auditTypeParam,
   } = params;
   const siteId = siteIdParam ?? salonIdParam;
   const automationName =
@@ -177,9 +179,22 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
         error: e instanceof Error ? e.message : String(e),
       });
     }
-    const ymd = getDateYMDInTimezone(new Date(), "Asia/Jerusalem");
-    const db = getAdminDb();
-    fireAndForgetLiveStats(() => updateLiveStats(db, siteId, ymd, { whatsappCount: 1 }));
+    if (isWhatsAppOutboundDelivered(sid)) {
+      try {
+        await writeWhatsAppAuditLog(siteId, {
+          type: inferAuditTypeFromSend(auditTypeParam, meta),
+          bookingId,
+          bookingRef,
+          twilioMessageSid: sid,
+          channel: "api",
+        });
+      } catch (e) {
+        console.error("[WhatsApp] whatsapp_logs audit write failed", {
+          siteId,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
   }
 
   return { sid };

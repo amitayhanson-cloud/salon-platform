@@ -21,6 +21,7 @@ import { subscribeBookingSettings } from "@/lib/firestoreBookingSettings";
 import AdminTabs from "@/components/ui/AdminTabs";
 import { AdminPageHero } from "@/components/admin/AdminPageHero";
 import { AdminCard } from "@/components/admin/AdminCard";
+import { useUnsavedChanges } from "@/components/admin/UnsavedChangesContext";
 
 import type { SiteService } from "@/types/siteConfig";
 import type { OpeningHours } from "@/types/booking";
@@ -116,9 +117,34 @@ function availabilityForFirestore(availability: OpeningHours[]): OpeningHours[] 
   });
 }
 
+/** Stable snapshot for dirty detection on the add / edit worker card. */
+function serializeWorkerFormState(fd: Partial<Worker>): string {
+  const services = [...(fd.services ?? [])].sort();
+  const availability = (fd.availability ?? defaultAvailability).map((day) => ({
+    day: day.day,
+    label: day.label,
+    open: day.open ?? null,
+    close: day.close ?? null,
+    breaks: (day.breaks ?? []).map((b) => ({ start: b.start, end: b.end })),
+  }));
+  return JSON.stringify({
+    name: fd.name ?? "",
+    role: fd.role ?? "",
+    phone: fd.phone ?? "",
+    email: fd.email ?? "",
+    services,
+    availability,
+    active: fd.active !== false,
+    treatmentCommissionPercent: Math.min(100, Math.max(0, Number(fd.treatmentCommissionPercent) || 0)),
+  });
+}
+
 export default function WorkersPage() {
   const params = useParams();
   const siteId = params?.siteId as string;
+  const unsavedCtx = useUnsavedChanges();
+  const formBaselineSerializedRef = useRef("");
+  const performWorkerSaveRef = useRef<() => Promise<void>>(async () => {});
 
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [workersLoading, setWorkersLoading] = useState(true);
@@ -445,7 +471,7 @@ export default function WorkersPage() {
         // Clamp worker availability to business hours (backwards compatibility)
         let normalizedAvailability = worker.availability || defaultAvailability;
         normalizedAvailability = clampWorkerAvailability(normalizedAvailability);
-        setFormData({
+        const nextForm: Partial<Worker> = {
           name: worker.name || "",
           role: worker.role || "",
           phone: worker.phone || "",
@@ -454,9 +480,11 @@ export default function WorkersPage() {
           availability: normalizedAvailability,
           active: worker.active !== false,
           treatmentCommissionPercent: worker.treatmentCommissionPercent ?? 0,
-        });
+        };
+        setFormData(nextForm);
+        formBaselineSerializedRef.current = serializeWorkerFormState(nextForm);
       }
-    } else {
+    } else if (isAddingWorker) {
       // New worker: default all service checkboxes checked
       const initialAvailability = defaultAvailability.map((day) => {
         const businessDay = getBusinessDayConfig(day.day);
@@ -473,7 +501,7 @@ export default function WorkersPage() {
           close: businessDay.end,
         };
       });
-      setFormData({
+      const nextForm: Partial<Worker> = {
         name: "",
         role: "",
         phone: "",
@@ -482,14 +510,20 @@ export default function WorkersPage() {
         availability: initialAvailability,
         active: true,
         treatmentCommissionPercent: 0,
-      });
+      };
+      setFormData(nextForm);
+      formBaselineSerializedRef.current = serializeWorkerFormState(nextForm);
     }
-  }, [selectedWorkerId, workers, services, businessHours]);
+  }, [selectedWorkerId, isAddingWorker, workers, services, businessHours]);
 
   const handleAddWorker = async () => {
-    if (!db || !siteId || !formData.name?.trim()) {
+    if (!db || !siteId) {
+      setError("לא ניתן לשמור כרגע");
+      throw new Error("WORKER_VALIDATION");
+    }
+    if (!formData.name?.trim()) {
       setError("יש להזין שם עובד");
-      return;
+      throw new Error("WORKER_VALIDATION");
     }
     try {
       setSaving(true);
@@ -530,9 +564,13 @@ export default function WorkersPage() {
   };
 
   const handleSaveWorker = async () => {
-    if (!db || !siteId || !selectedWorkerId || !formData.name?.trim()) {
+    if (!db || !siteId || !selectedWorkerId) {
+      setError("לא ניתן לשמור כרגע");
+      throw new Error("WORKER_VALIDATION");
+    }
+    if (!formData.name?.trim()) {
       setError("יש להזין שם עובד");
-      return;
+      throw new Error("WORKER_VALIDATION");
     }
     try {
       setSaving(true);
@@ -580,6 +618,40 @@ export default function WorkersPage() {
       console.error("[Workers] Failed to delete worker", err);
       setError("שגיאה במחיקת עובד");
     }
+  };
+
+  performWorkerSaveRef.current = async () => {
+    if (selectedWorkerId) await handleSaveWorker();
+    else if (isAddingWorker) await handleAddWorker();
+  };
+
+  const inWorkerEditor = Boolean(selectedWorkerId) || isAddingWorker;
+  const isWorkerFormDirty =
+    inWorkerEditor && serializeWorkerFormState(formData) !== formBaselineSerializedRef.current;
+
+  useEffect(() => {
+    if (!unsavedCtx) return;
+    if (!isWorkerFormDirty) {
+      unsavedCtx.setUnsaved(false, () => {});
+      return;
+    }
+    unsavedCtx.setUnsaved(true, () => performWorkerSaveRef.current());
+    return () => unsavedCtx.setUnsaved(false, () => {});
+  }, [unsavedCtx, isWorkerFormDirty]);
+
+  useEffect(() => {
+    if (!isWorkerFormDirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [isWorkerFormDirty]);
+
+  const checkAndProceed = (fn: () => void) => {
+    if (unsavedCtx) unsavedCtx.checkAndProceed(fn);
+    else fn();
   };
 
   const toggleService = (serviceId: string) => {
@@ -716,8 +788,10 @@ export default function WorkersPage() {
                 <h2 className="text-lg font-bold text-[#0F172A]">רשימת עובדים</h2>
                 <button
                   onClick={() => {
-                    setSelectedWorkerId(null);
-                    setIsAddingWorker(true);
+                    checkAndProceed(() => {
+                      setSelectedWorkerId(null);
+                      setIsAddingWorker(true);
+                    });
                   }}
                   className="rounded-full px-4 py-2 bg-[#0F172A] hover:bg-[#1E293B] text-white text-sm font-medium transition-colors shadow-sm"
                 >
@@ -735,8 +809,11 @@ export default function WorkersPage() {
                     <button
                       key={worker.id}
                       onClick={() => {
-                        setSelectedWorkerId(worker.id);
-                        setIsAddingWorker(false);
+                        if (worker.id === selectedWorkerId && !isAddingWorker) return;
+                        checkAndProceed(() => {
+                          setSelectedWorkerId(worker.id);
+                          setIsAddingWorker(false);
+                        });
                       }}
                       className={`w-full text-right p-3 rounded-lg border transition-colors ${
                         selectedWorkerId === worker.id
@@ -784,7 +861,7 @@ export default function WorkersPage() {
                     {isAddingWorker && (
                       <button
                         type="button"
-                        onClick={() => setIsAddingWorker(false)}
+                        onClick={() => checkAndProceed(() => setIsAddingWorker(false))}
                         className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium"
                       >
                         ביטול

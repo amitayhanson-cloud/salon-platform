@@ -11,9 +11,15 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 
+type PendingLeaveIntent =
+  | { type: "navigate"; href: string }
+  | { type: "callback"; fn: () => void };
+
 type UnsavedContextValue = {
   setUnsaved: (hasUnsaved: boolean, onSave: () => Promise<void> | void) => void;
   checkAndNavigate: (href: string) => boolean;
+  /** If there are unsaved changes, opens the same confirmation modal; otherwise runs `fn` immediately. */
+  checkAndProceed: (fn: () => void) => void;
 };
 
 const UnsavedChangesContext = createContext<UnsavedContextValue | null>(null);
@@ -28,60 +34,61 @@ type ProviderProps = { children: ReactNode };
 export function UnsavedChangesProvider({ children }: ProviderProps) {
   const router = useRouter();
   const [showModal, setShowModal] = useState(false);
-  const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const hasUnsavedRef = useRef(false);
   const onSaveRef = useRef<() => Promise<void> | void>(() => {});
+  const pendingIntentRef = useRef<PendingLeaveIntent | null>(null);
 
   const setUnsaved = useCallback((hasUnsaved: boolean, onSave: () => Promise<void> | void) => {
     hasUnsavedRef.current = hasUnsaved;
     onSaveRef.current = onSave;
   }, []);
 
+  const flushIntent = useCallback(() => {
+    const intent = pendingIntentRef.current;
+    pendingIntentRef.current = null;
+    setShowModal(false);
+    if (!intent) return;
+    if (intent.type === "navigate") router.push(intent.href);
+    else intent.fn();
+  }, [router]);
+
   const handleLeaveWithoutSaving = useCallback(() => {
-    if (pendingHref) {
-      router.push(pendingHref);
-      setPendingHref(null);
-      setShowModal(false);
-    }
-  }, [pendingHref, router]);
+    flushIntent();
+  }, [flushIntent]);
 
   const handleSaveAndLeave = useCallback(async () => {
     setSaving(true);
     try {
       await Promise.resolve(onSaveRef.current());
-      if (pendingHref) {
-        router.push(pendingHref);
-        setPendingHref(null);
-      }
-      setShowModal(false);
+      flushIntent();
     } finally {
       setSaving(false);
     }
-  }, [pendingHref, router]);
+  }, [flushIntent]);
 
   const handleCancel = useCallback(() => {
-    setPendingHref(null);
+    pendingIntentRef.current = null;
     setShowModal(false);
   }, []);
 
-  const openModalFor = useCallback((href: string) => {
-    setPendingHref(href);
+  const checkAndNavigate = useCallback((href: string) => {
+    if (!hasUnsavedRef.current || !href) return false;
+    pendingIntentRef.current = { type: "navigate", href };
+    setShowModal(true);
+    return true;
+  }, []);
+
+  const checkAndProceed = useCallback((fn: () => void) => {
+    if (!hasUnsavedRef.current) {
+      fn();
+      return;
+    }
+    pendingIntentRef.current = { type: "callback", fn };
     setShowModal(true);
   }, []);
 
-  const checkAndNavigate = useCallback(
-    (href: string) => {
-      if (hasUnsavedRef.current && href) {
-        openModalFor(href);
-        return true;
-      }
-      return false;
-    },
-    [openModalFor]
-  );
-
-  const value: UnsavedContextValue = { setUnsaved, checkAndNavigate };
+  const value: UnsavedContextValue = { setUnsaved, checkAndNavigate, checkAndProceed };
 
   return (
     <UnsavedChangesContext.Provider value={value}>

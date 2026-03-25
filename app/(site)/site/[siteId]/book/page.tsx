@@ -3049,7 +3049,7 @@ export default function BookingPage() {
                     onChange={(e) =>
                       setClientPhone(e.target.value.replace(/[^\d+\s\-]/g, "").slice(0, 22))
                     }
-                    className="w-full rounded-xl border px-4 py-3 focus:outline-none focus:ring-2"
+                    className="w-full rounded-xl border px-4 py-3 text-right placeholder:text-right focus:outline-none focus:ring-2"
                     dir="ltr"
                     style={{
                       borderColor:
@@ -3058,7 +3058,7 @@ export default function BookingPage() {
                           : "var(--border)",
                       backgroundColor: "var(--surface)",
                       color: "var(--text)",
-                      textAlign: "left",
+                      textAlign: "right",
                     }}
                     onFocus={(e) => {
                       e.target.style.borderColor = "var(--primary)";
@@ -3069,7 +3069,7 @@ export default function BookingPage() {
                       e.target.style.borderColor = invalid ? "#f87171" : "var(--border)";
                       e.target.style.boxShadow = "none";
                     }}
-                    placeholder="050-1234567 או +972501234567"
+                    placeholder="הזינו מספר מלא"
                   />
                   {clientPhone.trim() !== "" && !isBookingClientPhoneValid(clientPhone) && (
                     <p className="mt-1.5 text-xs text-right" style={{ color: "#b91c1c" }}>

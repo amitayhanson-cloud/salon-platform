@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const twilioCreateMock = vi.hoisted(() => vi.fn().mockResolvedValue({ sid: "SMtest123" }));
+const firestoreAddMock = vi.hoisted(() => vi.fn().mockResolvedValue({ id: "log1" }));
 
 vi.mock("twilio", () => ({
   default: vi.fn(() => ({
@@ -35,10 +36,18 @@ describe("sendWhatsApp", () => {
   beforeEach(() => {
     vi.mocked(isWhatsAppAutomationEnabled).mockReset();
     twilioCreateMock.mockClear();
+    firestoreAddMock.mockClear();
     vi.mocked(getAdminDb).mockReturnValue({
-      collection: vi.fn(() => ({
-        add: vi.fn().mockResolvedValue({ id: "log1" }),
-      })),
+      collection: vi.fn((name: string) => {
+        if (name === "sites") {
+          return {
+            doc: vi.fn(() => ({
+              collection: vi.fn(() => ({ add: firestoreAddMock })),
+            })),
+          };
+        }
+        return { add: firestoreAddMock };
+      }),
     } as unknown as ReturnType<typeof getAdminDb>);
     process.env = {
       ...env,
@@ -64,6 +73,7 @@ describe("sendWhatsApp", () => {
 
     expect(result).toEqual({ sid: "skipped-global-disabled" });
     expect(isWhatsAppAutomationEnabled).toHaveBeenCalledTimes(1);
+    expect(firestoreAddMock).not.toHaveBeenCalled();
   });
 
   it("accepts meta.automation when kill-switch is disabled", async () => {
@@ -78,6 +88,7 @@ describe("sendWhatsApp", () => {
     });
 
     expect(result).toEqual({ sid: "skipped-global-disabled" });
+    expect(firestoreAddMock).not.toHaveBeenCalled();
   });
 
   it("calls Twilio when bypassAutomationKillSwitch is true even if platform automations are off", async () => {
@@ -94,6 +105,7 @@ describe("sendWhatsApp", () => {
     expect(result).toEqual({ sid: "SMtest123" });
     expect(twilioCreateMock).toHaveBeenCalledTimes(1);
     expect(isWhatsAppAutomationEnabled).toHaveBeenCalledTimes(0);
+    expect(firestoreAddMock).toHaveBeenCalledTimes(2);
   });
 
   it("maps message body when sandbox mode is enabled", async () => {
@@ -108,6 +120,7 @@ describe("sendWhatsApp", () => {
     });
 
     expect(twilioCreateMock).toHaveBeenCalledTimes(1);
+    expect(firestoreAddMock).toHaveBeenCalledTimes(2);
     const arg = twilioCreateMock.mock.calls[0]?.[0] as { body?: string };
     expect(arg.body).toContain("*Sandbox*");
     expect(arg.body).toContain("הודעה קבוצתית");

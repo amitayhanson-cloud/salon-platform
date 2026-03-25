@@ -6,6 +6,7 @@
  * - deleteArchivedBookings: callable to delete cancelled (+ legacy expired) bookings (admin only)
  * - scheduledArchiveCleanup: weekly scheduled deletion per site archiveRetention
  * - liveStatsOnBookingWrite / liveStatsOnClientCreate: increment dashboardCurrent (FieldValue.increment)
+ * - auditWhatsAppUsage: onCreate whatsapp_logs → increment dashboardCurrent whatsappCount (billing truth)
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -41,7 +42,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.liveStatsOnClientCreate = exports.liveStatsOnBookingWrite = exports.scheduledArchiveCleanup = exports.deleteArchivedBookings = exports.runExpiredCleanupForSite = exports.expiredBookingsCleanup = void 0;
+exports.auditWhatsAppUsage = exports.liveStatsOnClientCreate = exports.liveStatsOnBookingWrite = exports.scheduledArchiveCleanup = exports.deleteArchivedBookings = exports.runExpiredCleanupForSite = exports.expiredBookingsCleanup = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const liveStatsScorekeeper_1 = require("./liveStatsScorekeeper");
@@ -522,5 +523,35 @@ exports.liveStatsOnClientCreate = functions.firestore
     }
     catch (e) {
         console.error("[liveStatsOnClientCreate]", { siteId, error: e });
+    }
+});
+/**
+ * Master auditor: each outbound WhatsApp receipt in whatsapp_logs bumps dashboard WhatsApp counts once.
+ * Uses the same day buckets + totals as booking/client live stats.
+ */
+exports.auditWhatsAppUsage = functions.firestore
+    .document("sites/{siteId}/whatsapp_logs/{logId}")
+    .onCreate(async (snap, context) => {
+    const siteId = context.params.siteId;
+    const data = snap.data();
+    const ts = data?.createdAt;
+    let ymd;
+    if (ts && typeof ts.toDate === "function") {
+        try {
+            ymd = (0, expiredCleanupUtilsForFunctions_1.getDateYMDInTimezone)(ts.toDate(), TZ);
+        }
+        catch {
+            ymd = (0, expiredCleanupUtilsForFunctions_1.getDateYMDInTimezone)(new Date(), TZ);
+        }
+    }
+    else {
+        ymd = (0, expiredCleanupUtilsForFunctions_1.getDateYMDInTimezone)(new Date(), TZ);
+    }
+    try {
+        await (0, liveStatsScorekeeper_1.updateLiveStats)(db, siteId, ymd, { whatsappCount: 1 });
+        console.log("[auditWhatsAppUsage]", { siteId, logId: context.params.logId, ymd, type: data?.type });
+    }
+    catch (e) {
+        console.error("[auditWhatsAppUsage]", { siteId, error: e });
     }
 });

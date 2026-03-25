@@ -5,6 +5,7 @@
  * - deleteArchivedBookings: callable to delete cancelled (+ legacy expired) bookings (admin only)
  * - scheduledArchiveCleanup: weekly scheduled deletion per site archiveRetention
  * - liveStatsOnBookingWrite / liveStatsOnClientCreate: increment dashboardCurrent (FieldValue.increment)
+ * - auditWhatsAppUsage: onCreate whatsapp_logs → increment dashboardCurrent whatsappCount (billing truth)
  */
 
 import * as functions from "firebase-functions/v1";
@@ -567,5 +568,33 @@ export const liveStatsOnClientCreate = functions.firestore
       await updateLiveStats(db, siteId, ymd, { newClients: 1 });
     } catch (e) {
       console.error("[liveStatsOnClientCreate]", { siteId, error: e });
+    }
+  });
+
+/**
+ * Master auditor: each outbound WhatsApp receipt in whatsapp_logs bumps dashboard WhatsApp counts once.
+ * Uses the same day buckets + totals as booking/client live stats.
+ */
+export const auditWhatsAppUsage = functions.firestore
+  .document("sites/{siteId}/whatsapp_logs/{logId}")
+  .onCreate(async (snap, context) => {
+    const siteId = context.params.siteId as string;
+    const data = snap.data() as Record<string, unknown>;
+    const ts = data?.createdAt as admin.firestore.Timestamp | undefined;
+    let ymd: string;
+    if (ts && typeof ts.toDate === "function") {
+      try {
+        ymd = getDateYMDInTimezone(ts.toDate(), TZ);
+      } catch {
+        ymd = getDateYMDInTimezone(new Date(), TZ);
+      }
+    } else {
+      ymd = getDateYMDInTimezone(new Date(), TZ);
+    }
+    try {
+      await updateLiveStats(db, siteId, ymd, { whatsappCount: 1 });
+      console.log("[auditWhatsAppUsage]", { siteId, logId: context.params.logId, ymd, type: data?.type });
+    } catch (e) {
+      console.error("[auditWhatsAppUsage]", { siteId, error: e });
     }
   });

@@ -23,6 +23,9 @@ import {
   assertSiteWithinWhatsAppLimit,
   incrementWhatsAppUsage,
   siteIdFromBookingRef,
+  writeWhatsAppAuditLog,
+  inferAuditTypeFromTwiMLReply,
+  bookingIdFromBookingRef,
 } from "@/lib/whatsapp";
 import { getAdminProjectId } from "@/lib/firebaseAdmin";
 import {
@@ -362,6 +365,18 @@ export async function POST(request: NextRequest) {
         await incrementWhatsAppUsage(siteId, "service");
       } catch (e) {
         console.warn("[WA_WEBHOOK] usage increment failed", e);
+      }
+      try {
+        const auditType = inferAuditTypeFromTwiMLReply(resultStatus);
+        await writeWhatsAppAuditLog(siteId, {
+          type: auditType,
+          channel: "twiml",
+          bookingRef: options.bookingRef ?? null,
+          bookingId: bookingIdFromBookingRef(options.bookingRef ?? undefined),
+          replyContext: resultStatus,
+        });
+      } catch (e) {
+        console.warn("[WA_WEBHOOK] whatsapp_logs audit write failed", e);
       }
       const twimlStr = buildTwimlResponse(text);
       await setInboundProcessed(docId, {

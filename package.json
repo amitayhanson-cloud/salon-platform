@@ -20,6 +20,8 @@
     "fix-bad-booking-statuses": "tsx scripts/fix-bad-booking-statuses.ts",
     "clean-slate": "tsx scripts/cleanSlate.ts",
     "clean-slate:execute": "tsx scripts/cleanSlate.ts --execute",
+    "deep-clean-site": "tsx scripts/deepCleanSingleSite.ts",
+    "deep-clean-site:execute": "tsx scripts/deepCleanSingleSite.ts --execute",
     "create-hair1-template": "tsx scripts/createHair1TemplateFromSite.ts",
     "migrate-sites-to-hair1": "tsx scripts/migrateSitesToHair1.ts",
     "verify-template-refactor": "tsx scripts/verifyTemplateRefactor.ts"

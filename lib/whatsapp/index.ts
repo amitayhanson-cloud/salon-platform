@@ -40,6 +40,14 @@ export {
 } from "./whatsappSessions";
 export type { SendWhatsAppParams } from "./send";
 export {
+  writeWhatsAppAuditLog,
+  inferAuditTypeFromSend,
+  inferAuditTypeFromTwiMLReply,
+  bookingIdFromBookingRef,
+  type WhatsAppAuditLogType,
+  type WriteWhatsAppAuditLogParams,
+} from "./auditLog";
+export {
   getWhatsAppUsageSnapshot,
   assertSiteWithinWhatsAppLimit,
   incrementWhatsAppUsage,
