@@ -1,7 +1,13 @@
+import { FieldValue } from "firebase/firestore";
+
+function isFirestoreFieldValue(value: unknown): boolean {
+  return typeof value === "object" && value !== null && value instanceof FieldValue;
+}
+
 /**
  * Recursively remove undefined values so Firestore never receives undefined.
  * Arrays: filter out undefined elements and sanitize objects inside.
- * Preserves null, primitives, Date, and Firestore Timestamp-like objects.
+ * Preserves null, primitives, Date, Firestore Timestamp-like objects, and FieldValue (e.g. serverTimestamp).
  * In development, logs paths of removed keys.
  */
 function collectUndefinedPaths(
@@ -11,6 +17,7 @@ function collectUndefinedPaths(
   if (value === undefined) return [path];
   if (value === null || typeof value !== "object") return [];
   if (value instanceof Date) return [];
+  if (isFirestoreFieldValue(value)) return [];
   if (
     typeof (value as { toMillis?: unknown }).toMillis === "function" ||
     typeof (value as { toDate?: unknown }).toDate === "function"
@@ -38,6 +45,7 @@ function stripUndefinedDeep<T>(value: T): T {
   if (value === undefined) return value;
   if (value === null || typeof value !== "object") return value;
   if (value instanceof Date) return value;
+  if (isFirestoreFieldValue(value)) return value;
   if (
     typeof (value as { toMillis?: unknown }).toMillis === "function" ||
     typeof (value as { toDate?: unknown }).toDate === "function"

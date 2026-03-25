@@ -18,15 +18,13 @@ import {
   bookingsCollection,
 } from "@/lib/firestorePaths";
 import { ymdLocal } from "@/lib/dateLocal";
-import { useAuth } from "@/hooks/useAuth";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
 import { subscribeSiteServices } from "@/lib/firestoreSiteServices";
 import type { SiteConfig, SiteService } from "@/types/siteConfig";
 import { getDateRange, getTwoWeekStart, getSundayStart, toYYYYMMDD } from "@/lib/calendarUtils";
-import { normalizeBooking, isBookingCancelled, isBookingArchived } from "@/lib/normalizeBooking";
+import { normalizeBooking, isBookingCancelled, isBookingArchived, isFollowUpBooking } from "@/lib/normalizeBooking";
 import TwoWeekCalendar from "@/components/admin/TwoWeekCalendar";
 import TaskListPanel from "@/components/admin/TaskListPanel";
-import CancelBookingModal from "@/components/admin/CancelBookingModal";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import CalenoLoading from "@/components/CalenoLoading";
@@ -71,11 +69,6 @@ export default function BookingsAdminPage() {
     // Initialize to Sunday of the week containing today
     return getSundayStart(new Date());
   });
-
-  // Cancel booking: modal asks for reason, then archive-cascade
-  const [cancelModalBookingId, setCancelModalBookingId] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Store unsubscribe function reference for manual refresh
   const unsubscribeRef = useRef<(() => void) | null>(null);
@@ -227,7 +220,8 @@ export default function BookingsAdminPage() {
           const same = normalized.every((b, i) => prev[i]?.id === b.id);
           return same ? prev : normalized;
         });
-        setBookingsCount((n) => (n === normalized.length ? n : normalized.length));
+        const visitCount = normalized.filter((b) => !isFollowUpBooking(b as Record<string, unknown>)).length;
+        setBookingsCount((n) => (n === visitCount ? n : visitCount));
         setBookingsLoading(false);
         setBookingsError(null);
         setLoading(false);
@@ -257,7 +251,8 @@ export default function BookingsAdminPage() {
                 const same = normalized.every((b, i) => prev[i]?.id === b.id);
                 return same ? prev : normalized;
               });
-              setBookingsCount((n) => (n === normalized.length ? n : normalized.length));
+              const visitCount = normalized.filter((b) => !isFollowUpBooking(b as Record<string, unknown>)).length;
+        setBookingsCount((n) => (n === visitCount ? n : visitCount));
               setBookingsError(null);
               setBookingsLoading(false);
               setLoading(false);
@@ -287,52 +282,6 @@ export default function BookingsAdminPage() {
   };
 
 
-
-  const { firebaseUser } = useAuth();
-
-  const onRequestDelete = (booking: any) => {
-    setDeleteError(null);
-    setCancelModalBookingId(booking.id);
-  };
-
-  const handleCancelModalConfirm = async (reason: string) => {
-    if (!cancelModalBookingId || !siteId || !firebaseUser) return;
-    setDeleting(true);
-    setDeleteError(null);
-    try {
-      const token = await firebaseUser.getIdToken();
-      const res = await fetch("/api/bookings/archive-cascade", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          siteId,
-          bookingId: cancelModalBookingId,
-          cancellationReason: reason || undefined,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const raw = data.error || "שגיאה במחיקה";
-        const errMsg =
-          raw === "forbidden"
-            ? "אין הרשאה"
-            : typeof raw === "string" && (raw.includes("RESOURCE_EXHAUSTED") || raw.includes("quota") || raw.includes("exhausted"))
-              ? "עומס על המערכת. נסה שוב בעוד רגע."
-              : raw;
-        setDeleteError(errMsg);
-        setTimeout(() => setDeleteError(null), 4000);
-        return;
-      }
-      setCancelModalBookingId(null);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setDeleteError(msg);
-      setTimeout(() => setDeleteError(null), 4000);
-    } finally {
-      setDeleting(false);
-      setCancelModalBookingId(null);
-    }
-  };
 
   // Resolve service color from site services (same as day view) so every booking gets a consistent color
   const serviceColorLookup = useMemo(() => {
@@ -378,6 +327,7 @@ export default function BookingsAdminPage() {
   type DayBooking = { id: string; time: string; serviceName: string; workerName?: string; serviceColor?: string };
   const groupedByDay = dateRangeKeys.reduce<Record<string, DayBooking[]>>((acc, dayKey) => {
     const dayBookings: DayBooking[] = bookings
+      .filter((b: { dateStr?: string }) => !isFollowUpBooking(b as Record<string, unknown>))
       .filter((b: { dateStr?: string }) => (b.dateStr ?? (b as any).date) === dayKey)
       .sort((a: { timeHHmm?: string; time?: string }, b: { timeHHmm?: string; time?: string }) =>
         (a.timeHHmm ?? a.time ?? "").localeCompare(b.timeHHmm ?? b.time ?? "")
@@ -526,23 +476,6 @@ export default function BookingsAdminPage() {
         </div>
 
       </div>
-
-      <CancelBookingModal
-        open={!!cancelModalBookingId}
-        bookingId={cancelModalBookingId ?? ""}
-        onConfirm={handleCancelModalConfirm}
-        onClose={() => {
-          setCancelModalBookingId(null);
-          setDeleteError(null);
-        }}
-        submitting={deleting}
-      />
-
-      {deleteError && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[56] px-4 py-2 rounded-lg shadow-lg text-sm font-medium bg-red-600 text-white" dir="rtl">
-          {deleteError}
-        </div>
-      )}
     </div>
   );
 }

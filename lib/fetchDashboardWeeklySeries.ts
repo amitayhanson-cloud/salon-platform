@@ -1,13 +1,14 @@
 /**
  * Dashboard chart series (client Firestore):
- * - day: last 24 hours, one point per hour (local time)
- * - week: last 7 calendar days, one point per day
- * - month: last 30 calendar days, one point per day
+ * - week: admin API uses Sun–Sat (Israel week); client fetch may differ
+ * - month: calendar month days; future days may be null in admin API
+ * - year: last 12 calendar months, one point per month
  *
- * Indices are oldest → newest within each granularity. Empty buckets are 0.
+ * Indices are oldest → newest. `null` = no bar (e.g. future day in admin charts).
  */
 
 import { query, where, getDocs, getDoc, Timestamp } from "firebase/firestore";
+import { analyticsRangeToStartAtBounds, bookingDayYmdIsrael } from "@/lib/bookingDayKey";
 import { db } from "@/lib/firebaseClient";
 import { bookingsCollection, clientsCollection, workersCollection } from "@/lib/firestorePaths";
 import { bookingSettingsDoc } from "@/lib/firestoreBookingSettings";
@@ -19,23 +20,23 @@ import type { BookingSettings } from "@/types/bookingSettings";
 import { defaultBookingSettings } from "@/types/bookingSettings";
 
 /** Points per granularity (x-axis length). */
-export const CHART_DAY_HOURS = 24;
 export const CHART_WEEK_DAYS = 7;
 export const CHART_MONTH_DAYS = 30;
+export const CHART_YEAR_MONTHS = 12;
 
-/** @deprecated Use CHART_DAY_HOURS */
-export const CHART_DAYS = CHART_DAY_HOURS;
+/** @deprecated Use CHART_YEAR_MONTHS */
+export const CHART_MONTHS = CHART_YEAR_MONTHS;
 /** @deprecated Use CHART_WEEK_DAYS */
 export const CHART_WEEKS = CHART_WEEK_DAYS;
-/** @deprecated Use CHART_MONTH_DAYS */
-export const CHART_MONTHS = CHART_MONTH_DAYS;
 
-export type ChartGranularity = "day" | "week" | "month";
+export type ChartGranularity = "week" | "month" | "year";
 
-export type MetricSlice = {
+/** Client-side series: numeric buckets only. */
+type MetricSliceNumbers = {
   labels: string[];
   bookings: number[];
   revenue: number[];
+  whatsappCount: number[];
   clientsCumulative: number[];
   newClients: number[];
   cancellations: number[];
@@ -43,23 +44,40 @@ export type MetricSlice = {
   trafficAttributedBookings: number[];
 };
 
+/** Dashboard charts may use `null` for “no bar” (e.g. future days on admin API). */
+export type MetricSlice = {
+  labels: string[];
+  titleLabels?: string[];
+  bookingsPast?: (number | null)[];
+  bookingsFuture?: (number | null)[];
+  bookings: (number | null)[];
+  revenue: (number | null)[];
+  whatsappCount: (number | null)[];
+  clientsCumulative: (number | null)[];
+  newClients: (number | null)[];
+  cancellations: (number | null)[];
+  utilizationPercent: (number | null)[];
+  trafficAttributedBookings: (number | null)[];
+};
+
 export type DashboardChartSeriesBundle = {
-  day: MetricSlice;
   week: MetricSlice;
   month: MetricSlice;
-  /** Wall time when this bundle was computed (hourly chart window anchor). */
+  year: MetricSlice;
+  /** Wall time when this bundle was computed. */
   fetchedAt: Date;
 };
 
 /** @deprecated Use DashboardChartSeriesBundle.week fields */
 export type WeeklySeries = {
-  bookings: number[];
-  revenue: number[];
-  clientsCumulative: number[];
-  newClients: number[];
-  cancellations: number[];
-  utilizationPercent: number[];
-  trafficAttributedBookings: number[];
+  bookings: (number | null)[];
+  revenue: (number | null)[];
+  whatsappCount: (number | null)[];
+  clientsCumulative: (number | null)[];
+  newClients: (number | null)[];
+  cancellations: (number | null)[];
+  utilizationPercent: (number | null)[];
+  trafficAttributedBookings: (number | null)[];
 };
 
 function addDaysYmd(ymd: string, deltaDays: number): string {
@@ -69,33 +87,36 @@ function addDaysYmd(ymd: string, deltaDays: number): string {
   return ymdLocal(dt);
 }
 
-/** Start of the current local hour. */
-function startOfLocalHour(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), 0, 0, 0);
-}
-
-/** Rolling 24h window: 24 hourly slots ending at the current hour start. */
-function rolling24HourWindow(anchor: Date): { windowStart: Date; labels: string[] } {
-  const endHour = startOfLocalHour(anchor);
-  const windowStart = new Date(endHour.getTime() - (CHART_DAY_HOURS - 1) * 3600000);
-  const labels: string[] = [];
-  for (let i = 0; i < CHART_DAY_HOURS; i++) {
-    const t = new Date(windowStart.getTime() + i * 3600000);
-    labels.push(
-      t.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit", hour12: false })
-    );
+function enumerateYmdsInclusive(startYmd: string, endYmd: string): string[] {
+  const [sy, sm, sd] = startYmd.split("-").map(Number);
+  const [ey, em, ed] = endYmd.split("-").map(Number);
+  const out: string[] = [];
+  let t = new Date(sy, sm - 1, sd).getTime();
+  const endT = new Date(ey, em - 1, ed).getTime();
+  while (t <= endT) {
+    out.push(ymdLocal(new Date(t)));
+    t += 86400000;
   }
-  return { windowStart, labels };
+  return out;
 }
 
-function hourSlotForAppointment(appointment: Date, windowStart: Date): number {
-  const ms = appointment.getTime() - windowStart.getTime();
-  if (ms < 0 || ms >= CHART_DAY_HOURS * 3600000) return -1;
-  return Math.floor(ms / 3600000);
+function minYmd(a: string, b: string): string {
+  return a <= b ? a : b;
 }
 
 function lastNDayYmds(endYmd: string, n: number): string[] {
   return Array.from({ length: n }, (_, i) => addDaysYmd(endYmd, -(n - 1 - i)));
+}
+
+function monthStartYmd(dt: Date): string {
+  return ymdLocal(new Date(dt.getFullYear(), dt.getMonth(), 1));
+}
+
+function lastNMonthStartYmds(anchor: Date, n: number): string[] {
+  return Array.from({ length: n }, (_, i) => {
+    const d = new Date(anchor.getFullYear(), anchor.getMonth() - (n - 1 - i), 1);
+    return monthStartYmd(d);
+  });
 }
 
 function weekDayLabels(ymds: string[]): string[] {
@@ -111,6 +132,13 @@ function monthRangeDayLabels(ymds: string[]): string[] {
     const [y, m, d] = ymd.split("-").map(Number);
     const dt = new Date(y, m - 1, d);
     return dt.toLocaleDateString("he-IL", { day: "numeric", month: "short" });
+  });
+}
+
+function yearMonthLabels(monthStartYmds: string[]): string[] {
+  return monthStartYmds.map((ymd) => {
+    const [y, m] = ymd.split("-").map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString("he-IL", { month: "short", year: "2-digit" });
   });
 }
 
@@ -230,29 +258,13 @@ function capacityMinutesForDay(settings: BookingSettings, dateStr: string, activ
   return businessDayMinutes(dayCfg ?? { enabled: false, start: "09:00", end: "17:00" }) * activeWorkers;
 }
 
-/** Appointment start in local time (for hourly bucketing). */
-function appointmentLocalDate(data: Record<string, unknown>): Date | null {
-  const dateISO = typeof data.dateISO === "string" ? data.dateISO.trim() : "";
-  if (dateISO.length < 10) return null;
-  const ymd = dateISO.slice(0, 10);
-  const [y, m, d] = ymd.split("-").map(Number);
-  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
-  const timeRaw =
-    (typeof data.timeHHmm === "string" && data.timeHHmm) ||
-    (typeof data.time === "string" && data.time) ||
-    "12:00";
-  const parts = timeRaw.split(/[:.]/);
-  const hh = parseInt(parts[0] ?? "12", 10);
-  const mm = parseInt(parts[1] ?? "0", 10);
-  return new Date(y, m - 1, d, Number.isFinite(hh) ? hh : 12, Number.isFinite(mm) ? mm : 0, 0, 0);
-}
-
-function emptySlice(len: number, labels: string[]): MetricSlice {
+function emptySlice(len: number, labels: string[]): MetricSliceNumbers {
   const z = () => Array.from({ length: len }, () => 0);
   return {
     labels,
     bookings: z(),
     revenue: z(),
+    whatsappCount: z(),
     clientsCumulative: z(),
     newClients: z(),
     cancellations: z(),
@@ -264,20 +276,21 @@ function emptySlice(len: number, labels: string[]): MetricSlice {
 export async function fetchDashboardChartSeries(siteId: string): Promise<DashboardChartSeriesBundle> {
   const anchor = new Date();
   const endYmd = ymdLocal(anchor);
-  const { windowStart, labels: hourLabels } = rolling24HourWindow(anchor);
   const weekYmds = lastNDayYmds(endYmd, CHART_WEEK_DAYS);
   const monthYmds = lastNDayYmds(endYmd, CHART_MONTH_DAYS);
+  const yearMonthStartYmds = lastNMonthStartYmds(anchor, CHART_YEAR_MONTHS);
   const weekL = weekDayLabels(weekYmds);
   const monthL = monthRangeDayLabels(monthYmds);
+  const yearL = yearMonthLabels(yearMonthStartYmds);
 
-  const daySlice = emptySlice(CHART_DAY_HOURS, hourLabels);
   const weekSlice = emptySlice(CHART_WEEK_DAYS, weekL);
   const monthSlice = emptySlice(CHART_MONTH_DAYS, monthL);
+  const yearSlice = emptySlice(CHART_YEAR_MONTHS, yearL);
 
   const emptyBundle: DashboardChartSeriesBundle = {
-    day: daySlice,
-    week: weekSlice,
-    month: monthSlice,
+    week: weekSlice as MetricSlice,
+    month: monthSlice as MetricSlice,
+    year: yearSlice as MetricSlice,
     fetchedAt: anchor,
   };
 
@@ -285,45 +298,63 @@ export async function fetchDashboardChartSeries(siteId: string): Promise<Dashboa
     return emptyBundle;
   }
 
-  const queryStartYmd = addDaysYmd(endYmd, -(CHART_MONTH_DAYS + 3));
+  const queryStartYmd = yearMonthStartYmds[0] ?? addDaysYmd(endYmd, -365);
 
   try {
-    const [settings, workersSnap, bookingsSnap, clientsSnap] = await Promise.all([
+    const col = bookingsCollection(siteId);
+    const { startMs, endExclusiveMs } = analyticsRangeToStartAtBounds(queryStartYmd, endYmd);
+    const tsLow = Timestamp.fromMillis(startMs);
+    const tsHigh = Timestamp.fromMillis(endExclusiveMs);
+
+    const [settings, workersSnap, isoSnap, dateSnap, startAtSnapResult, clientsSnap] = await Promise.all([
       loadBookingSettings(siteId),
       getDocs(workersCollection(siteId)),
-      getDocs(
-        query(
-          bookingsCollection(siteId),
-          where("dateISO", ">=", queryStartYmd),
-          where("dateISO", "<=", endYmd)
-        )
-      ),
+      getDocs(query(col, where("dateISO", ">=", queryStartYmd), where("dateISO", "<=", endYmd))),
+      getDocs(query(col, where("date", ">=", queryStartYmd), where("date", "<=", endYmd))),
+      (async () => {
+        try {
+          return await getDocs(query(col, where("startAt", ">=", tsLow), where("startAt", "<", tsHigh)));
+        } catch (e) {
+          console.warn("[fetchDashboardChartSeries] startAt range query failed", e);
+          return null;
+        }
+      })(),
       getDocs(clientsCollection(siteId)),
     ]);
+
+    const bookingSeen = new Set<string>();
+    const bookingsSnapDocs: { id: string; data: () => Record<string, unknown> }[] = [];
+    for (const snap of startAtSnapResult ? [isoSnap, dateSnap, startAtSnapResult] : [isoSnap, dateSnap]) {
+      for (const doc of snap.docs) {
+        if (!bookingSeen.has(doc.id)) {
+          bookingSeen.add(doc.id);
+          bookingsSnapDocs.push(doc);
+        }
+      }
+    }
 
     const activeWorkers = Math.max(
       1,
       workersSnap.docs.filter((d) => (d.data() as { active?: boolean }).active !== false).length
     );
 
-    const bookedMinH = Array.from({ length: CHART_DAY_HOURS }, () => 0);
     const bookedMinW = Array.from({ length: CHART_WEEK_DAYS }, () => 0);
     const bookedMinM = Array.from({ length: CHART_MONTH_DAYS }, () => 0);
+    const bookedMinY = Array.from({ length: CHART_YEAR_MONTHS }, () => 0);
 
     const ymdToWeekIndex = new Map(weekYmds.map((y, i) => [y, i]));
     const ymdToMonthIndex = new Map(monthYmds.map((y, i) => [y, i]));
+    const ymToYearIndex = new Map(
+      yearMonthStartYmds.map((startYmd, i) => [startYmd.slice(0, 7), i] as const)
+    );
 
-    for (const doc of bookingsSnap.docs) {
+    for (const doc of bookingsSnapDocs) {
       const data = doc.data() as Record<string, unknown>;
-      if (data.isArchived === true) continue;
 
-      const dateISO = typeof data.dateISO === "string" ? data.dateISO.slice(0, 10) : "";
-      const hi = (() => {
-        const apt = appointmentLocalDate(data);
-        return apt ? hourSlotForAppointment(apt, windowStart) : -1;
-      })();
+      const dateISO = bookingDayYmdIsrael(data);
       const wi = dateISO.length >= 10 ? ymdToWeekIndex.get(dateISO) : undefined;
       const mi = dateISO.length >= 10 ? ymdToMonthIndex.get(dateISO) : undefined;
+      const yi = dateISO.length >= 7 ? ymToYearIndex.get(dateISO.slice(0, 7)) : undefined;
 
       const cancelled = isDocCancelled(data);
       const followUp = isFollowUpBooking(data);
@@ -333,44 +364,37 @@ export async function fetchDashboardChartSeries(siteId: string): Promise<Dashboa
       const src = typeof data.bookingTrafficSource === "string" ? data.bookingTrafficSource.trim().toLowerCase() : "";
 
       if (cancelled) {
-        if (hi >= 0) daySlice.cancellations[hi] += 1;
         if (wi !== undefined) weekSlice.cancellations[wi] += 1;
         if (mi !== undefined) monthSlice.cancellations[mi] += 1;
+        if (yi !== undefined) yearSlice.cancellations[yi] += 1;
         continue;
       }
 
-      // Bookings chart: all non-cancelled, non-archived docs (including follow-ups), per spec.
-      if (hi >= 0) {
-        daySlice.bookings[hi] += 1;
-        bookedMinH[hi] += dur;
-      }
+      // Booked minutes: all active segments (main + follow-up). Booking count: one per visit (main only).
       if (wi !== undefined) {
-        weekSlice.bookings[wi] += 1;
+        if (!followUp) weekSlice.bookings[wi] += 1;
         bookedMinW[wi] += dur;
       }
       if (mi !== undefined) {
-        monthSlice.bookings[mi] += 1;
+        if (!followUp) monthSlice.bookings[mi] += 1;
         bookedMinM[mi] += dur;
+      }
+      if (yi !== undefined) {
+        if (!followUp) yearSlice.bookings[yi] += 1;
+        bookedMinY[yi] += dur;
       }
 
       if (isRevenueEligible(data)) {
-        if (hi >= 0) daySlice.revenue[hi] += price;
         if (wi !== undefined) weekSlice.revenue[wi] += price;
         if (mi !== undefined) monthSlice.revenue[mi] += price;
+        if (yi !== undefined) yearSlice.revenue[yi] += price;
       }
 
       if (!followUp && src) {
-        if (hi >= 0) daySlice.trafficAttributedBookings[hi] += 1;
         if (wi !== undefined) weekSlice.trafficAttributedBookings[wi] += 1;
         if (mi !== undefined) monthSlice.trafficAttributedBookings[mi] += 1;
+        if (yi !== undefined) yearSlice.trafficAttributedBookings[yi] += 1;
       }
-    }
-
-    const capPerHour = activeWorkers * 60;
-    for (let hi = 0; hi < CHART_DAY_HOURS; hi++) {
-      const booked = bookedMinH[hi] ?? 0;
-      daySlice.utilizationPercent[hi] =
-        capPerHour > 0 ? Math.min(100, Math.round((booked / capPerHour) * 1000) / 10) : 0;
     }
 
     for (let wi = 0; wi < CHART_WEEK_DAYS; wi++) {
@@ -389,6 +413,20 @@ export async function fetchDashboardChartSeries(siteId: string): Promise<Dashboa
         cap > 0 ? Math.min(100, Math.round((booked / cap) * 1000) / 10) : 0;
     }
 
+    for (let yi = 0; yi < CHART_YEAR_MONTHS; yi++) {
+      const monthStart = yearMonthStartYmds[yi]!;
+      const [y, m] = monthStart.split("-").map(Number);
+      const monthEnd = ymdLocal(new Date(y, m, 0));
+      const capEnd = minYmd(monthEnd, endYmd);
+      let cap = 0;
+      for (const d of enumerateYmdsInclusive(monthStart, capEnd)) {
+        cap += capacityMinutesForDay(settings, d, activeWorkers);
+      }
+      const booked = bookedMinY[yi] ?? 0;
+      yearSlice.utilizationPercent[yi] =
+        cap > 0 ? Math.min(100, Math.round((booked / cap) * 1000) / 10) : 0;
+    }
+
     type ClientRow = { created: Date; ymd: string | null };
     const clients: ClientRow[] = [];
     let clientsWithoutCreatedAt = 0;
@@ -399,23 +437,7 @@ export async function fetchDashboardChartSeries(siteId: string): Promise<Dashboa
       if (created) clients.push({ created, ymd });
       else clientsWithoutCreatedAt += 1;
     }
-    clients.sort((a, b) => (a.created!.getTime() - b.created!.getTime()));
-
-    const slotEndMs = (i: number) => windowStart.getTime() + (i + 1) * 3600000;
-    let p = 0;
-    for (let hi = 0; hi < CHART_DAY_HOURS; hi++) {
-      const endMs = slotEndMs(hi);
-      while (p < clients.length && clients[p]!.created!.getTime() <= endMs) p += 1;
-      daySlice.clientsCumulative[hi] = clientsWithoutCreatedAt + p;
-    }
-    const startMs = windowStart.getTime();
-    const windowEndMs = startMs + CHART_DAY_HOURS * 3600000;
-    for (const c of clients) {
-      const t = c.created!.getTime();
-      if (t < startMs || t >= windowEndMs) continue;
-      const hi = Math.floor((t - startMs) / 3600000);
-      if (hi >= 0 && hi < CHART_DAY_HOURS) daySlice.newClients[hi] += 1;
-    }
+    clients.sort((a, b) => a.created.getTime() - b.created.getTime());
 
     for (let wi = 0; wi < CHART_WEEK_DAYS; wi++) {
       const ymd = weekYmds[wi]!;
@@ -430,14 +452,24 @@ export async function fetchDashboardChartSeries(siteId: string): Promise<Dashboa
       monthSlice.clientsCumulative[mi] =
         clientsWithoutCreatedAt + clients.filter((c) => c.ymd && c.ymd <= ymd).length;
     }
+
+    for (let yi = 0; yi < CHART_YEAR_MONTHS; yi++) {
+      const startYmd = yearMonthStartYmds[yi]!;
+      const [y, m] = startYmd.split("-").map(Number);
+      const endMonthYmd = ymdLocal(new Date(y, m, 0));
+      const capEnd = minYmd(endMonthYmd, endYmd);
+      yearSlice.newClients[yi] = clients.filter((c) => c.ymd && c.ymd >= startYmd && c.ymd <= capEnd).length;
+      yearSlice.clientsCumulative[yi] =
+        clientsWithoutCreatedAt + clients.filter((c) => c.ymd && c.ymd <= capEnd).length;
+    }
   } catch (e) {
     console.warn("[fetchDashboardChartSeries]", e);
   }
 
   return {
-    day: daySlice,
-    week: weekSlice,
-    month: monthSlice,
+    week: weekSlice as MetricSlice,
+    month: monthSlice as MetricSlice,
+    year: yearSlice as MetricSlice,
     fetchedAt: anchor,
   };
 }
@@ -448,6 +480,7 @@ export async function fetchDashboardWeeklySeries(siteId: string): Promise<Weekly
   return {
     bookings: w.bookings,
     revenue: w.revenue,
+    whatsappCount: w.whatsappCount,
     clientsCumulative: w.clientsCumulative,
     newClients: w.newClients,
     cancellations: w.cancellations,
@@ -477,20 +510,16 @@ function uniformWeights(n: number): number[] {
 }
 
 /** WhatsApp: no per-interval logs; spread monthly total across bins for chart shape. */
-export function deriveWhatsappHourlyFromMonthly(used: number): number[] {
-  return distributeAcrossBins(used, uniformWeights(CHART_DAY_HOURS));
-}
-
-export function deriveWhatsappDailyFromMonthly(used: number): number[] {
+export function deriveWhatsappWeeklyFromMonthly(used: number): number[] {
   return distributeAcrossBins(used, uniformWeights(CHART_WEEK_DAYS));
 }
 
-export function deriveWhatsappWeeklyFromMonthly(used: number): number[] {
-  return deriveWhatsappDailyFromMonthly(used);
+export function deriveWhatsappMonthlyFromMonthly(used: number): number[] {
+  return distributeAcrossBins(used, uniformWeights(CHART_MONTH_DAYS));
 }
 
-export function deriveWhatsappMonthlyFromMonthlyTotal(used: number): number[] {
-  return distributeAcrossBins(used, uniformWeights(CHART_MONTH_DAYS));
+export function deriveWhatsappYearlyFromMonthlyTotal(used: number): number[] {
+  return distributeAcrossBins(used, uniformWeights(CHART_YEAR_MONTHS));
 }
 
 export function buildWhatsappChartSlices(
@@ -498,12 +527,12 @@ export function buildWhatsappChartSlices(
   anchor: Date
 ): Record<ChartGranularity, { labels: string[]; values: number[] }> {
   const endYmd = ymdLocal(anchor);
-  const { labels: hourLabels } = rolling24HourWindow(anchor);
   const weekYmds = lastNDayYmds(endYmd, CHART_WEEK_DAYS);
   const monthYmds = lastNDayYmds(endYmd, CHART_MONTH_DAYS);
+  const yearMonthStartYmds = lastNMonthStartYmds(anchor, CHART_YEAR_MONTHS);
   return {
-    day: { labels: hourLabels, values: deriveWhatsappHourlyFromMonthly(used) },
-    week: { labels: weekDayLabels(weekYmds), values: deriveWhatsappDailyFromMonthly(used) },
-    month: { labels: monthRangeDayLabels(monthYmds), values: deriveWhatsappMonthlyFromMonthlyTotal(used) },
+    week: { labels: weekDayLabels(weekYmds), values: deriveWhatsappWeeklyFromMonthly(used) },
+    month: { labels: monthRangeDayLabels(monthYmds), values: deriveWhatsappMonthlyFromMonthly(used) },
+    year: { labels: yearMonthLabels(yearMonthStartYmds), values: deriveWhatsappYearlyFromMonthlyTotal(used) },
   };
 }

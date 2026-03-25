@@ -40,7 +40,6 @@ import BookingCalendarLegend from "@/components/admin/BookingCalendarLegend";
 import WorkerFilter from "@/components/admin/WorkerFilter";
 import AdminBookingFormSimple from "@/components/admin/AdminBookingFormSimple";
 import AdminCreateBookingForm from "@/components/admin/AdminCreateBookingForm";
-import CancelBookingModal from "@/components/admin/CancelBookingModal";
 import { getAdminBasePathFromSiteId } from "@/lib/url";
 import CalenoLoading from "@/components/CalenoLoading";
 import { getDisplayStatus, getDisplayStatusKey } from "@/lib/bookingRootStatus";
@@ -178,14 +177,15 @@ export default function DaySchedulePage() {
   // Selected booking for details modal
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   
-  // Cancel booking: modal asks for reason, then archive-cascade
-  const [cancelModalBookingId, setCancelModalBookingId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteSuccess, setDeleteSuccess] = useState(false);
 
   // Delete single booking (group) state
   const [deleteBookingLoading, setDeleteBookingLoading] = useState(false);
+  const [permanentDeleteLoading, setPermanentDeleteLoading] = useState(false);
+  type BookingActionConfirm = "cancel" | "testDelete" | "permanent" | null;
+  const [bookingActionConfirm, setBookingActionConfirm] = useState<BookingActionConfirm>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastError, setToastError] = useState(false);
   /** When true, toast does not auto-dismiss; user must close it (e.g. recurring partial success). */
@@ -609,14 +609,8 @@ export default function DaySchedulePage() {
     return `${DAY_LABELS[dayIndex]} ${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
   };
 
-  // Delete booking handlers
-  const onRequestDelete = (booking: Booking) => {
-    setDeleteError(null);
-    setCancelModalBookingId(booking.id);
-  };
-
-  const handleCancelModalConfirm = async (reason: string) => {
-    if (!cancelModalBookingId || !siteId || !firebaseUser) return;
+  const handleArchiveCancelBooking = async () => {
+    if (!selectedBooking || !siteId || !firebaseUser) return;
     setDeleting(true);
     setDeleteError(null);
     setDeleteSuccess(false);
@@ -627,8 +621,7 @@ export default function DaySchedulePage() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           siteId,
-          bookingId: cancelModalBookingId,
-          cancellationReason: reason || undefined,
+          bookingId: selectedBooking.id,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -647,7 +640,6 @@ export default function DaySchedulePage() {
         setTimeout(() => setToastMessage(null), 4000);
         return;
       }
-      setCancelModalBookingId(null);
       setSelectedBooking(null);
       setDeleteSuccess(true);
       setTimeout(() => setDeleteSuccess(false), 500);
@@ -664,7 +656,6 @@ export default function DaySchedulePage() {
       setTimeout(() => setToastMessage(null), 4000);
     } finally {
       setDeleting(false);
-      setCancelModalBookingId(null);
     }
   };
 
@@ -700,6 +691,41 @@ export default function DaySchedulePage() {
       setTimeout(() => setToastMessage(null), 4000);
     } finally {
       setDeleteBookingLoading(false);
+    }
+  };
+
+  const handlePermanentDeleteBooking = async () => {
+    if (!selectedBooking || !siteId || !firebaseUser) return;
+    setPermanentDeleteLoading(true);
+    setToastMessage(null);
+    setToastError(false);
+    setToastPersistent(false);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch("/api/bookings/delete-booking-group-permanent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ siteId, bookingId: selectedBooking.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setToastMessage(data.error === "forbidden" ? "אין הרשאה" : data.error || "שגיאה במחיקה");
+        setToastError(true);
+        setToastPersistent(false);
+        return;
+      }
+      setToastMessage("התור נמחק לצמיתות מהמערכת");
+      setToastError(false);
+      setToastPersistent(false);
+      setSelectedBooking(null);
+      setTimeout(() => setToastMessage(null), 3000);
+    } catch (e) {
+      setToastMessage(e instanceof Error ? e.message : "שגיאה במחיקה");
+      setToastError(true);
+      setToastPersistent(false);
+      setTimeout(() => setToastMessage(null), 4000);
+    } finally {
+      setPermanentDeleteLoading(false);
     }
   };
 
@@ -846,14 +872,15 @@ export default function DaySchedulePage() {
     setSelectedBooking(null);
     setDeleteError(null);
     setDeleteSuccess(false);
+    setBookingActionConfirm(null);
   };
 
-  // Open cancel modal (reason then archive-cascade)
-  const handleOpenCancelModal = () => {
-    if (selectedBooking) {
-      setDeleteError(null);
-      setCancelModalBookingId(selectedBooking.id);
-    }
+  const runConfirmedBookingAction = async () => {
+    const kind = bookingActionConfirm;
+    setBookingActionConfirm(null);
+    if (kind === "cancel") await handleArchiveCancelBooking();
+    else if (kind === "testDelete") await handleDeleteBooking();
+    else if (kind === "permanent") await handlePermanentDeleteBooking();
   };
 
   const PHASE2_DEBUG_MODAL = false;
@@ -1305,20 +1332,106 @@ export default function DaySchedulePage() {
               </button>
               <button
                 type="button"
-                onClick={handleOpenCancelModal}
-                disabled={deleting || deleteSuccess}
+                onClick={() => setBookingActionConfirm("cancel")}
+                disabled={deleting || deleteSuccess || !!bookingActionConfirm}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
               >
                 בטל תור
               </button>
               <button
                 type="button"
-                onClick={handleDeleteBooking}
-                disabled={deleteBookingLoading}
+                onClick={() => setBookingActionConfirm("testDelete")}
+                disabled={deleteBookingLoading || !!bookingActionConfirm}
                 className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
+                title="יוסר לפני השקה — לארכיון לבדיקות בלבד"
               >
                 <Trash2 className="w-4 h-4" />
-                {deleteBookingLoading ? "מוחק..." : "מחק תור"}
+                {deleteBookingLoading ? "מוחק..." : "test delete button"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setBookingActionConfirm("permanent")}
+                disabled={permanentDeleteLoading || !!bookingActionConfirm}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium border border-slate-900"
+              >
+                <Trash2 className="w-4 h-4" />
+                {permanentDeleteLoading ? "מוחק..." : "מחק לצמיתות"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bookingActionConfirm && selectedBooking && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50"
+          dir="rtl"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="booking-action-confirm-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setBookingActionConfirm(null);
+          }}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl border border-[#E2E8F0] w-full max-w-md p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {bookingActionConfirm === "cancel" && (
+              <>
+                <h3 id="booking-action-confirm-title" className="text-lg font-bold text-slate-900 text-right">
+                  ביטול תור
+                </h3>
+                <p className="text-sm text-slate-600 text-right leading-relaxed">
+                  הביטול מסיר את התור מהיומן ושומר אותו כתור מבוטל. הוא יופיע בדף ״תורים שבוטלו״, שם ניתן לראות היסטוריה ומקור הביטול.
+                </p>
+              </>
+            )}
+            {bookingActionConfirm === "testDelete" && (
+              <>
+                <h3 id="booking-action-confirm-title" className="text-lg font-bold text-slate-900 text-right">
+                  מחיקה לבדיקה
+                </h3>
+                <p className="text-sm text-slate-600 text-right leading-relaxed">
+                  כפתור ״test delete button״ מדמה שתאריך התור עבר וניקוי הזמנים העביר אותו לארכיון אוטומטית (כמו ״ביטול אוטומטי״ בדוחות), ולא כמו ביטול תור רגיל מהאדמין. לפני השקה אפשר להסיר את הכפתור.
+                </p>
+              </>
+            )}
+            {bookingActionConfirm === "permanent" && (
+              <>
+                <h3 id="booking-action-confirm-title" className="text-lg font-bold text-slate-900 text-right">
+                  מחיקה לצמיתות
+                </h3>
+                <p className="text-sm text-slate-600 text-right leading-relaxed">
+                  התור יימחק לחלוטין מהמסד. הוא לא יופיע בדף ״תורים שבוטלו״ ולא יישמר בארכיון הלקוח. מומלץ רק לתורים שנוצרו בטעות.
+                </p>
+              </>
+            )}
+            <div className="flex flex-wrap justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setBookingActionConfirm(null)}
+                className="px-4 py-2 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 text-sm font-medium"
+              >
+                סגור
+              </button>
+              <button
+                type="button"
+                onClick={runConfirmedBookingAction}
+                disabled={deleting || deleteBookingLoading || permanentDeleteLoading}
+                className={`px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed ${
+                  bookingActionConfirm === "permanent"
+                    ? "bg-slate-900 hover:bg-black"
+                    : bookingActionConfirm === "testDelete"
+                      ? "bg-amber-600 hover:bg-amber-700"
+                      : "bg-red-600 hover:bg-red-700"
+                }`}
+              >
+                {bookingActionConfirm === "cancel"
+                  ? "אשר ביטול"
+                  : bookingActionConfirm === "testDelete"
+                    ? "אשר מחיקה לבדיקה"
+                    : "מחק לצמיתות"}
               </button>
             </div>
           </div>
@@ -1398,24 +1511,6 @@ export default function DaySchedulePage() {
             onSuccess={handleBookingFormSuccess}
             onCancel={handleBookingFormCancel}
           />
-        </div>
-      )}
-
-      {/* Cancel booking modal: reason then archive-cascade */}
-      <CancelBookingModal
-        open={!!cancelModalBookingId}
-        bookingId={cancelModalBookingId ?? ""}
-        onConfirm={handleCancelModalConfirm}
-        onClose={() => {
-          setCancelModalBookingId(null);
-          setDeleteError(null);
-        }}
-        submitting={deleting}
-      />
-
-      {deleteError && cancelModalBookingId && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[56] px-4 py-2 rounded-lg shadow-lg text-sm font-medium bg-red-600 text-white" dir="rtl">
-          {deleteError}
         </div>
       )}
 

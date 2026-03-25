@@ -68,9 +68,12 @@ export interface NormalizedBooking {
 
 /**
  * True if this booking is a follow-up (phase 2) of a main booking.
- * Follow-ups have parentBookingId set; they should be deleted without archiving to archivedServiceTypes.
+ * Phase-2 docs set {@link parentBookingId}; we also treat numeric `phase: 2` so legacy rows still match.
+ * Follow-ups stay separate booking docs for the calendar but are excluded from booking counts / archiving.
  */
 export function isFollowUpBooking(data: Record<string, unknown>): boolean {
+  const phase = data.phase;
+  if (phase === 2 || phase === "2") return true;
   const v = data.parentBookingId;
   return v != null && String(v).trim() !== "";
 }

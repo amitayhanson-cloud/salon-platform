@@ -9,8 +9,10 @@ import {
   bookingDocMatchesPhoneVariants,
   phoneVariants,
 } from "@/lib/bookingCustomerPhone";
-import { cancelBookingsCascade } from "@/lib/booking-cascade";
-import { getRelatedBookingIds } from "@/lib/whatsapp/relatedBookings";
+import {
+  cancelBookingsCascade,
+  resolveRelatedBookingIdsToCascadeCancel,
+} from "@/lib/booking-cascade";
 import { MAX_RELATED_BOOKINGS } from "@/lib/whatsapp/relatedBookings";
 
 export async function POST(request: Request) {
@@ -54,17 +56,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "phone_mismatch" }, { status: 403 });
     }
 
-    const { bookingIds: ids, rootId } = await getRelatedBookingIds(siteId, bookingId);
-    const rootSnap = await db.collection("sites").doc(siteId).collection("bookings").doc(rootId).get();
-    if (rootSnap.exists) {
-      const rd = rootSnap.data() as Record<string, unknown>;
-      if (!bookingDocMatchesPhoneVariants(rd, variants)) {
-        return NextResponse.json({ ok: false, error: "phone_mismatch" }, { status: 403 });
-      }
+    /** Same resolver as admin archive-cascade (explicit group + createdAt window heuristic). */
+    const candidateIds = await resolveRelatedBookingIdsToCascadeCancel(siteId, bookingId);
+    if (candidateIds.length > MAX_RELATED_BOOKINGS) {
+      return NextResponse.json({ ok: false, error: "too_many_related" }, { status: 400 });
     }
 
-    if (ids.length > MAX_RELATED_BOOKINGS) {
-      return NextResponse.json({ ok: false, error: "too_many_related" }, { status: 400 });
+    const col = db.collection("sites").doc(siteId).collection("bookings");
+    const ids: string[] = [];
+    for (const id of candidateIds) {
+      const snap = await col.doc(id).get();
+      if (!snap.exists) continue;
+      const data = snap.data() as Record<string, unknown>;
+      if ((data.isArchived as boolean) === true) continue;
+      if (!bookingDocMatchesPhoneVariants(data, variants)) continue;
+      ids.push(id);
+    }
+
+    if (!ids.includes(bookingId)) {
+      return NextResponse.json({ ok: false, error: "phone_mismatch" }, { status: 403 });
     }
 
     const { successCount, failCount } = await cancelBookingsCascade(

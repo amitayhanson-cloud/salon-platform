@@ -5,18 +5,15 @@ export const dynamic = "force-dynamic";
 import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { Trash2, Calendar } from "lucide-react";
-import { query, orderBy, onSnapshot, deleteDoc } from "firebase/firestore";
+import { Calendar } from "lucide-react";
+import { query, orderBy, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebaseClient";
-import {
-  workersCollection,
-  bookingDoc,
-  clientArchivedServiceTypeDoc,
-} from "@/lib/firestorePaths";
+import { workersCollection } from "@/lib/firestorePaths";
 import {
   fetchCancelledArchivedBookings,
   type CancelledArchiveItem,
 } from "@/lib/fetchCancelledArchivedBookings";
+import { formatCancelledBookingChannelCell } from "@/lib/cancellationChannelLabel";
 import { fromYYYYMMDD, toYYYYMMDD } from "@/lib/calendarUtils";
 import { getAdminBasePathFromSiteId } from "@/lib/url";
 import { AdminPageHero } from "@/components/admin/AdminPageHero";
@@ -42,10 +39,6 @@ export default function CancelledBookingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [archiveBookings, setArchiveBookings] = useState<CancelledArchiveItem[]>([]);
   const [workers, setWorkers] = useState<Array<{ id: string; name: string }>>([]);
-  const [confirmDelete, setConfirmDelete] = useState<CancelledArchiveItem | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [deleteSuccess, setDeleteSuccess] = useState(false);
   const [debugInfo, setDebugInfo] = useState<{
     bookingsScanned: number;
     archivedScanned: number;
@@ -139,39 +132,6 @@ export default function CancelledBookingsPage() {
   };
 
   const itemKey = (b: CancelledArchiveItem) => `${b.source}-${b.id}`;
-  const isDeleting = (b: CancelledArchiveItem) => deletingId === itemKey(b);
-
-  const handleDeleteClick = (b: CancelledArchiveItem) => {
-    setDeleteError(null);
-    setConfirmDelete(b);
-  };
-
-  const handleConfirmDelete = async () => {
-    const b = confirmDelete;
-    if (!b || !siteId) return;
-    const key = itemKey(b);
-    setDeletingId(key);
-    setDeleteError(null);
-    try {
-      if (b.source === "bookings") {
-        await deleteDoc(bookingDoc(siteId, b.id));
-      } else if (b.source === "archivedServiceTypes" && b.clientId) {
-        await deleteDoc(clientArchivedServiceTypeDoc(siteId, b.clientId, b.id));
-      } else {
-        setDeleteError("לא ניתן למחוק — חסר מזהה ארכיון.");
-        setDeletingId(null);
-        return;
-      }
-      setArchiveBookings((prev) => prev.filter((x) => itemKey(x) !== key));
-      setConfirmDelete(null);
-      setDeleteSuccess(true);
-      setTimeout(() => setDeleteSuccess(false), 3000);
-    } catch (e) {
-      setDeleteError(e instanceof Error ? e.message : "שגיאה במחיקה");
-    } finally {
-      setDeletingId(null);
-    }
-  };
 
   if (loading) {
     return (
@@ -205,23 +165,13 @@ export default function CancelledBookingsPage() {
           </div>
           <AdminPageHero
             title="תורים שבוטלו"
-            subtitle="סינון לפי תאריך כדי למצוא ביטולים ספציפיים"
+            subtitle="רשומות לאחר ארכיון (ביטול מהמערכת, מ־WhatsApp או מדף ההזמנה). מופיעות גם בכרטיס לקוח. אין מחיקה כאן — התור כבר הוסר מהיומן הפעיל."
             className="flex-1"
           />
         </div>
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-right">
             <p className="text-sm text-red-700">{error}</p>
-          </div>
-        )}
-        {deleteError && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-right">
-            <p className="text-sm text-red-700">{deleteError}</p>
-          </div>
-        )}
-        {deleteSuccess && (
-          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-xl text-right">
-            <p className="text-sm text-green-700">התור המבוטל נמחק בהצלחה.</p>
           </div>
         )}
         {DEBUG && debugInfo && (
@@ -287,7 +237,7 @@ export default function CancelledBookingsPage() {
                 {filteredBookings.map((b) => (
                   <div
                     key={itemKey(b)}
-                    className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-right flex flex-col gap-3"
+                    className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-right flex flex-col gap-2"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-slate-900 break-words">
@@ -301,25 +251,16 @@ export default function CancelledBookingsPage() {
                       <p className="text-xs text-slate-600 mt-0.5 break-all">
                         {b.customerPhone || b.phone || "—"}
                       </p>
-                      {(getStatusLabel(b.status) !== "—" || (b.cancellationReason && b.cancellationReason.trim())) && (
-                        <p className="text-xs text-slate-500 mt-1.5 break-words">
-                          {getStatusLabel(b.status) !== "—" && getStatusLabel(b.status)}
-                          {getStatusLabel(b.status) !== "—" && b.cancellationReason?.trim() ? " · " : ""}
-                          {b.cancellationReason?.trim() || ""}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex justify-start">
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteClick(b)}
-                        disabled={isDeleting(b)}
-                        className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200 disabled:opacity-50"
-                        aria-label="מחק תור מבוטל"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        מחק
-                      </button>
+                      {(() => {
+                        const channelLine = formatCancelledBookingChannelCell(b.archivedReason, b.cancellationReason);
+                        const statusLine = getStatusLabel(b.status);
+                        const parts = [statusLine !== "—" ? statusLine : null, channelLine !== "—" ? channelLine : null].filter(
+                          Boolean
+                        ) as string[];
+                        return parts.length > 0 ? (
+                          <p className="text-xs text-slate-500 mt-1.5 break-words">{parts.join(" · ")}</p>
+                        ) : null;
+                      })()}
                     </div>
                   </div>
                 ))}
@@ -337,8 +278,7 @@ export default function CancelledBookingsPage() {
                       <th className="px-4 py-3 text-right font-semibold text-slate-700">שירות</th>
                       <th className="px-4 py-3 text-right font-semibold text-slate-700">מטפל</th>
                       <th className="px-4 py-3 text-right font-semibold text-slate-700">סטטוס</th>
-                      <th className="px-4 py-3 text-right font-semibold text-slate-700">סיבת ביטול</th>
-                      <th className="px-4 py-3 text-right font-semibold text-slate-700 w-20" scope="col">מחיקה</th>
+                      <th className="px-4 py-3 text-right font-semibold text-slate-700">סיבת הביטול</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -353,19 +293,8 @@ export default function CancelledBookingsPage() {
                         <td className="px-4 py-3 text-slate-600">{b.serviceName || "—"}</td>
                         <td className="px-4 py-3 text-slate-600">{getWorkerName(b)}</td>
                         <td className="px-4 py-3 text-slate-600">{getStatusLabel(b.status)}</td>
-                        <td className="px-4 py-3 text-slate-600 max-w-[200px] truncate">
-                          {b.cancellationReason || "—"}
-                        </td>
-                        <td className="px-4 py-3 text-slate-600">
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteClick(b)}
-                            disabled={isDeleting(b)}
-                            className="p-1.5 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-50"
-                            aria-label="מחק תור מבוטל"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                        <td className="px-4 py-3 text-slate-600 max-w-[280px] truncate" title={formatCancelledBookingChannelCell(b.archivedReason, b.cancellationReason)}>
+                          {formatCancelledBookingChannelCell(b.archivedReason, b.cancellationReason)}
                         </td>
                       </tr>
                     ))}
@@ -376,47 +305,6 @@ export default function CancelledBookingsPage() {
           )}
         </AdminCard>
       </div>
-
-      {/* Confirm delete modal */}
-      {confirmDelete && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          data-admin-modal-overlay=""
-          dir="rtl"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="confirm-delete-title"
-        >
-          <div className="w-full max-w-sm rounded-3xl border border-[#E2E8F0] bg-white p-6 shadow-xl">
-            <h2 id="confirm-delete-title" className="text-lg font-bold text-slate-900 text-right">
-              מחיקת תור מבוטל
-            </h2>
-            <p className="mt-2 text-sm text-slate-600 text-right">
-              האם למחוק את התור המבוטל הזה?
-            </p>
-            <div className="mt-6 flex gap-3 justify-start">
-              <button
-                type="button"
-                onClick={() => {
-                  setConfirmDelete(null);
-                  setDeleteError(null);
-                }}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                ביטול
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmDelete}
-                disabled={!!deletingId}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
-              >
-                {deletingId ? "מוחק…" : "מחק"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

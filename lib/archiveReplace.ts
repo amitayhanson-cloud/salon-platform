@@ -10,6 +10,7 @@ import {
   bookingsCollection,
   bookingDoc,
   clientArchivedServiceTypeDoc,
+  clientArchivedServiceTypesCollection,
 } from "./firestorePaths";
 
 /** Normalize service type key from doc (serviceTypeId preferred, else serviceType, else unknown). */
@@ -42,6 +43,29 @@ export function getDeterministicArchiveDocId(
     return { docId: `${clientKey}__${serviceTypeKey}`, shouldDeleteOthers: true };
   }
   return { docId: `${clientKey}__unknown__${bookingId}`, shouldDeleteOthers: false };
+}
+
+/**
+ * Archive doc ids to delete before writing `canonicalDocId`, so only one row per
+ * (client archivedServiceTypes subcollection, service type) remains.
+ * Matches rows by {@link getServiceTypeKey} on existing docs (covers legacy id = raw serviceTypeId only).
+ */
+export function staleArchivedServiceTypeDocIdsForReplace(
+  existingArchivedDocs: Array<{ id: string; data: () => Record<string, unknown> }>,
+  canonicalDocId: string,
+  incomingServiceTypeKey: string | null | undefined
+): string[] {
+  const sk =
+    incomingServiceTypeKey != null && String(incomingServiceTypeKey).trim() !== ""
+      ? String(incomingServiceTypeKey).trim()
+      : null;
+  if (!sk) return [];
+  const out: string[] = [];
+  for (const d of existingArchivedDocs) {
+    if (d.id === canonicalDocId) continue;
+    if (getServiceTypeKey(d.data()) === sk) out.push(d.id);
+  }
+  return out;
 }
 
 /**
@@ -122,10 +146,11 @@ export async function getArchivedBookingIdsToReplaceClient(
 }
 
 /**
- * Archive one booking per (tenant, client, serviceTypeId). O(1) Firestore ops per call.
- * - Deletes only the current booking doc from bookings.
- * - Upserts to sites/{siteId}/clients/{clientId}/archivedServiceTypes/{serviceTypeId}.
- * Legacy duplicate cleanup is done by a separate admin script (dedupeClientArchivedBookings), not on UI click.
+ * Archive one booking per (tenant, client, serviceTypeId).
+ * - Deletes the current booking doc from bookings.
+ * - Writes sites/.../clients/{clientKey}/archivedServiceTypes/{docId} with docId from {@link getDeterministicArchiveDocId}
+ *   (same as cascade / cleanup).
+ * - Deletes any other archived row for the same client + service type (legacy ids, old naming).
  */
 export async function archiveBookingByServiceTypeUnique(
   tenantId: string,
@@ -145,9 +170,9 @@ export async function archiveBookingByServiceTypeUnique(
 
   const serviceTypeKey =
     serviceTypeId != null && String(serviceTypeId).trim() !== "" ? String(serviceTypeId).trim() : null;
-  const docId = serviceTypeKey ?? `unknown__${bookingId}`;
+  const { docId } = getDeterministicArchiveDocId(clientKey, options.customerPhone, serviceTypeId, bookingId);
   if (!serviceTypeKey) {
-    console.warn("[archiveBookingByServiceTypeUnique] serviceTypeId missing, storing under fallback key", {
+    console.warn("[archiveBookingByServiceTypeUnique] serviceTypeId missing, storing under per-booking key", {
       tenantId,
       clientId: clientKey,
       bookingId,
@@ -155,7 +180,18 @@ export async function archiveBookingByServiceTypeUnique(
     });
   }
 
+  const archCol = clientArchivedServiceTypesCollection(siteId, clientKey);
+  const existing = await getDocs(archCol);
+  const staleIds = staleArchivedServiceTypeDocIdsForReplace(
+    existing.docs.map((d) => ({ id: d.id, data: () => d.data() as Record<string, unknown> })),
+    docId,
+    serviceTypeKey
+  );
+
   const batch = writeBatch(db);
+  for (const id of staleIds) {
+    batch.delete(clientArchivedServiceTypeDoc(siteId, clientKey, id));
+  }
   batch.delete(bookingDoc(siteId, bookingId));
   const archiveRef = clientArchivedServiceTypeDoc(siteId, clientKey, docId);
   batch.set(archiveRef, archivePayload, { merge: false });
@@ -167,8 +203,9 @@ export async function archiveBookingByServiceTypeUnique(
     clientId: clientKey,
     serviceTypeId: serviceTypeKey ?? undefined,
     wroteDocPath,
+    removedStaleArchiveIds: staleIds.length,
   });
-  return { wroteDocPath, deletedLegacyCount: 1 };
+  return { wroteDocPath, deletedLegacyCount: 1 + staleIds.length };
 }
 
 /** Alias for backward compatibility. */

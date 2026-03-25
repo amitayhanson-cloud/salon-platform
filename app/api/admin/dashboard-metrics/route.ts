@@ -1,7 +1,7 @@
 /**
  * GET /api/admin/dashboard-metrics?siteId=&month=YYYY-MM
  * Bearer Firebase ID token. Site owner only.
- * Returns: cancellations (archived + rare live cancelled), utilization, traffic sources.
+ * Returns: cancellations (month + today Israel), utilization (month + today), traffic sources.
  */
 
 import { NextResponse } from "next/server";
@@ -15,6 +15,15 @@ import {
   countCancelledInBookingsMonthSnapshot,
   isDocCancelled,
 } from "@/lib/cancelledBookingShared";
+import { getTodayYMDInTimezone } from "@/lib/expiredCleanupUtils";
+
+const ISRAEL_TZ = "Asia/Jerusalem";
+
+/** Weekday 0–6 (Sun–Sat) for calendar YYYY-MM-DD (timezone-agnostic date). */
+function utcWeekdayFromYmd(ymd: string): number {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
 
 function daysInCalendarMonth(year: number, month1Based: number): number {
   return new Date(year, month1Based, 0).getDate();
@@ -138,6 +147,24 @@ export async function GET(request: Request) {
     const cancellationsFromLiveBookings = countCancelledInBookingsMonthSnapshot(bookingsSnap.docs);
     const cancellationsThisMonth = cancellationsFromLiveBookings + cancellationsFromArchive;
 
+    const todayYmd = getTodayYMDInTimezone(ISRAEL_TZ);
+    let cancellationsFromLiveToday = 0;
+    for (const doc of bookingsSnap.docs) {
+      const data = doc.data() as Record<string, unknown>;
+      if (isFollowUpBooking(data)) continue;
+      if (!isDocCancelled(data)) continue;
+      const dateKey =
+        typeof data.dateISO === "string" && data.dateISO.length >= 10 ? data.dateISO.slice(0, 10) : "";
+      if (dateKey === todayYmd) cancellationsFromLiveToday += 1;
+    }
+    const cancellationsFromArchiveToday = await countArchivedCancelledInAppointmentMonthAdmin(
+      db,
+      siteId,
+      todayYmd,
+      todayYmd
+    );
+    const cancellationsToday = cancellationsFromLiveToday + cancellationsFromArchiveToday;
+
     const settingsData = settingsSnap.exists ? (settingsSnap.data() as Record<string, unknown>) : {};
     const bookingSettings: BookingSettings = {
       ...defaultBookingSettings,
@@ -166,15 +193,12 @@ export async function GET(request: Request) {
 
     for (const doc of bookingsSnap.docs) {
       const d = doc.data() as Record<string, unknown>;
-      if (d.isArchived === true) continue;
-      if (isFollowUpBooking(d)) continue;
-
-      if (isDocCancelled(d)) {
-        continue;
-      }
+      if (isDocCancelled(d)) continue;
 
       const dm = typeof d.durationMin === "number" && Number.isFinite(d.durationMin) ? d.durationMin : 60;
       bookedMinutes += Math.max(0, dm);
+
+      if (isFollowUpBooking(d)) continue;
 
       const src = typeof d.bookingTrafficSource === "string" ? d.bookingTrafficSource.trim().toLowerCase() : "";
       if (src) {
@@ -185,6 +209,31 @@ export async function GET(request: Request) {
     const utilizationPercent =
       capacityMinutes > 0 ? Math.min(100, Math.round((bookedMinutes / capacityMinutes) * 1000) / 10) : null;
 
+    let capacityTodayMinutes = 0;
+    if (!isClosedDate(bookingSettings, todayYmd)) {
+      const dowToday = utcWeekdayFromYmd(todayYmd);
+      const dayKeyToday = String(dowToday) as keyof BookingSettings["days"];
+      const dayCfgToday = bookingSettings.days[dayKeyToday];
+      capacityTodayMinutes =
+        businessDayMinutes(dayCfgToday ?? { enabled: false, start: "09:00", end: "17:00" }) * activeWorkers;
+    }
+
+    let bookedTodayMinutes = 0;
+    for (const doc of bookingsSnap.docs) {
+      const d = doc.data() as Record<string, unknown>;
+      if (isDocCancelled(d)) continue;
+      const dateKey =
+        typeof d.dateISO === "string" && d.dateISO.length >= 10 ? d.dateISO.slice(0, 10) : "";
+      if (dateKey !== todayYmd) continue;
+      const dm = typeof d.durationMin === "number" && Number.isFinite(d.durationMin) ? d.durationMin : 60;
+      bookedTodayMinutes += Math.max(0, dm);
+    }
+
+    const utilizationPercentToday =
+      capacityTodayMinutes > 0
+        ? Math.min(100, Math.round((bookedTodayMinutes / capacityTodayMinutes) * 1000) / 10)
+        : null;
+
     const trafficBySource = Array.from(trafficMap.entries())
       .map(([source, count]) => ({ source, count }))
       .sort((a, b) => b.count - a.count);
@@ -192,7 +241,7 @@ export async function GET(request: Request) {
     const totalAttributed = trafficBySource.reduce((s, x) => s + x.count, 0);
     const totalBookingsForTraffic = bookingsSnap.docs.filter((doc) => {
       const d = doc.data() as Record<string, unknown>;
-      if (d.isArchived === true || isFollowUpBooking(d)) return false;
+      if (isFollowUpBooking(d)) return false;
       return !isDocCancelled(d);
     }).length;
 
@@ -200,9 +249,13 @@ export async function GET(request: Request) {
       ok: true,
       monthKey,
       cancellationsThisMonth,
+      cancellationsToday,
       utilizationPercent,
+      utilizationPercentToday,
       bookedHoursThisMonth: Math.round((bookedMinutes / 60) * 10) / 10,
       availableHoursThisMonth: Math.round((capacityMinutes / 60) * 10) / 10,
+      bookedHoursToday: Math.round((bookedTodayMinutes / 60) * 10) / 10,
+      availableHoursToday: Math.round((capacityTodayMinutes / 60) * 10) / 10,
       trafficBySource,
       totalBookingsWithSource: totalAttributed,
       totalBookingsInMonth: totalBookingsForTraffic,

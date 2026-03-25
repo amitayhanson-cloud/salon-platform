@@ -11,6 +11,7 @@ import type { DocumentReference } from "firebase-admin/firestore";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminAuth, adminDb } from "@/lib/firebaseAdmin";
 import { getDeterministicArchiveDocId } from "@/lib/archiveReplaceAdmin";
+import { staleArchivedServiceTypeDocIdsForReplace } from "@/lib/archiveReplace";
 import { isFollowUpBooking } from "@/lib/normalizeBooking";
 
 const BATCH_SIZE = 500;
@@ -72,7 +73,12 @@ export async function POST(request: Request) {
     let archived = 0;
     for (let i = 0; i < entries.length; i += BATCH_SIZE) {
       const chunk = entries.slice(i, i + BATCH_SIZE);
-      const archiveWrites: { clientKey: string; docId: string; minimal: Record<string, unknown> }[] = [];
+      const archiveWrites: {
+        clientKey: string;
+        docId: string;
+        minimal: Record<string, unknown>;
+        serviceTypeKey: string | null;
+      }[] = [];
       for (const { ref, data: d } of chunk) {
         if (isFollowUpBooking(d)) {
           if (process.env.NODE_ENV === "development") {
@@ -115,12 +121,46 @@ export async function POST(request: Request) {
           statusAtArchive,
         };
         const { docId } = getDeterministicArchiveDocId(clientIdVal, phone, serviceTypeId, ref.id);
-        archiveWrites.push({ clientKey, docId, minimal });
+        archiveWrites.push({ clientKey, docId, minimal, serviceTypeKey: serviceTypeId });
       }
       const deleteIds = chunk.map((e) => e.ref.id);
       const clientsRef = adminDb.collection("sites").doc(siteId).collection("clients");
+
+      const archiveByClient = new Map<
+        string,
+        Array<{ id: string; data: () => Record<string, unknown> }>
+      >();
+      for (const ck of new Set(archiveWrites.map((w) => w.clientKey))) {
+        const snap = await clientsRef.doc(ck).collection("archivedServiceTypes").get();
+        archiveByClient.set(
+          ck,
+          snap.docs.map((d) => ({ id: d.id, data: () => d.data() as Record<string, unknown> }))
+        );
+      }
+      const staleSeen = new Set<string>();
+      const staleRefs: DocumentReference[] = [];
+      for (const w of archiveWrites) {
+        const docs = archiveByClient.get(w.clientKey) ?? [];
+        for (const id of staleArchivedServiceTypeDocIdsForReplace(docs, w.docId, w.serviceTypeKey)) {
+          const r = clientsRef.doc(w.clientKey).collection("archivedServiceTypes").doc(id);
+          if (!staleSeen.has(r.path)) {
+            staleSeen.add(r.path);
+            staleRefs.push(r);
+          }
+        }
+      }
+
       let batch = adminDb.batch();
       let opCount = 0;
+      for (const ref of staleRefs) {
+        if (opCount >= FIRESTORE_BATCH_LIMIT) {
+          await batch.commit();
+          batch = adminDb.batch();
+          opCount = 0;
+        }
+        batch.delete(ref);
+        opCount++;
+      }
       for (const id of deleteIds) {
         if (opCount >= FIRESTORE_BATCH_LIMIT) {
           await batch.commit();

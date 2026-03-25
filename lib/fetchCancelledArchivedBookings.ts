@@ -21,7 +21,7 @@ export { CANCELLED_STATUSES } from "@/lib/cancelledBookingShared";
 export interface CancelledArchiveItem {
   id: string;
   source: "bookings" | "archivedServiceTypes";
-  /** Required when source === "archivedServiceTypes" for delete path. */
+  /** Client doc key when source === "archivedServiceTypes" (path under clients/{id}/archivedServiceTypes). */
   clientId?: string;
   customerName: string;
   customerPhone: string;
@@ -33,6 +33,8 @@ export interface CancelledArchiveItem {
   workerName?: string;
   serviceName?: string;
   cancellationReason?: string | null;
+  /** How the row was archived: admin_cancel, customer_cancelled_via_whatsapp, etc. */
+  archivedReason?: string | null;
   status: string;
   statusAtArchive?: string | null;
   archivedAt?: string | null;
@@ -75,6 +77,7 @@ function mapBookingsDoc(
     workerName: (data.workerName as string) ?? undefined,
     serviceName: (data.serviceName ?? data.service) as string | undefined,
     cancellationReason: (data.cancellationReason ?? data.cancelReason) as string | null,
+    archivedReason: (data.archivedReason as string) ?? null,
     status: (data.status as string) ?? (data.statusAtArchive as string) ?? "",
     statusAtArchive: (data.statusAtArchive as string) ?? undefined,
     archivedAt: undefined,
@@ -111,6 +114,7 @@ function mapArchivedDoc(
     workerName: (data.workerName as string) ?? undefined,
     serviceName: (data.serviceName ?? data.service) as string | undefined,
     cancellationReason: (data.cancellationReason ?? data.cancelReason) as string | null,
+    archivedReason: (data.archivedReason as string) ?? null,
     status: (data.statusAtArchive as string) ?? (data.status as string) ?? "",
     statusAtArchive: (data.statusAtArchive as string) ?? undefined,
     archivedAt: archivedAtStr,

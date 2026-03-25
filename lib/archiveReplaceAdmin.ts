@@ -7,9 +7,10 @@ import { getAdminDb } from "./firebaseAdmin";
 import {
   getServiceTypeKey,
   getDeterministicArchiveDocId,
+  staleArchivedServiceTypeDocIdsForReplace,
 } from "./archiveReplace";
 
-export { getDeterministicArchiveDocId };
+export { getDeterministicArchiveDocId, staleArchivedServiceTypeDocIdsForReplace };
 
 /**
  * Returns ALL archived booking document IDs for same (client, serviceType).
@@ -81,8 +82,8 @@ export async function getArchivedBookingIdsToReplaceAdmin(
 }
 
 /**
- * Admin SDK: archive one booking per (tenant, client, serviceTypeId). O(1) Firestore ops per call.
- * Deletes only the current booking doc; upserts to archivedServiceTypes. No legacy cleanup on this path.
+ * Admin SDK: archive one booking per (tenant, client, serviceTypeId).
+ * Uses {@link getDeterministicArchiveDocId} and removes other archived rows for the same service type.
  */
 export async function archiveBookingByServiceTypeUniqueAdmin(
   adminDb: ReturnType<typeof getAdminDb>,
@@ -102,9 +103,9 @@ export async function archiveBookingByServiceTypeUniqueAdmin(
 
   const serviceTypeKey =
     serviceTypeId != null && String(serviceTypeId).trim() !== "" ? String(serviceTypeId).trim() : null;
-  const docId = serviceTypeKey ?? `unknown__${bookingId}`;
+  const { docId } = getDeterministicArchiveDocId(clientKey, options.customerPhone, serviceTypeId, bookingId);
   if (!serviceTypeKey) {
-    console.warn("[archiveBookingByServiceTypeUnique] serviceTypeId missing, storing under fallback key", {
+    console.warn("[archiveBookingByServiceTypeUnique] serviceTypeId missing, storing under per-booking key", {
       tenantId,
       clientId: clientKey,
       bookingId,
@@ -114,7 +115,17 @@ export async function archiveBookingByServiceTypeUniqueAdmin(
 
   const bookingsCol = adminDb.collection("sites").doc(siteId).collection("bookings");
   const archiveCol = adminDb.collection("sites").doc(siteId).collection("clients").doc(clientKey).collection("archivedServiceTypes");
+  const existing = await archiveCol.get();
+  const staleIds = staleArchivedServiceTypeDocIdsForReplace(
+    existing.docs.map((d) => ({ id: d.id, data: () => d.data() as Record<string, unknown> })),
+    docId,
+    serviceTypeKey
+  );
+
   const batch = adminDb.batch();
+  for (const id of staleIds) {
+    batch.delete(archiveCol.doc(id));
+  }
   batch.delete(bookingsCol.doc(bookingId));
   batch.set(archiveCol.doc(docId), archivePayload, { merge: false });
   await batch.commit();
@@ -125,8 +136,9 @@ export async function archiveBookingByServiceTypeUniqueAdmin(
     clientId: clientKey,
     serviceTypeId: serviceTypeKey ?? undefined,
     wroteDocPath,
+    removedStaleArchiveIds: staleIds.length,
   });
-  return { wroteDocPath, deletedLegacyCount: 1 };
+  return { wroteDocPath, deletedLegacyCount: 1 + staleIds.length };
 }
 
 /** Alias for backward compatibility. */

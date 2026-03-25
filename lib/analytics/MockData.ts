@@ -65,11 +65,11 @@ function resampleSeries(src: number[], targetLen: number): number[] {
   });
 }
 
-export type MockChartGranularity = "day" | "week" | "month";
+export type MockChartGranularity = "week" | "month" | "year";
 
 /** Placeholder labels when real Firestore bundle is not loaded */
 export function mockChartLabels(granularity: MockChartGranularity): string[] {
-  const n = granularity === "day" ? 24 : granularity === "week" ? 7 : 30;
+  const n = granularity === "week" ? 7 : granularity === "month" ? 30 : 12;
   return Array.from({ length: n }, (_, i) => String(i + 1));
 }
 
@@ -79,6 +79,6 @@ export function getMockValuesForGranularity(
 ): number[] {
   const base = getMockSeriesForMetric(kind);
   if (granularity === "week") return resampleSeries(base, 7);
-  if (granularity === "day") return resampleSeries(base, 24);
-  return resampleSeries(base, 30);
+  if (granularity === "month") return resampleSeries(base, 30);
+  return resampleSeries(base, 12);
 }

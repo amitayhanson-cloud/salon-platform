@@ -1,16 +1,13 @@
 /**
- * POST /api/bookings/delete-booking-group
- * Archive a booking group the same way past-date cleanup does: {@link cancelBookingsCascade} with reason "auto"
- * (archivedReason "auto", statusAtArchive preserved — not an admin cancel).
- * Uses getRelatedBookingIds (visitGroupId / parentBookingId - NO customer heuristic).
- * Does NOT touch other bookings of the same customer.
- * Same permission as other booking APIs: site owner only.
+ * POST /api/bookings/delete-booking-group-permanent
+ * Permanently removes booking docs for the same group as delete-booking-group (visitGroupId / parent chain).
+ * Does NOT archive and does NOT write clients/.../archivedServiceTypes — for mistaken bookings only.
  */
 
 import { NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
 import { getRelatedBookingIds } from "@/lib/whatsapp/relatedBookings";
-import { cancelBookingsCascade } from "@/lib/booking-cascade";
+import { permanentDeleteBookingGroupDocs } from "@/lib/booking-cascade";
 
 const MAX_WITHOUT_GROUP = 10;
 
@@ -50,28 +47,18 @@ export async function POST(request: Request) {
     const { bookingIds: ids, groupKey } = await getRelatedBookingIds(siteId, bookingId);
 
     if (ids.length > MAX_WITHOUT_GROUP && !groupKey) {
-      return NextResponse.json(
-        { error: "too_many_bookings" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "too_many_bookings" }, { status: 400 });
     }
 
-    const { successCount, failCount } = await cancelBookingsCascade(siteId, ids, "auto");
+    const { successCount, failCount } = await permanentDeleteBookingGroupDocs(siteId, ids);
 
     if (process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true") {
-      console.log("[delete-booking-group]", {
-        siteId,
-        bookingId,
-        groupKey,
-        ids,
-        deletedCount: successCount,
-        failCount,
-      });
+      console.log("[delete-booking-group-permanent]", { siteId, bookingId, groupKey, ids, successCount, failCount });
     }
 
-    return NextResponse.json({ archived: successCount, failed: failCount, ids });
+    return NextResponse.json({ deleted: successCount, failed: failCount, ids });
   } catch (e) {
-    console.error("[delete-booking-group]", e);
+    console.error("[delete-booking-group-permanent]", e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "server_error" },
       { status: 500 }

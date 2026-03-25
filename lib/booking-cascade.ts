@@ -6,10 +6,12 @@
  */
 
 import admin from "firebase-admin";
+import type { DocumentReference, QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { getRelatedBookingIds } from "@/lib/whatsapp/relatedBookings";
 import { MAX_RELATED_BOOKINGS } from "@/lib/whatsapp/relatedBookings";
 import { getDeterministicArchiveDocId } from "@/lib/archiveReplaceAdmin";
+import { getServiceTypeKey } from "@/lib/archiveReplace";
 import { isFollowUpBooking } from "@/lib/normalizeBooking";
 import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
 
@@ -246,20 +248,51 @@ export async function cancelBookingsCascade(
     return { successCount: 0, failCount: 0 };
   }
 
-  const archiveWrites: { clientKey: string; docId: string; minimal: Record<string, unknown> }[] = [];
+  const archiveWrites: {
+    clientKey: string;
+    docId: string;
+    minimal: Record<string, unknown>;
+    serviceTypeKey: string | null;
+  }[] = [];
   for (const { ref, clientId, customerPhone, serviceTypeId, minimal } of toUpdate) {
     const clientKey = (clientId != null && String(clientId).trim() !== "") ? String(clientId).trim() : (customerPhone || "unknown");
     const { docId } = getDeterministicArchiveDocId(clientId, customerPhone, serviceTypeId, ref.id);
-    archiveWrites.push({ clientKey, docId, minimal });
+    const serviceTypeKey =
+      serviceTypeId != null && String(serviceTypeId).trim() !== "" ? String(serviceTypeId).trim() : null;
+    archiveWrites.push({ clientKey, docId, minimal, serviceTypeKey });
   }
   const mainIdsToDelete = new Set(toUpdate.map((u) => u.ref.id));
   const allToDelete = new Set([...mainIdsToDelete, ...followUpIdsToDeleteOnly]);
 
+  const clientsRef = db.collection("sites").doc(siteId).collection("clients");
+  const archiveByClient = new Map<string, QueryDocumentSnapshot[]>();
+  for (const ck of new Set(archiveWrites.map((w) => w.clientKey))) {
+    const snap = await clientsRef.doc(ck).collection("archivedServiceTypes").get();
+    archiveByClient.set(ck, snap.docs);
+  }
+  const stalePath = new Set<string>();
+  const staleRefs: DocumentReference[] = [];
+  for (const w of archiveWrites) {
+    if (!w.serviceTypeKey) continue;
+    for (const ad of archiveByClient.get(w.clientKey) ?? []) {
+      if (ad.id === w.docId) continue;
+      if (getServiceTypeKey(ad.data() as Record<string, unknown>) === w.serviceTypeKey) {
+        const p = ad.ref.path;
+        if (!stalePath.has(p)) {
+          stalePath.add(p);
+          staleRefs.push(ad.ref);
+        }
+      }
+    }
+  }
+
   const batch = db.batch();
+  for (const ref of staleRefs) {
+    batch.delete(ref);
+  }
   for (const id of allToDelete) {
     batch.delete(col.doc(id));
   }
-  const clientsRef = db.collection("sites").doc(siteId).collection("clients");
   for (const { clientKey, docId, minimal } of archiveWrites) {
     const archiveRef = clientsRef.doc(clientKey).collection("archivedServiceTypes").doc(docId);
     batch.set(archiveRef, minimal, { merge: false });
@@ -276,4 +309,38 @@ export async function cancelBookingsCascade(
     console.error("[booking-cascade] batch commit failed", { siteId, bookingIds: bookingIds.slice(0, 5), reason, error: e });
     return { successCount: 0, failCount: toUpdate.length };
   }
+}
+
+const FIRESTORE_BATCH_DELETE_LIMIT = 500;
+
+/**
+ * Hard-delete booking documents only (no client archivedServiceTypes writes).
+ * Use for mistaken test bookings. Same doc set as getRelatedBookingIds (group + follow-ups).
+ */
+export async function permanentDeleteBookingGroupDocs(
+  siteId: string,
+  bookingIds: string[]
+): Promise<{ successCount: number; failCount: number }> {
+  if (bookingIds.length === 0) {
+    return { successCount: 0, failCount: 0 };
+  }
+  const db = getAdminDb();
+  const col = db.collection("sites").doc(siteId).collection("bookings");
+  let successCount = 0;
+  let failCount = 0;
+  for (let i = 0; i < bookingIds.length; i += FIRESTORE_BATCH_DELETE_LIMIT) {
+    const chunk = bookingIds.slice(i, i + FIRESTORE_BATCH_DELETE_LIMIT);
+    const batch = db.batch();
+    for (const id of chunk) {
+      batch.delete(col.doc(id));
+    }
+    try {
+      await batch.commit();
+      successCount += chunk.length;
+    } catch (e) {
+      console.error("[permanentDeleteBookingGroupDocs] batch failed", { siteId, error: e });
+      failCount += chunk.length;
+    }
+  }
+  return { successCount, failCount };
 }

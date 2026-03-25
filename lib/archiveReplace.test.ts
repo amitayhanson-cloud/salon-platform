@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { getServiceTypeKey, getDeterministicArchiveDocId } from "./archiveReplace";
+import { getServiceTypeKey, getDeterministicArchiveDocId, staleArchivedServiceTypeDocIdsForReplace } from "./archiveReplace";
 
 describe("getServiceTypeKey", () => {
   it("uses serviceTypeId when present", () => {
@@ -48,5 +48,39 @@ describe("getDeterministicArchiveDocId", () => {
     const r = getDeterministicArchiveDocId("c1", "050", null, "booking-xyz");
     expect(r.docId).toBe("c1__unknown__booking-xyz");
     expect(r.shouldDeleteOthers).toBe(false);
+  });
+});
+
+describe("staleArchivedServiceTypeDocIdsForReplace", () => {
+  const doc = (id: string, data: Record<string, unknown>) => ({
+    id,
+    data: () => data,
+  });
+
+  it("drops legacy plain service id when canonical uses client__service shape", () => {
+    const stale = staleArchivedServiceTypeDocIdsForReplace(
+      [doc("st1", { serviceTypeId: "st1" }), doc("c1__st1", { serviceTypeId: "st1" })],
+      "c1__st1",
+      "st1"
+    );
+    expect(stale.sort()).toEqual(["st1"]);
+  });
+
+  it("returns empty when incoming has no service type", () => {
+    const stale = staleArchivedServiceTypeDocIdsForReplace([doc("x", { serviceTypeId: "st1" })], "c1__unknown__b", null);
+    expect(stale).toEqual([]);
+  });
+
+  it("does not remove canonical or different services", () => {
+    const stale = staleArchivedServiceTypeDocIdsForReplace(
+      [
+        doc("c1__st1", { serviceTypeId: "st1" }),
+        doc("c1__st2", { serviceTypeId: "st2" }),
+        doc("old", { serviceTypeId: "st1" }),
+      ],
+      "c1__st1",
+      "st1"
+    );
+    expect(stale).toEqual(["old"]);
   });
 });

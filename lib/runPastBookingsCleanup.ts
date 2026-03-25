@@ -5,8 +5,9 @@
  */
 
 import admin from "firebase-admin";
-import type { Firestore } from "firebase-admin/firestore";
+import type { DocumentReference, Firestore, QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { getDeterministicArchiveDocId } from "./archiveReplaceAdmin";
+import { getServiceTypeKey } from "./archiveReplace";
 import { getDateYMDInTimezone } from "./expiredCleanupUtils";
 
 const FieldPath = admin.firestore.FieldPath;
@@ -69,8 +70,18 @@ export async function runPastBookingsCleanup(
   let snapshot = await q.get();
 
   while (!snapshot.empty) {
-    let batch = db.batch();
-    let batchCount = 0;
+    type Op =
+      | { kind: "followup"; bookingRef: DocumentReference }
+      | {
+          kind: "archive";
+          bookingRef: DocumentReference;
+          clientKey: string;
+          deterministicId: string;
+          minimal: Record<string, unknown>;
+          serviceTypeKey: string | null;
+        };
+
+    const ops: Op[] = [];
 
     for (const doc of snapshot.docs) {
       scanned++;
@@ -84,11 +95,7 @@ export async function runPastBookingsCleanup(
       }
 
       if (isFollowUpBooking(d)) {
-        if (!dryRun) {
-          batch.delete(bookingsRef.doc(doc.id));
-          batchCount++;
-        }
-        skippedFollowups++;
+        ops.push({ kind: "followup", bookingRef: bookingsRef.doc(doc.id) });
         continue;
       }
 
@@ -112,6 +119,8 @@ export async function runPastBookingsCleanup(
         clientId != null && String(clientId).trim() !== ""
           ? String(clientId).trim()
           : customerPhone || "unknown";
+      const serviceTypeKey =
+        serviceTypeId != null && String(serviceTypeId).trim() !== "" ? String(serviceTypeId).trim() : null;
       const minimal: Record<string, unknown> = {
         date: dateStr,
         serviceName: (d.serviceName as string) ?? "",
@@ -125,32 +134,86 @@ export async function runPastBookingsCleanup(
         ...archivePayload,
         statusAtArchive,
       };
+      ops.push({ kind: "archive", bookingRef: bookingsRef.doc(doc.id), clientKey, deterministicId, minimal, serviceTypeKey });
+    }
 
-      if (!dryRun) {
-        if (batchCount + 2 > FIRESTORE_BATCH_LIMIT) {
-          try {
-            await batch.commit();
-          } catch (e) {
-            errors++;
+    const archiveClientKeys = new Set(
+      ops.filter((o): o is Extract<Op, { kind: "archive" }> => o.kind === "archive").map((o) => o.clientKey)
+    );
+    const archiveByClient = new Map<string, QueryDocumentSnapshot[]>();
+    if (!dryRun) {
+      for (const ck of archiveClientKeys) {
+        archiveByClient.set(ck, (await clientsRef.doc(ck).collection("archivedServiceTypes").get()).docs);
+      }
+    }
+
+    const stalePath = new Set<string>();
+    const staleRefs: DocumentReference[] = [];
+    if (!dryRun) {
+      for (const o of ops) {
+        if (o.kind !== "archive" || !o.serviceTypeKey) continue;
+        for (const ad of archiveByClient.get(o.clientKey) ?? []) {
+          if (ad.id === o.deterministicId) continue;
+          if (getServiceTypeKey(ad.data() as Record<string, unknown>) === o.serviceTypeKey) {
+            const p = ad.ref.path;
+            if (!stalePath.has(p)) {
+              stalePath.add(p);
+              staleRefs.push(ad.ref);
+            }
           }
-          batch = db.batch();
-          batchCount = 0;
         }
-        batch.delete(bookingsRef.doc(doc.id));
+      }
+    }
+
+    let batch = db.batch();
+    let batchCount = 0;
+
+    const flushBatch = async () => {
+      if (batchCount === 0) return;
+      try {
+        await batch.commit();
+      } catch {
+        errors++;
+      }
+      batch = db.batch();
+      batchCount = 0;
+    };
+
+    if (!dryRun) {
+      for (const ref of staleRefs) {
+        if (batchCount >= FIRESTORE_BATCH_LIMIT) await flushBatch();
+        batch.delete(ref);
+        batchCount++;
+      }
+    }
+
+    for (const o of ops) {
+      if (o.kind === "followup") {
+        skippedFollowups++;
+        if (!dryRun) {
+          if (batchCount >= FIRESTORE_BATCH_LIMIT) await flushBatch();
+          batch.delete(o.bookingRef);
+          batchCount++;
+        }
+        continue;
+      }
+      archived++;
+      if (!dryRun) {
+        if (batchCount + 2 > FIRESTORE_BATCH_LIMIT) await flushBatch();
+        batch.delete(o.bookingRef);
         batch.set(
-          clientsRef.doc(clientKey).collection("archivedServiceTypes").doc(deterministicId),
-          minimal,
+          clientsRef.doc(o.clientKey).collection("archivedServiceTypes").doc(o.deterministicId),
+          o.minimal,
           { merge: false }
         );
         batchCount += 2;
       }
-      archived++;
     }
 
     if (!dryRun && batchCount > 0) {
       try {
         await batch.commit();
-      } catch (e) {
+      } catch {
         errors++;
       }
     }

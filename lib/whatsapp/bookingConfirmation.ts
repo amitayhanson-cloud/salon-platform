@@ -13,6 +13,8 @@ import {
   getDeterministicArchiveDocId,
   archiveBookingUniqueByServiceTypeAdmin,
 } from "@/lib/archiveReplaceAdmin";
+import { getServiceTypeKey } from "@/lib/archiveReplace";
+import type { DocumentReference, QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { normalizeE164 } from "./e164";
 import { getRelatedBookingIds } from "./relatedBookings";
 
@@ -313,7 +315,12 @@ export async function cancelBookingGroupByWhatsApp(siteId: string, bookingId: st
     workerName?: string;
     parentBookingId?: string | null;
   };
-  const archiveWrites: { clientKey: string; docId: string; minimal: Record<string, unknown> }[] = [];
+  const archiveWrites: {
+    clientKey: string;
+    docId: string;
+    minimal: Record<string, unknown>;
+    serviceTypeKey: string | null;
+  }[] = [];
   for (const id of bookingIds) {
     const ref = col.doc(id);
     const snap = await ref.get();
@@ -346,13 +353,39 @@ export async function cancelBookingGroupByWhatsApp(siteId: string, bookingId: st
       ...CANCELLED_BY_WHATSAPP_PAYLOAD,
     };
     const { docId } = getDeterministicArchiveDocId(clientId, customerPhone, serviceTypeId, id);
-    archiveWrites.push({ clientKey, docId, minimal });
+    const serviceTypeKey =
+      serviceTypeId != null && String(serviceTypeId).trim() !== "" ? String(serviceTypeId).trim() : null;
+    archiveWrites.push({ clientKey, docId, minimal, serviceTypeKey });
   }
+  const clientsRef = db.collection("sites").doc(siteId).collection("clients");
+  const archiveByClient = new Map<string, QueryDocumentSnapshot[]>();
+  for (const ck of new Set(archiveWrites.map((w) => w.clientKey))) {
+    const snap = await clientsRef.doc(ck).collection("archivedServiceTypes").get();
+    archiveByClient.set(ck, snap.docs);
+  }
+  const stalePath = new Set<string>();
+  const staleRefs: DocumentReference[] = [];
+  for (const w of archiveWrites) {
+    if (!w.serviceTypeKey) continue;
+    for (const ad of archiveByClient.get(w.clientKey) ?? []) {
+      if (ad.id === w.docId) continue;
+      if (getServiceTypeKey(ad.data() as Record<string, unknown>) === w.serviceTypeKey) {
+        const p = ad.ref.path;
+        if (!stalePath.has(p)) {
+          stalePath.add(p);
+          staleRefs.push(ad.ref);
+        }
+      }
+    }
+  }
+
   const batch = db.batch();
+  for (const ref of staleRefs) {
+    batch.delete(ref);
+  }
   for (const id of bookingIds) {
     batch.delete(col.doc(id));
   }
-  const clientsRef = db.collection("sites").doc(siteId).collection("clients");
   for (const { clientKey, docId, minimal } of archiveWrites) {
     const archiveRef = clientsRef.doc(clientKey).collection("archivedServiceTypes").doc(docId);
     batch.set(archiveRef, minimal, { merge: false });

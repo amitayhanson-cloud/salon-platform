@@ -59,9 +59,9 @@ export function clientDoc(siteId: string, clientId: string) {
 }
 
 /**
- * Option A: One archived doc per (client, serviceTypeId) for history.
- * Path: sites/{siteId}/clients/{clientId}/archivedServiceTypes/{serviceTypeId}
- * Uniqueness is by serviceTypeId only (ignores worker/date).
+ * One archived visit per (client, service type) under this subcollection.
+ * Document id is {@link getDeterministicArchiveDocId} in practice: `{clientKey}__{serviceTypeId}` or
+ * `{clientKey}__unknown__{bookingId}`; legacy plain `serviceTypeId` ids are removed on new archive writes.
  */
 export function clientArchivedServiceTypesCollection(siteId: string, clientId: string) {
   if (!db) throw new Error("Firestore db not initialized");

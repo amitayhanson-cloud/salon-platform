@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from "vitest";
 import { isFollowUpBooking } from "./normalizeBooking";
-import { getDateYMDInTimezone } from "./expiredCleanupUtils";
+import { getDateYMDInTimezone, zonedDayRangeEpochMs } from "./expiredCleanupUtils";
 import { isBookingDateInPast } from "./validateBookingDate";
 
 describe("expiredCleanupUtils", () => {
@@ -28,6 +28,17 @@ describe("expiredCleanupUtils", () => {
       const d = new Date("2026-02-17T12:00:00Z");
       const ymd = getDateYMDInTimezone(d, "Invalid/Timezone");
       expect(ymd).toMatch(/^\d{4}-\d{2}-\d{2}/);
+    });
+  });
+
+  describe("zonedDayRangeEpochMs", () => {
+    it("bounds a full Jerusalem calendar day in February", () => {
+      const { start, endExclusive } = zonedDayRangeEpochMs("2026-02-17", "Asia/Jerusalem");
+      expect(getDateYMDInTimezone(new Date(start), "Asia/Jerusalem")).toBe("2026-02-17");
+      expect(getDateYMDInTimezone(new Date(endExclusive - 1), "Asia/Jerusalem")).toBe("2026-02-17");
+      expect(getDateYMDInTimezone(new Date(endExclusive), "Asia/Jerusalem")).toBe("2026-02-18");
+      expect(endExclusive - start).toBeGreaterThan(23 * 3600_000);
+      expect(endExclusive - start).toBeLessThan(25 * 3600_000);
     });
   });
 });
@@ -67,6 +78,11 @@ describe("isFollowUpBooking", () => {
     expect(isFollowUpBooking({ parentBookingId: null })).toBe(false);
     expect(isFollowUpBooking({ parentBookingId: "" })).toBe(false);
     expect(isFollowUpBooking({ parentBookingId: "   " })).toBe(false);
+  });
+
+  it("returns true when phase is 2 (even if parentBookingId missing)", () => {
+    expect(isFollowUpBooking({ phase: 2 })).toBe(true);
+    expect(isFollowUpBooking({ phase: "2" })).toBe(true);
   });
 
   it("follow-up booking should not be archived (logic used by cleanup)", () => {

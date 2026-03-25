@@ -1,13 +1,16 @@
 "use client";
 
-import { useMemo, type ComponentType } from "react";
+import { useMemo, useState } from "react";
 import Box from "@mui/material/Box";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
-import { LineChart, type MarkElementProps } from "@mui/x-charts/LineChart";
+import { BarChart } from "@mui/x-charts/BarChart";
 import { cn } from "@/lib/utils";
 
-const CHART_UP = "#09899b";
-const CHART_DOWN = "#c45c5a";
+/** Placeholder when a bucket has no value (future day / null) — keeps header height stable. */
+const EM_DASH = "\u2014";
+
+const COLOR_BOOKINGS_PAST = "#1e6f7c";
+const COLOR_BOOKINGS_FUTURE = "#9dc5cf";
 
 const chartTheme = createTheme({
   palette: {
@@ -19,70 +22,37 @@ const chartTheme = createTheme({
   },
 });
 
+export type BookingsStackedSlice = {
+  past: (number | null)[];
+  future: (number | null)[];
+};
+
 type Props = {
-  data: number[];
+  data: (number | null)[];
   className?: string;
   /** y-axis tick + mark label format */
   formatY?: (n: number) => string;
-  /** @deprecated Unused with MUI LineChart; kept for call-site compatibility */
+  /** @deprecated Unused with MUI BarChart; kept for call-site compatibility */
   strokeClassName?: string;
-  /** One label per data point (day / week / month) — drives the x-axis */
+  /** One label per data point (week/month/year buckets) — drives the x-axis */
   xLabels?: string[];
+  /** When length matches data, top row uses this (e.g. Hebrew date); x-axis still uses xLabels */
+  titleLabels?: string[];
+  /** Bookings: stacked past (dark) + future (light) per day */
+  bookingsStacked?: BookingsStackedSlice;
 };
 
-function markFillColor(values: number[], dataIndex: number): string {
-  if (dataIndex <= 0) {
-    if (values.length <= 1) return CHART_UP;
-    return values[1] >= values[0] ? CHART_UP : CHART_DOWN;
-  }
-  return values[dataIndex] >= values[dataIndex - 1] ? CHART_UP : CHART_DOWN;
+function nullToZero(n: number | null | undefined): number {
+  return n == null ? 0 : n;
 }
 
-function createStatMark(
-  values: number[],
-  formatY: ((n: number) => string) | undefined,
-  fontSize: number
-): ComponentType<MarkElementProps> {
-  function StatMark(props: MarkElementProps) {
-    const { x, y, dataIndex, hidden } = props;
-    if (hidden) return null;
-    const raw = values[dataIndex];
-    if (raw == null || Number.isNaN(raw)) return null;
-
-    const nx = typeof x === "number" ? x : Number(x);
-    const ny = typeof y === "number" ? y : Number(y);
-    const fill = markFillColor(values, dataIndex);
-    const text = formatY ? formatY(raw) : String(raw);
-
-    return (
-      <g>
-        <circle cx={nx} cy={ny} r={4} fill={fill} stroke="#fff" strokeWidth={1.25} />
-        <text
-          x={nx}
-          y={ny - 12}
-          textAnchor="middle"
-          dominantBaseline="auto"
-          fill={fill}
-          style={{
-            fontWeight: 700,
-            fontSize,
-          }}
-        >
-          {text}
-        </text>
-      </g>
-    );
-  }
-  StatMark.displayName = "StatMark";
-  return StatMark;
-}
-
-export function DashboardMiniChart({ data, className, formatY, xLabels }: Props) {
-  const fontSize = data.length > 8 ? 9 : 11;
+export function DashboardMiniChart({ data, className, formatY, xLabels, titleLabels, bookingsStacked }: Props) {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [highlightedItem, setHighlightedItem] = useState<{ seriesId: string | number; dataIndex: number } | null>(null);
 
   const { seriesData, axisLabels } = useMemo(() => {
     const n = data.length;
-    if (n === 0) return { seriesData: [] as number[], axisLabels: [] as string[] };
+    if (n === 0) return { seriesData: [] as (number | null)[], axisLabels: [] as string[] };
     const labels =
       xLabels && xLabels.length === n
         ? xLabels
@@ -90,12 +60,52 @@ export function DashboardMiniChart({ data, className, formatY, xLabels }: Props)
     return { seriesData: [...data], axisLabels: labels };
   }, [data, xLabels]);
 
-  const tiltXLabels = useMemo(() => axisLabels.some((l) => l.length > 6), [axisLabels]);
+  const useStackedBookings =
+    !!bookingsStacked &&
+    bookingsStacked.past.length === seriesData.length &&
+    bookingsStacked.future.length === seriesData.length;
 
-  const Mark = useMemo(
-    () => createStatMark(seriesData, formatY, fontSize),
-    [seriesData, formatY, fontSize]
+  const isWeekStrip = axisLabels.length === 7;
+  const tiltXLabels = useMemo(
+    () => isWeekStrip || axisLabels.some((l) => l.length > 8),
+    [axisLabels, isWeekStrip]
   );
+  const timelineStep = useMemo(() => {
+    const n = axisLabels.length;
+    if (n <= 8) return 1;
+    if (n <= 12) return 2;
+    if (n <= 30) return 5;
+    return 6;
+  }, [axisLabels.length]);
+
+  const defaultActiveIndex = useMemo(() => {
+    for (let i = seriesData.length - 1; i >= 0; i--) {
+      if (useStackedBookings && bookingsStacked) {
+        const t = nullToZero(bookingsStacked.past[i]) + nullToZero(bookingsStacked.future[i]);
+        if (t > 0) return i;
+      } else if (seriesData[i] != null) return i;
+    }
+    return Math.max(0, seriesData.length - 1);
+  }, [seriesData, useStackedBookings, bookingsStacked]);
+
+  const activeIndex = hoveredIndex != null ? hoveredIndex : defaultActiveIndex;
+  const titleLine =
+    titleLabels &&
+    titleLabels.length === seriesData.length &&
+    titleLabels[activeIndex] !== undefined
+      ? titleLabels[activeIndex]!
+      : axisLabels[activeIndex] ?? "";
+
+  const activeValue = seriesData[activeIndex];
+  const activeTotalNum = useStackedBookings
+    ? nullToZero(bookingsStacked!.past[activeIndex]) + nullToZero(bookingsStacked!.future[activeIndex])
+    : activeValue ?? null;
+  const activeText =
+    activeTotalNum == null
+      ? EM_DASH
+      : formatY
+        ? formatY(Number(activeTotalNum))
+        : String(activeTotalNum);
 
   if (seriesData.length === 0) {
     return (
@@ -104,6 +114,43 @@ export function DashboardMiniChart({ data, className, formatY, xLabels }: Props)
       </div>
     );
   }
+
+  const formatCell = (v: number | null) => (v == null ? EM_DASH : formatY ? formatY(v) : String(v));
+
+  const singleSeries = [
+    {
+      id: "stat",
+      data: seriesData,
+      label: "",
+      color: COLOR_BOOKINGS_PAST,
+      valueFormatter: (v: number | null) => formatCell(v),
+      highlightScope: { highlight: "item" as const, fade: "none" as const },
+    },
+  ];
+
+  const stackedSeries =
+    useStackedBookings && bookingsStacked
+      ? [
+          {
+            id: "bookingsPast",
+            data: bookingsStacked.past.map(nullToZero),
+            stack: "bookings",
+            label: "תורים (עבר / היום)",
+            color: COLOR_BOOKINGS_PAST,
+            valueFormatter: (v: number | null) => formatCell(v),
+            highlightScope: { highlight: "item" as const, fade: "none" as const },
+          },
+          {
+            id: "bookingsFuture",
+            data: bookingsStacked.future.map(nullToZero),
+            stack: "bookings",
+            label: "תורים (עתיד)",
+            color: COLOR_BOOKINGS_FUTURE,
+            valueFormatter: (v: number | null) => formatCell(v),
+            highlightScope: { highlight: "item" as const, fade: "none" as const },
+          },
+        ]
+      : null;
 
   return (
     <ThemeProvider theme={chartTheme}>
@@ -118,18 +165,80 @@ export function DashboardMiniChart({ data, className, formatY, xLabels }: Props)
           },
           "& .MuiChartsAxis-line": { stroke: "rgba(226, 232, 240, 0.95)" },
           "& .MuiChartsAxis-tick": { stroke: "rgba(226, 232, 240, 0.95)" },
+          "& rect[data-highlighted]": {
+            filter: "brightness(1.38) saturate(1.06) !important",
+            opacity: "1 !important",
+          },
+          "& rect[data-faded]": {
+            opacity: "1 !important",
+            filter: "none !important",
+          },
         }}
       >
-        <LineChart
+        <div className="mb-1 text-center">
+          <p className="text-xs font-semibold text-slate-600">{titleLine}</p>
+          <p
+            className={cn(
+              "flex min-h-[2rem] items-center justify-center text-xl font-bold tracking-tight tabular-nums",
+              activeTotalNum == null ? "text-slate-400" : "text-[#1e6f7c]"
+            )}
+          >
+            {activeText}
+          </p>
+        </div>
+        <BarChart
           height={300}
-          margin={{ top: 28, right: 12, bottom: 44, left: 12 }}
-          hideLegend
-          colors={["#1e6f7c"]}
+          margin={{ top: 16, right: 12, bottom: tiltXLabels ? 56 : 44, left: 12 }}
+          hideLegend={!useStackedBookings}
+          colors={useStackedBookings ? [COLOR_BOOKINGS_PAST, COLOR_BOOKINGS_FUTURE] : [COLOR_BOOKINGS_PAST]}
           grid={{ vertical: true, horizontal: true }}
+          highlightedItem={highlightedItem}
+          axisHighlight={{ x: "band", y: "none" }}
+          onHighlightedAxisChange={(axisItems) => {
+            if (!axisItems || axisItems.length === 0) {
+              setHoveredIndex(null);
+              setHighlightedItem(null);
+              return;
+            }
+            const item = axisItems[0];
+            if (item && typeof item.dataIndex === "number") {
+              const idx = item.dataIndex;
+              setHoveredIndex(idx);
+              // Axis fires on every move; it always targeted "past" and overwrote highlight when hovering the
+              // future (light) stack segment — keep that segment highlighted while pointer stays in the band.
+              setHighlightedItem((prev) => {
+                if (!useStackedBookings || !bookingsStacked) {
+                  return { seriesId: "stat", dataIndex: idx };
+                }
+                if (prev?.dataIndex === idx && prev.seriesId === "bookingsFuture") {
+                  return prev;
+                }
+                const past = nullToZero(bookingsStacked.past[idx]);
+                const future = nullToZero(bookingsStacked.future[idx]);
+                const anchor: "bookingsPast" | "bookingsFuture" =
+                  past <= 0 && future > 0 ? "bookingsFuture" : "bookingsPast";
+                return { seriesId: anchor, dataIndex: idx };
+              });
+            }
+          }}
+          onHighlightChange={(item) => {
+            // Bar segments call clearHighlight on pointer-leave even when the cursor is still in the same
+            // x band (empty area above short bars). Ignoring null keeps slot hover driven by the axis listener.
+            if (!item || typeof item.dataIndex !== "number") {
+              return;
+            }
+            setHoveredIndex(item.dataIndex);
+            setHighlightedItem({ seriesId: item.seriesId, dataIndex: item.dataIndex });
+          }}
           xAxis={[
             {
-              scaleType: "point",
+              scaleType: "band",
               data: axisLabels,
+              tickLabelInterval:
+                isWeekStrip || axisLabels.length <= 7
+                  ? () => true
+                  : (_value, index) =>
+                      index === 0 || index === axisLabels.length - 1 || index % timelineStep === 0,
               tickLabelStyle: {
                 angle: tiltXLabels ? -35 : 0,
                 textAnchor: tiltXLabels ? "end" : "middle",
@@ -145,27 +254,15 @@ export function DashboardMiniChart({ data, className, formatY, xLabels }: Props)
               tickLabelStyle: { fontSize: 10 },
             },
           ]}
-          series={[
-            {
-              id: "stat",
-              data: seriesData,
-              label: "",
-              area: true,
-              showMark: true,
-              curve: "monotoneX",
-              valueFormatter: (v) => (v == null ? "" : formatY ? formatY(v) : String(v)),
-            },
-          ]}
+          series={stackedSeries ?? singleSeries}
           slotProps={{
             tooltip: {
-              trigger: "item",
+              trigger: "axis",
             },
-            line: {
-              strokeWidth: 2,
+            legend: {
+              direction: "horizontal",
+              position: { vertical: "top", horizontal: "center" },
             },
-          }}
-          slots={{
-            mark: Mark,
           }}
         />
       </Box>
