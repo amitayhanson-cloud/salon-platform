@@ -667,7 +667,7 @@ export default function BookingPage() {
   const [cancellingActiveBooking, setCancellingActiveBooking] = useState(false);
   /** After successful cancel: popup then redirect home */
   const [cancelSuccessModal, setCancelSuccessModal] = useState(false);
-  const cancelSuccessRedirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelSuccessRedirectTimerRef = useRef<number | null>(null);
 
   /** Brief green glow before auto-advance so the choice feels confirmed */
   const SELECTION_FLASH_MS = 480;

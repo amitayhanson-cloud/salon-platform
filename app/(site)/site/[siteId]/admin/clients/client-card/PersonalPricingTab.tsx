@@ -16,6 +16,26 @@ import type { PricingItem } from "@/types/pricingItem";
 import { AccordionItem } from "@/components/admin/Accordion";
 import { Save, X, Loader2 } from "lucide-react";
 
+function normKey(v: string | undefined | null): string {
+  return String(v ?? "").trim();
+}
+
+/** Pricing rows may reference SiteService.id or service name (legacy). */
+function pricingItemBelongsToService(item: PricingItem, service: SiteService): boolean {
+  const itemKey = normKey(item.serviceId || item.service);
+  if (!itemKey) return false;
+  return itemKey === normKey(service.id) || itemKey === normKey(service.name);
+}
+
+function sortPricingItemsForDisplay(items: PricingItem[]): PricingItem[] {
+  return [...items].sort((a, b) => {
+    const oa = a.order ?? 999999;
+    const ob = b.order ?? 999999;
+    if (oa !== ob) return oa - ob;
+    return (a.type || "").localeCompare(b.type || "", "he");
+  });
+}
+
 interface PersonalPricingTabProps {
   siteId: string;
   phone: string; // phone number (document ID)
@@ -47,15 +67,13 @@ export default function PersonalPricingTab({
     const unsubscribe = subscribeSiteServices(
       siteId,
       (svcs) => {
-        const enabledServices = svcs
-          .filter((s) => s.enabled !== false)
-          .sort((a, b) => {
-            if (a.sortOrder !== undefined && b.sortOrder !== undefined) {
-              return a.sortOrder - b.sortOrder;
-            }
-            return a.name.localeCompare(b.name);
-          });
-        setServices(enabledServices);
+        const allServices = [...svcs].sort((a, b) => {
+          if (a.sortOrder !== undefined && b.sortOrder !== undefined) {
+            return a.sortOrder - b.sortOrder;
+          }
+          return a.name.localeCompare(b.name, "he");
+        });
+        setServices(allServices);
         setServicesLoading(false);
       },
       (err) => {
@@ -159,18 +177,22 @@ export default function PersonalPricingTab({
     return () => unsubscribe();
   }, [siteId, phone]);
 
-  // Group pricing items by service
-  const itemsByService = useMemo(() => {
-    return pricingItems.reduce((acc, item) => {
-      const serviceId = item.serviceId || item.service;
-      if (!serviceId) return acc;
-      if (!acc[serviceId]) {
-        acc[serviceId] = [];
+  /** Pricing items that did not match any site service (still editable). */
+  const orphanPricingItems = useMemo(() => {
+    if (pricingItems.length === 0 || services.length === 0) {
+      return pricingItems;
+    }
+    const matched = new Set<string>();
+    for (const item of pricingItems) {
+      for (const svc of services) {
+        if (pricingItemBelongsToService(item, svc)) {
+          matched.add(item.id);
+          break;
+        }
       }
-      acc[serviceId].push(item);
-      return acc;
-    }, {} as Record<string, PricingItem[]>);
-  }, [pricingItems]);
+    }
+    return pricingItems.filter((i) => !matched.has(i.id));
+  }, [pricingItems, services]);
 
   // Build override map by serviceTypeId
   // personalPricing is already Record<string, number>
@@ -389,6 +411,93 @@ export default function PersonalPricingTab({
     );
   }
 
+  const renderPricingRows = (rows: PricingItem[], serviceLabelForSave: string) =>
+    rows.map((item) => {
+      const defaultPrice = getDefaultPrice(item);
+      const personalPrice = overrideByServiceTypeId.get(item.id);
+      const editingPrice = editingPrices.get(item.id) || "";
+      const hasOverride = personalPrice !== undefined;
+
+      return (
+        <tr
+          key={item.id}
+          className="border-b border-slate-200 hover:bg-slate-50 transition-colors"
+        >
+          <td className="p-3">
+            <span className="font-medium text-slate-900">
+              {item.type || "כללי"}
+            </span>
+          </td>
+          <td className="p-3">
+            <span className="text-slate-600">
+              {defaultPrice > 0 ? `₪${defaultPrice.toFixed(2)}` : "—"}
+            </span>
+          </td>
+          <td className="p-3">
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={editingPrice}
+                onChange={(e) => handlePriceChange(item.id, e.target.value)}
+                placeholder={hasOverride ? personalPrice.toString() : "—"}
+                className="w-24 px-2 py-1.5 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
+                dir="ltr"
+              />
+              <span className="text-xs text-slate-500">₪</span>
+            </div>
+          </td>
+          <td className="p-3">
+            <div className="flex items-center gap-2 justify-start">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleSave(item.id, serviceLabelForSave);
+                }}
+                disabled={savingServiceTypeId === item.id || resettingServiceTypeId === item.id}
+                className="flex items-center gap-1 rounded bg-caleno-ink px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingServiceTypeId === item.id ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>שומר...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>שמור</span>
+                  </>
+                )}
+              </button>
+              {hasOverride && (
+                <button
+                  type="button"
+                  onClick={() => handleReset(item.id)}
+                  disabled={savingServiceTypeId === item.id || resettingServiceTypeId === item.id}
+                  className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                  {resettingServiceTypeId === item.id ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>מאפס...</span>
+                    </>
+                  ) : (
+                    <>
+                      <X className="w-4 h-4" />
+                      <span>איפוס</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </td>
+        </tr>
+      );
+    });
+
   return (
     <div className="space-y-4" dir="rtl">
       {/* Success/Error Messages */}
@@ -406,29 +515,32 @@ export default function PersonalPricingTab({
       {/* Services Accordion */}
       <div className="space-y-3">
         {services.map((service) => {
-          const serviceId = service.name; // Use service name as ID (matches pricing items)
-          const items = itemsByService[serviceId] || [];
-          const isOpen = openServices.has(serviceId);
-
-          if (items.length === 0) {
-            return null; // Skip services with no pricing items
-          }
+          const items = sortPricingItemsForDisplay(
+            pricingItems.filter((item) => pricingItemBelongsToService(item, service))
+          );
+          const isOpen = openServices.has(service.id);
 
           return (
             <AccordionItem
               key={service.id}
               title={
-                <div className="flex items-center justify-between w-full pr-2">
-                  <span className="font-semibold text-slate-900">{service.name}</span>
-                  <span className="text-xs text-slate-500">
-                    {items.length} {items.length === 1 ? "סוג מחיר" : "סוגי מחיר"}
+                <div className="flex items-center justify-between w-full pr-2 gap-2">
+                  <span className="font-semibold text-slate-900">
+                    {service.name}
+                    {service.enabled === false && (
+                      <span className="mr-2 text-xs font-normal text-slate-500">(מושבת)</span>
+                    )}
+                  </span>
+                  <span className="text-xs text-slate-500 shrink-0">
+                    {items.length === 0
+                      ? "אין סוגי מחיר במחירון"
+                      : `${items.length} ${items.length === 1 ? "סוג מחיר" : "סוגי מחיר"}`}
                   </span>
                 </div>
               }
               isOpen={isOpen}
-              onToggle={() => handleToggleService(serviceId)}
+              onToggle={() => handleToggleService(service.id)}
             >
-              {/* Service Types Table */}
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
                   <thead>
@@ -440,102 +552,57 @@ export default function PersonalPricingTab({
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((item) => {
-                      const defaultPrice = getDefaultPrice(item);
-                      const personalPrice = overrideByServiceTypeId.get(item.id);
-                      const editingPrice = editingPrices.get(item.id) || "";
-                      const hasOverride = personalPrice !== undefined;
-
-                      return (
-                        <tr
-                          key={item.id}
-                          className="border-b border-slate-200 hover:bg-slate-50 transition-colors"
-                        >
-                          <td className="p-3">
-                            <span className="font-medium text-slate-900">
-                              {item.type || "כללי"}
-                            </span>
-                          </td>
-                          <td className="p-3">
-                            <span className="text-slate-600">
-                              {defaultPrice > 0 ? `₪${defaultPrice.toFixed(2)}` : "—"}
-                            </span>
-                          </td>
-                          <td className="p-3">
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={editingPrice}
-                                onChange={(e) => handlePriceChange(item.id, e.target.value)}
-                                placeholder={hasOverride ? personalPrice.toString() : "—"}
-                                className="w-24 px-2 py-1.5 border border-slate-300 rounded text-sm text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
-                                dir="ltr"
-                              />
-                              <span className="text-xs text-slate-500">₪</span>
-                            </div>
-                          </td>
-                          <td className="p-3">
-                            <div className="flex items-center gap-2 justify-start">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  console.log("[PersonalPricingTab] SAVE BUTTON CLICKED", {
-                                    serviceId,
-                                    serviceTypeId: item.id,
-                                    phone,
-                                    siteId,
-                                  });
-                                  handleSave(item.id, serviceId);
-                                }}
-                                disabled={savingServiceTypeId === item.id || resettingServiceTypeId === item.id}
-                                className="flex items-center gap-1 rounded bg-caleno-ink px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                {savingServiceTypeId === item.id ? (
-                                  <>
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    <span>שומר...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Save className="w-4 h-4" />
-                                    <span>שמור</span>
-                                  </>
-                                )}
-                              </button>
-                              {hasOverride && (
-                                <button
-                                  onClick={() => handleReset(item.id)}
-                                  disabled={savingServiceTypeId === item.id || resettingServiceTypeId === item.id}
-                                  className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                                >
-                                  {resettingServiceTypeId === item.id ? (
-                                    <>
-                                      <Loader2 className="w-4 h-4 animate-spin" />
-                                      <span>מאפס...</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <X className="w-4 h-4" />
-                                      <span>איפוס</span>
-                                    </>
-                                  )}
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {items.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="p-4 text-sm text-slate-500 text-right">
+                          אין פריטי מחיר משויכים לשירות זה במחירון. הוסיפו סוג מחיר בעמוד השירותים והמחירים.
+                        </td>
+                      </tr>
+                    ) : (
+                      renderPricingRows(items, service.id)
+                    )}
                   </tbody>
                 </table>
               </div>
             </AccordionItem>
           );
         })}
+
+        {orphanPricingItems.length > 0 && (
+          <AccordionItem
+            key="__orphan_pricing__"
+            title={
+              <div className="flex items-center justify-between w-full pr-2">
+                <span className="font-semibold text-amber-900">פריטי מחיר ללא שירות תואם</span>
+                <span className="text-xs text-slate-500">
+                  {orphanPricingItems.length}{" "}
+                  {orphanPricingItems.length === 1 ? "פריט" : "פריטים"}
+                </span>
+              </div>
+            }
+            isOpen={openServices.has("__orphan_pricing__")}
+            onToggle={() => handleToggleService("__orphan_pricing__")}
+          >
+            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg p-2 mb-3 text-right">
+              השורות האלה לא תואמות לאף שירות ברשימת השירותים (למשל אחרי שינוי שם או מזהה). עדיין ניתן לעדכן תמחור אישי לפי מזהה סוג המחיר.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b-2 border-slate-300">
+                    <th className="text-right p-3 text-sm font-semibold text-slate-700">שם סוג</th>
+                    <th className="text-right p-3 text-sm font-semibold text-slate-700">מחיר ברירת מחדל</th>
+                    <th className="text-right p-3 text-sm font-semibold text-slate-700">מחיר אישי</th>
+                    <th className="text-right p-3 text-sm font-semibold text-slate-700">פעולות</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {renderPricingRows(sortPricingItemsForDisplay(orphanPricingItems), "orphan")}
+                </tbody>
+              </table>
+            </div>
+          </AccordionItem>
+        )}
       </div>
 
       {/* Info text */}

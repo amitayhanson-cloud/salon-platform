@@ -10,19 +10,11 @@ import { isFollowUpBooking } from "@/lib/normalizeBooking";
 import { isClosedDate } from "@/lib/closedDates";
 import type { BookingSettings } from "@/types/bookingSettings";
 import { defaultBookingSettings } from "@/types/bookingSettings";
-
-const CANCEL_ARCHIVE_REASONS = [
-  "customer_cancelled_via_whatsapp",
-  "customer_cancelled_via_public_booking",
-  "admin_cancel",
-  "auto",
-  "manual",
-] as const;
-
-function isCancelledLiveStatus(s: string | undefined): boolean {
-  const x = (s ?? "").toLowerCase();
-  return x === "cancelled" || x === "canceled" || x === "cancelled_by_salon" || x === "no_show";
-}
+import {
+  countArchivedCancelledInAppointmentMonthAdmin,
+  countCancelledInBookingsMonthSnapshot,
+  isDocCancelled,
+} from "@/lib/cancelledBookingShared";
 
 function daysInCalendarMonth(year: number, month1Based: number): number {
   return new Date(year, month1Based, 0).getDate();
@@ -129,21 +121,7 @@ export async function GET(request: Request) {
     const dim = daysInCalendarMonth(year, month1);
     const monthEnd = `${year}-${String(month1).padStart(2, "0")}-${String(dim).padStart(2, "0")}`;
 
-    let cancellationsArchived: number | null = null;
-    try {
-      const archSnap = await db
-        .collectionGroup("archivedServiceTypes")
-        .where("archiveSiteId", "==", siteId)
-        .where("cancellationMonthKey", "==", monthKey)
-        .where("archivedReason", "in", [...CANCEL_ARCHIVE_REASONS])
-        .get();
-      cancellationsArchived = archSnap.size;
-    } catch (e) {
-      console.warn("[dashboard-metrics] archived cancellation query failed (index may be deploying)", e);
-      cancellationsArchived = null;
-    }
-
-    const [settingsSnap, workersSnap, bookingsSnap] = await Promise.all([
+    const [settingsSnap, workersSnap, bookingsSnap, cancellationsFromArchive] = await Promise.all([
       db.collection("sites").doc(siteId).collection("settings").doc("booking").get(),
       db.collection("sites").doc(siteId).collection("workers").get(),
       db
@@ -153,7 +131,12 @@ export async function GET(request: Request) {
         .where("dateISO", ">=", monthStart)
         .where("dateISO", "<=", monthEnd)
         .get(),
+      countArchivedCancelledInAppointmentMonthAdmin(db, siteId, monthStart, monthEnd),
     ]);
+
+    /** Same cancellation rules as /admin/.../cancelled; appointment date in this month */
+    const cancellationsFromLiveBookings = countCancelledInBookingsMonthSnapshot(bookingsSnap.docs);
+    const cancellationsThisMonth = cancellationsFromLiveBookings + cancellationsFromArchive;
 
     const settingsData = settingsSnap.exists ? (settingsSnap.data() as Record<string, unknown>) : {};
     const bookingSettings: BookingSettings = {
@@ -179,7 +162,6 @@ export async function GET(request: Request) {
     }
 
     let bookedMinutes = 0;
-    let liveCancelledInMonth = 0;
     const trafficMap = new Map<string, number>();
 
     for (const doc of bookingsSnap.docs) {
@@ -187,8 +169,7 @@ export async function GET(request: Request) {
       if (d.isArchived === true) continue;
       if (isFollowUpBooking(d)) continue;
 
-      if (isCancelledLiveStatus(d.status as string | undefined)) {
-        liveCancelledInMonth += 1;
+      if (isDocCancelled(d)) {
         continue;
       }
 
@@ -201,9 +182,6 @@ export async function GET(request: Request) {
       }
     }
 
-    const cancellationsThisMonth =
-      cancellationsArchived != null ? cancellationsArchived + liveCancelledInMonth : null;
-
     const utilizationPercent =
       capacityMinutes > 0 ? Math.min(100, Math.round((bookedMinutes / capacityMinutes) * 1000) / 10) : null;
 
@@ -215,17 +193,13 @@ export async function GET(request: Request) {
     const totalBookingsForTraffic = bookingsSnap.docs.filter((doc) => {
       const d = doc.data() as Record<string, unknown>;
       if (d.isArchived === true || isFollowUpBooking(d)) return false;
-      return !isCancelledLiveStatus(d.status as string | undefined);
+      return !isDocCancelled(d);
     }).length;
 
     return NextResponse.json({
       ok: true,
       monthKey,
       cancellationsThisMonth,
-      cancellationsNote:
-        cancellationsArchived === null
-          ? "מונה ביטולים מהארכיון יופיע אחרי פריסת אינדקס Firestore (archivedServiceTypes)."
-          : undefined,
       utilizationPercent,
       bookedHoursThisMonth: Math.round((bookedMinutes / 60) * 10) / 10,
       availableHoursThisMonth: Math.round((capacityMinutes / 60) * 10) / 10,

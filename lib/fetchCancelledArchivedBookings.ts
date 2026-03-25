@@ -14,30 +14,9 @@ import {
   clientArchivedServiceTypesCollection,
 } from "@/lib/firestorePaths";
 import { isFollowUpBooking } from "@/lib/normalizeBooking";
+import { CANCELLED_STATUSES, isDocCancelled } from "@/lib/cancelledBookingShared";
 
-export const CANCELLED_STATUSES = [
-  "cancelled",
-  "canceled",
-  "cancelled_by_salon",
-  "no_show",
-] as const;
-
-function isCancelledStatus(s: string | null | undefined): boolean {
-  if (!s || typeof s !== "string") return false;
-  return CANCELLED_STATUSES.includes(s.toLowerCase() as (typeof CANCELLED_STATUSES)[number]);
-}
-
-/** Check if doc indicates cancelled (status, statusAtArchive, or displayedStatus) */
-function isDocCancelled(data: Record<string, unknown>): boolean {
-  const status = (data.status as string) ?? "";
-  const statusAtArchive = (data.statusAtArchive as string) ?? "";
-  const displayedStatus = (data.displayedStatus as string) ?? "";
-  return (
-    isCancelledStatus(status) ||
-    isCancelledStatus(statusAtArchive) ||
-    isCancelledStatus(displayedStatus)
-  );
-}
+export { CANCELLED_STATUSES } from "@/lib/cancelledBookingShared";
 
 export interface CancelledArchiveItem {
   id: string;

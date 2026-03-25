@@ -134,9 +134,9 @@ export async function cancelBookingsCascade(
         cancelledAt: serverTimestamp(),
         isArchived: true,
         archivedAt: serverTimestamp(),
-        archivedReason: (isWhatsApp
+        archivedReason: isWhatsApp
           ? "customer_cancelled_via_whatsapp"
-          : "customer_cancelled_via_public_booking") as const,
+          : "customer_cancelled_via_public_booking",
         updatedAt: serverTimestamp(),
       }
     : {
