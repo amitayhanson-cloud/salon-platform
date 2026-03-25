@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { motion } from "framer-motion";
 import { useAuth } from "@/components/auth/AuthProvider";
 import CalenoLoading from "@/components/CalenoLoading";
 import { fetchSiteStats, type SiteStats } from "@/lib/fetchSiteStats";
@@ -17,10 +18,63 @@ import {
   XCircle,
   Percent,
   Link2,
+  type LucideIcon,
 } from "lucide-react";
 import { AdminCard } from "@/components/admin/AdminCard";
 import { AdminStatCard } from "@/components/admin/AdminStatCard";
+import { DashboardStatsLoading } from "@/components/admin/DashboardStatsLoading";
+import {
+  ExpandableAnalyticsStatCard,
+  type DashboardChartSlices,
+} from "@/components/admin/dashboard/ExpandableAnalyticsStatCard";
 import { DEFAULT_WHATSAPP_USAGE_LIMIT } from "@/lib/whatsapp/constants";
+import {
+  fetchDashboardChartSeries,
+  buildWhatsappChartSlices,
+  type DashboardChartSeriesBundle,
+  type MetricSlice,
+} from "@/lib/fetchDashboardWeeklySeries";
+import {
+  getMockValuesForGranularity,
+  mockChartLabels,
+  type AnalyticsMetricKind,
+} from "@/lib/analytics/MockData";
+
+type MetricValueKey = Exclude<keyof MetricSlice, "labels">;
+
+const METRIC_SLICE_KEY: Record<Exclude<AnalyticsMetricKind, "whatsapp">, MetricValueKey> = {
+  revenue: "revenue",
+  bookings: "bookings",
+  clients: "clientsCumulative",
+  newClients: "newClients",
+  cancellations: "cancellations",
+  utilization: "utilizationPercent",
+  traffic: "trafficAttributedBookings",
+};
+
+function buildDashboardChartSlices(
+  kind: AnalyticsMetricKind,
+  bundle: DashboardChartSeriesBundle | null,
+  whatsappUsed: number,
+  chartFetchedAt: Date | null
+): DashboardChartSlices {
+  if (kind === "whatsapp") {
+    return buildWhatsappChartSlices(whatsappUsed, chartFetchedAt ?? new Date());
+  }
+  if (!bundle) {
+    return {
+      day: { labels: mockChartLabels("day"), values: getMockValuesForGranularity(kind, "day") },
+      week: { labels: mockChartLabels("week"), values: getMockValuesForGranularity(kind, "week") },
+      month: { labels: mockChartLabels("month"), values: getMockValuesForGranularity(kind, "month") },
+    };
+  }
+  const key = METRIC_SLICE_KEY[kind];
+  return {
+    day: { labels: bundle.day.labels, values: [...bundle.day[key]] },
+    week: { labels: bundle.week.labels, values: [...bundle.week[key]] },
+    month: { labels: bundle.month.labels, values: [...bundle.month[key]] },
+  };
+}
 
 type DashboardMetrics = {
   ok?: boolean;
@@ -47,6 +101,8 @@ export default function AdminHomePage() {
   const [dashMetrics, setDashMetrics] = useState<DashboardMetrics | null>(null);
   const [dashLoading, setDashLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [chartBundle, setChartBundle] = useState<DashboardChartSeriesBundle | null>(null);
+  const [chartFetchedAt, setChartFetchedAt] = useState<Date | null>(null);
 
   const adminBasePath = getAdminBasePathFromSiteId(siteId);
 
@@ -146,6 +202,24 @@ export default function AdminHomePage() {
     };
   }, [siteId, firebaseUser]);
 
+  useEffect(() => {
+    if (!siteId || siteId === "me" || !firebaseUser) {
+      setChartBundle(null);
+      setChartFetchedAt(null);
+      return;
+    }
+    let cancelled = false;
+    fetchDashboardChartSeries(siteId).then((b) => {
+      if (!cancelled) {
+        setChartBundle(b);
+        setChartFetchedAt(b.fetchedAt);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [siteId, firebaseUser]);
+
   const revenueFormatted =
     stats?.revenueThisMonth != null
       ? `\u200E${new Intl.NumberFormat("he-IL", {
@@ -155,7 +229,28 @@ export default function AdminHomePage() {
         }).format(stats.revenueThisMonth)}`
       : null;
 
-  const statCards = useMemo(() => {
+  type DashboardStatRow =
+    | {
+        key: string;
+        kind: "link";
+        label: string;
+        value: number | string | null;
+        href: string;
+        icon: LucideIcon;
+        title?: string;
+      }
+    | {
+        key: string;
+        kind: "analytics";
+        metricKind: AnalyticsMetricKind;
+        label: string;
+        value: number | string | null;
+        href: string;
+        icon: LucideIcon;
+        title?: string;
+      };
+
+  const statCards = useMemo((): DashboardStatRow[] => {
     const trafficTop = (dashMetrics?.trafficBySource ?? []).slice(0, 3);
     const trafficValue =
       trafficTop.length > 0 ? trafficTop.map((t) => `${t.source}: ${t.count}`).join(" · ") : null;
@@ -173,36 +268,53 @@ export default function AdminHomePage() {
 
     return [
       {
+        key: "clients",
+        kind: "analytics",
+        metricKind: "clients" as const,
         label: "לקוחות",
         value: stats?.clientsCount ?? null,
         href: `${adminBasePath}/clients/client-card`,
         icon: Users,
       },
       {
+        key: "newClients",
+        kind: "analytics",
+        metricKind: "newClients" as const,
         label: "לקוחות חדשים החודש",
         value: stats?.newCustomersThisMonth ?? null,
         href: `${adminBasePath}/clients/client-card`,
         icon: UserPlus,
       },
       {
+        key: "bookingsToday",
+        kind: "link",
         label: "תורים היום",
         value: stats?.bookingsToday ?? null,
         href: `${adminBasePath}/bookings`,
         icon: Calendar,
       },
       {
+        key: "bookingsMonth",
+        kind: "analytics",
+        metricKind: "bookings",
         label: "תורים החודש",
         value: stats?.bookingsThisMonth ?? null,
         href: `${adminBasePath}/bookings`,
         icon: CalendarDays,
       },
       {
+        key: "revenue",
+        kind: "analytics",
+        metricKind: "revenue",
         label: "הכנסות החודש",
         value: revenueFormatted,
         href: `${adminBasePath}/bookings`,
         icon: Banknote,
       },
       {
+        key: "cancellations",
+        kind: "analytics",
+        metricKind: "cancellations" as const,
         label: "ביטולים החודש",
         value: dashMetrics?.cancellationsThisMonth ?? null,
         href: `${adminBasePath}/bookings`,
@@ -210,18 +322,27 @@ export default function AdminHomePage() {
         title: dashMetrics?.cancellationsNote,
       },
       {
+        key: "util",
+        kind: "analytics",
+        metricKind: "utilization" as const,
         label: "ניצולת זמן",
         value: utilValue,
         href: `${adminBasePath}/bookings`,
         icon: Percent,
       },
       {
+        key: "traffic",
+        kind: "analytics",
+        metricKind: "traffic" as const,
         label: "מקור הגעה (קישור)",
         value: trafficValue,
         href: `${adminBasePath}/site`,
         icon: Link2,
       },
       {
+        key: "whatsapp",
+        kind: "analytics",
+        metricKind: "whatsapp",
         label: "הודעות WhatsApp החודש",
         value:
           whatsAppThisMonth != null
@@ -232,6 +353,11 @@ export default function AdminHomePage() {
       },
     ];
   }, [adminBasePath, dashMetrics, revenueFormatted, stats, whatsAppThisMonth]);
+
+  const formatRevenueAxis = (n: number) =>
+    `\u200E${new Intl.NumberFormat("he-IL", { style: "currency", currency: "ILS", maximumFractionDigits: 0 }).format(n)}`;
+
+  const formatPercentAxis = (n: number) => `\u200E${Math.round(n)}%`;
 
   const handleLogout = async () => {
     if (loggingOut) return;
@@ -287,30 +413,53 @@ export default function AdminHomePage() {
                     סטטיסטיקות העסק
                   </h2>
                   {statsLoading || whatsAppLoading || dashLoading ? (
-                    <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
-                        <div
-                          key={i}
-                          className="flex min-h-[7.5rem] flex-col rounded-2xl border border-[#E2E8F0] bg-[rgba(30,111,124,0.06)] p-4 animate-pulse"
-                        >
-                          <div className="mb-3 h-4 w-16 rounded bg-[#E2E8F0]" />
-                          <div className="h-8 w-12 rounded bg-[#E2E8F0]" />
-                        </div>
-                      ))}
-                    </div>
+                    <DashboardStatsLoading />
                   ) : (
-                    <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-                      {statCards.map(({ label, value, href, icon, title }) => (
-                        <AdminStatCard
-                          key={label}
-                          label={label}
-                          value={value}
-                          href={href}
-                          icon={icon}
-                          title={title}
-                        />
-                      ))}
-                    </div>
+                    <motion.div layout className="grid grid-cols-2 gap-4 md:grid-cols-3">
+                      {statCards.map((row) =>
+                        row.kind === "analytics" ? (
+                          <ExpandableAnalyticsStatCard
+                            key={row.key}
+                            label={row.label}
+                            value={row.value}
+                            href={row.href}
+                            icon={row.icon}
+                            title={row.title}
+                            chartSlices={buildDashboardChartSlices(
+                              row.metricKind,
+                              chartBundle,
+                              whatsAppThisMonth?.used ?? 0,
+                              chartFetchedAt
+                            )}
+                            formatChartY={
+                              row.metricKind === "revenue"
+                                ? formatRevenueAxis
+                                : row.metricKind === "utilization"
+                                  ? formatPercentAxis
+                                  : (n) => `\u200E${Math.round(n)}`
+                            }
+                            detailNote={
+                              row.metricKind === "cancellations"
+                                ? "הגרף מבוסס על ביטולים במסמכי התורים; לא כולל כל הארכיון."
+                                : row.metricKind === "whatsapp"
+                                  ? "אין יומן שליחות לפי שעה/יום; הגרף מפיץ את ספירת החודש הנוכחי על פי 24 שעות / 7 ימים / 30 ימים."
+                                  : row.metricKind === "revenue"
+                                    ? "הגרף מציג הכנסות מתורים שאינם מבוטלים ובסטטוס מאושר/פעיל/נקבע; המספר הגדול למעלה הוא סיכום החודש לפי כל התורים ביומן."
+                                    : undefined
+                            }
+                          />
+                        ) : (
+                          <AdminStatCard
+                            key={row.key}
+                            label={row.label}
+                            value={row.value}
+                            href={row.href}
+                            icon={row.icon}
+                            title={row.title}
+                          />
+                        )
+                      )}
+                    </motion.div>
                   )}
                 </div>
 

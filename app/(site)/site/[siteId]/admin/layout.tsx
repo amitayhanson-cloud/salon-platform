@@ -8,6 +8,8 @@ export const dynamic = "force-dynamic";
 import AdminHeader from "@/components/admin/AdminHeader";
 import { AdminHelpPanel } from "@/components/admin/AdminHelpPanel";
 import { UnsavedChangesProvider } from "@/components/admin/UnsavedChangesContext";
+import { NavigationLoadingLayer } from "@/components/navigation/NavigationLoadingLayer";
+import { adminNavigationPredicate } from "@/components/navigation/navigationLoadingPredicates";
 import { useAuth } from "@/components/auth/AuthProvider";
 import CalenoLoading from "@/components/CalenoLoading";
 
@@ -381,38 +383,43 @@ export default function AdminLayout({
   const isDayView = typeof pathname === "string" && pathname.includes("/bookings/day");
 
   return (
-    <div className="min-h-screen w-full overflow-x-hidden relative">
-      {/* Fixed radial gradient: Caleno at center, white at edges (match landing) */}
-      <div
-        aria-hidden
-        className="fixed inset-0 -z-10"
-        style={{
-          backgroundImage: "radial-gradient(ellipse 100% 100% at 50% 50%, #cceef1 0%, #e6f5f7 25%, #f0f9fa 50%, #f8fcfd 75%, #ffffff 100%)",
-        }}
-      />
-      {lazyCleanupToast && (
+    <NavigationLoadingLayer
+      variant="caleno"
+      shouldShowForNavigation={adminNavigationPredicate}
+    >
+      <div className="min-h-screen w-full overflow-x-hidden relative">
+        {/* Fixed radial gradient: Caleno at center, white at edges (match landing) */}
         <div
-          role="alert"
-          className="fixed top-4 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-[#0F172A] px-4 py-2 text-sm text-white shadow-lg"
-        >
-          {lazyCleanupToast}
-        </div>
-      )}
-      <UnsavedChangesProvider>
-        <div className="relative z-10 w-full overflow-x-hidden">
-          {/* z-40 keeps header above scrolling main; modals use data-admin-modal-overlay + globals.css to hide header while open */}
-          <div className="relative z-40 admin-layout-header-root">
-            <AdminHeader onOpenHelp={() => setHelpOpen(true)} />
-          </div>
-          <AdminHelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} />
-          {/* Full-width content area: no top padding on day view so calendar sits under header */}
-          <main
-            className={`relative z-0 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ${isDayView ? "pt-0 pb-4" : "py-8"}`}
+          aria-hidden
+          className="fixed inset-0 -z-10"
+          style={{
+            backgroundImage: "radial-gradient(ellipse 100% 100% at 50% 50%, #cceef1 0%, #e6f5f7 25%, #f0f9fa 50%, #f8fcfd 75%, #ffffff 100%)",
+          }}
+        />
+        {lazyCleanupToast && (
+          <div
+            role="alert"
+            className="fixed top-4 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-[#0F172A] px-4 py-2 text-sm text-white shadow-lg"
           >
-            {children}
-          </main>
-        </div>
-      </UnsavedChangesProvider>
-    </div>
+            {lazyCleanupToast}
+          </div>
+        )}
+        <UnsavedChangesProvider>
+          <div className="relative z-10 w-full overflow-x-hidden">
+            {/* z-40 keeps header above scrolling main; modals use data-admin-modal-overlay + globals.css to hide header while open */}
+            <div className="relative z-40 admin-layout-header-root">
+              <AdminHeader onOpenHelp={() => setHelpOpen(true)} />
+            </div>
+            <AdminHelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} />
+            {/* Full-width content area: no top padding on day view so calendar sits under header */}
+            <main
+              className={`relative z-0 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ${isDayView ? "pt-0 pb-4" : "py-8"}`}
+            >
+              {children}
+            </main>
+          </div>
+        </UnsavedChangesProvider>
+      </div>
+    </NavigationLoadingLayer>
   );
 }

@@ -21,6 +21,7 @@ import { DEFAULT_CONTENT, getContentValue } from "@/lib/editor/defaultContent";
 import type { SiteContent } from "@/types/siteConfig";
 import { slideInFromLeft, slideInFromRight } from "@/lib/animations";
 import { getSiteUrl } from "@/lib/tenant";
+import { BookNowNavButton } from "@/components/publicSite/BookNowNavButton";
 import { resolveReviewAvatarUrl } from "@/lib/reviewAvatar";
 import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 import WaveDivider from "./components/WaveDivider";
@@ -424,9 +425,9 @@ export default function HairLuxurySite({
             }}
           >
             {bookingEnabled(config) && (
-              <Link
+              <BookNowNavButton
                 href={getSiteUrl(config?.slug, siteId, "/book")}
-                className="inline-flex items-center justify-center min-h-[48px] px-8 sm:px-10 py-3.5 sm:py-4 rounded-full text-base sm:text-lg font-semibold shadow-xl transition-all duration-200 hover:opacity-95 hover:scale-[1.02] active:scale-[0.98]"
+                className="inline-flex items-center justify-center min-h-[48px] px-8 sm:px-10 py-3.5 sm:py-4 rounded-full text-base sm:text-lg font-semibold shadow-xl transition-all duration-200 hover:opacity-95 hover:scale-[1.02] active:scale-[0.98] disabled:cursor-wait disabled:hover:scale-100"
                 style={{
                   backgroundColor: "var(--hero-primaryBtnBg)",
                   color: "var(--hero-primaryBtnText)",
@@ -438,7 +439,7 @@ export default function HairLuxurySite({
                 data-edit-label="כפתור ראשי (קביעת תור)"
               >
                 {ct("hero", "ctaPrimaryText")}
-              </Link>
+              </BookNowNavButton>
             )}
             <button
               type="button"

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { getSiteUrl } from "@/lib/tenant";
+import { BookNowNavButton } from "@/components/publicSite/BookNowNavButton";
 import { DEFAULT_CONTENT } from "@/lib/editor/defaultContent";
 import type { SiteContent } from "@/types/siteConfig";
 
@@ -228,14 +229,14 @@ export default function SalonHeader({
                 </button>
               ))}
               {isBookingEnabled ? (
-                <Link
+                <BookNowNavButton
                   href={getSiteUrl(slug, siteId, "/book")}
-                  className="whitespace-nowrap rounded-full px-5 py-2.5 text-sm font-semibold transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/45 focus-visible:ring-offset-0 active:outline-none"
+                  className="whitespace-nowrap rounded-full px-5 py-2.5 text-sm font-semibold transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/45 focus-visible:ring-offset-0 active:outline-none disabled:cursor-wait disabled:opacity-90"
                   style={{ backgroundColor: ctaBg, color: ctaText }}
                   {...edit("headerCtaButton")}
                 >
                   {navLabel("navCtaBook")}
-                </Link>
+                </BookNowNavButton>
               ) : (
                 <button
                   type="button"
@@ -326,15 +327,15 @@ export default function SalonHeader({
               </button>
             ))}
             {isBookingEnabled ? (
-              <Link
+              <BookNowNavButton
                 href={getSiteUrl(slug, siteId, "/book")}
                 onClick={() => setMobileMenuOpen(false)}
-                className="mt-2 whitespace-nowrap rounded-full px-5 py-3 text-center text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-white/45 focus-visible:ring-offset-0 active:outline-none"
+                className="mt-2 w-full whitespace-nowrap rounded-full px-5 py-3 text-center text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-white/45 focus-visible:ring-offset-0 active:outline-none disabled:cursor-wait"
                 style={{ backgroundColor: ctaBg, color: ctaText }}
                 {...edit("headerCtaButton")}
               >
                 {navLabel("navCtaBook")}
-              </Link>
+              </BookNowNavButton>
             ) : (
               <button
                 type="button"

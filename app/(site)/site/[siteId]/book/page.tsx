@@ -129,7 +129,7 @@ function normalizePhases(value: unknown): PhaseForDate[] | undefined {
   return out.length ? out : undefined;
 }
 
-type BookingStep = 1 | 2 | 3 | 4 | 5 | 6 | 7; // 6 = review, 7 = success
+type BookingStep = 1 | 2 | 3 | 4 | 5; // 1 פרטים, 2 שירות+עובד, 3 תאריך+שעה, 4 סיכום, 5 הצלחה
 
 /** Payload from last-for-phone API + UI for repeat booking */
 type RepeatBookingPayload = {
@@ -1671,14 +1671,10 @@ export default function BookingPage() {
       case 2:
         if (selectedServices.length < 1) return false;
         if (isMultiBooking && selectedServices.length > 1 && !hasValidMultiBookingCombo) return false;
-        return true;
-      case 3:
         return eligibleWorkers.length > 0;
+      case 3:
+        return selectedDate !== null && selectedTime !== "";
       case 4:
-        return selectedDate !== null;
-      case 5:
-        return selectedTime !== "";
-      case 6:
         return (
           clientName.trim() !== "" &&
           clientPhone.trim() !== "" &&
@@ -1904,7 +1900,7 @@ export default function BookingPage() {
         setRepeatPrefillWorkerId(picked?.id ?? null);
         setPendingRepeatWorker(null);
       }
-      setStep(4);
+      setStep(2);
     };
 
     try {
@@ -1937,7 +1933,7 @@ export default function BookingPage() {
       if (pricingItems.length === 0 || services.length === 0) {
         setPendingRepeatApply(m);
         setRepeatBookingModal(null);
-        setStep(4);
+        setStep(2);
         return;
       }
 
@@ -2002,7 +1998,7 @@ export default function BookingPage() {
       setRepeatPrefillWorkerId(picked?.id ?? null);
       setPendingRepeatWorker(null);
     }
-    setStep(4);
+    setStep(2);
   }, [pendingRepeatApply, pricingItems, services, allSiteServices, workers, workersLoading]);
 
   useEffect(() => {
@@ -2041,8 +2037,12 @@ export default function BookingPage() {
       if (isStepValid()) void continueFromDetailsStep();
       return;
     }
-    if (step === 2 && isMultiBooking && isStepValid()) {
+    if (step === 2 && isStepValid()) {
       setStep(3);
+      return;
+    }
+    if (step === 3 && isStepValid()) {
+      setStep(4);
       return;
     }
   };
@@ -2076,7 +2076,7 @@ export default function BookingPage() {
       !clientName.trim() ||
       !clientPhone.trim() ||
       !isBookingClientPhoneValid(clientPhone) ||
-      step !== 6 ||
+      step !== 4 ||
       selectedServices.length === 0 ||
       !selectedDate ||
       !selectedTime ||
@@ -2347,7 +2347,7 @@ export default function BookingPage() {
       });
       setPhase2WorkerAssigned(null);
       setCustomerEditCancelAnchorId(null);
-      setStep(7);
+      setStep(5);
     } catch (err) {
       console.error("Failed to save booking", err);
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -2464,14 +2464,12 @@ export default function BookingPage() {
 
   const stepLabels = [
     { num: 1, label: "פרטים" },
-    { num: 2, label: "שירות" },
-    { num: 3, label: "איש צוות" },
-    { num: 4, label: "תאריך" },
-    { num: 5, label: "שעה" },
-    { num: 6, label: "סיכום" },
+    { num: 2, label: "שירות ואיש צוות" },
+    { num: 3, label: "יום ושעה" },
+    { num: 4, label: "סיכום" },
   ];
 
-  if (step === 7) {
+  if (step === 5) {
     // Success screen
     return (
       <div 
@@ -3109,7 +3107,7 @@ export default function BookingPage() {
           {step === 2 && (
             <div className="space-y-4">
               <h2 className="text-xl font-bold mb-4 text-right" style={{ color: "var(--text)" }}>
-                בחרו שירותים
+                שירותים ואיש צוות
               </h2>
               <div className="flex items-center justify-end gap-3 mb-3">
                 <span className="text-sm" style={{ color: "var(--muted)" }}>הזמנה כפולה (מספר שירותים)</span>
@@ -3343,7 +3341,7 @@ export default function BookingPage() {
                                   onClick={() => {
                                     if (!isMultiBooking) {
                                       setSelectedServices([{ service, pricingItem: item }]);
-                                      flashSelectionThen(pricingFlashKey, () => setStep(3));
+                                      flashSelectionThen(pricingFlashKey, () => {});
                                     } else {
                                       setSelectedServices((prev) => [...prev, { service, pricingItem: item }]);
                                       setExpandingServiceId(null);
@@ -3390,15 +3388,11 @@ export default function BookingPage() {
                   })}
                 </div>
               )}
-            </div>
-          )}
 
-          {/* Step 3: Worker selection */}
-          {step === 3 && (
-            <div className="space-y-4">
-              <h2 className="text-xl font-bold mb-4 text-right" style={{ color: "var(--text)" }}>
-                בחרו איש צוות
-              </h2>
+              <div className="mt-10 space-y-4 border-t pt-8" style={{ borderColor: "var(--border)" }}>
+              <h3 className="text-lg font-bold mb-1 text-right" style={{ color: "var(--text)" }}>
+                איש צוות
+              </h3>
               <p className="text-sm mb-3 text-right" style={{ color: "var(--muted)" }}>
                 (אופציונלי - ניתן לדלג)
               </p>
@@ -3435,7 +3429,7 @@ export default function BookingPage() {
                         repeatApplyPricingItemIdRef.current = null;
                         setSelectedWorker(null);
                         setTimeUpdatedByWorkerMessage(false);
-                        flashSelectionThen("worker:none", () => setStep(4));
+                        flashSelectionThen("worker:none", () => {});
                       }}
                       className="w-full text-right p-4 rounded-2xl border-2 transition-all hover:opacity-90"
                       style={{
@@ -3481,7 +3475,7 @@ export default function BookingPage() {
                           }
                           setSelectedWorker({ id: worker.id, name: worker.name });
                           setTimeUpdatedByWorkerMessage(false);
-                          flashSelectionThen(workerFlashKey, () => setStep(4));
+                          flashSelectionThen(workerFlashKey, () => {});
                         }}
                         className="w-full text-right p-4 rounded-2xl border-2 transition-all hover:opacity-90"
                         style={{
@@ -3528,11 +3522,12 @@ export default function BookingPage() {
                   </div>
                 )}
               </div>
+              </div>
             </div>
           )}
 
-          {/* Step 3: Date selection */}
-          {step === 4 && (
+          {/* Step 3: יום ושעה */}
+          {step === 3 && (
             <div className="space-y-4">
               {pendingRepeatApply && selectedServices.length === 0 && (
                 <div
@@ -3543,8 +3538,11 @@ export default function BookingPage() {
                 </div>
               )}
               <h2 className="text-xl font-bold mb-4 text-right" style={{ color: "var(--text)" }}>
-                בחרו תאריך
+                יום ושעה
               </h2>
+              <h3 className="text-base font-semibold mb-3 text-right" style={{ color: "var(--text)" }}>
+                תאריך
+              </h3>
               
               {/* Navigation controls */}
               <div className="flex items-center justify-between mb-4 gap-4">
@@ -3608,7 +3606,7 @@ export default function BookingPage() {
                         if (available) {
                           setSelectedDate(date);
                           setTimeUpdatedByWorkerMessage(false);
-                          flashSelectionThen(dateFlashKey, () => setStep(5));
+                          flashSelectionThen(dateFlashKey, () => {});
                         }
                       }}
                       disabled={!available}
@@ -3638,15 +3636,11 @@ export default function BookingPage() {
                   );
                 })}
               </div>
-            </div>
-          )}
 
-          {/* Step 5: Time selection */}
-          {step === 5 && (
-            <div className="space-y-4">
-              <h2 className="text-xl font-bold mb-4 text-right" style={{ color: "var(--text)" }}>
-                בחרו שעה
-              </h2>
+              <div className="mt-10 space-y-4 border-t pt-8" style={{ borderColor: "var(--border)" }}>
+              <h3 className="text-base font-semibold mb-2 text-right" style={{ color: "var(--text)" }}>
+                שעה
+              </h3>
               {selectedDate && (
                 <p className="text-sm mb-4 text-right" style={{ color: "var(--muted)" }}>
                   {formatDateForDisplay(selectedDate)}
@@ -3716,7 +3710,7 @@ export default function BookingPage() {
                         onClick={() => {
                           setSelectedTime(time);
                           setTimeUpdatedByWorkerMessage(false);
-                          flashSelectionThen(timeFlashKey, () => setStep(6));
+                          flashSelectionThen(timeFlashKey, () => setStep(4));
                         }}
                         className="p-3 rounded-xl border-2 text-sm font-medium transition-all hover:opacity-90"
                         style={{
@@ -3735,9 +3729,10 @@ export default function BookingPage() {
                 </div>
               )}
             </div>
+            </div>
           )}
 
-          {step === 6 && (
+          {step === 4 && (
             <div className="space-y-4" dir="rtl">
               <h2 className="text-xl font-bold mb-2 text-right" style={{ color: "var(--text)" }}>
                 סיכום ההזמנה
@@ -3836,7 +3831,7 @@ export default function BookingPage() {
                   {checkingLastBooking ? "בודק…" : "המשך"}
                 </button>
               )}
-              {step === 2 && isMultiBooking && (
+              {step === 2 && (
                 <button
                   type="button"
                   onClick={handleNext}
@@ -3850,7 +3845,21 @@ export default function BookingPage() {
                   המשך
                 </button>
               )}
-              {step === 6 && (
+              {step === 3 && (
+                <button
+                  type="button"
+                  onClick={handleNext}
+                  disabled={!isStepValid()}
+                  className="px-6 py-3 rounded-xl font-semibold transition-colors hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{
+                    backgroundColor: "var(--primary)",
+                    color: "var(--primaryText)",
+                  }}
+                >
+                  המשך
+                </button>
+              )}
+              {step === 4 && (
                 <button
                   type="button"
                   onClick={handleSubmit}
@@ -3873,7 +3882,7 @@ export default function BookingPage() {
             </div>
           )}
 
-          {!isStepValid() && step < 7 && step !== 1 && step !== 6 && (
+          {!isStepValid() && step < 5 && step !== 1 && step !== 4 && (
             <div className="mt-4 p-3 border rounded-xl text-right" style={{ backgroundColor: "#fef2f2", borderColor: "#fecaca" }}>
               <p className="text-sm" style={{ color: "#991b1b" }}>
                 יש למלא את כל השדות הנדרשים לפני המשך

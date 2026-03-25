@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useLayoutEffect } from "react";
+import { useState, useEffect, useRef, useLayoutEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import Image from "next/image";
@@ -79,6 +79,40 @@ function getMenuItems(basePath: string): MenuItem[] {
   ];
 }
 
+/** Desktop (LTR cluster): dashboard to the right of "ניהול אתר", toward tenant logo. */
+const ADMIN_NAV_ORDER_DESKTOP = [
+  "יומן",
+  "לקוחות",
+  "צוות",
+  "ניהול אתר",
+  "לוח בקרה",
+] as const;
+
+/** Mobile: dashboard first (was second after יומן). */
+const ADMIN_NAV_ORDER_MOBILE = [
+  "לוח בקרה",
+  "יומן",
+  "לקוחות",
+  "צוות",
+  "ניהול אתר",
+] as const;
+
+function orderAdminNavItems(
+  items: MenuItem[],
+  preferredOrder: readonly string[]
+): MenuItem[] {
+  const byLabel = new Map(items.map((i) => [i.label, i]));
+  const ordered: MenuItem[] = [];
+  for (const label of preferredOrder) {
+    const it = byLabel.get(label);
+    if (it) ordered.push(it);
+  }
+  for (const it of items) {
+    if (!preferredOrder.includes(it.label)) ordered.push(it);
+  }
+  return ordered;
+}
+
 type AdminHeaderProps = {
   onOpenHelp?: () => void;
 };
@@ -93,7 +127,15 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
     !siteId || siteId === "me"
       ? "/site/me/admin"
       : getAdminBasePath(siteId, isOnTenantSubdomainClient());
-  const menuItems = getMenuItems(adminBasePath);
+  const menuItems = useMemo(() => getMenuItems(adminBasePath), [adminBasePath]);
+  const desktopNavItems = useMemo(
+    () => orderAdminNavItems(menuItems, ADMIN_NAV_ORDER_DESKTOP),
+    [menuItems]
+  );
+  const mobileNavItems = useMemo(
+    () => orderAdminNavItems(menuItems, ADMIN_NAV_ORDER_MOBILE),
+    [menuItems]
+  );
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const headerRef = useRef<HTMLDivElement>(null);
@@ -296,7 +338,7 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                   <ExternalLink className="w-4 h-4" />
                 </button>
               )}
-              {menuItems.map((item) => (
+              {desktopNavItems.map((item) => (
                 <div key={item.label} className="relative">
                       {item.href ? (
                     (() => {
@@ -395,7 +437,7 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
           <nav className="md:hidden pb-4 animate-[dropdown_0.2s_ease-out_forwards]">
-            {menuItems.map((item) => (
+            {mobileNavItems.map((item) => (
               <div key={item.label} className="border-b border-[#E2E8F0] last:border-0">
                 {item.href ? (
                   (() => {

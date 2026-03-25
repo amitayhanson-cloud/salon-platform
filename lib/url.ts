@@ -240,3 +240,33 @@ export function getAdminBasePathFromSiteId(siteId: string | null): string {
   if (!siteId || siteId === "me") return "/site/me/admin";
   return getAdminBasePath(siteId, isOnTenantSubdomainClient());
 }
+
+/**
+ * Marketing pricing URL (upgrade CTA). Prefer NEXT_PUBLIC_APP_URL for stable SSR + client hydration.
+ */
+export function getMarketingPricingUrlClient(): string {
+  const envBase = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+  if (envBase) {
+    try {
+      return new URL("/pricing", envBase).href;
+    } catch {
+      /* fall through */
+    }
+  }
+  if (typeof window === "undefined") {
+    return `https://${getRootHost()}/pricing`;
+  }
+  const host = window.location.hostname.toLowerCase();
+  const root = getRootHost();
+  const onPlatform =
+    host === root ||
+    host === `www.${root}` ||
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host.endsWith(".vercel.app");
+  if (onPlatform) {
+    return `${window.location.origin}/pricing`;
+  }
+  const proto = window.location.protocol === "http:" ? "http:" : "https:";
+  return `${proto}//${root}/pricing`;
+}

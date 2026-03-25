@@ -1,6 +1,8 @@
 "use client";
 
-import Link from "next/link";
+import { useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { getSiteUrl } from "@/lib/tenant";
 import type { SiteService } from "@/types/siteConfig";
 
@@ -35,6 +37,9 @@ export default function ServiceCard({
   /** When true, wrap image in click-to-edit target for preview editor */
   editorMode?: boolean;
 }) {
+  const router = useRouter();
+  const [navPending, startNav] = useTransition();
+
   // Parent services are category-only; duration belongs to service types. Do not show service.duration.
   const priceStr = formatStartingPrice(service.price);
   const metaRow = priceStr;
@@ -103,14 +108,31 @@ export default function ServiceCard({
   const cardStyle = { borderColor: "var(--services-border, var(--border))" };
 
   if (bookingEnabled) {
+    const bookHref = getSiteUrl(slug, siteId, "/book");
     return (
-      <Link
-        href={getSiteUrl(slug, siteId, "/book")}
-        className={cardClassName}
+      <button
+        type="button"
+        disabled={navPending}
+        aria-busy={navPending}
+        onClick={() => {
+          startNav(() => router.push(bookHref));
+        }}
+        className={`${cardClassName} relative w-full text-right disabled:cursor-wait`}
         style={cardStyle}
       >
+        {navPending ? (
+          <div
+            className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl backdrop-blur-sm"
+            style={{ backgroundColor: "rgba(255,255,255,0.65)" }}
+          >
+            <span className="inline-flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--services-cardText, var(--text))" }}>
+              <Loader2 className="h-5 w-5 animate-spin shrink-0" aria-hidden />
+              טוען…
+            </span>
+          </div>
+        ) : null}
         {content}
-      </Link>
+      </button>
     );
   }
 

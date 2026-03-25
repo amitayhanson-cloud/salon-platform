@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { getAdminDb } from "@/lib/firebaseAdmin";
-import type { SiteConfig } from "@/types/siteConfig";
+import SiteNavigationGate from "@/components/navigation/SiteNavigationGate";
 import {
   calenoDefaultIcons,
   getRequestOriginFromHeaders,
   tenantIconsFromLogoAbsoluteUrl,
-  toAbsoluteAssetUrlFromOrigin,
 } from "@/lib/metadataTenantIcons";
+import { getTenantLogoAbsoluteUrl } from "@/lib/tenantSiteLogoServer";
 
 type Props = { children: React.ReactNode; params: Promise<{ siteId: string }> };
 
@@ -23,25 +22,31 @@ export async function generateMetadata({ params }: Pick<Props, "params">): Promi
   const origin = getRequestOriginFromHeaders(headersList);
 
   try {
-    const snap = await getAdminDb().collection("sites").doc(siteId).get();
-    if (!snap.exists) {
+    const absolute = await getTenantLogoAbsoluteUrl(siteId, origin);
+    if (!absolute) {
       return { metadataBase: new URL(origin), icons: calenoDefaultIcons() };
     }
-    const cfg = (snap.data()?.config ?? {}) as Partial<SiteConfig>;
-    const raw = cfg.branding?.logoUrl?.trim();
-    if (!raw) {
-      return { metadataBase: new URL(origin), icons: calenoDefaultIcons() };
-    }
-    const absolute = toAbsoluteAssetUrlFromOrigin(origin, raw);
     return {
       metadataBase: new URL(origin),
       icons: tenantIconsFromLogoAbsoluteUrl(absolute),
     };
   } catch {
-    return {};
+    return { metadataBase: new URL(origin), icons: calenoDefaultIcons() };
   }
 }
 
-export default function SiteByIdLayout({ children }: { children: React.ReactNode }) {
-  return children;
+export default async function SiteByIdLayout({ children, params }: Props) {
+  const { siteId } = await params;
+  if (!siteId || siteId === "me") {
+    return children;
+  }
+  const headersList = await headers();
+  const origin = getRequestOriginFromHeaders(headersList);
+  const tenantLogoUrl = await getTenantLogoAbsoluteUrl(siteId, origin);
+
+  return (
+    <SiteNavigationGate siteId={siteId} tenantLogoUrl={tenantLogoUrl}>
+      {children}
+    </SiteNavigationGate>
+  );
 }
