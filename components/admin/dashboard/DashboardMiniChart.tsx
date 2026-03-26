@@ -5,12 +5,22 @@ import Box from "@mui/material/Box";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { BarChart } from "@mui/x-charts/BarChart";
 import { cn } from "@/lib/utils";
+import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
+import type { ChartGranularity } from "@/lib/fetchDashboardWeeklySeries";
+
+const IL_TZ = "Asia/Jerusalem";
 
 /** Placeholder when a bucket has no value (future day / null) — keeps header height stable. */
 const EM_DASH = "\u2014";
 
 const COLOR_BOOKINGS_PAST = "#1e6f7c";
 const COLOR_BOOKINGS_FUTURE = "#9dc5cf";
+
+/** Slightly lift a bar fill so the “today” column reads as highlighted (band-style cue). */
+function todayBandColor(base: string, dataIndex: number, todayIdx: number | undefined): string {
+  if (todayIdx == null || todayIdx < 0 || dataIndex !== todayIdx) return base;
+  return `color-mix(in srgb, ${base} 84%, white)`;
+}
 
 const chartTheme = createTheme({
   palette: {
@@ -40,13 +50,29 @@ type Props = {
   titleLabels?: string[];
   /** Bookings: stacked past (dark) + future (light) per day */
   bookingsStacked?: BookingsStackedSlice;
+  /** X-axis index for Israel “today”; bars at this index get a subtle fill lift. */
+  todayHighlightIndex?: number;
+  /** When set with matching `calendarBucketIds`, “today” follows the browser clock (Israel). */
+  timeGranularity?: ChartGranularity;
+  /** Same length as `data`: YYYY-MM-DD (week/month) or YYYY-MM (year). */
+  calendarBucketIds?: string[];
 };
 
 function nullToZero(n: number | null | undefined): number {
   return n == null ? 0 : n;
 }
 
-export function DashboardMiniChart({ data, className, formatY, xLabels, titleLabels, bookingsStacked }: Props) {
+export function DashboardMiniChart({
+  data,
+  className,
+  formatY,
+  xLabels,
+  titleLabels,
+  bookingsStacked,
+  todayHighlightIndex,
+  timeGranularity = "week",
+  calendarBucketIds,
+}: Props) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [highlightedItem, setHighlightedItem] = useState<{ seriesId: string | number; dataIndex: number } | null>(null);
 
@@ -88,7 +114,29 @@ export function DashboardMiniChart({ data, className, formatY, xLabels, titleLab
     return Math.max(0, seriesData.length - 1);
   }, [seriesData, useStackedBookings, bookingsStacked]);
 
-  const activeIndex = hoveredIndex != null ? hoveredIndex : defaultActiveIndex;
+  /** Align header + tint with Israel “today” on the client so stale SWR / null-future series don’t pin on yesterday. */
+  const highlightIdx = useMemo(() => {
+    const n = seriesData.length;
+    if (n === 0) return undefined;
+    if (calendarBucketIds && calendarBucketIds.length === n) {
+      const ilYmd = getDateYMDInTimezone(new Date(), IL_TZ);
+      if (timeGranularity === "year") {
+        const ym = ilYmd.slice(0, 7);
+        const yi = calendarBucketIds.indexOf(ym);
+        if (yi >= 0) return yi;
+      } else {
+        const di = calendarBucketIds.indexOf(ilYmd);
+        if (di >= 0) return di;
+      }
+    }
+    if (todayHighlightIndex != null && todayHighlightIndex >= 0 && todayHighlightIndex < n) {
+      return todayHighlightIndex;
+    }
+    return undefined;
+  }, [calendarBucketIds, seriesData.length, timeGranularity, todayHighlightIndex]);
+
+  const activeIndex =
+    hoveredIndex != null ? hoveredIndex : highlightIdx != null ? highlightIdx : defaultActiveIndex;
   const titleLine =
     titleLabels &&
     titleLabels.length === seriesData.length &&
@@ -123,6 +171,8 @@ export function DashboardMiniChart({ data, className, formatY, xLabels, titleLab
       data: seriesData,
       label: "",
       color: COLOR_BOOKINGS_PAST,
+      colorGetter: ({ dataIndex }: { dataIndex: number }) =>
+        todayBandColor(COLOR_BOOKINGS_PAST, dataIndex, highlightIdx),
       valueFormatter: (v: number | null) => formatCell(v),
       highlightScope: { highlight: "item" as const, fade: "none" as const },
     },
@@ -137,6 +187,8 @@ export function DashboardMiniChart({ data, className, formatY, xLabels, titleLab
             stack: "bookings",
             label: "תורים (עבר / היום)",
             color: COLOR_BOOKINGS_PAST,
+            colorGetter: ({ dataIndex }: { dataIndex: number }) =>
+              todayBandColor(COLOR_BOOKINGS_PAST, dataIndex, highlightIdx),
             valueFormatter: (v: number | null) => formatCell(v),
             highlightScope: { highlight: "item" as const, fade: "none" as const },
           },
@@ -146,6 +198,8 @@ export function DashboardMiniChart({ data, className, formatY, xLabels, titleLab
             stack: "bookings",
             label: "תורים (עתיד)",
             color: COLOR_BOOKINGS_FUTURE,
+            colorGetter: ({ dataIndex }: { dataIndex: number }) =>
+              todayBandColor(COLOR_BOOKINGS_FUTURE, dataIndex, highlightIdx),
             valueFormatter: (v: number | null) => formatCell(v),
             highlightScope: { highlight: "item" as const, fade: "none" as const },
           },

@@ -2,23 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/server/requireAuth";
 import { assertSiteOwner } from "@/lib/server/assertSiteOwner";
 import { getTenantForUid } from "@/lib/getTenantForUid";
-import { getWhatsAppUsageSnapshot } from "@/lib/whatsapp/usage";
+import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
+import { getWhatsAppUsageSnapshotForAdminUI } from "@/lib/whatsapp/usage";
 
-function currentMonthLabel(): string {
-  const now = new Date();
-  const y = now.getUTCFullYear();
-  const m = now.getUTCMonth() + 1;
-  return `${y}-${m < 10 ? "0" : ""}${m}`;
+function currentMonthLabelIsrael(): string {
+  return getDateYMDInTimezone(new Date(), "Asia/Jerusalem").slice(0, 7);
 }
 
 /**
  * GET /api/admin/whatsapp/monthly-count?siteId=...
- * Returns outbound WhatsApp usage counted toward the site’s monthly limit.
- *
- * Uses the same counters as `/api/sites/.../whatsapp/usage` (sites/{siteId}:
- * whatsappUtilitySent + whatsappServiceSent). That includes replies sent via
- * Twilio TwiML from the inbound webhook, which are not written to
- * `whatsapp_messages` as outbound API sends are.
+ * Primary count (`outboundCount`) matches the admin graph: `dashboardCurrent.totals.whatsappCount`
+ * when month aligns (Israel). Utility/service breakdown still come from site billing fields.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -42,12 +36,12 @@ export async function GET(request: NextRequest) {
     const forbidden = await assertSiteOwner(uid, siteId);
     if (forbidden) return forbidden;
 
-    const snapshot = await getWhatsAppUsageSnapshot(siteId);
+    const snapshot = await getWhatsAppUsageSnapshotForAdminUI(siteId);
 
     return NextResponse.json({
       ok: true,
       siteId,
-      month: currentMonthLabel(),
+      month: currentMonthLabelIsrael(),
       outboundCount: snapshot.totalUsed,
       /** Monthly cap (same field as sites/{siteId}.whatsappUsageLimit, default 250) */
       usageLimit: snapshot.whatsappUsageLimit,

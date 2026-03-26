@@ -28,6 +28,10 @@ export type DashboardChartSlices = Record<
     titleLabels?: string[];
     /** Bookings chart: past (dark) + future (light) stacked bars */
     bookingsStacked?: BookingsStackedSlice;
+    /** Israel “today” column on the bar chart x-axis, when in range. */
+    todayHighlightIndex?: number;
+    /** Per-bar calendar id (see admin `DashboardMetricSlice.xCalendarIds`). */
+    xCalendarIds?: string[];
   }
 >;
 
@@ -131,6 +135,9 @@ export function DashboardAnalyticsChartPanel({
             xLabels={slice.labels}
             titleLabels={slice.titleLabels}
             bookingsStacked={slice.bookingsStacked}
+            todayHighlightIndex={slice.todayHighlightIndex}
+            timeGranularity={granularity}
+            calendarBucketIds={slice.xCalendarIds}
           />
         )}
       </div>

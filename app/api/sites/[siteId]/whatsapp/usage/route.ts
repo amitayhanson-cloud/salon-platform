@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/server/requireAuth";
 import { assertSiteOwner } from "@/lib/server/assertSiteOwner";
-import { getWhatsAppUsageSnapshot } from "@/lib/whatsapp/usage";
+import { getWhatsAppUsageSnapshotForAdminUI } from "@/lib/whatsapp/usage";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ siteId: string }> }) {
   const { siteId } = await params;
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (forbidden) return forbidden;
 
   try {
-    const snapshot = await getWhatsAppUsageSnapshot(id);
+    const snapshot = await getWhatsAppUsageSnapshotForAdminUI(id);
     return NextResponse.json(
       {
         ok: true,

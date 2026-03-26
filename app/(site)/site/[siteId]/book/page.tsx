@@ -648,6 +648,8 @@ export default function BookingPage() {
   const [timeUpdatedByWorkerMessage, setTimeUpdatedByWorkerMessage] = useState(false);
   const [clientName, setClientName] = useState("");
   const [clientPhone, setClientPhone] = useState("");
+  /** Show Israeli format hint only after המשך with an invalid number (not while typing). */
+  const [showPhoneInvalidAfterContinue, setShowPhoneInvalidAfterContinue] = useState(false);
   const [clientNote, setClientNote] = useState("");
   /** After פרטים: fetch last booking for repeat-service prompt */
   const [checkingLastBooking, setCheckingLastBooking] = useState(false);
@@ -1664,11 +1666,7 @@ export default function BookingPage() {
   const isStepValid = (): boolean => {
     switch (step) {
       case 1:
-        return (
-          clientName.trim() !== "" &&
-          clientPhone.trim() !== "" &&
-          isBookingClientPhoneValid(clientPhone)
-        );
+        return clientName.trim() !== "" && clientPhone.trim() !== "";
       case 2:
         if (selectedServices.length < 1) return false;
         if (isMultiBooking && selectedServices.length > 1 && !hasValidMultiBookingCombo) return false;
@@ -2048,7 +2046,14 @@ export default function BookingPage() {
   };
 
   const handleNext = () => {
-    if (step === 1 && isStepValid()) void continueFromDetailsStep();
+    if (step !== 1) return;
+    if (!clientName.trim() || !clientPhone.trim()) return;
+    if (!isBookingClientPhoneValid(clientPhone)) {
+      setShowPhoneInvalidAfterContinue(true);
+      return;
+    }
+    setShowPhoneInvalidAfterContinue(false);
+    void continueFromDetailsStep();
   };
 
   const handleBack = () => {
@@ -2064,6 +2069,7 @@ export default function BookingPage() {
       setStep(next);
       if (next === 1) {
         setCustomerEditCancelAnchorId(null);
+        setShowPhoneInvalidAfterContinue(false);
       }
     }
   };
@@ -3045,15 +3051,22 @@ export default function BookingPage() {
                     inputMode="tel"
                     autoComplete="tel"
                     maxLength={22}
-                    aria-invalid={clientPhone.trim() !== "" && !isBookingClientPhoneValid(clientPhone)}
-                    onChange={(e) =>
-                      setClientPhone(e.target.value.replace(/[^\d+\s\-]/g, "").slice(0, 22))
+                    aria-invalid={
+                      showPhoneInvalidAfterContinue &&
+                      clientPhone.trim() !== "" &&
+                      !isBookingClientPhoneValid(clientPhone)
                     }
+                    onChange={(e) => {
+                      setShowPhoneInvalidAfterContinue(false);
+                      setClientPhone(e.target.value.replace(/[^\d+\s\-]/g, "").slice(0, 22));
+                    }}
                     className="w-full rounded-xl border px-4 py-3 text-right placeholder:text-right focus:outline-none focus:ring-2"
                     dir="ltr"
                     style={{
                       borderColor:
-                        clientPhone.trim() !== "" && !isBookingClientPhoneValid(clientPhone)
+                        showPhoneInvalidAfterContinue &&
+                        clientPhone.trim() !== "" &&
+                        !isBookingClientPhoneValid(clientPhone)
                           ? "#f87171"
                           : "var(--border)",
                       backgroundColor: "var(--surface)",
@@ -3065,17 +3078,22 @@ export default function BookingPage() {
                       e.target.style.boxShadow = "0 0 0 2px rgba(0, 0, 0, 0.1)";
                     }}
                     onBlur={(e) => {
-                      const invalid = clientPhone.trim() !== "" && !isBookingClientPhoneValid(clientPhone);
+                      const invalid =
+                        showPhoneInvalidAfterContinue &&
+                        clientPhone.trim() !== "" &&
+                        !isBookingClientPhoneValid(clientPhone);
                       e.target.style.borderColor = invalid ? "#f87171" : "var(--border)";
                       e.target.style.boxShadow = "none";
                     }}
                     placeholder="הזינו מספר מלא"
                   />
-                  {clientPhone.trim() !== "" && !isBookingClientPhoneValid(clientPhone) && (
-                    <p className="mt-1.5 text-xs text-right" style={{ color: "#b91c1c" }}>
-                      נא להזין מספר נייד תקין בישראל (למשל 05XXXXXXXX או +9725XXXXXXXX).
-                    </p>
-                  )}
+                  {showPhoneInvalidAfterContinue &&
+                    clientPhone.trim() !== "" &&
+                    !isBookingClientPhoneValid(clientPhone) && (
+                      <p className="mt-1.5 text-xs text-right" style={{ color: "#b91c1c" }}>
+                        נא להזין מספר נייד תקין בישראל (למשל 05XXXXXXXX או +9725XXXXXXXX).
+                      </p>
+                    )}
                 </div>
 
                 <div>
@@ -3885,11 +3903,7 @@ export default function BookingPage() {
               <p className="text-sm" style={{ color: "#991b1b" }}>
                 {!clientName.trim()
                   ? "נא להזין שם מלא כדי להמשיך."
-                  : !clientPhone.trim()
-                    ? "נא להזין מספר טלפון כדי להמשיך."
-                    : !isBookingClientPhoneValid(clientPhone)
-                      ? "מספר הטלפון אינו תקין. בדקו שזה המספר הנכון — אליו נשלחות תזכורות לתור."
-                      : "נא למלא את כל השדות הנדרשים כדי להמשיך."}
+                  : "נא להזין מספר טלפון כדי להמשיך."}
               </p>
             </div>
           )}

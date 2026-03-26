@@ -48,6 +48,10 @@ type MetricSliceNumbers = {
 export type MetricSlice = {
   labels: string[];
   titleLabels?: string[];
+  /** X-axis band to mark as “today” (admin API); optional on client-built slices. */
+  todayHighlightIndex?: number;
+  /** Parallel to `labels`: day ymds (week/month) or YYYY-MM (year). */
+  xCalendarIds?: string[];
   bookingsPast?: (number | null)[];
   bookingsFuture?: (number | null)[];
   bookings: (number | null)[];

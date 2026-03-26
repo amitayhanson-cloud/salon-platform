@@ -8,6 +8,8 @@ exports.liveStatsDeltaForBookingCreated = liveStatsDeltaForBookingCreated;
 exports.liveStatsDeltaForActiveCancellation = liveStatsDeltaForActiveCancellation;
 exports.liveStatsDeltaUndoFollowUpOnly = liveStatsDeltaUndoFollowUpOnly;
 const CANCELLED = new Set(["cancelled", "canceled", "cancelled_by_salon", "no_show"]);
+const expiredCleanupUtilsForFunctions_1 = require("./expiredCleanupUtilsForFunctions");
+const IL_TZ = "Asia/Jerusalem";
 function isCancelledStatus(s) {
     return CANCELLED.has(s.toLowerCase());
 }
@@ -35,9 +37,23 @@ function normalizeBookingYmd(data) {
         return null;
     return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
+/** Same resolution order as lib/bookingDayKey.ts `bookingDayYmdIsrael` (date fields + startAt). */
 function bookingYmdIsrael(data) {
     const n = normalizeBookingYmd(data);
-    return n ?? "";
+    if (n && n.length >= 10)
+        return n;
+    const st = data.startAt;
+    if (st && typeof st.toDate === "function") {
+        try {
+            const dt = st.toDate();
+            if (dt && !Number.isNaN(dt.getTime()))
+                return (0, expiredCleanupUtilsForFunctions_1.getDateYMDInTimezone)(dt, IL_TZ);
+        }
+        catch {
+            /* ignore */
+        }
+    }
+    return "";
 }
 function isRevenueEligible(data) {
     if (isDocCancelled(data))

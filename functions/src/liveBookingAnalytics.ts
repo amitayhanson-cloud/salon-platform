@@ -4,7 +4,10 @@
 
 const CANCELLED = new Set(["cancelled", "canceled", "cancelled_by_salon", "no_show"]);
 
+import { getDateYMDInTimezone } from "./expiredCleanupUtilsForFunctions";
 import type { LiveStatsBookingEffect, LiveStatsDelta } from "./liveStatsScorekeeper";
+
+const IL_TZ = "Asia/Jerusalem";
 
 function isCancelledStatus(s: string): boolean {
   return CANCELLED.has(s.toLowerCase());
@@ -34,9 +37,20 @@ function normalizeBookingYmd(data: Record<string, unknown>): string | null {
   return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
+/** Same resolution order as lib/bookingDayKey.ts `bookingDayYmdIsrael` (date fields + startAt). */
 function bookingYmdIsrael(data: Record<string, unknown>): string {
   const n = normalizeBookingYmd(data);
-  return n ?? "";
+  if (n && n.length >= 10) return n;
+  const st = data.startAt as { toDate?: () => Date } | undefined;
+  if (st && typeof st.toDate === "function") {
+    try {
+      const dt = st.toDate();
+      if (dt && !Number.isNaN(dt.getTime())) return getDateYMDInTimezone(dt, IL_TZ);
+    } catch {
+      /* ignore */
+    }
+  }
+  return "";
 }
 
 function isRevenueEligible(data: Record<string, unknown>): boolean {

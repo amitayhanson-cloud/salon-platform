@@ -41,9 +41,42 @@ import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
 
 const DASHBOARD_DAY_TZ = "Asia/Jerusalem";
 
+/**
+ * `fillSliceFromDayMap` nulls out future days using server time. Cached JSON can lag,
+ * so the client may highlight “today” while that bucket is still null. Any bucket on or
+ * before Israel’s current day/month is never “future” — coerce null → 0 for display.
+ */
+function coerceStaleFutureNullsForIsraelCalendar(
+  values: (number | null)[],
+  xCalendarIds: string[] | undefined,
+  granularity: "week" | "month" | "year"
+): (number | null)[] {
+  if (!xCalendarIds || xCalendarIds.length !== values.length) return values;
+  const ymd = getDateYMDInTimezone(new Date(), DASHBOARD_DAY_TZ);
+  const ym = ymd.slice(0, 7);
+  const out = values.slice();
+  const isYear = granularity === "year";
+  for (let i = 0; i < out.length; i++) {
+    if (out[i] !== null) continue;
+    const id = xCalendarIds[i];
+    if (id == null) continue;
+    if (isYear) {
+      if (id <= ym) out[i] = 0;
+    } else if (id <= ymd) {
+      out[i] = 0;
+    }
+  }
+  return out;
+}
+
 type MetricValueKey = Exclude<
   keyof MetricSlice,
-  "labels" | "titleLabels" | "bookingsPast" | "bookingsFuture"
+  | "labels"
+  | "titleLabels"
+  | "bookingsPast"
+  | "bookingsFuture"
+  | "todayHighlightIndex"
+  | "xCalendarIds"
 >;
 
 const METRIC_SLICE_KEY: Record<AnalyticsMetricKind, MetricValueKey> = {
@@ -96,16 +129,37 @@ function buildDashboardChartSlices(
   return {
     week: {
       labels: bundle.week.labels,
-      values: [...bundle.week[key]],
+      values: coerceStaleFutureNullsForIsraelCalendar(
+        [...bundle.week[key]],
+        bundle.week.xCalendarIds,
+        "week"
+      ),
       titleLabels: bundle.week.titleLabels,
       bookingsStacked: weekBookingsStacked,
+      todayHighlightIndex: bundle.week.todayHighlightIndex,
+      xCalendarIds: bundle.week.xCalendarIds,
     },
     month: {
       labels: bundle.month.labels,
-      values: [...bundle.month[key]],
+      values: coerceStaleFutureNullsForIsraelCalendar(
+        [...bundle.month[key]],
+        bundle.month.xCalendarIds,
+        "month"
+      ),
       bookingsStacked: monthBookingsStacked,
+      todayHighlightIndex: bundle.month.todayHighlightIndex,
+      xCalendarIds: bundle.month.xCalendarIds,
     },
-    year: { labels: bundle.year.labels, values: [...bundle.year[key]] },
+    year: {
+      labels: bundle.year.labels,
+      values: coerceStaleFutureNullsForIsraelCalendar(
+        [...bundle.year[key]],
+        bundle.year.xCalendarIds,
+        "year"
+      ),
+      todayHighlightIndex: bundle.year.todayHighlightIndex,
+      xCalendarIds: bundle.year.xCalendarIds,
+    },
   };
 }
 
@@ -424,7 +478,7 @@ export default function AdminHomePage() {
     if (kind === "cancellations")
       return "המספר למעלה הוא ביטולים היום; הגרף מציג מגמות (לא רק היום). מבוסס על מסמכי התורים וארכיון מבוטלים לפי תאריך התור.";
     if (kind === "whatsapp")
-      return "אין יומן שליחות לפי יום/חודש; הגרף מפיץ את ספירת החודש הנוכחי על פני שבוע/חודש/שנה.";
+      return "כרטיס «הודעות WhatsApp החודש» ומרכז ה-WhatsApp משתמשים באותה ספירת חודש כמו סיכום הגרף (לוח בקרה). פירוט יוזמה/שירות בדף ה-WhatsApp הוא לפי קטגוריות חיוב בנפרד.";
     if (kind === "utilization")
       return "המספר למעלה הוא ניצולת היום (דקות מתור לעומת קיבולת יום העסקים); הגרף מציג אותו מדד לפי ימים/חודשים.";
     if (kind === "bookings")

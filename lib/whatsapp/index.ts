@@ -49,6 +49,7 @@ export {
 } from "./auditLog";
 export {
   getWhatsAppUsageSnapshot,
+  getWhatsAppUsageSnapshotForAdminUI,
   assertSiteWithinWhatsAppLimit,
   incrementWhatsAppUsage,
   siteIdFromBookingRef,

@@ -4,6 +4,7 @@
 
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
+import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
 import { normalizeE164 } from "@/lib/whatsapp/e164";
 import { DEFAULT_WHATSAPP_USAGE_LIMIT } from "@/lib/whatsapp/constants";
 
@@ -60,6 +61,41 @@ function coerceSnapshot(data: Record<string, unknown> | undefined): WhatsAppUsag
 export async function getWhatsAppUsageSnapshot(siteId: string): Promise<WhatsAppUsageSnapshot> {
   const snap = await getAdminDb().collection("sites").doc(siteId.trim()).get();
   return coerceSnapshot(snap.data() as Record<string, unknown> | undefined);
+}
+
+const IL_TZ = "Asia/Jerusalem";
+
+/**
+ * Admin UI + stat cards: same month-total as the dashboard graph (`auditWhatsAppUsage` →
+ * `analytics/dashboardCurrent.totals.whatsappCount`) when `dashboardCurrent.monthKey` matches
+ * the current calendar month in Israel. Billing/limit checks still use {@link getWhatsAppUsageSnapshot}.
+ */
+export async function getWhatsAppUsageSnapshotForAdminUI(siteId: string): Promise<WhatsAppUsageSnapshot> {
+  const base = await getWhatsAppUsageSnapshot(siteId);
+  const id = siteId.trim();
+  if (!id) return base;
+
+  const wallMonth = getDateYMDInTimezone(new Date(), IL_TZ).slice(0, 7);
+  const dashSnap = await getAdminDb()
+    .collection("sites")
+    .doc(id)
+    .collection("analytics")
+    .doc("dashboardCurrent")
+    .get();
+  if (!dashSnap.exists) return base;
+
+  const live = dashSnap.data() as Record<string, unknown>;
+  const liveMonth = typeof live.monthKey === "string" ? live.monthKey.trim() : "";
+  if (!liveMonth || liveMonth !== wallMonth) return base;
+
+  const totals = live.totals as Record<string, unknown> | undefined;
+  if (!totals || totals.whatsappCount == null) return base;
+
+  const fromDash = coerceUsageInt(totals.whatsappCount);
+  return {
+    ...base,
+    totalUsed: fromDash,
+  };
 }
 
 export async function assertSiteWithinWhatsAppLimit(siteId: string): Promise<{

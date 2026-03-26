@@ -19,6 +19,13 @@ export type CurrentMonthDoc = {
 export type DashboardMetricSlice = {
   labels: string[];
   titleLabels?: string[];
+  /** X-axis band index for Israel “today”; omitted when out of range. */
+  todayHighlightIndex?: number;
+  /**
+   * One id per x-axis bar, same length as `labels`: week/month = YYYY-MM-DD, year = YYYY-MM.
+   * Lets the client align “today” with the browser clock even if the bundle was built slightly earlier.
+   */
+  xCalendarIds?: string[];
   revenue: ChartMetricPoint[];
   bookings: ChartMetricPoint[];
   bookingsPast?: ChartMetricPoint[];
@@ -38,8 +45,15 @@ export type DashboardChartSeriesBundleAdmin = {
   fetchedAt: string;
 };
 
-function monthKeyFromDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+/** Israel wall-clock month + offset (for year chart axis; avoids UTC/server-local drift). */
+function monthKeyIsraelOffsetFrom(now: Date, deltaMonths: number): string {
+  const ymd = getDateYMDInTimezone(now, IL_TZ);
+  const y = Number(ymd.slice(0, 4));
+  const m1 = Number(ymd.slice(5, 7));
+  const d = new Date(Date.UTC(y, m1 - 1 + deltaMonths, 1));
+  const ym = d.getUTCFullYear();
+  const mo = d.getUTCMonth() + 1;
+  return `${ym}-${String(mo).padStart(2, "0")}`;
 }
 
 function daysInMonth(year: number, month1Based: number): number {
@@ -168,9 +182,11 @@ function fillSliceFromDayMap(
       slice.whatsappCount[i] = null;
       slice.clientsCumulative[i] = null;
       slice.newClients[i] = null;
-      slice.cancellations[i] = null;
+      // Still read from `days.{ymd}` — counts are tied to that calendar day (e.g. cancels of
+      // upcoming appointments), not “has this wall day passed yet”.
+      slice.cancellations[i] = m.cancellations;
       slice.utilizationPercent[i] = null;
-      slice.trafficAttributedBookings[i] = null;
+      slice.trafficAttributedBookings[i] = m.trafficAttributedBookings;
       continue;
     }
     slice.revenue[i] = m.revenue;
@@ -243,6 +259,7 @@ export function buildDashboardChartSeriesFromCurrentDoc(
   const weekYmds = weekYmdsSundayToSaturdayContaining(todayIl);
   const week = mkSlice(weekYmds.map(formatWeekAxisEnglishWeekdayLong));
   week.titleLabels = weekYmds.map(formatWeekAxisLabelIsrael);
+  week.xCalendarIds = [...weekYmds];
   fillSliceFromDayMap(week, weekYmds, dayMap, todayIl);
 
   const monthLabels = ymds.map((ymd) => {
@@ -254,17 +271,16 @@ export function buildDashboardChartSeriesFromCurrentDoc(
     });
   });
   const month = mkSlice(monthLabels);
+  month.xCalendarIds = [...ymds];
   fillSliceFromDayMap(month, ymds, dayMap, todayIl);
 
-  const monthKeys = Array.from({ length: 12 }, (_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
-    return monthKeyFromDate(d);
-  });
+  const monthKeys = Array.from({ length: 12 }, (_, i) => monthKeyIsraelOffsetFrom(now, -(11 - i)));
   const yearLabels = monthKeys.map((k) => {
     const [y, m] = k.split("-").map(Number);
     return new Date(y, m - 1, 1).toLocaleDateString("he-IL", { month: "short", year: "2-digit" });
   });
   const yearSlice = mkSlice(yearLabels);
+  yearSlice.xCalendarIds = [...monthKeys];
   for (let i = 0; i < monthKeys.length; i++) {
     const k = monthKeys[i];
     const t = k === doc.monthKey ? totals : zeroStoredMetrics();
@@ -280,6 +296,15 @@ export function buildDashboardChartSeriesFromCurrentDoc(
         ? Math.min(100, Math.round((t.bookedMinutes / t.capacityMinutes) * 1000) / 10)
         : 0;
   }
+
+  const weekTodayIdx = weekYmds.indexOf(todayIl);
+  if (weekTodayIdx >= 0) week.todayHighlightIndex = weekTodayIdx;
+
+  const monthTodayIdx = ymds.indexOf(todayIl);
+  if (monthTodayIdx >= 0) month.todayHighlightIndex = monthTodayIdx;
+
+  // 12 rolling Israel months; last bucket is the current calendar month.
+  yearSlice.todayHighlightIndex = monthKeys.length - 1;
 
   return {
     week,
