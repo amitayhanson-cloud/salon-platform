@@ -69,7 +69,10 @@ export type MockChartGranularity = "week" | "month" | "year";
 
 /** Placeholder labels when real Firestore bundle is not loaded */
 export function mockChartLabels(granularity: MockChartGranularity): string[] {
-  const n = granularity === "week" ? 7 : granularity === "month" ? 30 : 12;
+  if (granularity === "week") {
+    return ["יום א׳", "יום ב׳", "יום ג׳", "יום ד׳", "יום ה׳", "יום ו׳", "יום ש׳"];
+  }
+  const n = granularity === "month" ? 30 : 12;
   return Array.from({ length: n }, (_, i) => String(i + 1));
 }
 

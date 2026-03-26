@@ -13,6 +13,7 @@ import { db } from "@/lib/firebaseClient";
 import { bookingsCollection, clientsCollection, workersCollection } from "@/lib/firestorePaths";
 import { bookingSettingsDoc } from "@/lib/firestoreBookingSettings";
 import { ymdLocal } from "@/lib/dateLocal";
+import { hebrewWeekChartAxisLabel } from "@/lib/hebrewWeekChartAxisLabel";
 import { isClosedDate } from "@/lib/closedDates";
 import { isDocCancelled } from "@/lib/cancelledBookingShared";
 import { isFollowUpBooking } from "@/lib/normalizeBooking";
@@ -124,11 +125,7 @@ function lastNMonthStartYmds(anchor: Date, n: number): string[] {
 }
 
 function weekDayLabels(ymds: string[]): string[] {
-  return ymds.map((ymd) => {
-    const [y, m, d] = ymd.split("-").map(Number);
-    const dt = new Date(y, m - 1, d);
-    return dt.toLocaleDateString("he-IL", { weekday: "short" });
-  });
+  return ymds.map((ymd) => hebrewWeekChartAxisLabel(ymd));
 }
 
 function monthRangeDayLabels(ymds: string[]): string[] {

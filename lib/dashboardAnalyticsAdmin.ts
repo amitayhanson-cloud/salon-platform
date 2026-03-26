@@ -1,7 +1,11 @@
 import { type Firestore } from "firebase-admin/firestore";
 import { getDateYMDInTimezone, zonedDayRangeEpochMs } from "@/lib/expiredCleanupUtils";
+import { hebrewWeekChartAxisLabel } from "@/lib/hebrewWeekChartAxisLabel";
+import { isClosedDate } from "@/lib/closedDates";
 import type { StoredMetrics } from "@/lib/dashboardAnalyticsStoredMetrics";
 import { zeroStoredMetrics, rolloverDashboardMonthIfNeeded } from "@/lib/liveStatsScorekeeper";
+import type { BookingSettings } from "@/types/bookingSettings";
+import { defaultBookingSettings } from "@/types/bookingSettings";
 
 const IL_TZ = "Asia/Jerusalem";
 
@@ -107,15 +111,6 @@ function weekYmdsSundayToSaturdayContaining(ymd: string): string[] {
   return Array.from({ length: 7 }, (_, i) => addCalendarDaysYmd(sun, i));
 }
 
-function formatWeekAxisEnglishWeekdayLong(ymd: string): string {
-  const { start } = zonedDayRangeEpochMs(ymd, IL_TZ);
-  const mid = start + 12 * 3600_000;
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: IL_TZ,
-    weekday: "long",
-  }).format(new Date(mid));
-}
-
 function formatWeekAxisLabelIsrael(ymd: string): string {
   const { start } = zonedDayRangeEpochMs(ymd, IL_TZ);
   const mid = start + 12 * 3600_000;
@@ -137,6 +132,119 @@ function formatWeekAxisLabelIsrael(ymd: string): string {
   if (!month) month = String(Number(ymd.slice(5, 7)));
   if (!weekday) weekday = "יום";
   return `${weekday} · ${day}.${month}`;
+}
+
+function timeRangeMinutes(start: string, end: string): number {
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  return Math.max(0, eh * 60 + em - (sh * 60 + sm));
+}
+
+function businessDayMinutes(dayCfg: {
+  enabled?: boolean;
+  start?: string;
+  end?: string;
+  breaks?: { start: string; end: string }[];
+}): number {
+  if (!dayCfg?.enabled) return 0;
+  const start = typeof dayCfg.start === "string" ? dayCfg.start : "09:00";
+  const end = typeof dayCfg.end === "string" ? dayCfg.end : "17:00";
+  let m = timeRangeMinutes(start, end);
+  for (const b of dayCfg.breaks ?? []) {
+    if (b?.start && b?.end) m -= timeRangeMinutes(b.start, b.end);
+  }
+  return Math.max(0, m);
+}
+
+function mergeBookingDays(raw: Record<string, unknown> | undefined): BookingSettings["days"] {
+  const keys = ["0", "1", "2", "3", "4", "5", "6"] as const;
+  const result = { ...defaultBookingSettings.days };
+  if (!raw || typeof raw !== "object") return result;
+  for (const k of keys) {
+    const src = (raw[k] ?? raw[String(Number(k))]) as {
+      enabled?: boolean;
+      start?: string;
+      end?: string;
+      breaks?: { start: string; end: string }[];
+    };
+    if (src && typeof src === "object") {
+      result[k] = {
+        enabled: src.enabled ?? false,
+        start: typeof src.start === "string" ? src.start : "09:00",
+        end: typeof src.end === "string" ? src.end : "17:00",
+      };
+      if (src.breaks?.length) {
+        (result[k] as { breaks?: { start: string; end: string }[] }).breaks = src.breaks.filter(
+          (b): b is { start: string; end: string } =>
+            !!b && typeof b === "object" && typeof b.start === "string" && typeof b.end === "string"
+        );
+      }
+    }
+  }
+  return result;
+}
+
+/** Same rules as GET /api/admin/dashboard-metrics (capacity from schedule × active workers). */
+function capacityMinutesForCalendarDay(
+  settings: BookingSettings,
+  dateStr: string,
+  activeWorkers: number
+): number {
+  if (isClosedDate(settings, dateStr)) return 0;
+  const [y, m1, d] = dateStr.split("-").map(Number);
+  const dow = new Date(y, m1 - 1, d).getDay();
+  const dayKey = String(dow) as keyof BookingSettings["days"];
+  const dayCfg = settings.days[dayKey];
+  return businessDayMinutes(dayCfg ?? { enabled: false, start: "09:00", end: "17:00" }) * activeWorkers;
+}
+
+function sumCapacityMinutesForCalendarMonth(
+  settings: BookingSettings,
+  activeWorkers: number,
+  monthKey: string
+): number {
+  const { year, month1 } = parseMonthKey(monthKey);
+  const dim = daysInMonth(year, month1);
+  let sum = 0;
+  for (let d = 1; d <= dim; d++) {
+    const dateStr = `${year}-${String(month1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    sum += capacityMinutesForCalendarDay(settings, dateStr, activeWorkers);
+  }
+  return sum;
+}
+
+export type UtilizationCapacityContext = {
+  settings: BookingSettings;
+  activeWorkers: number;
+};
+
+async function loadUtilizationCapacityContext(
+  db: Firestore,
+  siteId: string
+): Promise<UtilizationCapacityContext | null> {
+  try {
+    const [settingsSnap, workersSnap] = await Promise.all([
+      db.collection("sites").doc(siteId).collection("settings").doc("booking").get(),
+      db.collection("sites").doc(siteId).collection("workers").get(),
+    ]);
+    const settingsData = settingsSnap.exists ? (settingsSnap.data() as Record<string, unknown>) : {};
+    const bookingSettings: BookingSettings = {
+      ...defaultBookingSettings,
+      ...settingsData,
+      days: mergeBookingDays(settingsData.days as Record<string, unknown> | undefined),
+      closedDates: Array.isArray(settingsData.closedDates)
+        ? (settingsData.closedDates as BookingSettings["closedDates"])
+        : [],
+    };
+    const activeWorkers = Math.max(
+      1,
+      workersSnap.docs.filter((d) => (d.data() as { active?: boolean }).active !== false).length
+    );
+    return { settings: bookingSettings, activeWorkers };
+  } catch (e) {
+    console.warn("[dashboardAnalyticsAdmin] loadUtilizationCapacityContext", e);
+    return null;
+  }
 }
 
 export type ChartMetricPoint = number | null;
@@ -161,7 +269,8 @@ function fillSliceFromDayMap(
   slice: DashboardMetricSlice,
   ymds: string[],
   dayMap: Record<string, StoredMetrics>,
-  todayYmd: string
+  todayYmd: string,
+  utilizationCapacity: UtilizationCapacityContext | null
 ) {
   const len = ymds.length;
   const bp: ChartMetricPoint[] = Array.from({ length: len }, () => 0);
@@ -198,8 +307,10 @@ function fillSliceFromDayMap(
     slice.clientsCumulative[i] = runningNewClients;
     slice.newClients[i] = m.newClients;
     slice.cancellations[i] = m.cancellations;
-    const cap = m.capacityMinutes ?? 0;
     const booked = m.bookedMinutes ?? 0;
+    const cap = utilizationCapacity
+      ? capacityMinutesForCalendarDay(utilizationCapacity.settings, ymd, utilizationCapacity.activeWorkers)
+      : m.capacityMinutes ?? 0;
     slice.utilizationPercent[i] =
       cap > 0 ? Math.min(100, Math.round((booked / cap) * 1000) / 10) : 0;
     slice.trafficAttributedBookings[i] = m.trafficAttributedBookings;
@@ -227,12 +338,17 @@ export async function loadDashboardChartSeriesForSite(
   siteId: string,
   now = new Date()
 ): Promise<DashboardChartSeriesBundleAdmin> {
-  const snap = await db.collection("sites").doc(siteId).collection("analytics").doc("dashboardCurrent").get();
+  const dashRef = db.collection("sites").doc(siteId).collection("analytics").doc("dashboardCurrent");
+  const [snap, utilizationCapacity] = await Promise.all([
+    dashRef.get(),
+    loadUtilizationCapacityContext(db, siteId),
+  ]);
   const fallbackKey = monthKeyIsraelFromDate(now);
   if (!snap.exists) {
     return buildDashboardChartSeriesFromCurrentDoc(
       { monthKey: fallbackKey, days: {}, totals: zeroStoredMetrics() },
-      now
+      now,
+      utilizationCapacity
     );
   }
   const d = snap.data() as Partial<CurrentMonthDoc>;
@@ -242,13 +358,15 @@ export async function loadDashboardChartSeriesForSite(
       days: (d.days as Record<string, StoredMetrics>) ?? {},
       totals: (d.totals as StoredMetrics) ?? zeroStoredMetrics(),
     },
-    now
+    now,
+    utilizationCapacity
   );
 }
 
 export function buildDashboardChartSeriesFromCurrentDoc(
   doc: Pick<CurrentMonthDoc, "monthKey" | "days" | "totals">,
-  now: Date
+  now: Date,
+  utilizationCapacity: UtilizationCapacityContext | null = null
 ): DashboardChartSeriesBundleAdmin {
   const { year, month1 } = parseMonthKey(doc.monthKey);
   const ymds = enumerateYmdInMonth(year, month1);
@@ -257,10 +375,10 @@ export function buildDashboardChartSeriesFromCurrentDoc(
 
   const todayIl = getDateYMDInTimezone(now, IL_TZ);
   const weekYmds = weekYmdsSundayToSaturdayContaining(todayIl);
-  const week = mkSlice(weekYmds.map(formatWeekAxisEnglishWeekdayLong));
+  const week = mkSlice(weekYmds.map((ymd) => hebrewWeekChartAxisLabel(ymd)));
   week.titleLabels = weekYmds.map(formatWeekAxisLabelIsrael);
   week.xCalendarIds = [...weekYmds];
-  fillSliceFromDayMap(week, weekYmds, dayMap, todayIl);
+  fillSliceFromDayMap(week, weekYmds, dayMap, todayIl, utilizationCapacity);
 
   const monthLabels = ymds.map((ymd) => {
     const [y, m, d] = ymd.split("-").map(Number);
@@ -272,7 +390,7 @@ export function buildDashboardChartSeriesFromCurrentDoc(
   });
   const month = mkSlice(monthLabels);
   month.xCalendarIds = [...ymds];
-  fillSliceFromDayMap(month, ymds, dayMap, todayIl);
+  fillSliceFromDayMap(month, ymds, dayMap, todayIl, utilizationCapacity);
 
   const monthKeys = Array.from({ length: 12 }, (_, i) => monthKeyIsraelOffsetFrom(now, -(11 - i)));
   const yearLabels = monthKeys.map((k) => {
@@ -291,10 +409,22 @@ export function buildDashboardChartSeriesFromCurrentDoc(
     yearSlice.newClients[i] = t.newClients;
     yearSlice.cancellations[i] = t.cancellations;
     yearSlice.trafficAttributedBookings[i] = t.trafficAttributedBookings;
-    yearSlice.utilizationPercent[i] =
-      t.capacityMinutes > 0
-        ? Math.min(100, Math.round((t.bookedMinutes / t.capacityMinutes) * 1000) / 10)
-        : 0;
+    if (utilizationCapacity && k === doc.monthKey) {
+      const monthCap = sumCapacityMinutesForCalendarMonth(
+        utilizationCapacity.settings,
+        utilizationCapacity.activeWorkers,
+        k
+      );
+      yearSlice.utilizationPercent[i] =
+        monthCap > 0
+          ? Math.min(100, Math.round((t.bookedMinutes / monthCap) * 1000) / 10)
+          : 0;
+    } else {
+      yearSlice.utilizationPercent[i] =
+        t.capacityMinutes > 0
+          ? Math.min(100, Math.round((t.bookedMinutes / t.capacityMinutes) * 1000) / 10)
+          : 0;
+    }
   }
 
   const weekTodayIdx = weekYmds.indexOf(todayIl);

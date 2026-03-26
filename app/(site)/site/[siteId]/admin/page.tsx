@@ -27,6 +27,7 @@ import {
   type DashboardChartSlices,
 } from "@/components/admin/dashboard/DashboardAnalyticsChartPanel";
 import { AnalyticsStatCardWithGraphScroll } from "@/components/admin/dashboard/AnalyticsStatCardWithGraphScroll";
+import type { DashboardChartYValueKind } from "@/components/admin/dashboard/DashboardMiniChart";
 import { DEFAULT_WHATSAPP_USAGE_LIMIT } from "@/lib/whatsapp/constants";
 import {
   type DashboardChartSeriesBundle,
@@ -37,6 +38,8 @@ import {
   mockChartLabels,
   type AnalyticsMetricKind,
 } from "@/lib/analytics/MockData";
+import { bookingDayYmdIsrael } from "@/lib/bookingDayKey";
+import { isDocCancelled } from "@/lib/cancelledBookingShared";
 import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
 
 const DASHBOARD_DAY_TZ = "Asia/Jerusalem";
@@ -182,8 +185,6 @@ export default function AdminHomePage() {
   const router = useRouter();
   const siteId = (params?.siteId as string) || "";
   const { user, firebaseUser, loading, logout } = useAuth();
-  const [stats, setStats] = useState<SiteStats | null>(null);
-  const [statsLoading, setStatsLoading] = useState(true);
   const [whatsAppThisMonth, setWhatsAppThisMonth] = useState<{
     used: number;
     limit: number;
@@ -198,6 +199,28 @@ export default function AdminHomePage() {
     siteId && siteId !== "me" && firebaseUser
       ? (["admin-dashboard-chart-series", siteId, firebaseUser.uid] as const)
       : null;
+
+  const statsSwrKey =
+    siteId && siteId !== "me" && firebaseUser
+      ? (["admin-site-stats", siteId, firebaseUser.uid] as const)
+      : null;
+
+  const {
+    data: stats,
+    isLoading: statsIsLoading,
+    mutate: mutateSiteStats,
+  } = useSWR(
+    statsSwrKey,
+    async ([, sid]) => fetchSiteStats(sid),
+    {
+      dedupingInterval: 60_000,
+      revalidateOnFocus: true,
+      keepPreviousData: true,
+    }
+  );
+
+  /** First paint: no cards until stats resolve (fetchSiteStats always returns an object, never throws). */
+  const statsLoading = Boolean(statsSwrKey && stats === undefined && statsIsLoading);
 
   const { data: chartApiRaw, isLoading: chartSeriesIsLoading } = useSWR(
     chartSwrKey,
@@ -229,6 +252,17 @@ export default function AdminHomePage() {
     }
   );
 
+  /** Chart uses server admin reads; stat cards use client Firestore — refresh stats whenever chart data refetches so “היום” stays aligned. */
+  const chartFetchedAt =
+    chartApiRaw && typeof chartApiRaw === "object" && typeof (chartApiRaw as { fetchedAt?: unknown }).fetchedAt === "string"
+      ? (chartApiRaw as { fetchedAt: string }).fetchedAt
+      : null;
+
+  useEffect(() => {
+    if (!statsSwrKey || !chartFetchedAt) return;
+    void mutateSiteStats();
+  }, [chartFetchedAt, statsSwrKey, mutateSiteStats]);
+
   const chartBundle = useMemo((): DashboardChartSeriesBundle | null => {
     if (!chartApiRaw?.week || !chartApiRaw?.month || !chartApiRaw?.year) return null;
     const fetchedAt =
@@ -246,23 +280,6 @@ export default function AdminHomePage() {
   const welcomeMessage = user?.name
     ? `ברוך שובך – ${user.name}`
     : "ברוך שובך";
-
-  useEffect(() => {
-    if (!siteId) {
-      setStatsLoading(false);
-      return;
-    }
-    let cancelled = false;
-    fetchSiteStats(siteId).then((data) => {
-      if (!cancelled) {
-        setStats(data);
-        setStatsLoading(false);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [siteId]);
 
   useEffect(() => {
     if (!siteId || !firebaseUser) {
@@ -339,13 +356,37 @@ export default function AdminHomePage() {
     };
   }, [siteId, firebaseUser]);
 
+  /**
+   * Today’s revenue on the card should match the admin chart: both come from
+   * `analytics/dashboardCurrent` (Cloud Functions). Client `fetchSiteStats` only queries
+   * `dateISO` and used that for “today”, so new bookings could be missing or mis-bucketed.
+   */
+  const revenueTodayFromChart = useMemo(() => {
+    const w = chartBundle?.week;
+    if (!w?.xCalendarIds?.length || !Array.isArray(w.revenue)) return undefined;
+    const todayYmd = getDateYMDInTimezone(new Date(), DASHBOARD_DAY_TZ);
+    for (let i = 0; i < w.xCalendarIds.length; i++) {
+      if (w.xCalendarIds[i] !== todayYmd) continue;
+      const r = w.revenue[i];
+      return typeof r === "number" && Number.isFinite(r) ? r : undefined;
+    }
+    return undefined;
+  }, [chartBundle]);
+
+  const revenueTodayNis =
+    revenueTodayFromChart !== undefined
+      ? revenueTodayFromChart
+      : stats?.revenueToday != null && Number.isFinite(stats.revenueToday)
+        ? stats.revenueToday
+        : null;
+
   const revenueFormatted =
-    stats?.revenueToday != null
+    revenueTodayNis != null
       ? `\u200E${new Intl.NumberFormat("he-IL", {
           style: "currency",
           currency: "ILS",
           maximumFractionDigits: 0,
-        }).format(stats.revenueToday)}`
+        }).format(revenueTodayNis)}`
       : null;
 
   type DashboardStatRow = {
@@ -498,6 +539,12 @@ export default function AdminHomePage() {
     return (n) => `\u200E${Math.round(n)}`;
   }
 
+  function dashboardYValueKind(kind: AnalyticsMetricKind): DashboardChartYValueKind {
+    if (kind === "revenue") return "currency";
+    if (kind === "utilization") return "percent";
+    return "count";
+  }
+
   const handleLogout = async () => {
     if (loggingOut) return;
     setLoggingOut(true);
@@ -616,6 +663,7 @@ export default function AdminHomePage() {
                     <DashboardAnalyticsChartPanel
                       chartSlices={chartSlices}
                       formatChartY={formatChartYForMetric(row.metricKind)}
+                      yValueKind={dashboardYValueKind(row.metricKind)}
                       detailNote={chartDetailNoteForMetric(row.metricKind)}
                       pieData={row.metricKind === "traffic" ? trafficPieData : undefined}
                       chartSeriesLoading={chartSeriesLoading}

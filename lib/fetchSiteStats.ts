@@ -16,6 +16,8 @@ import {
   clientsCollection,
   bookingsCollection,
 } from "@/lib/firestorePaths";
+import { bookingDayYmdIsrael } from "@/lib/bookingDayKey";
+import { isDocCancelled } from "@/lib/cancelledBookingShared";
 import { getDateYMDInTimezone, zonedDayRangeEpochMs } from "@/lib/expiredCleanupUtils";
 import { isFollowUpBooking } from "@/lib/normalizeBooking";
 
@@ -113,12 +115,16 @@ export async function fetchSiteStats(siteId: string): Promise<SiteStats> {
       let monthVisitCount = 0;
       for (const doc of monthBookingsSnap.docs) {
         const data = doc.data() as Record<string, unknown>;
+        if (isDocCancelled(data)) continue;
         const price = numericBookingPrice(data);
         revenue += price;
+        const canonicalDay = bookingDayYmdIsrael(data);
         const dateKey =
-          typeof data.dateISO === "string" && data.dateISO.length >= 10
-            ? data.dateISO.slice(0, 10)
-            : "";
+          canonicalDay.length >= 10
+            ? canonicalDay
+            : typeof data.dateISO === "string" && data.dateISO.length >= 10
+              ? data.dateISO.slice(0, 10)
+              : "";
         const followUp = isFollowUpBooking(data);
         if (!followUp) monthVisitCount += 1;
         if (dateKey === today) {

@@ -1,10 +1,15 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
+import { useCallback, useMemo, useState } from "react";
+import type { DefaultizedPieValueType } from "@mui/x-charts/models";
 import { PieChart, pieArcLabelClasses } from "@mui/x-charts/PieChart";
 import { cn } from "@/lib/utils";
-import { DashboardMiniChart, type BookingsStackedSlice } from "@/components/admin/dashboard/DashboardMiniChart";
+import {
+  DashboardMiniChart,
+  type BookingsStackedSlice,
+  type DashboardChartYValueKind,
+} from "@/components/admin/dashboard/DashboardMiniChart";
 import { DashboardChartSkeleton } from "@/components/admin/dashboard/DashboardChartSkeleton";
 import type { ChartGranularity } from "@/lib/fetchDashboardWeeklySeries";
 
@@ -15,7 +20,7 @@ const GRANULARITY_LABEL: Record<ChartGranularity, string> = {
 };
 
 const RANGE_CAPTION: Record<ChartGranularity, string> = {
-  week: "השבוע הנוכחי (ראשון–שבת, לפי ישראל) · מתחת לגרף שמות היום באנגלית",
+  week: "השבוע הנוכחי (ראשון–שבת, לפי ישראל) · מתחת לכל עמודה שם היום והתאריך",
   month: "החודש הנוכחי (לפי יום) · תורים: נספרים גם לימים עתידיים (עמודה בהירה)",
   year: "12 החודשים האחרונים (לפי חודש)",
 };
@@ -38,15 +43,55 @@ export type DashboardChartSlices = Record<
 type Props = {
   chartSlices: DashboardChartSlices;
   formatChartY?: (n: number) => string;
+  yValueKind?: DashboardChartYValueKind;
   detailNote?: string;
-  pieData?: { id: string; label: string; value: number; color?: string }[];
+  pieData?: TrafficPieDatum[];
   chartSeriesLoading?: boolean;
   href: string;
 };
 
+export type TrafficPieDatum = { id: string; label: string; value: number; color?: string };
+
+/** מקור הגעה — pie by share of attributed bookings (MUI pattern: % labels from total). */
+function TrafficAttributionPieChart({ data }: { data: TrafficPieDatum[] }) {
+  const ordered = useMemo(() => [...data].sort((a, b) => b.value - a.value), [data]);
+  const total = useMemo(() => ordered.reduce((a, b) => a + b.value, 0) || 1, [ordered]);
+
+  const getArcLabel = useCallback(
+    (params: DefaultizedPieValueType) => `${((params.value / total) * 100).toFixed(0)}%\u200E`,
+    [total]
+  );
+
+  return (
+    <PieChart
+      width={280}
+      height={260}
+      hideLegend
+      margin={{ top: 8, bottom: 8, left: 8, right: 5 }}
+      series={[
+        {
+          outerRadius: 92,
+          data: ordered,
+          arcLabel: getArcLabel,
+          /** Hide % on hairline slices so labels do not collide */
+          arcLabelMinAngle: 12,
+        },
+      ]}
+      sx={{
+        [`& .${pieArcLabelClasses.root}`]: {
+          fill: "#ffffff",
+          fontSize: 14,
+          fontWeight: 700,
+        },
+      }}
+    />
+  );
+}
+
 export function DashboardAnalyticsChartPanel({
   chartSlices,
   formatChartY,
+  yValueKind,
   detailNote,
   pieData,
   chartSeriesLoading = false,
@@ -54,11 +99,13 @@ export function DashboardAnalyticsChartPanel({
 }: Props) {
   const [granularity, setGranularity] = useState<ChartGranularity>("week");
   const slice = chartSlices[granularity];
-  const hasPie = !!pieData && pieData.length > 0;
+  /** Traffic row always passes `pieData` (maybe `[]`); other rows pass `undefined` → bars only. */
+  const isTrafficSourcePie = pieData !== undefined;
+  const hasPieSlices = !!pieData && pieData.length > 0;
 
   return (
     <div className="relative rounded-xl bg-[rgba(255,255,255,0.6)] px-2 py-3 ring-1 ring-[#E2E8F0]/80">
-      {!hasPie ? (
+      {!isTrafficSourcePie ? (
         <div
           className="absolute left-2 top-2 z-10 flex rounded-lg border border-slate-200/90 bg-white/95 p-0.5 shadow-sm"
           dir="ltr"
@@ -84,7 +131,7 @@ export function DashboardAnalyticsChartPanel({
         </div>
       ) : null}
 
-      {!hasPie ? (
+      {!isTrafficSourcePie ? (
         <div className="mb-2 mt-7 space-y-1.5 text-center sm:mt-6">
           <p className="text-[11px] font-medium text-slate-500">{RANGE_CAPTION[granularity]}</p>
           {detailNote ? (
@@ -101,37 +148,25 @@ export function DashboardAnalyticsChartPanel({
       )}
 
       <div className="relative rounded-lg pt-1">
-        {chartSeriesLoading && !hasPie ? (
+        {isTrafficSourcePie ? (
+          chartSeriesLoading && !hasPieSlices ? (
+            <DashboardChartSkeleton />
+          ) : hasPieSlices ? (
+            <div className="flex justify-center" dir="ltr">
+              <TrafficAttributionPieChart data={pieData} />
+            </div>
+          ) : (
+            <div className="flex h-[200px] items-center justify-center px-4 text-center text-sm text-slate-500">
+              אין עדיין נתוני מקור הגעה מספיקים להצגת הגרף
+            </div>
+          )
+        ) : chartSeriesLoading ? (
           <DashboardChartSkeleton />
-        ) : hasPie ? (
-          <PieChart
-            height={240}
-            hideLegend
-            margin={{ right: 10, left: 10, top: 8, bottom: 8 }}
-            series={[
-              {
-                outerRadius: 88,
-                innerRadius: 32,
-                data: pieData,
-                arcLabel: (params) => {
-                  const total = pieData.reduce((s, x) => s + x.value, 0) || 1;
-                  const percent = (params.value / total) * 100;
-                  return percent >= 7 ? `${percent.toFixed(0)}%` : "";
-                },
-              },
-            ]}
-            sx={{
-              [`& .${pieArcLabelClasses.root}`]: {
-                fill: "#ffffff",
-                fontSize: 12,
-                fontWeight: 700,
-              },
-            }}
-          />
         ) : (
           <DashboardMiniChart
             data={slice.values}
             formatY={formatChartY}
+            yValueKind={yValueKind}
             xLabels={slice.labels}
             titleLabels={slice.titleLabels}
             bookingsStacked={slice.bookingsStacked}
