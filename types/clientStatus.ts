@@ -4,8 +4,8 @@ export type SleepingWindowUnit = "days" | "months";
 
 export type ClientStatusRules = {
   /**
-   * "חדש" if the client has at least one qualifying (non-cancelled) dated visit in history,
-   * but fewer than this many **lifetime** visits. Clients with **no** qualifying history are "רדום".
+   * "חדש" if the client has fewer than this many **lifetime** qualifying (non-cancelled) visits,
+   * including clients with no qualifying history.
    */
   newMaxTotalBookings: number;
   /** "פעיל" if at least this many **past** visits fall inside `activeWindowDays`. */

@@ -49,6 +49,17 @@ export type DashboardChartSeriesBundleAdmin = {
   fetchedAt: string;
 };
 
+async function loadClientsTotalCount(db: Firestore, siteId: string): Promise<number | null> {
+  try {
+    const agg = await db.collection("sites").doc(siteId).collection("clients").count().get();
+    const n = agg.data().count;
+    return Number.isFinite(n) ? Number(n) : null;
+  } catch (e) {
+    console.warn("[dashboardAnalyticsAdmin] loadClientsTotalCount", e);
+    return null;
+  }
+}
+
 /** Israel wall-clock month + offset (for year chart axis; avoids UTC/server-local drift). */
 function monthKeyIsraelOffsetFrom(now: Date, deltaMonths: number): string {
   const ymd = getDateYMDInTimezone(now, IL_TZ);
@@ -339,16 +350,41 @@ export async function loadDashboardChartSeriesForSite(
   now = new Date()
 ): Promise<DashboardChartSeriesBundleAdmin> {
   const dashRef = db.collection("sites").doc(siteId).collection("analytics").doc("dashboardCurrent");
-  const [snap, utilizationCapacity] = await Promise.all([
+  const [snap, utilizationCapacity, clientsTotalCount] = await Promise.all([
     dashRef.get(),
     loadUtilizationCapacityContext(db, siteId),
+    loadClientsTotalCount(db, siteId),
   ]);
   const fallbackKey = monthKeyIsraelFromDate(now);
+  const rollingMonthKeys = Array.from({ length: 12 }, (_, i) => monthKeyIsraelOffsetFrom(now, -(11 - i)));
+
+  const archivedMonthTotals: Record<string, StoredMetrics> = {};
+  const historyMonthKeys = rollingMonthKeys.filter((k) => k !== fallbackKey);
+  if (historyMonthKeys.length > 0) {
+    const monthlyMonths = db
+      .collection("sites")
+      .doc(siteId)
+      .collection("analytics")
+      .doc("monthly")
+      .collection("months");
+    const monthSnaps = await Promise.all(historyMonthKeys.map((k) => monthlyMonths.doc(k).get()));
+    for (const monthSnap of monthSnaps) {
+      if (!monthSnap.exists) continue;
+      const data = monthSnap.data() as { monthKey?: unknown; totals?: Partial<StoredMetrics> } | undefined;
+      const monthKey = typeof data?.monthKey === "string" ? data.monthKey : monthSnap.id;
+      const totals = data?.totals;
+      if (!totals || typeof totals !== "object") continue;
+      archivedMonthTotals[monthKey] = { ...zeroStoredMetrics(), ...totals };
+    }
+  }
+
   if (!snap.exists) {
     return buildDashboardChartSeriesFromCurrentDoc(
       { monthKey: fallbackKey, days: {}, totals: zeroStoredMetrics() },
       now,
-      utilizationCapacity
+      utilizationCapacity,
+      archivedMonthTotals,
+      clientsTotalCount
     );
   }
   const d = snap.data() as Partial<CurrentMonthDoc>;
@@ -359,14 +395,18 @@ export async function loadDashboardChartSeriesForSite(
       totals: (d.totals as StoredMetrics) ?? zeroStoredMetrics(),
     },
     now,
-    utilizationCapacity
+    utilizationCapacity,
+    archivedMonthTotals,
+    clientsTotalCount
   );
 }
 
 export function buildDashboardChartSeriesFromCurrentDoc(
   doc: Pick<CurrentMonthDoc, "monthKey" | "days" | "totals">,
   now: Date,
-  utilizationCapacity: UtilizationCapacityContext | null = null
+  utilizationCapacity: UtilizationCapacityContext | null = null,
+  archivedMonthTotals: Record<string, StoredMetrics> = {},
+  clientsTotalCount: number | null = null
 ): DashboardChartSeriesBundleAdmin {
   const { year, month1 } = parseMonthKey(doc.monthKey);
   const ymds = enumerateYmdInMonth(year, month1);
@@ -401,7 +441,7 @@ export function buildDashboardChartSeriesFromCurrentDoc(
   yearSlice.xCalendarIds = [...monthKeys];
   for (let i = 0; i < monthKeys.length; i++) {
     const k = monthKeys[i];
-    const t = k === doc.monthKey ? totals : zeroStoredMetrics();
+    const t = k === doc.monthKey ? totals : (archivedMonthTotals[k] ?? zeroStoredMetrics());
     yearSlice.revenue[i] = t.revenue;
     yearSlice.bookings[i] = t.bookings;
     yearSlice.whatsappCount[i] = t.whatsappCount;
@@ -424,6 +464,20 @@ export function buildDashboardChartSeriesFromCurrentDoc(
         t.capacityMinutes > 0
           ? Math.min(100, Math.round((t.bookedMinutes / t.capacityMinutes) * 1000) / 10)
           : 0;
+    }
+  }
+
+  // Year clients should never collapse to zero when monthly totals omit `clientsCumulative`.
+  if (clientsTotalCount != null && Number.isFinite(clientsTotalCount)) {
+    let tailNewClients = 0;
+    for (let i = monthKeys.length - 1; i >= 0; i--) {
+      const monthNewClients = Number(yearSlice.newClients[i] ?? 0);
+      const reconstructed = Math.max(0, clientsTotalCount - tailNewClients);
+      const existing = Number(yearSlice.clientsCumulative[i] ?? 0);
+      if (!Number.isFinite(existing) || existing <= 0) {
+        yearSlice.clientsCumulative[i] = reconstructed;
+      }
+      tailNewClients += Number.isFinite(monthNewClients) ? monthNewClients : 0;
     }
   }
 

@@ -603,67 +603,81 @@ export default function TeamPerformancePage() {
         </div>
       ) : (
         <AdminCard className="overflow-hidden">
-          {/* Mobile: card layout — all info visible without horizontal scroll */}
-          <div className="md:hidden space-y-3 p-3 sm:p-4">
+          {/* Mobile: card-based layout */}
+          <div className="space-y-4 p-3 sm:p-4 md:hidden">
             {/* Summary card */}
-            <div className="rounded-xl bg-slate-100 border border-slate-200 p-3 text-right">
-              <p className="text-xs font-semibold text-slate-600 mb-2">סיכום לתקופה</p>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
-                <div className="flex justify-between gap-2">
-                  <span className="text-slate-600">שירותים</span>
-                  <span className="font-medium text-slate-900">{formatCurrency(totals.totalGrossRevenue)}</span>
+            <div className="overflow-hidden rounded-2xl border-2 border-[#99d7df] bg-[#f0fbfd] text-right shadow-sm">
+              <div className="bg-[#d8f3f7] px-4 py-2.5">
+                <p className="text-sm font-bold text-[#0b4f5a]">סיכום לתקופה</p>
+              </div>
+              <div className="space-y-3 px-4 py-3.5">
+                <div>
+                  <p className="text-xs font-medium text-slate-500">סה״כ שירותים</p>
+                  <p className="mt-1 text-2xl font-extrabold tracking-tight text-[#0F172A]">
+                    {formatCurrency(totals.totalGrossRevenue)}
+                  </p>
                 </div>
-                <div className="flex justify-between gap-2">
-                  <span className="text-slate-600">שעות עבודה</span>
-                  <span className="font-medium text-slate-900">{formatTime(totals.totalHours)}</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl bg-white/80 px-3 py-2.5">
+                    <p className="text-[11px] font-medium text-slate-500">שעות עבודה</p>
+                    <p className="mt-1 text-base font-bold text-slate-900">{formatTime(totals.totalHours)}</p>
+                  </div>
+                  <div className="rounded-xl bg-white/80 px-3 py-2.5">
+                    <p className="text-[11px] font-medium text-slate-500">ממוצע לשעה</p>
+                    <p className="mt-1 text-base font-bold text-slate-900">
+                      {totals.totalHours > 0 ? formatCurrency(totals.avgPerHour) : formatCurrency(0)}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex justify-between gap-2">
-                  <span className="text-slate-600">ממוצע לשעה</span>
-                  <span className="font-medium text-slate-900">
-                    {totals.totalHours > 0 ? formatCurrency(totals.avgPerHour) : formatCurrency(0)}
-                  </span>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <span className="text-slate-600">חלק עובד</span>
-                  <span className="font-medium text-slate-900">{formatCurrency(totals.totalWorkerPayout)}</span>
-                </div>
-                <div className="flex justify-between gap-2 col-span-2">
-                  <span className="text-slate-600">חלק עסק</span>
-                  <span className="font-bold text-slate-900">{formatCurrency(totals.totalBusinessShare)}</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl border border-[#bde7e3] bg-[#eafaf7] px-3 py-2.5">
+                    <p className="text-[11px] font-semibold text-[#2f6f67]">חלק עובד</p>
+                    <p className="mt-1 text-base font-bold text-[#0F172A]">{formatCurrency(totals.totalWorkerPayout)}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                    <p className="text-[11px] font-semibold text-slate-600">חלק עסק</p>
+                    <p className="mt-1 text-base font-bold text-[#0F172A]">{formatCurrency(totals.totalBusinessShare)}</p>
+                  </div>
                 </div>
               </div>
             </div>
+
             {/* Per-worker cards */}
             {workerMetrics.map((worker) => (
-              <div
-                key={worker.workerId}
-                className="rounded-xl border border-slate-200 bg-white p-3 text-right"
-              >
-                <p className="text-sm font-semibold text-slate-900 mb-2 border-b border-slate-100 pb-1.5">
-                  {worker.workerName}
-                </p>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
-                  <div className="flex justify-between gap-2">
-                    <span className="text-slate-600">שירותים</span>
-                    <span className="text-slate-900">{formatCurrency(worker.grossRevenue)}</span>
+              <div key={worker.workerId} className="overflow-hidden rounded-2xl border border-slate-200 bg-white text-right shadow-sm">
+                <div className="bg-slate-900 px-4 py-2.5">
+                  <p className="text-sm font-bold text-white">{worker.workerName}</p>
+                </div>
+                <div className="space-y-3 px-4 py-3.5">
+                  <div>
+                    <p className="text-xs font-medium text-slate-500">סה״כ שירותים</p>
+                    <p className="mt-1 text-2xl font-extrabold tracking-tight text-[#0F172A]">
+                      {formatCurrency(worker.grossRevenue)}
+                    </p>
                   </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-slate-600">שעות עבודה</span>
-                    <span className="text-slate-900">{formatTime(worker.totalHours)}</span>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-xl bg-slate-100 px-3 py-2.5">
+                      <p className="text-[11px] font-medium text-slate-500">שעות עבודה</p>
+                      <p className="mt-1 text-base font-bold text-slate-900">{formatTime(worker.totalHours)}</p>
+                    </div>
+                    <div className="rounded-xl bg-slate-100 px-3 py-2.5">
+                      <p className="text-[11px] font-medium text-slate-500">ממוצע לשעה</p>
+                      <p className="mt-1 text-base font-bold text-slate-900">
+                        {worker.totalHours > 0 ? formatCurrency(worker.avgPerHour) : formatCurrency(0)}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-slate-600">ממוצע לשעה</span>
-                    <span className="text-slate-900">
-                      {worker.totalHours > 0 ? formatCurrency(worker.avgPerHour) : formatCurrency(0)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-slate-600">חלק עובד</span>
-                    <span className="text-slate-900">{formatCurrency(worker.workerPayout)}</span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-slate-600">חלק עסק</span>
-                    <span className="text-slate-900">{formatCurrency(worker.businessShare)}</span>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-xl border border-[#bde7e3] bg-[#eafaf7] px-3 py-2.5">
+                      <p className="text-[11px] font-semibold text-[#2f6f67]">חלק עובד</p>
+                      <p className="mt-1 text-base font-bold text-[#0F172A]">{formatCurrency(worker.workerPayout)}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <p className="text-[11px] font-semibold text-slate-600">חלק עסק</p>
+                      <p className="mt-1 text-base font-bold text-[#0F172A]">{formatCurrency(worker.businessShare)}</p>
+                    </div>
                   </div>
                 </div>
               </div>

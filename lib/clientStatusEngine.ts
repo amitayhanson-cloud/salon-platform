@@ -56,8 +56,8 @@ export function calculateAutomatedClientStatus(
     .map((b) => toDate(b.date, b.time))
     .filter((d): d is Date => !!d);
 
-  // No usable history → dormant (never booked / only cancelled / bad data)
-  if (qualifyingDates.length === 0) return "sleeping";
+  // No usable history (never booked / only cancelled / bad data) follows the "new" threshold rule.
+  if (qualifyingDates.length === 0) return "new";
 
   const nowMs = now.getTime();
   const pastVisits = qualifyingDates.filter((d) => d.getTime() <= nowMs);
@@ -68,7 +68,7 @@ export function calculateAutomatedClientStatus(
     return totalLifetime < rules.newMaxTotalBookings ? "new" : "normal";
   }
 
-  // Had at least one past visit — "חדש" = few lifetime visits (but not zero-history; that's sleeping above)
+  // "חדש" = few lifetime visits.
   if (totalLifetime < rules.newMaxTotalBookings) return "new";
 
   // "פעיל" = enough *past* visits in the recent window (future bookings don't count)

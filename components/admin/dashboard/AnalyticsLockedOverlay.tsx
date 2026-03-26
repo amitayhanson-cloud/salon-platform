@@ -14,6 +14,7 @@ const TEASER_BODY: Record<AnalyticsMetricKind, string> = {
   cancellations: "Spot cancellation trends early.",
   utilization: "See how fully your calendar is booked.",
   traffic: "See which booking links drive the most traffic.",
+  popularService: "See which services drive the biggest share.",
 };
 
 type Props = {

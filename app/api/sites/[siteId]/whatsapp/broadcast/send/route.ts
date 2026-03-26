@@ -18,7 +18,7 @@ import { listBroadcastRecipients } from "@/lib/whatsapp/broadcastRecipients";
 import { MAX_BROADCAST_CUSTOM_TEXT_LEN, MAX_BROADCAST_RECIPIENTS } from "@/lib/whatsapp/broadcastConstants";
 import { parseBroadcastFiltersFromBody } from "@/lib/whatsapp/parseBroadcastBody";
 import { renderWhatsAppTemplate } from "@/lib/whatsapp/templateRender";
-import { getPublicLandingPageAbsoluteUrlForSite } from "@/lib/url";
+import { getPublicBookingPageAbsoluteUrlForSite, withTrackingSource } from "@/lib/url";
 import { getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
 import { assertSiteWithinWhatsAppLimit } from "@/lib/whatsapp/usage";
 
@@ -123,7 +123,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const tenantSlug =
     (typeof raw?.slug === "string" && raw.slug.trim() ? raw.slug.trim() : null) ??
     (typeof config?.slug === "string" && config.slug.trim() ? config.slug.trim() : null);
-  const landingUrl = getPublicLandingPageAbsoluteUrlForSite(id, tenantSlug);
+  const trackedBookingUrl = withTrackingSource(
+    getPublicBookingPageAbsoluteUrlForSite(id, tenantSlug),
+    "whatsapp"
+  );
   const waSettings = await getSiteWhatsAppSettings(id);
   const broadcastTemplate = waSettings.broadcastTemplate;
 
@@ -135,10 +138,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const bodyRendered = renderWhatsAppTemplate(broadcastTemplate, {
       שם_לקוח: r.name,
       שם_העסק: salonName,
-      קישור_לתיאום: landingUrl,
+      קישור_לתיאום: trackedBookingUrl,
       client_name: r.name,
       business_name: salonName,
-      link: landingUrl,
+      link: trackedBookingUrl,
       custom_text: customSegment,
     });
     if (bodyRendered.length > MAX_MESSAGE_LEN) {

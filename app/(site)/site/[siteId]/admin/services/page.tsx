@@ -96,6 +96,7 @@ export default function ServicesPage() {
   const [itemMenuOpenId, setItemMenuOpenId] = useState<string | null>(null);
   const itemMenuRef = useRef<HTMLDivElement>(null);
   const [itemMenuPosition, setItemMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const activeServiceTabBtnRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (serviceMenuOpenId == null) {
@@ -551,6 +552,15 @@ export default function ServicesPage() {
   /** Resolved tab for display (avoids empty content before effect runs). */
   const activeTabId = selectedServiceId ?? (services[0]?.id ?? (unassignedItems.length > 0 ? "__UNASSIGNED__" : null));
 
+  useEffect(() => {
+    if (!activeServiceTabBtnRef.current) return;
+    activeServiceTabBtnRef.current.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "center",
+    });
+  }, [activeTabId]);
+
   const handleEditService = (service: SiteService) => {
     setEditingService(service);
   };
@@ -823,7 +833,7 @@ export default function ServicesPage() {
             <div className="text-center py-8 sm:py-12">
               <p className="text-[#64748B] mb-4">אין שירותים עדיין</p>
               <p className="text-xs sm:text-sm text-slate-400 mb-4">
-                לחץ על "הוסף שירות" כדי להתחיל
+                לחץ על "הוסף קטגוריית שירות" כדי להתחיל
               </p>
               <button
                 type="button"
@@ -831,40 +841,33 @@ export default function ServicesPage() {
                 className="min-h-[44px] px-4 py-3 sm:py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium transition-colors inline-flex items-center justify-center gap-2 touch-manipulation"
               >
                 <Plus className="w-4 h-4" />
-                הוסף שירות
+                הוסף קטגוריית שירות
               </button>
             </div>
           ) : (
             <>
-              {/* Tabs navbar with Add service button on the right; each service tab has a 3-dot menu */}
-              <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 sm:gap-3 border-b border-slate-200 pb-4 sm:pb-0 sm:mb-6 -mx-1 sm:mx-0">
-                <button
-                  type="button"
-                  onClick={() => setEditingService({ ...NEW_SERVICE_DRAFT })}
-                  className="shrink-0 min-h-[44px] px-4 py-3 sm:py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 touch-manipulation order-first sm:order-none"
-                >
-                  <Plus className="w-4 h-4" />
-                  הוסף שירות
-                </button>
-                <div className="flex-1 min-w-0 flex flex-wrap gap-1.5 py-1 px-1 rounded-xl sm:rounded-full bg-white/40 border border-[#E2E8F0]/60 w-full">
+              {/* Tabs navbar: match Site page style; action button sits below on desktop */}
+              <div className="mb-4 sm:mb-6 -mx-1 sm:mx-0">
+                <div className="flex w-full min-w-0 gap-2 overflow-x-auto rounded-xl border border-[#E2E8F0]/60 bg-white/40 px-1.5 py-1.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden md:flex-wrap md:gap-1.5 md:rounded-full md:px-1 md:py-1">
                   {services.map((s) => {
                     const isSelected = activeTabId === s.id;
                     return (
                       <div
                         key={s.id}
-                        className={`flex items-center flex-row-reverse rounded-full touch-manipulation ${
+                        className={`flex shrink-0 items-center flex-row-reverse rounded-full touch-manipulation ${
                           isSelected
                             ? "bg-[#1E6F7C] text-white shadow-sm"
                             : ""
                         }`}
                       >
                         <button
+                          ref={isSelected ? activeServiceTabBtnRef : null}
                           type="button"
                           onClick={() => setSelectedServiceId(s.id)}
-                          className={`min-h-[44px] px-3 sm:px-4 py-2.5 md:px-5 text-sm font-medium transition-all whitespace-nowrap touch-manipulation ${
+                          className={`min-h-[38px] whitespace-nowrap px-3 py-1.5 text-xs font-semibold transition-all touch-manipulation sm:text-sm md:min-h-[44px] md:px-4 md:py-2.5 md:font-medium md:md:px-5 ${
                             isSelected
                               ? "text-white"
-                              : "text-[#64748B] hover:bg-white/60 hover:text-[#1E6F7C] rounded-full"
+                              : "rounded-full bg-[#f3f4f6] text-[#4b5563] hover:bg-[#e5e7eb] md:bg-transparent md:text-[#64748B] md:hover:bg-white/60 md:hover:text-[#1E6F7C]"
                           }`}
                         >
                           {s.name}
@@ -890,17 +893,28 @@ export default function ServicesPage() {
                   })}
                   {unassignedItems.length > 0 && (
                     <button
+                      ref={activeTabId === "__UNASSIGNED__" ? activeServiceTabBtnRef : null}
                       type="button"
                       onClick={() => setSelectedServiceId("__UNASSIGNED__")}
-                      className={`min-h-[44px] px-3 sm:px-4 py-2.5 md:px-5 text-sm font-medium transition-all rounded-full touch-manipulation whitespace-nowrap ${
+                      className={`min-h-[38px] shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-all touch-manipulation sm:text-sm md:min-h-[44px] md:px-4 md:py-2.5 md:font-medium md:md:px-5 ${
                         activeTabId === "__UNASSIGNED__"
                           ? "bg-[#1E6F7C] text-white shadow-sm"
-                          : "text-[#64748B] hover:bg-white/60 hover:text-[#1E6F7C]"
+                          : "bg-[#f3f4f6] text-[#4b5563] hover:bg-[#e5e7eb] md:bg-transparent md:text-[#64748B] md:hover:bg-white/60 md:hover:text-[#1E6F7C]"
                       }`}
                     >
                       לא משויך ({unassignedItems.length})
                     </button>
                   )}
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setEditingService({ ...NEW_SERVICE_DRAFT })}
+                    className="shrink-0 min-h-[44px] px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 touch-manipulation"
+                  >
+                    <Plus className="w-4 h-4" />
+                    הוסף קטגוריית שירות
+                  </button>
                 </div>
               </div>
 
@@ -1301,7 +1315,7 @@ export default function ServicesPage() {
         >
           <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl border border-slate-200 w-full max-w-md max-h-[90vh] sm:max-h-[85vh] flex flex-col mt-auto sm:mt-0">
             <div className="sticky top-0 bg-white border-b border-slate-200 px-4 sm:px-6 py-4 flex justify-between items-center shrink-0">
-              <h3 className="text-base sm:text-lg font-bold text-slate-900">{isServiceCreateMode ? "הוסף שירות" : "ערוך שירות"}</h3>
+              <h3 className="text-base sm:text-lg font-bold text-slate-900">{isServiceCreateMode ? "הוסף קטגוריית שירות" : "ערוך קטגוריית שירות"}</h3>
               <button
                 onClick={() => setEditingService(null)}
                 className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 -m-2 hover:bg-slate-100 rounded-lg touch-manipulation"
@@ -1314,7 +1328,7 @@ export default function ServicesPage() {
             <div className="p-4 sm:p-6 space-y-4 overflow-y-auto">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  שם השירות *
+                  שם קטגוריה *
                 </label>
                 <input
                   type="text"
@@ -1328,7 +1342,7 @@ export default function ServicesPage() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  צבע השירות ביומן
+                  צבע קטגוריה ביומן
                 </label>
                 <div className="flex items-center gap-3">
                   <input
@@ -1479,7 +1493,7 @@ export default function ServicesPage() {
                   >
                     <option value="">בחר שירות</option>
                     {activeServiceIds.length === 0 ? (
-                      <option value="" disabled>אין שירותים זמינים</option>
+                      <option value="" disabled>אין קטגוריות שירות זמינות</option>
                     ) : (
                       activeServiceIds.map((serviceName) => (
                         <option key={serviceName} value={serviceName}>
@@ -1493,7 +1507,7 @@ export default function ServicesPage() {
                   )}
                   {activeServiceIds.length === 0 && (
                     <p className="text-xs text-red-600 mt-1">
-                      הוסף שירות תחילה מהרשימה למעלה
+                      הוסף קטגוריית שירות תחילה מהרשימה למעלה
                     </p>
                   )}
                 </div>
@@ -1912,7 +1926,7 @@ export default function ServicesPage() {
                   className="w-full flex items-center gap-2 px-3 py-2 text-right text-sm text-slate-700 hover:bg-slate-50"
                 >
                   <Pencil className="w-4 h-4 shrink-0" />
-                  ערוך שירות
+                  ערוך קטגוריית שירות
                 </button>
                 <button
                   type="button"

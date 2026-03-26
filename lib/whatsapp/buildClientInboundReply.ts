@@ -4,7 +4,7 @@
 
 import { formatIsraelDateTime, formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
 import { getAdminDb } from "@/lib/firebaseAdmin";
-import { getPublicBookingPageAbsoluteUrlForSite } from "@/lib/url";
+import { getPublicBookingPageAbsoluteUrlForSite, withTrackingSource } from "@/lib/url";
 import type { WhatsAppTemplateVariables } from "@/types/whatsappSettings";
 import { fetchWazeUrlForSite } from "./fetchWazeUrlForSite";
 import { getSiteWhatsAppSettings } from "./siteWhatsAppSettings";
@@ -47,7 +47,7 @@ export async function buildClientConfirmReplyMessage(
 ): Promise<string> {
   const settings = await getSiteWhatsAppSettings(siteId);
   const [wazeUrl, slug] = await Promise.all([fetchWazeUrlForSite(siteId), getSiteSlugForLink(siteId)]);
-  const link = getPublicBookingPageAbsoluteUrlForSite(siteId, slug);
+  const link = withTrackingSource(getPublicBookingPageAbsoluteUrlForSite(siteId, slug), "whatsapp");
   const waze = wazeUrl ?? "";
   const timeOnly = formatIsraelTime(params.startAt);
 
@@ -85,7 +85,7 @@ export async function buildClientCancelReplyMessage(
 ): Promise<string> {
   const settings = await getSiteWhatsAppSettings(siteId);
   const [wazeUrl, slug] = await Promise.all([fetchWazeUrlForSite(siteId), getSiteSlugForLink(siteId)]);
-  const link = getPublicBookingPageAbsoluteUrlForSite(siteId, slug);
+  const link = withTrackingSource(getPublicBookingPageAbsoluteUrlForSite(siteId, slug), "whatsapp");
   const waze = wazeUrl ?? "";
 
   if (!settings.clientCancelReplyEnabled) {

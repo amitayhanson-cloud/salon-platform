@@ -190,18 +190,12 @@ export default function AdminClientStatusSettings({ siteId }: { siteId: string }
           <span className={automatedStatusBadgeClass("sleeping")}>רדום</span>
           .
         </p>
-        <p className="text-sm text-slate-600">
-          הסטטוס מחושב לפי היסטוריית תורים (כולל תורים שהוסרו מהיומן), ללא ביטולים.{" "}
-          <span className={automatedStatusBadgeClass("sleeping")}>רדום</span> — בלי תורים רלוונטיים בכלל, או בלי תור
-          שכבר התקיים בחלון שמוגדר למטה. <span className={automatedStatusBadgeClass("active")}>פעיל</span> — רק תורים
-          שכבר עברו (לא עתידיים) נספרים בחלון הימים האחרונים.
-        </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <label className="rounded-xl border border-slate-200 p-4 bg-slate-50/70 space-y-2">
           <span className="text-sm text-slate-700">
-            לקוח ייחשב <span className={automatedStatusBadgeClass("new")}>חדש</span> אם יש לו היסטוריה, אבל פחות מ־
+            לקוח ייחשב <span className={automatedStatusBadgeClass("new")}>חדש</span> אם יש לו פחות מ־
           </span>
           <input
             type="number"
@@ -215,7 +209,7 @@ export default function AdminClientStatusSettings({ siteId }: { siteId: string }
             }
             className="w-full rounded-lg border border-slate-300 px-3 py-2"
           />
-          <span className="text-sm text-slate-600">תורים בסך הכול (לקוח בלי היסטוריה רלוונטית יסומן רדום).</span>
+          <span className="text-sm text-slate-600">תורים בסך הכול (כולל לקוח בלי היסטוריה רלוונטית).</span>
         </label>
 
         <label className="rounded-xl border border-slate-200 p-4 bg-slate-50/70 space-y-2">

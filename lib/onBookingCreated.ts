@@ -20,7 +20,7 @@ import { renderBookingConfirmationMessageFromBookingData } from "@/lib/whatsapp/
 import { getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
 import { setWaOptInPending } from "@/lib/whatsapp/waOptInPending";
 import { skipPostBookingConfirmationBecauseReminderCovers } from "@/lib/whatsapp/postBookingConfirmationSkip";
-import { getPublicBookingPageUrlForSite } from "@/lib/url";
+import { getPublicBookingPageAbsoluteUrlForSite, withTrackingSource } from "@/lib/url";
 import { formatIsraelDateShort, formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
 import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
 import { refreshClientAutomatedStatusFromBooking } from "@/lib/server/clientAutomatedStatus";
@@ -47,12 +47,14 @@ function getTomorrowIsrael(): string {
 async function getSiteSalonNameAndWazeUrl(
   db: ReturnType<typeof getAdminDb>,
   siteId: string
-): Promise<{ salonName: string; wazeUrl: string }> {
+): Promise<{ salonName: string; wazeUrl: string; slug: string | null }> {
   const siteSnap = await db.collection("sites").doc(siteId).get();
   const config = siteSnap.data()?.config;
   const salonName = config?.salonName ?? config?.whatsappBrandName ?? "הסלון";
   const wazeUrl = buildWazeUrlFromAddress(config?.address);
-  return { salonName, wazeUrl };
+  const rawSlug = siteSnap.data()?.slug;
+  const slug = typeof rawSlug === "string" && rawSlug.trim() ? rawSlug.trim() : null;
+  return { salonName, wazeUrl, slug };
 }
 
 /**
@@ -87,9 +89,12 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
     throw new Error(phoneResult.error);
   }
   const customerPhoneE164 = phoneResult.e164;
-  const { salonName } = await getSiteSalonNameAndWazeUrl(db, siteId);
+  const { salonName, slug } = await getSiteSalonNameAndWazeUrl(db, siteId);
   const waSettings = await getSiteWhatsAppSettings(siteId);
-  const bookingPublicUrl = getPublicBookingPageUrlForSite(siteId);
+  const bookingPublicUrl = withTrackingSource(
+    getPublicBookingPageAbsoluteUrlForSite(siteId, slug),
+    "whatsapp"
+  );
   const customerDisplayName = String(data.customerName ?? "").trim() || "לקוח/ה";
 
   // Idempotent: skip if confirmation already sent, opt-in already registered, or reminder flow advanced

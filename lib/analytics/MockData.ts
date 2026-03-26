@@ -26,7 +26,8 @@ export type AnalyticsMetricKind =
   | "newClients"
   | "cancellations"
   | "utilization"
-  | "traffic";
+  | "traffic"
+  | "popularService";
 
 export function getMockSeriesForMetric(kind: AnalyticsMetricKind): number[] {
   switch (kind) {
@@ -46,6 +47,8 @@ export function getMockSeriesForMetric(kind: AnalyticsMetricKind): number[] {
       return [...MOCK_UTILIZATION_WEEKLY];
     case "traffic":
       return [...MOCK_TRAFFIC_WEEKLY];
+    case "popularService":
+      return [...MOCK_BOOKINGS_WEEKLY_COUNT];
     default:
       return [...MOCK_BOOKINGS_WEEKLY_COUNT];
   }

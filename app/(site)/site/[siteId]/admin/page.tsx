@@ -18,6 +18,7 @@ import {
   XCircle,
   Percent,
   Link2,
+  Scissors,
   type LucideIcon,
 } from "lucide-react";
 import { AdminCard } from "@/components/admin/AdminCard";
@@ -91,6 +92,7 @@ const METRIC_SLICE_KEY: Record<AnalyticsMetricKind, MetricValueKey> = {
   cancellations: "cancellations",
   utilization: "utilizationPercent",
   traffic: "trafficAttributedBookings",
+  popularService: "bookings",
 };
 
 /** Graph block headings (granularity is שבוע/חודש/שנה — not “היום” on the title). */
@@ -103,6 +105,7 @@ const DASHBOARD_CHART_SECTION_TITLE: Record<AnalyticsMetricKind, string> = {
   utilization: "ניצולת זמן",
   traffic: "מקור הגעה",
   whatsapp: "הודעות WhatsApp",
+  popularService: "שירותים פופולריים",
 };
 
 function buildDashboardChartSlices(
@@ -178,6 +181,7 @@ type DashboardMetrics = {
   bookedHoursToday?: number;
   availableHoursToday?: number;
   trafficBySource?: { source: string; count: number }[];
+  servicePopularity?: { service: string; count: number }[];
 };
 
 export default function AdminHomePage() {
@@ -422,6 +426,20 @@ export default function AdminHomePage() {
     return base;
   }, [dashMetrics?.trafficBySource]);
 
+  const formatUtilizationPercent = (value: number) => `\u200E${value.toFixed(1)}%`;
+
+  const servicePopularityPieData = useMemo(() => {
+    const rows = dashMetrics?.servicePopularity ?? [];
+    if (rows.length === 0) return [];
+    const colors = ["#1e6f7c", "#2fb7b5", "#7eddd8", "#0f4550", "#155969", "#94a3b8", "#0ea5a4"];
+    return rows.map((row, i) => ({
+      id: `service-${i}`,
+      label: row.service,
+      value: row.count,
+      color: colors[i % colors.length],
+    }));
+  }, [dashMetrics?.servicePopularity]);
+
   const statCards = useMemo((): DashboardStatRow[] => {
     const trafficTop = (dashMetrics?.trafficBySource ?? []).slice(0, 3);
     const trafficValue =
@@ -431,11 +449,17 @@ export default function AdminHomePage() {
     const utilPct = dm?.utilizationPercentToday;
     const utilValue =
       dm != null && utilPct != null && Number.isFinite(utilPct)
-        ? `\u200E${utilPct}%${
+        ? `${formatUtilizationPercent(utilPct)}${
             dm.bookedHoursToday != null && dm.availableHoursToday != null
               ? ` (${dm.bookedHoursToday}/${dm.availableHoursToday} ש׳)`
               : ""
           }`
+        : null;
+    const popularServiceTop = dm?.servicePopularity?.[0] ?? null;
+    const popularServiceTotal = (dm?.servicePopularity ?? []).reduce((sum, row) => sum + row.count, 0);
+    const popularServiceValue =
+      popularServiceTop && popularServiceTotal > 0
+        ? `${popularServiceTop.service} (${((popularServiceTop.count / popularServiceTotal) * 100).toFixed(1)}%)`
         : null;
 
     return [
@@ -500,6 +524,14 @@ export default function AdminHomePage() {
         icon: Link2,
       },
       {
+        key: "popularService",
+        metricKind: "popularService" as const,
+        label: "השירות הכי פופולרי",
+        value: popularServiceValue,
+        href: `${adminBasePath}/services`,
+        icon: Scissors,
+      },
+      {
         key: "util",
         metricKind: "utilization" as const,
         label: "ניצולת זמן היום",
@@ -513,7 +545,7 @@ export default function AdminHomePage() {
   const formatRevenueAxis = (n: number) =>
     `\u200E${new Intl.NumberFormat("he-IL", { style: "currency", currency: "ILS", maximumFractionDigits: 0 }).format(n)}`;
 
-  const formatPercentAxis = (n: number) => `\u200E${Math.round(n)}%`;
+  const formatPercentAxis = (n: number) => formatUtilizationPercent(n);
 
   function chartDetailNoteForMetric(kind: AnalyticsMetricKind): string | undefined {
     if (kind === "cancellations")
@@ -530,6 +562,8 @@ export default function AdminHomePage() {
       return "המספר למעלה הוא לקוחות שנרשמו היום (יצירה בישראל); בגרף: לקוחות חדשים לפי יום — ההפרש בעמודת «לקוחות» בין יום ליום שווה למספר החדשים באותו יום.";
     if (kind === "revenue")
       return "הגרף מציג הכנסות מתורים שאינם מבוטלים ובסטטוס מאושר/פעיל/נקבע; המספר למעלה הוא סכום היום (לפי יומן ישראל) ממחירי התורים — לא בהכרח זהה לכלל הזמנות היום.";
+    if (kind === "popularService")
+      return "החלוקה מציגה את אחוז התורים לכל שירות מתוך כלל התורים הפעילים בחודש הנוכחי.";
     return undefined;
   }
 
@@ -665,7 +699,25 @@ export default function AdminHomePage() {
                       formatChartY={formatChartYForMetric(row.metricKind)}
                       yValueKind={dashboardYValueKind(row.metricKind)}
                       detailNote={chartDetailNoteForMetric(row.metricKind)}
-                      pieData={row.metricKind === "traffic" ? trafficPieData : undefined}
+                      pieData={
+                        row.metricKind === "traffic"
+                          ? trafficPieData
+                          : row.metricKind === "popularService"
+                            ? servicePopularityPieData
+                            : undefined
+                      }
+                      pieTitle={row.metricKind === "popularService" ? "חלוקה לפי שירותים" : undefined}
+                      pieEmptyHint={
+                        row.metricKind === "traffic"
+                          ? "אין עדיין נתוני מקור הגעה מספיקים להצגת הגרף. ודאו שהעתקתם את הקישורים ממחולל הקישורים כדי שנוכל לעקוב מאיפה הלקוחות מגיעים."
+                          : undefined
+                      }
+                      pieEmptyActionLabel={row.metricKind === "traffic" ? "למחולל הקישורים" : undefined}
+                      pieEmptyActionHref={
+                        row.metricKind === "traffic"
+                          ? `${adminBasePath}/settings#marketing-link-generator`
+                          : undefined
+                      }
                       chartSeriesLoading={chartSeriesLoading}
                       href={row.href}
                     />

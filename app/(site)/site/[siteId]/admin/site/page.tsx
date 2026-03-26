@@ -9,6 +9,7 @@ import AdminTabs from "@/components/ui/AdminTabs";
 import {
   AdminReviewsEditor,
   AdminFaqEditor,
+  AdminSiteTab,
 } from "@/app/(site)/site/[siteId]/admin/settings/page";
 import {
   AdminOpeningHoursSection,
@@ -19,14 +20,27 @@ import { AdminPageHero } from "@/components/admin/AdminPageHero";
 import { AdminCard } from "@/components/admin/AdminCard";
 import { useUnsavedChanges } from "@/components/admin/UnsavedChangesContext";
 
-const SITE_PAGE_TABS = [
+const SITE_PAGE_TABS_DESKTOP = [
+  { key: "basic", label: "מידע בסיסי" },
+  { key: "contact", label: "פרטי יצירת קשר" },
   { key: "reviews", label: "ביקורות" },
   { key: "faq", label: "FAQ" },
   { key: "hours", label: "שעות פעילות" },
   { key: "design", label: "עיצוב האתר" },
 ] as const;
 
-type SiteTabKey = (typeof SITE_PAGE_TABS)[number]["key"];
+const SITE_PAGE_TABS_MOBILE = [
+  { key: "basic", label: "מידע בסיסי" },
+  { key: "contact", label: "פרטי יצירת קשר" },
+  { key: "reviews", label: "ביקורות" },
+  { key: "faq", label: "FAQ" },
+  { key: "hours", label: "שעות פעילות" },
+  { key: "design", label: "עיצוב האתר" },
+] as const;
+
+type SiteTabKey =
+  | (typeof SITE_PAGE_TABS_DESKTOP)[number]["key"]
+  | (typeof SITE_PAGE_TABS_MOBILE)[number]["key"];
 
 export default function AdminSitePage() {
   const params = useParams();
@@ -36,13 +50,23 @@ export default function AdminSitePage() {
     useSiteConfig(siteId);
   const unsavedCtx = useUnsavedChanges();
 
-  const [activeSiteTab, setActiveSiteTab] = useState<SiteTabKey>("reviews");
+  const [isMobileTabs, setIsMobileTabs] = useState(false);
+  const [activeSiteTab, setActiveSiteTab] = useState<SiteTabKey>("basic");
   const [designDirty, setDesignDirty] = useState(false);
   const [showRotateHintModal, setShowRotateHintModal] = useState(false);
   const [leaveDesignModalOpen, setLeaveDesignModalOpen] = useState(false);
   const [pendingSiteTab, setPendingSiteTab] = useState<SiteTabKey | null>(null);
   const [tabSwitchSaving, setTabSwitchSaving] = useState(false);
   const [hoursUnsaved, setHoursUnsaved] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobileTabs(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  const sitePageTabs = isMobileTabs ? SITE_PAGE_TABS_MOBILE : SITE_PAGE_TABS_DESKTOP;
+
   const designEditorRef = useRef<VisualSiteEditorHandle>(null);
   const openingHoursRef = useRef<AdminOpeningHoursSectionHandle>(null);
 
@@ -171,7 +195,7 @@ export default function AdminSitePage() {
           {/* Slim bar: tabs + save */}
           <div className="shrink-0 flex flex-wrap items-center justify-between gap-4 border-b border-[#E2E8F0] bg-white/95 backdrop-blur-sm px-4 py-2">
             <AdminTabs
-              tabs={SITE_PAGE_TABS}
+              tabs={sitePageTabs}
               activeKey={activeSiteTab}
               onChange={handleSiteTabChange}
               className="flex-1 min-w-0"
@@ -334,7 +358,7 @@ export default function AdminSitePage() {
           <AdminCard className="overflow-hidden">
             <div className="shrink-0 flex flex-wrap items-center justify-between gap-4 px-6 py-3 border-b border-[#E2E8F0] bg-white/80">
               <AdminTabs
-                tabs={SITE_PAGE_TABS}
+                tabs={sitePageTabs}
                 activeKey={activeSiteTab}
                 onChange={handleSiteTabChange}
                 className="flex-1 min-w-0"
@@ -342,6 +366,38 @@ export default function AdminSitePage() {
             </div>
             <div className="p-6">
               <div className="min-h-[320px]">
+                {/* מידע בסיסי */}
+                <div
+                  role="tabpanel"
+                  aria-hidden={activeSiteTab !== "basic"}
+                  className={activeSiteTab === "basic" ? "block" : "hidden"}
+                >
+                  <section className={sectionCardClass}>
+                    <h2 className={sectionTitleClass}>מידע בסיסי</h2>
+                    <AdminSiteTab
+                      siteConfig={siteConfig}
+                      onChange={handleConfigChange}
+                      renderSections={["basic", "location", "specialNote"]}
+                    />
+                  </section>
+                </div>
+
+                {/* פרטי יצירת קשר */}
+                <div
+                  role="tabpanel"
+                  aria-hidden={activeSiteTab !== "contact"}
+                  className={activeSiteTab === "contact" ? "block" : "hidden"}
+                >
+                  <section className={sectionCardClass}>
+                    <h2 className={sectionTitleClass}>פרטי יצירת קשר</h2>
+                    <AdminSiteTab
+                      siteConfig={siteConfig}
+                      onChange={handleConfigChange}
+                      renderSections={["contact"]}
+                    />
+                  </section>
+                </div>
+
                 {/* ביקורות */}
                 <div
                   role="tabpanel"

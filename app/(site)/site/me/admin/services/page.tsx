@@ -523,6 +523,8 @@ export default function ServicesPage() {
             ]}
             activeKey={activeTab}
             onChange={setActiveTab}
+            mobileScrollableChips
+            className="w-full"
           />
 
           {/* Tab Content */}
@@ -537,7 +539,7 @@ export default function ServicesPage() {
               className="px-4 py-2 bg-[#0F172A] hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
-              הוסף שירות
+              הוסף קטגוריית שירות
             </button>
           </div>
 
@@ -548,7 +550,7 @@ export default function ServicesPage() {
                   type="text"
                   value={newServiceName}
                   onChange={(e) => setNewServiceName(e.target.value)}
-                  placeholder="שם השירות"
+                  placeholder="שם קטגוריה"
                   className="flex-1 px-3 py-2 border border-[#E2E8F0] rounded-lg text-right focus:outline-none focus:border-[#1E6F7C] focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -580,9 +582,9 @@ export default function ServicesPage() {
 
           {services.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-[#64748B] mb-4">אין שירותים עדיין</p>
+              <p className="text-[#64748B] mb-4">אין קטגוריות שירות עדיין</p>
               <p className="text-sm text-[#64748B]">
-                לחץ על "הוסף שירות" כדי להתחיל
+                לחץ על "הוסף קטגוריית שירות" כדי להתחיל
               </p>
             </div>
           ) : (
@@ -762,7 +764,7 @@ export default function ServicesPage() {
         >
           <div className="bg-white rounded-2xl shadow-xl border border-[#E2E8F0] w-full max-w-md">
             <div className="sticky top-0 bg-white border-b border-[#E2E8F0] px-6 py-4 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-[#0F172A]">ערוך שירות</h3>
+              <h3 className="text-lg font-bold text-[#0F172A]">ערוך קטגוריית שירות</h3>
               <button
                 onClick={() => setEditingService(null)}
                 className="p-1 hover:bg-slate-100 rounded"
@@ -774,7 +776,7 @@ export default function ServicesPage() {
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-[#0F172A] mb-1">
-                  שם השירות *
+                  שם קטגוריה *
                 </label>
                 <input
                   type="text"
@@ -859,7 +861,7 @@ export default function ServicesPage() {
                 >
                   <option value="">בחר שירות</option>
                   {activeServiceIds.length === 0 ? (
-                    <option value="" disabled>אין שירותים זמינים</option>
+                    <option value="" disabled>אין קטגוריות שירות זמינות</option>
                   ) : (
                     activeServiceIds.map((serviceName) => (
                       <option key={serviceName} value={serviceName}>
@@ -873,7 +875,7 @@ export default function ServicesPage() {
                 )}
                 {activeServiceIds.length === 0 && (
                   <p className="text-xs text-red-600 mt-1">
-                    הוסף שירות תחילה מהרשימה למעלה
+                    הוסף קטגוריית שירות תחילה מהרשימה למעלה
                   </p>
                 )}
               </div>

@@ -13,6 +13,7 @@ import { renderWhatsAppTemplate } from "@/lib/whatsapp/templateRender";
 import { getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
 import { formatIsraelDateShort, formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
 import { getRelatedBookingIds } from "@/lib/whatsapp/relatedBookings";
+import { getPublicBookingPageAbsoluteUrlForSite, withTrackingSource } from "@/lib/url";
 
 export type ReminderDetail = {
   bookingRef: string;
@@ -128,10 +129,13 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
     }
 
     let salonName = "הסלון";
+    let tenantSlug: string | null = null;
     try {
       const siteSnap = await db.collection("sites").doc(siteId).get();
       const config = siteSnap.data()?.config;
       salonName = config?.salonName ?? config?.whatsappBrandName ?? salonName;
+      const rawSlug = siteSnap.data()?.slug;
+      tenantSlug = typeof rawSlug === "string" && rawSlug.trim() ? rawSlug.trim() : null;
     } catch {
       // keep default
     }
@@ -150,15 +154,21 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
     const timeStr = startAt ? formatIsraelTime(startAt) : "";
     const dateStr = startAt ? formatIsraelDateShort(startAt) : "";
     const customerDisplayName = String(data.customerName ?? "").trim() || "לקוח/ה";
+    const trackedBookingUrl = withTrackingSource(
+      getPublicBookingPageAbsoluteUrlForSite(siteId, tenantSlug),
+      "whatsapp"
+    );
     const reminderBody = renderWhatsAppTemplate(waSettings.reminderTemplate, {
       שם_העסק: salonName,
       זמן_תור: timeStr,
       שם_לקוח: customerDisplayName,
       תאריך_תור: dateStr,
+      קישור_לתיאום: trackedBookingUrl,
       business_name: salonName,
       time: timeStr,
       client_name: customerDisplayName,
       date: dateStr,
+      link: trackedBookingUrl,
       custom_text: waSettings.reminderCustomText ?? "",
       // Reminder messages intentionally omit Waze (even if an old template still contains {waze_link})
       waze_link: "",

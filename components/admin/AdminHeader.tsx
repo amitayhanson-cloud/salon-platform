@@ -18,7 +18,6 @@ import {
   Settings2,
   type LucideIcon,
 } from "lucide-react";
-import { HoverBorderGradient } from "@/components/ui/hover-border-gradient";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { isOnTenantSubdomainClient, getAdminBasePath } from "@/lib/url";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
@@ -38,6 +37,31 @@ type MenuItem = {
   items?: SubMenuItem[];
 };
 
+function AiSparklesGradientIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <defs>
+        <linearGradient id="ai-sparkle-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#1E3A8A" />
+          <stop offset="55%" stopColor="#0F766E" />
+          <stop offset="100%" stopColor="#7DD3FC" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.937A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.063A2 2 0 0 0 14.063 15.5l-1.582 6.135a.5.5 0 0 1-.962 0z"
+        stroke="url(#ai-sparkle-gradient)"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M20 3v4" stroke="url(#ai-sparkle-gradient)" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M22 5h-4" stroke="url(#ai-sparkle-gradient)" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M4 17v2" stroke="url(#ai-sparkle-gradient)" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M5 18H3" stroke="url(#ai-sparkle-gradient)" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function getMenuItems(basePath: string): MenuItem[] {
   return [
     {
@@ -55,7 +79,6 @@ function getMenuItems(basePath: string): MenuItem[] {
       icon: Users,
       items: [
         { label: "כרטיס לקוח", href: `${basePath}/clients/client-card` },
-        { label: "הגדרות לקוחות", href: `${basePath}/clients/settings` },
         { label: "מרכז הודעות WhatsApp", href: `${basePath}/whatsapp` },
       ],
     },
@@ -71,8 +94,8 @@ function getMenuItems(basePath: string): MenuItem[] {
       label: "ניהול אתר",
       icon: Settings2,
       items: [
-        { label: "אתר", href: `${basePath}/site` },
         { label: "הגדרות", href: `${basePath}/settings` },
+        { label: "אתר", href: `${basePath}/site` },
         { label: "שירותים", href: `${basePath}/services` },
       ],
     },
@@ -81,20 +104,20 @@ function getMenuItems(basePath: string): MenuItem[] {
 
 /** Desktop (LTR cluster): dashboard to the right of "ניהול אתר", toward tenant logo. */
 const ADMIN_NAV_ORDER_DESKTOP = [
-  "יומן",
-  "לקוחות",
-  "צוות",
   "ניהול אתר",
+  "צוות",
+  "לקוחות",
+  "יומן",
   "לוח בקרה",
 ] as const;
 
 /** Mobile: dashboard first (was second after יומן). */
 const ADMIN_NAV_ORDER_MOBILE = [
-  "לוח בקרה",
-  "יומן",
-  "לקוחות",
-  "צוות",
   "ניהול אתר",
+  "צוות",
+  "לקוחות",
+  "יומן",
+  "לוח בקרה",
 ] as const;
 
 function orderAdminNavItems(
@@ -284,17 +307,33 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
 
   return (
     <header ref={headerRef} className="sticky top-0 z-[100] pt-3 pb-2 px-4 sm:px-6 lg:px-8">
-      <div
-        className="max-w-7xl mx-auto rounded-xl md:rounded-full border border-white/30 bg-white/25 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.08),0_0_0_1px_rgba(255,255,255,0.4)_inset] backdrop-blur-xl px-4 sm:px-6 md:px-6"
-        style={{ WebkitBackdropFilter: "blur(16px)" }}
-      >
+      <div className="max-w-7xl mx-auto rounded-xl border border-[#E9F4F7] bg-[#FCFEFF] px-4 shadow-sm md:rounded-full md:shadow-md sm:px-6 md:px-6">
         {/* dir=ltr so left/right zones stay fixed: left = Caleno, right = tenant+nav */}
         <div className="flex items-center justify-between h-14 w-full" dir="ltr">
-          {/* LEFT: Caleno logo — match landing page position/sizing */}
-          <div className="flex shrink-0">
+          {/* LEFT: mobile salon branding / desktop Caleno logo */}
+          <div className="flex shrink-0 items-center">
             <Link
               href={adminBasePath}
-              className="relative flex shrink-0 items-center py-1 transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-caleno-deep focus-visible:ring-offset-2 rounded"
+              className="flex h-9 min-w-0 items-center text-[#0F172A] transition-colors hover:text-[#1E6F7C] md:hidden"
+              aria-label={siteName || "פאנל ניהול"}
+            >
+              {siteLogoUrl ? (
+                <img
+                  src={siteLogoUrl}
+                  alt={siteName || "לוגו"}
+                  className="h-8 w-auto object-contain max-w-[140px]"
+                  width={140}
+                  height={32}
+                />
+              ) : (
+                <div className="max-w-[150px] truncate text-sm font-semibold">
+                  {siteName || "פאנל ניהול"}
+                </div>
+              )}
+            </Link>
+            <Link
+              href={adminBasePath}
+              className="relative hidden shrink-0 items-center py-1 transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-caleno-deep focus-visible:ring-offset-2 rounded md:flex"
               aria-label="Caleno – פאנל ניהול"
             >
               <span className="relative block h-9 w-[140px] shrink-0 md:h-11 md:min-w-[180px] md:w-[205px]">
@@ -313,31 +352,7 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
           {/* RIGHT: tenant branding + navbar (one cluster) */}
           <div className="flex items-center gap-4 md:gap-6 shrink-0">
             {/* Navbar */}
-            <nav className="hidden md:flex items-center gap-4 whitespace-nowrap">
-              {onOpenHelp && (
-                <HoverBorderGradient
-                  as="button"
-                  type="button"
-                  onClick={onOpenHelp}
-                  containerClassName="rounded-full"
-                  className="flex items-center gap-2 text-sm font-medium"
-                  title="עזרה בפאנל (AI)"
-                >
-                  <Sparkles className="w-4 h-4 shrink-0" />
-                  <span>עזרה</span>
-                </HoverBorderGradient>
-              )}
-              {canViewSite && (
-                <button
-                  onClick={handleViewWebsite}
-                  className="flex items-center gap-2 rounded-full border border-emerald-200/60 bg-emerald-50/50 px-4 py-2 text-sm font-medium text-[#0F172A] shadow-[0_2px_12px_-4px_rgba(0,0,0,0.06),0_0_0_1px_rgba(255,255,255,0.5)_inset] backdrop-blur-xl transition-colors hover:bg-emerald-100/60 hover:border-emerald-300/60"
-                  style={{ WebkitBackdropFilter: "blur(16px)" }}
-                  title="צפייה באתר הציבורי"
-                >
-                  <span>צפייה באתר</span>
-                  <ExternalLink className="w-4 h-4" />
-                </button>
-              )}
+            <nav dir="rtl" className="hidden md:flex items-center gap-2 whitespace-nowrap rounded-full bg-[#FBFEFF] px-2 py-1">
               {desktopNavItems.map((item) => (
                 <div key={item.label} className="relative">
                       {item.href ? (
@@ -346,16 +361,17 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                       return (
                     <Link
                       href={item.href}
-                      className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-[background-color,border-color,box-shadow] duration-200 backdrop-blur-md ${
+                      className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
                         isActive(item.href)
-                          ? "text-[#0F172A] bg-[rgba(204,238,241,0.7)] border border-[rgba(30,111,124,0.25)] shadow-[0_2px_10px_-2px_rgba(30,111,124,0.15),0_0_0_1px_rgba(255,255,255,0.4)_inset]"
-                          : "text-[#0F172A] hover:bg-caleno-100/70 hover:shadow-[0_1px_8px_-2px_rgba(9,137,155,0.12)]"
+                          ? "bg-[#1E6F7C] text-white shadow-sm"
+                          : "text-slate-700 hover:bg-slate-100"
                       }`}
-                      style={isActive(item.href) ? { WebkitBackdropFilter: "blur(12px)" } : undefined}
                     >
-                      {NavIcon ? (
-                        <NavIcon className="w-4 h-4 shrink-0 opacity-90 text-[#1E6F7C]" aria-hidden />
-                      ) : null}
+                      <span className={`rounded-lg p-1.5 ${isActive(item.href) ? "bg-white/20" : "bg-slate-100"}`}>
+                        {NavIcon ? (
+                          <NavIcon className={`h-4 w-4 shrink-0 ${isActive(item.href) ? "text-white" : "text-[#1E6F7C]"}`} aria-hidden />
+                        ) : null}
+                      </span>
                       <span>{item.label}</span>
                     </Link>
                       );
@@ -372,19 +388,20 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                           else delete triggerRefs.current[item.label];
                         }}
                         onClick={() => toggleDropdown(item.label)}
-                        className={`flex items-center gap-1 rounded-full px-4 py-2 text-sm font-medium transition-[background-color,border-color,box-shadow] duration-200 backdrop-blur-md ${
-                          isParentActive(item)
-                            ? "text-[#0F172A] bg-[rgba(204,238,241,0.7)] border border-[rgba(30,111,124,0.25)] shadow-[0_2px_10px_-2px_rgba(30,111,124,0.15),0_0_0_1px_rgba(255,255,255,0.4)_inset]"
-                            : "text-[#0F172A] hover:bg-caleno-100/70 hover:shadow-[0_1px_8px_-2px_rgba(9,137,155,0.12)]"
+                        className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
+                        isParentActive(item)
+                            ? "bg-[#1E6F7C] text-white shadow-sm"
+                            : "text-slate-700 hover:bg-slate-100"
                         }`}
-                        style={isParentActive(item) ? { WebkitBackdropFilter: "blur(12px)" } : undefined}
                       >
-                        {NavIcon ? (
-                          <NavIcon className="w-4 h-4 shrink-0 opacity-90 text-[#1E6F7C]" aria-hidden />
-                        ) : null}
+                        <span className={`rounded-lg p-1.5 ${isParentActive(item) ? "bg-white/20" : "bg-slate-100"}`}>
+                          {NavIcon ? (
+                            <NavIcon className={`h-4 w-4 shrink-0 ${isParentActive(item) ? "text-white" : "text-[#1E6F7C]"}`} aria-hidden />
+                          ) : null}
+                        </span>
                         {item.label}
                         <ChevronDown
-                          className={`w-4 h-4 transition-transform ${
+                          className={`h-4 w-4 transition-transform ${
                             openDropdown === item.label ? "rotate-180" : ""
                           }`}
                         />
@@ -395,10 +412,35 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                   )}
                 </div>
               ))}
+              {canViewSite && (
+                <button
+                  onClick={handleViewWebsite}
+                  className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100"
+                  title="צפייה באתר הציבורי"
+                >
+                  <span className="rounded-lg bg-slate-100 p-1.5">
+                    <ExternalLink className="w-4 h-4 text-[#1E6F7C]" />
+                  </span>
+                  <span>צפייה באתר</span>
+                </button>
+              )}
+              {onOpenHelp && (
+                <button
+                  type="button"
+                  onClick={onOpenHelp}
+                  className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-100"
+                  title="עזרה בפאנל (AI)"
+                >
+                  <span className="rounded-lg bg-slate-100 p-1.5">
+                    <AiSparklesGradientIcon className="w-4 h-4 shrink-0" />
+                  </span>
+                  <span>עזרה</span>
+                </button>
+              )}
             </nav>
 
             {/* Tenant logo or name (far right) */}
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="hidden items-center gap-2 min-w-0 md:flex">
               <Link
                 href={adminBasePath}
                 className="flex h-9 items-center text-[#0F172A] transition-colors hover:text-[#1E6F7C]"
@@ -436,25 +478,28 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
 
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
-          <nav className="md:hidden pb-4 animate-[dropdown_0.2s_ease-out_forwards]">
+          <nav className="md:hidden mx-2 mt-1 mb-2 pb-3 animate-[dropdown_0.2s_ease-out_forwards] overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-[0_20px_35px_-20px_rgba(15,23,42,0.35)]">
+            <div className="backdrop-blur-lg">
             {mobileNavItems.map((item) => (
-              <div key={item.label} className="border-b border-[#E2E8F0] last:border-0">
+              <div key={item.label} className="border-b border-slate-100/80 last:border-0">
                 {item.href ? (
                   (() => {
                     const NavIcon = item.icon;
                     return (
                   <Link
                     href={item.href}
-                    className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold transition-colors duration-200 ${
+                    className={`mx-3 my-1 flex items-center justify-between rounded-xl px-3 py-3.5 text-sm font-semibold transition-colors duration-200 active:scale-[0.99] ${
                       isActive(item.href)
-                        ? "bg-[#DBF4F7] text-[#0B5E6A]"
-                        : "text-[#1E6F7C] hover:bg-[#EEF8FA]"
+                        ? "bg-[#1E6F7C] text-white shadow-sm"
+                        : "text-slate-700 hover:bg-[#EEF8FA] active:bg-[#EEF8FA]"
                     }`}
                   >
-                    {NavIcon ? (
-                      <NavIcon className="w-4 h-4 shrink-0 text-[#1E6F7C]" aria-hidden />
-                    ) : null}
-                    <span>{item.label}</span>
+                    <span className="font-semibold">{item.label}</span>
+                    <span className={`rounded-lg p-2 ${isActive(item.href) ? "bg-white/20" : "bg-slate-100/70"}`}>
+                      {NavIcon ? (
+                        <NavIcon className={`h-4 w-4 shrink-0 ${isActive(item.href) ? "text-white" : "text-[#1E6F7C]"}`} aria-hidden />
+                      ) : null}
+                    </span>
                   </Link>
                     );
                   })()
@@ -465,18 +510,22 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                       return (
                     <button
                       onClick={() => toggleDropdown(item.label)}
-                      className={`flex w-full items-center justify-between px-4 py-3 text-sm font-semibold transition-colors duration-200 ${
+                      className={`mx-3 my-1 flex w-[calc(100%-1.5rem)] items-center justify-between rounded-xl px-3 py-3.5 text-sm font-semibold transition-colors duration-200 active:scale-[0.99] ${
                         isParentActive(item)
-                          ? "bg-[#DBF4F7] text-[#0B5E6A]"
-                          : "text-[#1E6F7C] hover:bg-[#EEF8FA]"
+                          ? "bg-[#1E6F7C] text-white shadow-sm"
+                          : "text-slate-700 hover:bg-[#EEF8FA] active:bg-[#EEF8FA]"
                       }`}
                     >
-                      <span className="flex items-center gap-2">
-                        {NavIcon ? <NavIcon className="w-4 h-4 shrink-0 text-[#1E6F7C]" aria-hidden /> : null}
+                      <span className="flex items-center gap-3">
+                        <span className={`rounded-lg p-2 ${isParentActive(item) ? "bg-white/20" : "bg-slate-100/70"}`}>
+                          {NavIcon ? (
+                            <NavIcon className={`h-4 w-4 shrink-0 ${isParentActive(item) ? "text-white" : "text-[#1E6F7C]"}`} aria-hidden />
+                          ) : null}
+                        </span>
                         <span>{item.label}</span>
                       </span>
                       <ChevronDown
-                        className={`w-4 h-4 transition-transform ${
+                        className={`h-4 w-4 transition-transform ${
                           openDropdown === item.label ? "rotate-180" : ""
                         }`}
                       />
@@ -484,32 +533,34 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                       );
                     })()}
                     {openDropdown === item.label && item.items && (
-                      <div className="bg-[#F8FAFC]">
+                      <div className="bg-slate-50/80 pb-1">
                         {item.items.map((subItem) => {
                           const SubIcon = subItem.icon;
                           return (
                           <div key={subItem.href}>
                             <Link
                               href={subItem.href}
-                              className={`flex items-center gap-2 px-8 py-2 text-sm transition-colors duration-200 ${
+                              className={`mx-3 my-1 flex items-center justify-between rounded-xl px-3 py-3 text-sm font-semibold transition-colors duration-200 ${
                                 isActive(subItem.href)
-                                  ? "bg-[#EEF2FF] font-medium text-[#3730A3]"
-                                  : "text-[#4F46E5] hover:bg-[#EEF2FF]/70"
+                                  ? "bg-[#E6F5F7] text-[#1E6F7C]"
+                                  : "text-slate-600 hover:bg-[#eaf5f8]"
                               }`}
                             >
-                              {SubIcon ? (
-                                <SubIcon className="w-4 h-4 shrink-0 text-[#1E6F7C]" aria-hidden />
-                              ) : null}
                               <span>{subItem.label}</span>
+                              <span className="rounded-lg bg-white/80 p-1.5">
+                                {SubIcon ? (
+                                  <SubIcon className="h-3.5 w-3.5 shrink-0 text-[#1E6F7C]" aria-hidden />
+                                ) : null}
+                              </span>
                             </Link>
                             {subItem.items?.map((nested) => (
                               <Link
                                 key={nested.href}
                                 href={nested.href}
-                                className={`block px-12 py-2 text-sm transition-colors duration-200 ${
+                                className={`mx-3 my-1 block rounded-xl px-6 py-2.5 text-sm font-medium transition-colors duration-200 ${
                                   isActive(nested.href)
-                                    ? "bg-[#EEF2FF] font-medium text-[#3730A3]"
-                                    : "text-[#4F46E5] hover:bg-[#EEF2FF]/70"
+                                    ? "bg-[#E6F5F7] text-[#1E6F7C]"
+                                    : "text-slate-600 hover:bg-[#eaf5f8]"
                                 }`}
                               >
                                 {nested.label}
@@ -524,34 +575,42 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                 )}
               </div>
             ))}
-            {onOpenHelp && (
-              <div className="mb-3 border-b border-[#E2E8F0] pb-3 pt-3">
-                <HoverBorderGradient
-                  as="button"
-                  type="button"
-                  onClick={() => {
-                    onOpenHelp();
-                    setMobileMenuOpen(false);
-                  }}
-                  containerClassName="rounded-full w-full"
-                  className="flex w-full items-center justify-between gap-2 text-sm font-medium"
-                >
-                  <span>עזרה</span>
-                  <Sparkles className="w-4 h-4 shrink-0" />
-                </HoverBorderGradient>
-              </div>
-            )}
+            </div>
+            <div className="my-1 border-t border-slate-200/80" />
             {canViewSite && (
-              <div className="mb-3 border-b border-[#E2E8F0] pb-3 pt-3">
+              <div className="mb-1">
                 <button
                   onClick={() => {
                     handleViewWebsite();
                     setMobileMenuOpen(false);
                   }}
-                  className="flex w-full items-center justify-between rounded-xl border border-emerald-200/60 bg-emerald-50/50 px-4 py-3 text-sm font-medium text-[#0F172A] shadow-[0_2px_12px_-4px_rgba(0,0,0,0.06)] backdrop-blur-md transition-colors hover:bg-emerald-100/60"
+                  className="mx-3 flex h-12 w-[calc(100%-1.5rem)] items-center justify-between rounded-xl px-3 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100/70 active:bg-slate-100"
                 >
-                  <span>צפייה באתר</span>
-                  <ExternalLink className="w-4 h-4" />
+                  <span className="flex flex-row-reverse items-center gap-2.5">
+                    <span>צפייה באתר</span>
+                    <span className="rounded-lg bg-slate-100/80 p-2">
+                      <ExternalLink className="h-4 w-4 text-[#0f5d67]" />
+                    </span>
+                  </span>
+                </button>
+              </div>
+            )}
+            {onOpenHelp && (
+              <div className="mb-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenHelp();
+                    setMobileMenuOpen(false);
+                  }}
+                  className="mx-3 flex h-12 w-[calc(100%-1.5rem)] items-center justify-between rounded-xl px-3 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100/70 active:bg-slate-100"
+                >
+                  <span className="flex flex-row-reverse items-center gap-2.5">
+                    <span>עזרה</span>
+                    <span className="rounded-lg bg-slate-100/80 p-2">
+                      <AiSparklesGradientIcon className="h-4 w-4" />
+                    </span>
+                  </span>
                 </button>
               </div>
             )}

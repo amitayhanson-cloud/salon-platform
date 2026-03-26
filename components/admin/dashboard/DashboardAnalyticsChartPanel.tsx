@@ -46,6 +46,10 @@ type Props = {
   yValueKind?: DashboardChartYValueKind;
   detailNote?: string;
   pieData?: TrafficPieDatum[];
+  pieTitle?: string;
+  pieEmptyHint?: string;
+  pieEmptyActionLabel?: string;
+  pieEmptyActionHref?: string;
   chartSeriesLoading?: boolean;
   href: string;
 };
@@ -94,6 +98,10 @@ export function DashboardAnalyticsChartPanel({
   yValueKind,
   detailNote,
   pieData,
+  pieTitle = "חלוקה לפי מקור הגעה",
+  pieEmptyHint,
+  pieEmptyActionLabel,
+  pieEmptyActionHref,
   chartSeriesLoading = false,
   href,
 }: Props) {
@@ -140,7 +148,7 @@ export function DashboardAnalyticsChartPanel({
         </div>
       ) : (
         <div className="mb-2 mt-1 space-y-1.5 text-center">
-          <p className="text-[11px] font-medium text-slate-500">חלוקה לפי מקור הגעה</p>
+          <p className="text-[11px] font-medium text-slate-500">{pieTitle}</p>
           {detailNote ? (
             <p className="text-[10px] leading-snug text-slate-400">{detailNote}</p>
           ) : null}
@@ -152,12 +160,42 @@ export function DashboardAnalyticsChartPanel({
           chartSeriesLoading && !hasPieSlices ? (
             <DashboardChartSkeleton />
           ) : hasPieSlices ? (
-            <div className="flex justify-center" dir="ltr">
+            <div className="flex flex-col items-center gap-3" dir="ltr">
               <TrafficAttributionPieChart data={pieData} />
+              <div className="w-full max-w-[360px] space-y-1.5 px-2 pb-1">
+                {pieData
+                  .slice()
+                  .sort((a, b) => b.value - a.value)
+                  .map((item) => {
+                    const total = pieData.reduce((sum, row) => sum + row.value, 0) || 1;
+                    const pct = (item.value / total) * 100;
+                    return (
+                      <div key={item.id} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="inline-flex min-w-0 items-center gap-2 text-slate-700">
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: item.color ?? "#1e6f7c" }}
+                            aria-hidden
+                          />
+                          <span className="truncate">{item.label}</span>
+                        </span>
+                        <span className="shrink-0 font-semibold text-slate-600">{pct.toFixed(1)}%</span>
+                      </div>
+                    );
+                  })}
+              </div>
             </div>
           ) : (
-            <div className="flex h-[200px] items-center justify-center px-4 text-center text-sm text-slate-500">
-              אין עדיין נתוני מקור הגעה מספיקים להצגת הגרף
+            <div className="flex h-[220px] flex-col items-center justify-center gap-3 px-4 text-center text-sm text-slate-500">
+              <p>{pieEmptyHint ?? "אין עדיין נתוני מקור הגעה מספיקים להצגת הגרף"}</p>
+              {pieEmptyActionLabel && pieEmptyActionHref ? (
+                <Link
+                  href={pieEmptyActionHref}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-[#1e6f7c] hover:bg-slate-50"
+                >
+                  {pieEmptyActionLabel}
+                </Link>
+              ) : null}
             </div>
           )
         ) : chartSeriesLoading ? (

@@ -29,7 +29,7 @@ export function AdminPageHero({
   return (
     <section
       dir="rtl"
-      className={`relative overflow-hidden rounded-3xl border border-[#E2E8F0] shadow-sm px-6 py-8 sm:py-10 md:py-12 ${className}`}
+      className={`relative overflow-hidden rounded-2xl border border-[#E2E8F0] shadow-sm px-4 py-4 sm:rounded-3xl sm:px-6 sm:py-7 md:py-8 ${className}`}
       style={
         glass
           ? {
@@ -78,11 +78,11 @@ export function AdminPageHero({
             ))}
           </div>
         )}
-        <h1 className="text-2xl font-extrabold tracking-tight text-[#0F172A] sm:text-3xl md:text-4xl">
+        <h1 className="text-xl font-extrabold tracking-tight text-[#0F172A] sm:text-3xl md:text-4xl">
           {title}
         </h1>
         {subtitle && (
-          <p className="mt-2 text-base leading-relaxed text-[#64748B] sm:text-lg">
+          <p className="mt-1 text-sm leading-relaxed text-[#64748B] sm:mt-2 sm:text-lg">
             {subtitle}
           </p>
         )}

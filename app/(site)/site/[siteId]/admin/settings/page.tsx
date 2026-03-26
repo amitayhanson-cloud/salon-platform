@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { Instagram, MessageCircle, Facebook, Linkedin, Music2 } from "lucide-react";
 import DeleteAccountButton from "@/components/admin/DeleteAccountButton";
 import SubdomainSettingsCard from "@/components/admin/SubdomainSettingsCard";
 import CustomDomainSettingsCard from "@/components/admin/CustomDomainSettingsCard";
@@ -19,6 +20,9 @@ import { ImagePickerModal } from "@/components/editor/ImagePickerModal";
 import { AdminPageHero } from "@/components/admin/AdminPageHero";
 import { AdminCard } from "@/components/admin/AdminCard";
 import { useUnsavedChanges } from "@/components/admin/UnsavedChangesContext";
+import { getPublicBookingPageUrlForSiteClient } from "@/lib/url";
+import AdminClientStatusSettings from "@/components/admin/AdminClientStatusSettings";
+import ClientImportSection from "@/components/admin/ClientImportSection";
 
 
 const SERVICE_OPTIONS: Record<SiteConfig["salonType"], string[]> = {
@@ -66,9 +70,10 @@ const salonTypeLabels: Record<SiteConfig["salonType"], string> = {
 };
 
 const SETTINGS_TABS = [
-  { key: "basic", label: "מידע בסיסי" },
-  { key: "contact", label: "פרטי יצירת קשר" },
-  { key: "security", label: "אבטחה" },
+  { key: "marketing", label: "שיווק וקישורים" },
+  { key: "clientStatus", label: "סטטוס לקוחות" },
+  { key: "csvImport", label: "ייבוא לקוחות" },
+  { key: "security", label: "דומיין ואבטחה" },
 ] as const;
 
 type SettingsTabType = (typeof SETTINGS_TABS)[number]["key"];
@@ -667,7 +672,7 @@ export function AdminFaqEditor({
 }
 
 
-function AdminSiteTab({
+export function AdminSiteTab({
   siteConfig,
   onChange,
   renderSections,
@@ -1051,24 +1056,126 @@ export function BrandingLogoEditor({
   );
 }
 
+function MarketingLinkGenerator({
+  siteId,
+  slug,
+}: {
+  siteId: string;
+  slug?: string | null;
+}) {
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const bookingBaseUrl = getPublicBookingPageUrlForSiteClient(siteId, slug);
+
+  const buildTrackedLink = (
+    source: "instagram" | "whatsapp" | "facebook" | "tiktok" | "linkedin"
+  ) => {
+    if (!bookingBaseUrl) return "";
+    const url = new URL(bookingBaseUrl);
+    url.searchParams.set("source", source);
+    return url.toString();
+  };
+
+  const copyLink = async (
+    source: "instagram" | "whatsapp" | "facebook" | "tiktok" | "linkedin"
+  ) => {
+    const tracked = buildTrackedLink(source);
+    if (!tracked) return;
+    try {
+      await navigator.clipboard.writeText(tracked);
+      setCopiedKey(source);
+      window.setTimeout(() => setCopiedKey((prev) => (prev === source ? null : prev)), 1400);
+    } catch {
+      setCopiedKey(null);
+    }
+  };
+
+  return (
+    <div id="marketing-link-generator" className="mt-6 scroll-mt-28 space-y-3 rounded-2xl border border-[#E2E8F0] bg-slate-50/70 p-4">
+      <div className="space-y-1">
+        <h3 className="text-sm font-semibold text-slate-900">מחולל קישורי שיווק</h3>
+        <p className="text-xs text-slate-500">
+          העתיקו את הקישור לכל רשת חברתית, וזה הקישור שתרצו שאנשים ילחצו עליו כדי להגיע לאתר שלכם ולקבוע תור. כך נוכל לעקוב מאיפה הלקוחות מגיעים ולתת לכם נתונים חשובים לעסק.
+        </p>
+      </div>
+      <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-600 space-y-2">
+        <p>העתיקו והדביקו את הקישור המתאים בכל ערוץ שיווקי.</p>
+      </div>
+      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+        {bookingBaseUrl || "לא נמצא קישור הזמנות לסלון"}
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <button
+          type="button"
+          onClick={() => void copyLink("instagram")}
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100"
+        >
+          <Instagram className="h-3.5 w-3.5" aria-hidden />
+          {copiedKey === "instagram" ? "הועתק!" : "Copy Instagram Link"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void copyLink("whatsapp")}
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100"
+        >
+          <MessageCircle className="h-3.5 w-3.5" aria-hidden />
+          {copiedKey === "whatsapp" ? "הועתק!" : "Copy WhatsApp Link"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void copyLink("facebook")}
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100"
+        >
+          <Facebook className="h-3.5 w-3.5" aria-hidden />
+          {copiedKey === "facebook" ? "הועתק!" : "Copy Facebook Link"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void copyLink("tiktok")}
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100"
+        >
+          <Music2 className="h-3.5 w-3.5" aria-hidden />
+          {copiedKey === "tiktok" ? "הועתק!" : "Copy TikTok Link"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void copyLink("linkedin")}
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100"
+        >
+          <Linkedin className="h-3.5 w-3.5" aria-hidden />
+          {copiedKey === "linkedin" ? "הועתק!" : "Copy LinkedIn Link"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // Reviews Editor Component
 
 
 export default function SettingsPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const siteId = params?.siteId as string;
   const { siteConfig, isSaving, saveMessage, hasUnsavedChanges, handleConfigChange, handleSaveConfig } =
     useSiteConfig(siteId);
   const unsavedCtx = useUnsavedChanges();
   const { user, firebaseUser, logout } = useAuth();
   // Tab state for settings sections - MUST be declared before any early returns
-  const [activeTab, setActiveTab] = useState<SettingsTabType>("basic");
+  const [activeTab, setActiveTab] = useState<SettingsTabType>("marketing");
   // Delete account state
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   // Security section toast
   const [securityToast, setSecurityToast] = useState<{ message: string; isError?: boolean } | null>(null);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (!tab) return;
+    if (SETTINGS_TABS.some((t) => t.key === tab)) {
+      setActiveTab(tab as SettingsTabType);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!securityToast) return;
@@ -1193,6 +1300,7 @@ export default function SettingsPage() {
           tabs={SETTINGS_TABS}
           activeKey={activeTab}
           onChange={(key) => setActiveTab(key)}
+          mobileScrollableChips
           className="flex-1 min-w-0 w-full sm:w-auto"
         />
         <div className="flex items-center gap-3 sm:gap-4 shrink-0 flex-wrap">
@@ -1215,37 +1323,35 @@ export default function SettingsPage() {
 
         {/* Tab Content */}
         <div>
-          {activeTab === "basic" && (
-            <>
-              <AdminSiteTab
-                siteConfig={siteConfig}
-                onChange={handleConfigChange}
-                renderSections={["basic", "location", "specialNote"]}
-              />
+          {activeTab === "marketing" && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-[#0F172A] mb-1">שיווק וקישורים</h2>
+                <p className="text-sm text-slate-500">
+                  בלחיצה אחת מעתיקים קישור מוכן לכל ערוץ, ואז רואים מאיפה הלקוחות הגיעו.
+                </p>
+              </div>
+              <MarketingLinkGenerator siteId={siteId} slug={siteConfig.slug} />
+            </div>
+          )}
+          {activeTab === "security" && (
+            <div className="space-y-6">
+              <div className="space-y-1">
+                <p className="text-sm text-slate-500">
+                  <span className="font-semibold text-slate-700">תת-דומיין:</span> כתובת מוכנה של Caleno לאתר שלך (לדוגמה:
+                  `my-salon.caleno.co`).
+                </p>
+                <p className="text-sm text-slate-500">
+                  <span className="font-semibold text-slate-700">דומיין מותאם אישית:</span> הכתובת הפרטית שלך שקניתם
+                  (לדוגמה: `www.my-salon.co.il`).
+                </p>
+              </div>
               <SubdomainSettingsCard firebaseUser={firebaseUser} />
               <div className="mt-6">
                 <CustomDomainSettingsCard siteId={siteId} firebaseUser={firebaseUser} />
               </div>
-              <div className="mt-10">
-                <DeleteAccountButton
-                  onDelete={handleDeleteAccount}
-                  isDeleting={isDeleting}
-                  deleteError={deleteError}
-                />
-              </div>
-            </>
-          )}
-          {activeTab === "contact" && (
-            <AdminSiteTab
-              siteConfig={siteConfig}
-              onChange={handleConfigChange}
-              renderSections={["contact"]}
-            />
-          )}
-          {activeTab === "security" && (
-            <div className="space-y-6">
               <div>
-                <h2 className="text-base sm:text-lg font-bold text-[#0F172A] mb-1">אבטחה</h2>
+                <h2 className="text-base sm:text-lg font-bold text-[#0F172A] mb-1">דומיין ואבטחה</h2>
                 {firebaseUser?.providerData?.some((p) => p.providerId === "password") ? (
                   <>
                     <p className="text-sm text-slate-500 mb-4">
@@ -1274,8 +1380,27 @@ export default function SettingsPage() {
                   {securityToast.message}
                 </div>
               )}
+              <div className="mt-10">
+                <DeleteAccountButton
+                  onDelete={handleDeleteAccount}
+                  isDeleting={isDeleting}
+                  deleteError={deleteError}
+                />
+              </div>
             </div>
           )}
+          {activeTab === "clientStatus" && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-[#0F172A] mb-1">סטטוס לקוחות</h2>
+                <p className="text-sm text-slate-500">
+                  הגדרת סטטוסים אוטומטיים ותוויות ידניות כדי לשפר פילוח, מעקב וקמפיינים ללקוחות.
+                </p>
+              </div>
+              <AdminClientStatusSettings siteId={siteId} />
+            </div>
+          )}
+          {activeTab === "csvImport" && <ClientImportSection siteId={siteId} />}
         </div>
       </div>
       </AdminCard>

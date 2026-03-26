@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { MessageSquare } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { AdminPageHero } from "@/components/admin/AdminPageHero";
 import { AdminCard } from "@/components/admin/AdminCard";
@@ -807,23 +806,14 @@ export default function AdminWhatsAppPage() {
       <AdminPageHero
         title="מרכז הודעות WhatsApp"
         subtitle="שליחת הודעות ישירות ללקוחות — עדכונים, מבצעים, תזכורות ואוטומציות מהמערכת"
-        pills={["Premium", "WhatsApp"]}
         glass
-      >
-        <div className="mt-4 flex items-center gap-2 text-sm text-[#64748B]">
-          <MessageSquare className="w-4 h-4 text-[#1E6F7C]" aria-hidden />
-          <span>ההודעות יוצאות כשיחות WhatsApp ללקוחות שבחרתם</span>
-        </div>
-      </AdminPageHero>
+      />
 
       <AdminCard className="p-5 sm:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-[#0F172A]">שימוש ב־WhatsApp החודש</h2>
-            <p className="mt-1 text-sm text-[#64748B]">
-              נספרות כל ההודעות היוצאות מול המכסה החודשית. יוזמה — תזכורות ושליחה יזומה; שירות — תשובות לאחר פנייה
-              מהלקוח.
-            </p>
+            <p className="mt-1 text-sm text-[#64748B]">נספרות כל ההודעות היוצאות מול המכסה החודשית.</p>
           </div>
           {usageAtLimit && (
             <Link
@@ -874,9 +864,9 @@ export default function AdminWhatsAppPage() {
       <AdminTabs tabs={TABS} activeKey={tab} onChange={setTab} />
 
       {tab === "broadcast" && localSettings && (
-        <div className="space-y-6">
+        <div className="flex flex-col gap-6">
           {/* Message first, preview beside; then recipients below */}
-          <AdminCard className="overflow-hidden p-0">
+          <AdminCard className="order-2 overflow-hidden p-0">
             <div className="border-b border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3 sm:px-6" dir="rtl">
               <h2 className="text-lg font-semibold text-[#0F172A]">תוכן ההודעה</h2>
               <p className="text-sm text-[#64748B] mt-0.5">
@@ -887,11 +877,7 @@ export default function AdminWhatsAppPage() {
               className="flex flex-col gap-6 p-4 sm:p-6 lg:flex-row-reverse lg:items-start lg:gap-8"
               dir="ltr"
             >
-              <div className="min-w-0 flex-1 space-y-3" dir="rtl">
-                <p className="text-sm text-[#64748B] leading-relaxed">
-                  כאן שולחים הודעה אחת לכל מי שבחרתם ב-WhatsApp — עדכונים, מבצעים, דברים חשובים שהלקוחות צריכים לדעת, או כל מה שמתאים
-                  לעסק. המערכת מוסיפה פנייה אישית, שם העסק וקישור לדף שלכם, כדי שההודעה תיראה מסודרת.
-                </p>
+              <div className="order-2 min-w-0 flex-1 space-y-3 lg:order-none" dir="rtl">
                 <label htmlFor="broadcast-custom-text" className="text-sm font-medium text-[#0F172A] block">
                   נוסח ההודעה
                 </label>
@@ -907,8 +893,18 @@ export default function AdminWhatsAppPage() {
                 <p className="text-xs text-[#64748B]">
                   {broadcastCustomText.length}/{MAX_BROADCAST_CUSTOM_TEXT_LEN} תווים
                 </p>
+                <div className="flex flex-wrap justify-end pt-2">
+                  <button
+                    type="button"
+                    disabled={reviewLoading || usageLoading || usageAtLimit}
+                    onClick={openReview}
+                    className="rounded-full bg-[#1E6F7C] px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#175a66] disabled:opacity-50"
+                  >
+                    {reviewLoading ? "בודקים נמענים…" : "המשך לסקירה לפני שליחה"}
+                  </button>
+                </div>
               </div>
-              <div className="flex w-full shrink-0 flex-col items-center border-t border-[#E2E8F0] pt-6 lg:w-[min(100%,300px)] lg:border-t-0 lg:border-r lg:pr-8 lg:pt-0">
+              <div className="order-1 flex w-full shrink-0 flex-col items-center border-t border-[#E2E8F0] pt-6 lg:order-none lg:w-[min(100%,300px)] lg:border-t-0 lg:border-r lg:pr-8 lg:pt-0">
                 <h3 className="text-base font-semibold text-[#0F172A] mb-1 text-center">תצוגה מלאה</h3>
                 <p className="text-xs text-[#64748B] text-center mb-4 max-w-[260px]">
                   שם לדוגמה; אצל כל נמען יופיע השם והקישור לאתר.
@@ -918,11 +914,15 @@ export default function AdminWhatsAppPage() {
             </div>
           </AdminCard>
 
-          <AdminCard className="p-6">
+          <AdminCard className="order-1 p-6">
             <h2 className="text-lg font-semibold text-[#0F172A] mb-1">למי לשלוח את ההודעה?</h2>
-            <p className="text-sm text-[#64748B] mb-4">
+            <p className="hidden text-sm text-[#64748B] mb-4 sm:block">
               בחרו למי לשלוח: כל הלקוחות, לפי סוג סטטוס אוטומטי, לפי תג, או לקוחות ספציפיים מהרשימה. אפשר לשלב — למשל סטטוס ותג
               יחד כדי לדייק את הקהל.
+            </p>
+            <p className="text-sm text-[#64748B] mb-4 leading-relaxed">
+              כאן שולחים הודעה אחת לכל מי שבחרתם ב-WhatsApp — עדכונים, מבצעים ודברים חשובים שהלקוחות צריכים לדעת.
+              המערכת מוסיפה פנייה אישית, שם העסק וקישור לדף שלכם, כדי שההודעה תיראה מסודרת.
             </p>
             <div className="mb-4">
               <span className="rounded-full bg-[#EFF6FF] px-3 py-2 text-xs font-medium text-[#1E3A8A]">
@@ -1089,16 +1089,6 @@ export default function AdminWhatsAppPage() {
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">{sendResult}</div>
           )}
 
-          <div className="flex flex-wrap gap-3 justify-end">
-            <button
-              type="button"
-              disabled={reviewLoading || usageLoading || usageAtLimit}
-              onClick={openReview}
-              className="rounded-full bg-[#1E6F7C] px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#175a66] disabled:opacity-50"
-            >
-              {reviewLoading ? "בודקים נמענים…" : "המשך לסקירה לפני שליחה"}
-            </button>
-          </div>
         </div>
       )}
 

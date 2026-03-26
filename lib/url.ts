@@ -62,6 +62,20 @@ export function getPublicBookingPageAbsoluteUrlForSite(siteId: string, slug?: st
   return `https://${getRootHost()}${path}`;
 }
 
+/** Append/update `source` query param for tracked attribution links. */
+export function withTrackingSource(url: string, source: string): string {
+  const raw = url.trim();
+  const src = source.trim();
+  if (!raw || !src) return raw;
+  try {
+    const parsed = new URL(raw);
+    parsed.searchParams.set("source", src);
+    return parsed.toString();
+  } catch {
+    return raw;
+  }
+}
+
 /**
  * Server / API: absolute public site (landing) URL — no `/book`.
  * With slug: `https://slug.caleno.co`; else `https://<origin>/site/<id>`.

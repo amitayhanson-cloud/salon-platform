@@ -10,8 +10,8 @@ const defaultRules = {
 };
 
 describe("calculateAutomatedClientStatus", () => {
-  it("sleeping when no qualifying booking history", () => {
-    expect(calculateAutomatedClientStatus([], defaultRules, new Date("2025-06-01"))).toBe("sleeping");
+  it("new when no qualifying booking history", () => {
+    expect(calculateAutomatedClientStatus([], defaultRules, new Date("2025-06-01"))).toBe("new");
   });
 
   it("new when at least one visit but below lifetime threshold (past visits)", () => {

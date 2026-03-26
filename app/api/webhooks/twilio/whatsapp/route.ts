@@ -53,7 +53,7 @@ import {
   renderBookingConfirmationMessageFromBookingData,
 } from "@/lib/whatsapp/renderBookingConfirmationMessage";
 import { fetchWazeUrlForSite } from "@/lib/whatsapp/fetchWazeUrlForSite";
-import { getPublicBookingPageAbsoluteUrlForSite } from "@/lib/url";
+import { getPublicBookingPageAbsoluteUrlForSite, withTrackingSource } from "@/lib/url";
 import { clearWaOptInPending } from "@/lib/whatsapp/waOptInPending";
 
 const WEBHOOK_PATH = "/api/webhooks/twilio/whatsapp";
@@ -478,7 +478,10 @@ export async function POST(request: NextRequest) {
           const salonName = cfg?.salonName ?? cfg?.whatsappBrandName ?? "הסלון";
           const slug = typeof siteSnap.data()?.slug === "string" ? siteSnap.data()?.slug : null;
           const [wazeUrl] = await Promise.all([fetchWazeUrlForSite(optSiteId)]);
-          const bookingPublicUrl = getPublicBookingPageAbsoluteUrlForSite(optSiteId, slug);
+          const bookingPublicUrl = withTrackingSource(
+            getPublicBookingPageAbsoluteUrlForSite(optSiteId, slug),
+            "whatsapp"
+          );
           const customerDisplayName = String(bookingData.customerName ?? "").trim() || "לקוח/ה";
           const replyBody = renderBookingConfirmationMessageFromBookingData(waSettings, {
             salonName,

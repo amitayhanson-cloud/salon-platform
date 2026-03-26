@@ -88,6 +88,16 @@ function parseMonthKey(s: string | null | undefined): { key: string; y: number; 
   return { key: t, y, m };
 }
 
+function serviceLabelFromBooking(data: Record<string, unknown>): string {
+  const candidates = [data.serviceName, data.serviceType, data.service];
+  for (const raw of candidates) {
+    if (typeof raw !== "string") continue;
+    const value = raw.trim();
+    if (value.length > 0) return value;
+  }
+  return "שירות לא ידוע";
+}
+
 export async function GET(request: Request) {
   try {
     const authHeader = request.headers.get("authorization");
@@ -199,6 +209,7 @@ export async function GET(request: Request) {
 
     let bookedMinutes = 0;
     const trafficMap = new Map<string, number>();
+    const servicesMap = new Map<string, number>();
 
     if (useLiveScoreboard) {
       const totals = liveDash?.totals as Record<string, unknown> | undefined;
@@ -227,6 +238,13 @@ export async function GET(request: Request) {
           trafficMap.set(src, (trafficMap.get(src) ?? 0) + 1);
         }
       }
+    }
+
+    for (const doc of bookingsSnap.docs) {
+      const d = doc.data() as Record<string, unknown>;
+      if (isDocCancelled(d) || isFollowUpBooking(d)) continue;
+      const serviceLabel = serviceLabelFromBooking(d);
+      servicesMap.set(serviceLabel, (servicesMap.get(serviceLabel) ?? 0) + 1);
     }
 
     const utilizationPercent =
@@ -267,6 +285,9 @@ export async function GET(request: Request) {
     const trafficBySource = Array.from(trafficMap.entries())
       .map(([source, count]) => ({ source, count }))
       .sort((a, b) => b.count - a.count);
+    const servicePopularity = Array.from(servicesMap.entries())
+      .map(([service, count]) => ({ service, count }))
+      .sort((a, b) => b.count - a.count);
 
     const totalAttributed = trafficBySource.reduce((s, x) => s + x.count, 0);
     let totalBookingsForTraffic = bookingsSnap.docs.filter((doc) => {
@@ -291,6 +312,7 @@ export async function GET(request: Request) {
       bookedHoursToday: Math.round((bookedTodayMinutes / 60) * 10) / 10,
       availableHoursToday: Math.round((capacityTodayMinutes / 60) * 10) / 10,
       trafficBySource,
+      servicePopularity,
       totalBookingsWithSource: totalAttributed,
       totalBookingsInMonth: totalBookingsForTraffic,
     });
