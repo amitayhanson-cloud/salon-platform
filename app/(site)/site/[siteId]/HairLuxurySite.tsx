@@ -30,6 +30,24 @@ import SalonHeader from "./components/SalonHeader";
 import ServiceCard from "./components/ServiceCard";
 import { TestimonialCarousel, type TestimonialItem } from "@/components/ui/testimonial-carousel";
 
+/**
+ * Header label when there is no logo: prefer the site’s salon name. Ignore editor
+ * placeholders such as "logo" / "לוגו". If there is a logo image, SalonHeader only
+ * shows it — this string is used as fallback text and accessibility.
+ */
+function headerSalonDisplayName(
+  salonName: string | undefined,
+  editorBrandName: string | undefined
+): string {
+  const site = salonName?.trim() ?? "";
+  if (site) return site;
+  const brand = editorBrandName?.trim() ?? "";
+  if (!brand || /^logo$/i.test(brand) || brand === "לוגו") {
+    return "שם הסלון";
+  }
+  return brand;
+}
+
 // Work Gallery Component with horizontal scrolling
 function WorkGallery({
   images,
@@ -321,7 +339,7 @@ export default function HairLuxurySite({
         >
           <div className="pointer-events-auto w-full flex justify-center max-w-[100vw]">
             <SalonHeader
-              salonName={content.header?.brandName?.trim() ? content.header.brandName : (config.salonName || "שם הסלון")}
+              salonName={headerSalonDisplayName(config.salonName, content.header?.brandName)}
               siteId={siteId}
               slug={config.slug ?? null}
               bookingEnabled={bookingEnabled(config)}

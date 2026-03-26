@@ -6,7 +6,12 @@
  */
 
 import admin from "firebase-admin";
-import type { DocumentReference, QueryDocumentSnapshot, UpdateData } from "firebase-admin/firestore";
+import type {
+  DocumentData,
+  DocumentReference,
+  QueryDocumentSnapshot,
+  UpdateData,
+} from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { getRelatedBookingIds } from "@/lib/whatsapp/relatedBookings";
 import { MAX_RELATED_BOOKINGS } from "@/lib/whatsapp/relatedBookings";
@@ -323,7 +328,7 @@ export async function cancelBookingsCascade(
   if (dashPatch && Object.keys(dashPatch).length > 0) {
     // Must use update(), not set(merge): dotted keys like days.{ymd}.bookings are real nested
     // paths only with update — set+merge would miss live stats (bookings/revenue/cancellations).
-    batch.update(dashRef, dashPatch as UpdateData);
+    batch.update(dashRef, dashPatch as UpdateData<DocumentData>);
   }
   try {
     await batch.commit();
@@ -376,7 +381,7 @@ export async function permanentDeleteBookingGroupDocs(
       liveEffects.length > 0 ? await prepareDashboardBatchIncrement(db, siteId, liveEffects) : null;
     const batch = db.batch();
     if (dashPatch && Object.keys(dashPatch).length > 0) {
-      batch.update(dashRef, dashPatch as UpdateData);
+      batch.update(dashRef, dashPatch as UpdateData<DocumentData>);
     }
     for (const id of chunk) {
       batch.delete(col.doc(id));
