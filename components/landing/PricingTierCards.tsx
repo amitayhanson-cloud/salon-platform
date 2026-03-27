@@ -46,14 +46,14 @@ export function PricingTierCards() {
             ))}
           </ul>
           <Link
-            href="/signup"
+            href="/waitlist"
             className={
               tier.highlighted
                 ? "mt-8 inline-flex w-full items-center justify-center rounded-full bg-caleno-deep px-4 py-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-caleno-600 md:w-auto"
                 : "mt-8 inline-flex w-full items-center justify-center rounded-full border border-[#E2E8F0] bg-white px-4 py-3 text-sm font-medium text-caleno-ink transition-colors hover:bg-caleno-off md:w-auto"
             }
           >
-            {PRICING_SECTION.cta}
+            הצטרפו לרשימת ההמתנה
           </Link>
         </article>
       ))}

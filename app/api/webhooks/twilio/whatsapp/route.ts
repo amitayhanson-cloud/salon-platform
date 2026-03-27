@@ -40,9 +40,9 @@ import {
 } from "@/lib/whatsapp/inboundLog";
 import { formatIsraelDateTime } from "@/lib/datetime/formatIsraelTime";
 import {
-  buildClientCancelReplyMessage,
-  buildClientConfirmReplyMessage,
-} from "@/lib/whatsapp/buildClientInboundReply";
+  buildClientCancelSystemFallbackText,
+  buildClientConfirmSystemFallbackText,
+} from "@/lib/whatsapp/inboundReplyFallbackText";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
 import { looksLikeCustomerBookingConfirmationRequest } from "@/lib/whatsapp/optInConfirmationPattern";
@@ -60,6 +60,37 @@ const WEBHOOK_PATH = "/api/webhooks/twilio/whatsapp";
 
 /** TwiML with no outbound message — avoids spending quota on unknown inbound. */
 const EMPTY_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
+
+async function markUnsubscribedByPhone(phoneE164: string): Promise<number> {
+  const db = getAdminDb();
+  let updated = 0;
+  const now = Timestamp.now();
+  const candidates = [phoneE164, phoneE164.replace(/^\+/, "")].filter(Boolean);
+  const userSnaps = await Promise.all(
+    candidates.map((p) => db.collection("users").where("phone", "==", p).limit(50).get())
+  );
+  for (const snap of userSnaps) {
+    for (const doc of snap.docs) {
+      await doc.ref.set({ isSubscribed: false, updatedAt: now }, { merge: true });
+      updated += 1;
+    }
+  }
+
+  const clientFieldQueries = [
+    db.collectionGroup("clients").where("phone", "==", phoneE164).limit(200).get(),
+    db.collectionGroup("clients").where("customerPhone", "==", phoneE164).limit(200).get(),
+    db.collectionGroup("clients").where("customerPhoneE164", "==", phoneE164).limit(200).get(),
+  ];
+  const clientSnaps = await Promise.allSettled(clientFieldQueries);
+  for (const res of clientSnaps) {
+    if (res.status !== "fulfilled") continue;
+    for (const doc of res.value.docs) {
+      await doc.ref.set({ isSubscribed: false, updatedAt: now }, { merge: true });
+      updated += 1;
+    }
+  }
+  return updated;
+}
 
 /** Twilio sandbox: user must send `join <code>` before messaging the sandbox number. */
 function isSandboxJoinCommand(body: string): boolean {
@@ -292,6 +323,16 @@ export async function POST(request: NextRequest) {
 
     const { intent, selection } = normalizeInbound(inboundBody, ButtonPayload || null);
 
+    if (normalizeInbound(inboundBody).normalized === "הסר אותי מהרשימה") {
+      try {
+        const hits = await markUnsubscribedByPhone(fromE164);
+        console.log("[WA_WEBHOOK] unsubscribed", { fromE164, updated: hits });
+      } catch (e) {
+        console.error("[WA_WEBHOOK] unsubscribe_failed", e);
+      }
+      return recordSilent("unsubscribed");
+    }
+
     async function recordSilent(
       resultStatus: string,
       options: { bookingRef?: string | null; action?: "confirmed" | "cancelled" | null } = {}
@@ -417,10 +458,10 @@ export async function POST(request: NextRequest) {
           bookingRef: chosen.bookingRef,
           action: "confirmed",
         });
-        const reply = await buildClientConfirmReplyMessage(booking.siteId, {
-          startAt: booking.startAt,
+        const reply = buildClientConfirmSystemFallbackText({
+          time: formatIsraelDateTime(booking.startAt).timeStr,
           businessName: booking.salonName,
-          customerName: booking.customerName,
+          wazeUrl: (await fetchWazeUrlForSite(booking.siteId)) ?? "",
         });
         await deleteWhatsAppSession(fromE164);
         return recordAndReturnReply(reply, "matched_yes", {
@@ -433,11 +474,7 @@ export async function POST(request: NextRequest) {
         bookingRef: chosen.bookingRef,
         action: "cancelled",
       });
-      const reply = await buildClientCancelReplyMessage(booking.siteId, {
-        businessName: booking.salonName,
-        startAt: booking.startAt,
-        customerName: booking.customerName,
-      });
+      const reply = buildClientCancelSystemFallbackText(booking.salonName);
       await deleteWhatsAppSession(fromE164);
       return recordAndReturnReply(reply, "matched_no", {
         bookingRef: chosen.bookingRef,
@@ -527,10 +564,10 @@ export async function POST(request: NextRequest) {
             bookingRef,
             action: "confirmed",
           });
-          const reply = await buildClientConfirmReplyMessage(choice.siteId, {
-            startAt: choice.startAt.toDate(),
+          const reply = buildClientConfirmSystemFallbackText({
+            time: formatIsraelDateTime(choice.startAt.toDate()).timeStr,
             businessName: choice.siteName,
-            customerName: choice.customerName,
+            wazeUrl: (await fetchWazeUrlForSite(choice.siteId)) ?? "",
           });
           return recordAndReturnReply(reply, "matched_yes", {
             bookingRef,
@@ -543,11 +580,7 @@ export async function POST(request: NextRequest) {
           bookingRef,
           action: "cancelled",
         });
-        const reply = await buildClientCancelReplyMessage(choice.siteId, {
-          businessName: choice.siteName,
-          startAt: choice.startAt.toDate(),
-          customerName: choice.customerName,
-        });
+        const reply = buildClientCancelSystemFallbackText(choice.siteName);
         return recordAndReturnReply(reply, "matched_no", { bookingRef, action: "cancelled" });
       }
 

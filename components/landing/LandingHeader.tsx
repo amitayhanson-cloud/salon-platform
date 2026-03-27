@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { HEADER_CTA, NAV_LINKS } from "@/lib/landingContent";
+import { NAV_LINKS } from "@/lib/landingContent";
 
 const navLinkLine =
   "relative inline-block pb-1 text-sm text-[#64748B] transition-colors duration-300 group-hover:text-[#0F172A] after:absolute after:bottom-0 after:right-0 after:block after:h-[2px] after:w-0 after:rounded-full after:bg-[#1E6F7C] after:transition-[width] after:duration-300 after:ease-out group-hover:after:w-full after:content-['']";
@@ -34,16 +34,10 @@ export function LandingHeader() {
         <div className="order-1 flex shrink-0 items-center gap-2 md:order-none md:justify-self-end">
           <div className="hidden md:flex md:items-center md:gap-2">
             <Link
-              href="/login"
+              href="/waitlist"
               className="inline-flex items-center justify-center rounded-full border border-caleno-200/50 bg-caleno-50/40 px-4 py-2 text-sm font-medium text-[#0F172A] transition-[background-color,box-shadow,border-color] duration-300 hover:border-caleno-200 hover:bg-caleno-100/90 hover:shadow-[0_2px_16px_-4px_rgba(9,137,155,0.16)]"
             >
-              התחברות
-            </Link>
-            <Link
-              href="/signup"
-              className="inline-flex items-center justify-center rounded-full bg-caleno-800 px-4 py-2 text-sm font-medium text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,.12)] transition-[background-color,box-shadow] duration-300 hover:bg-caleno-700 hover:shadow-[0_2px_18px_-4px_rgba(15,69,80,0.35),inset_0_1px_0_0_rgba(255,255,255,.1)]"
-            >
-              {HEADER_CTA}
+              הצטרפו לרשימת ההמתנה
             </Link>
           </div>
           <button
@@ -111,18 +105,11 @@ export function LandingHeader() {
             ))}
             <div className="mt-3 flex flex-col gap-2 border-t border-gray-100 pt-3">
               <Link
-                href="/login"
-                className="rounded-full border border-caleno-200/60 bg-caleno-50/70 px-4 py-3 text-center text-sm font-medium leading-relaxed text-[#0F172A] shadow-sm transition-[background-color,box-shadow,border-color] duration-300 hover:border-caleno-200 hover:bg-caleno-100 hover:shadow-[0_2px_14px_-4px_rgba(9,137,155,0.14)] hover:text-caleno-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
-                onClick={() => setMobileOpen(false)}
-              >
-                התחברות
-              </Link>
-              <Link
-                href="/signup"
+                href="/waitlist"
                 className="inline-flex items-center justify-center rounded-full bg-caleno-800 px-5 py-3 text-sm font-medium leading-normal text-white shadow-sm transition-[background-color,box-shadow] duration-300 hover:bg-caleno-700 hover:shadow-[0_4px_18px_-4px_rgba(15,69,80,0.3)] active:translate-y-0 focus-visible:ring-2 focus-visible:ring-caleno-300 focus-visible:ring-offset-2"
                 onClick={() => setMobileOpen(false)}
               >
-                {HEADER_CTA}
+                הצטרפו לרשימת ההמתנה
               </Link>
             </div>
           </nav>

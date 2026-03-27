@@ -30,7 +30,7 @@ function FooterColumn({
 
 export function LandingFooter() {
   return (
-    <footer dir="rtl" className="border-t border-gray-200 bg-white">
+    <footer data-waitlist-chrome="footer" dir="rtl" className="border-t border-gray-200 bg-white">
       <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 md:py-16 lg:px-8">
         <div className="grid grid-cols-1 gap-8 md:grid-cols-4">
           <FooterColumn title={FOOTER.product.title} links={FOOTER.product.links} />

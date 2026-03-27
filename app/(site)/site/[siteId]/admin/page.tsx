@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { LayoutGroup, motion } from "framer-motion";
 import { useAuth } from "@/components/auth/AuthProvider";
 import CalenoLoading from "@/components/CalenoLoading";
 import { fetchSiteStats, type SiteStats } from "@/lib/fetchSiteStats";
@@ -19,6 +20,7 @@ import {
   Percent,
   Link2,
   Scissors,
+  ExternalLink,
   type LucideIcon,
 } from "lucide-react";
 import { AdminCard } from "@/components/admin/AdminCard";
@@ -27,10 +29,15 @@ import {
   DashboardAnalyticsChartPanel,
   type DashboardChartSlices,
 } from "@/components/admin/dashboard/DashboardAnalyticsChartPanel";
-import { AnalyticsStatCardWithGraphScroll } from "@/components/admin/dashboard/AnalyticsStatCardWithGraphScroll";
+import {
+  AnalyticsStatCardWithGraphScroll,
+  STAT_MORPH_TRANSITION,
+  type DashboardBentoSize,
+} from "@/components/admin/dashboard/AnalyticsStatCardWithGraphScroll";
 import type { DashboardChartYValueKind } from "@/components/admin/dashboard/DashboardMiniChart";
 import { DEFAULT_WHATSAPP_USAGE_LIMIT } from "@/lib/whatsapp/constants";
 import {
+  type ChartGranularity,
   type DashboardChartSeriesBundle,
   type MetricSlice,
 } from "@/lib/fetchDashboardWeeklySeries";
@@ -44,6 +51,12 @@ import { isDocCancelled } from "@/lib/cancelledBookingShared";
 import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
 
 const DASHBOARD_DAY_TZ = "Asia/Jerusalem";
+
+const BENTO_GRID_CLASS = {
+  hero: "col-span-12 md:col-span-6",
+  secondary: "col-span-12 md:col-span-4",
+  small: "col-span-12 sm:col-span-6 md:col-span-3",
+} as const;
 
 /**
  * `fillSliceFromDayMap` nulls out future days using server time. Cached JSON can lag,
@@ -197,6 +210,10 @@ export default function AdminHomePage() {
   const [dashMetrics, setDashMetrics] = useState<DashboardMetrics | null>(null);
   const [dashLoading, setDashLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
+  /** `null` = grid of stat cards; key = single metric chart shown in place of the grid */
+  const [selectedMetricKey, setSelectedMetricKey] = useState<string | null>(null);
+  /** Lifted from chart panel so week/month/year survives remounts when `chartSlices` is rebuilt each render. */
+  const [expandedChartGranularity, setExpandedChartGranularity] = useState<ChartGranularity>("week");
   const adminBasePath = getAdminBasePathFromSiteId(siteId);
 
   const chartSwrKey =
@@ -284,6 +301,16 @@ export default function AdminHomePage() {
   const welcomeMessage = user?.name
     ? `ברוך שובך – ${user.name}`
     : "ברוך שובך";
+
+  useEffect(() => {
+    setSelectedMetricKey(null);
+  }, [siteId]);
+
+  useEffect(() => {
+    if (selectedMetricKey == null) {
+      setExpandedChartGranularity("week");
+    }
+  }, [selectedMetricKey]);
 
   useEffect(() => {
     if (!siteId || !firebaseUser) {
@@ -401,6 +428,8 @@ export default function AdminHomePage() {
     href: string;
     icon: LucideIcon;
     title?: string;
+    bentoSize: DashboardBentoSize;
+    gridClassName: string;
   };
 
   const trafficPieData = useMemo(() => {
@@ -441,9 +470,8 @@ export default function AdminHomePage() {
   }, [dashMetrics?.servicePopularity]);
 
   const statCards = useMemo((): DashboardStatRow[] => {
-    const trafficTop = (dashMetrics?.trafficBySource ?? []).slice(0, 3);
-    const trafficValue =
-      trafficTop.length > 0 ? trafficTop.map((t) => `${t.source}: ${t.count}`).join(" · ") : null;
+    const trafficLeader = (dashMetrics?.trafficBySource ?? [])[0] ?? null;
+    const trafficValue = trafficLeader ? `${trafficLeader.source}: ${trafficLeader.count}` : null;
 
     const dm = dashMetrics;
     const utilPct = dm?.utilizationPercentToday;
@@ -462,22 +490,17 @@ export default function AdminHomePage() {
         ? `${popularServiceTop.service} (${((popularServiceTop.count / popularServiceTotal) * 100).toFixed(1)}%)`
         : null;
 
+    /** Bento order (RTL grid): heroes → secondaries → compact metrics */
     return [
       {
-        key: "clients",
-        metricKind: "clients" as const,
-        label: "לקוחות",
-        value: stats?.clientsCount ?? null,
-        href: `${adminBasePath}/clients/client-card`,
-        icon: Users,
-      },
-      {
-        key: "newClients",
-        metricKind: "newClients" as const,
-        label: "לקוחות חדשים היום",
-        value: stats?.newCustomersToday ?? null,
-        href: `${adminBasePath}/clients/client-card`,
-        icon: UserPlus,
+        key: "revenue",
+        metricKind: "revenue" as const,
+        label: "הכנסות היום",
+        value: revenueFormatted,
+        href: `${adminBasePath}/bookings`,
+        icon: Banknote,
+        bentoSize: "hero",
+        gridClassName: BENTO_GRID_CLASS.hero,
       },
       {
         key: "bookingsToday",
@@ -486,14 +509,39 @@ export default function AdminHomePage() {
         value: stats?.bookingsToday ?? null,
         href: `${adminBasePath}/bookings`,
         icon: Calendar,
+        bentoSize: "hero",
+        gridClassName: BENTO_GRID_CLASS.hero,
       },
       {
-        key: "revenue",
-        metricKind: "revenue",
-        label: "הכנסות היום",
-        value: revenueFormatted,
+        key: "newClients",
+        metricKind: "newClients" as const,
+        label: "לקוחות חדשים היום",
+        value: stats?.newCustomersToday ?? null,
+        href: `${adminBasePath}/clients/client-card`,
+        icon: UserPlus,
+        bentoSize: "secondary",
+        gridClassName: BENTO_GRID_CLASS.secondary,
+      },
+      {
+        key: "cancellations",
+        metricKind: "cancellations" as const,
+        label: "ביטולים היום",
+        value: dashMetrics?.cancellationsToday ?? null,
         href: `${adminBasePath}/bookings`,
-        icon: Banknote,
+        icon: XCircle,
+        title: dashMetrics?.cancellationsNote,
+        bentoSize: "secondary",
+        gridClassName: BENTO_GRID_CLASS.secondary,
+      },
+      {
+        key: "clients",
+        metricKind: "clients" as const,
+        label: "לקוחות",
+        value: stats?.clientsCount ?? null,
+        href: `${adminBasePath}/clients/client-card`,
+        icon: Users,
+        bentoSize: "secondary",
+        gridClassName: BENTO_GRID_CLASS.secondary,
       },
       {
         key: "whatsapp",
@@ -505,15 +553,8 @@ export default function AdminHomePage() {
             : null,
         href: `${adminBasePath}/whatsapp`,
         icon: MessageSquare,
-      },
-      {
-        key: "cancellations",
-        metricKind: "cancellations" as const,
-        label: "ביטולים היום",
-        value: dashMetrics?.cancellationsToday ?? null,
-        href: `${adminBasePath}/bookings`,
-        icon: XCircle,
-        title: dashMetrics?.cancellationsNote,
+        bentoSize: "small",
+        gridClassName: BENTO_GRID_CLASS.small,
       },
       {
         key: "traffic",
@@ -522,6 +563,8 @@ export default function AdminHomePage() {
         value: trafficValue,
         href: `${adminBasePath}/site`,
         icon: Link2,
+        bentoSize: "small",
+        gridClassName: BENTO_GRID_CLASS.small,
       },
       {
         key: "popularService",
@@ -530,6 +573,8 @@ export default function AdminHomePage() {
         value: popularServiceValue,
         href: `${adminBasePath}/services`,
         icon: Scissors,
+        bentoSize: "small",
+        gridClassName: BENTO_GRID_CLASS.small,
       },
       {
         key: "util",
@@ -538,34 +583,38 @@ export default function AdminHomePage() {
         value: utilValue,
         href: `${adminBasePath}/bookings`,
         icon: Percent,
+        bentoSize: "small",
+        gridClassName: BENTO_GRID_CLASS.small,
       },
     ];
   }, [adminBasePath, dashMetrics, revenueFormatted, stats, whatsAppThisMonth]);
+
+  const heroSparklines = useMemo(() => {
+    const w = whatsAppThisMonth?.used ?? 0;
+    const fa = chartBundle?.fetchedAt ?? null;
+    const revWeek = buildDashboardChartSlices("revenue", chartBundle, w, fa).week;
+    const bookWeek = buildDashboardChartSlices("bookings", chartBundle, w, fa).week;
+    let bookingsVals: (number | null)[] = [...bookWeek.values];
+    if (bookWeek.bookingsStacked) {
+      const { past, future } = bookWeek.bookingsStacked;
+      bookingsVals = past.map((p, i) => (p ?? 0) + (future[i] ?? 0));
+    }
+    return {
+      revenue: revWeek.values,
+      bookingsToday: bookingsVals,
+    };
+  }, [chartBundle, whatsAppThisMonth]);
+
+  const selectedStatRow = useMemo(
+    () =>
+      selectedMetricKey == null ? null : (statCards.find((r) => r.key === selectedMetricKey) ?? null),
+    [selectedMetricKey, statCards]
+  );
 
   const formatRevenueAxis = (n: number) =>
     `\u200E${new Intl.NumberFormat("he-IL", { style: "currency", currency: "ILS", maximumFractionDigits: 0 }).format(n)}`;
 
   const formatPercentAxis = (n: number) => formatUtilizationPercent(n);
-
-  function chartDetailNoteForMetric(kind: AnalyticsMetricKind): string | undefined {
-    if (kind === "cancellations")
-      return "המספר למעלה הוא ביטולים היום; הגרף מציג מגמות (לא רק היום). מבוסס על מסמכי התורים וארכיון מבוטלים לפי תאריך התור.";
-    if (kind === "whatsapp")
-      return "כרטיס «הודעות WhatsApp החודש» ומרכז ה-WhatsApp משתמשים באותה ספירת חודש כמו סיכום הגרף (לוח בקרה). פירוט יוזמה/שירות בדף ה-WhatsApp הוא לפי קטגוריות חיוב בנפרד.";
-    if (kind === "utilization")
-      return "המספר למעלה הוא ניצולת היום (דקות מתור לעומת קיבולת יום העסקים); הגרף מציג אותו מדד לפי ימים/חודשים.";
-    if (kind === "bookings")
-      return "המספר למעלה הוא מספר תורי היום (כמו ביומן). הגרף: ספירת תורים לפי תאריך התור — כהה = עבר/היום, בהיר = ימים עתידיים באותו חודש או שבוע.";
-    if (kind === "clients")
-      return "המספר למעלה הוא סך הלקוחות במערכת; בגרף: סה\"כ לקוחות בסוף כל יום (כולל כל מה שנוצר לפני תחילת החודש + חדשים מאז). מבוסס על מסמכי לקוח עם createdAt בישראל.";
-    if (kind === "newClients")
-      return "המספר למעלה הוא לקוחות שנרשמו היום (יצירה בישראל); בגרף: לקוחות חדשים לפי יום — ההפרש בעמודת «לקוחות» בין יום ליום שווה למספר החדשים באותו יום.";
-    if (kind === "revenue")
-      return "הגרף מציג הכנסות מתורים שאינם מבוטלים ובסטטוס מאושר/פעיל/נקבע; המספר למעלה הוא סכום היום (לפי יומן ישראל) ממחירי התורים — לא בהכרח זהה לכלל הזמנות היום.";
-    if (kind === "popularService")
-      return "החלוקה מציגה את אחוז התורים לכל שירות מתוך כלל התורים הפעילים בחודש הנוכחי.";
-    return undefined;
-  }
 
   function formatChartYForMetric(kind: AnalyticsMetricKind): (n: number) => string {
     if (kind === "revenue") return formatRevenueAxis;
@@ -590,20 +639,19 @@ export default function AdminHomePage() {
     }
   };
 
-  // UX: show stat cards first, then mount graphs (charts are heavier).
-  // This prevents the whole dashboard from waiting on dash metrics / chart SWR.
-  const [showCharts, setShowCharts] = useState(false);
-  useEffect(() => {
-    setShowCharts(false);
-  }, [siteId]);
-  useEffect(() => {
-    if (!statsLoading) setShowCharts(true);
-  }, [statsLoading]);
-
   return (
-    <div dir="rtl" className="min-h-screen">
-      <div className="mx-auto max-w-4xl px-4 pb-16 sm:px-0">
-        <AdminCard gradient className="relative overflow-hidden p-6 md:p-10">
+    <div dir="rtl" className="min-h-screen overflow-x-hidden">
+      <div className="mx-auto max-w-6xl px-4 pb-16 lg:px-8">
+        <AdminCard gradient className="relative overflow-x-hidden overflow-y-visible p-5 md:p-8 lg:p-10">
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="absolute right-5 top-5 z-20 flex items-center justify-center gap-2 rounded-lg bg-white/90 px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 md:right-8 md:top-8"
+          >
+            <LogOut className="h-4 w-4 shrink-0" aria-hidden />
+            {loggingOut ? "מתנתק..." : "התנתקות"}
+          </button>
           {/* Optional subtle grid overlay */}
           <div
             aria-hidden
@@ -621,112 +669,161 @@ export default function AdminHomePage() {
             </div>
           ) : (
             <>
-              <button
-                type="button"
-                onClick={handleLogout}
-                disabled={loggingOut}
-                className="absolute left-6 top-6 z-20 inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white/90 px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <LogOut className="h-4 w-4" />
-                {loggingOut ? "מתנתק..." : "התנתקות"}
-              </button>
-              <div className="relative z-10">
-                <h1 className="mb-2 text-2xl font-extrabold tracking-tight text-[#0F172A] md:text-3xl">
-                  {welcomeMessage}
-                </h1>
-                <p className="mb-8 text-[#64748B]">
-                  מה תרצה לעשות היום?
-                </p>
-
-                <div className="mb-10">
-                  <h2 className="mb-4 text-lg font-semibold text-[#0F172A]">
-                    סטטיסטיקות העסק
-                  </h2>
-                  {statsLoading ? (
-                    <DashboardStatsLoading />
-                  ) : (
-                    <motion.div layout className="grid grid-cols-2 gap-4 md:grid-cols-3">
-                      {statCards.map((row) => (
-                        <AnalyticsStatCardWithGraphScroll
-                          key={row.key}
-                          label={row.label}
-                          value={row.value}
-                          href={row.href}
-                          icon={row.icon}
-                          title={row.title}
-                          chartSectionId={`dashboard-chart-${row.key}`}
-                        />
-                      ))}
-                    </motion.div>
-                  )}
+              <div className="relative z-10 flex flex-col items-center gap-4">
+                <div className="min-w-0 pt-12 text-center md:pt-2">
+                  <h1 className="mb-2 text-pretty text-xl font-extrabold tracking-tight text-[#0F172A] md:text-2xl lg:text-3xl">
+                    {welcomeMessage}
+                  </h1>
+                  <p className="mb-6 text-sm text-[#64748B] md:mb-8 md:text-base">
+                    מה תרצה לעשות היום?
+                  </p>
                 </div>
+              </div>
 
-                <p className="relative z-10 mt-8 text-sm text-[#64748B]">
+              <div className="relative z-10">
+                <LayoutGroup id="dashboard-stat-morph">
+                  <div className="mb-10">
+                    <h2 className="mb-4 text-lg font-semibold text-[#0F172A]">
+                      סטטיסטיקות העסק
+                    </h2>
+                    {statsLoading ? (
+                      <DashboardStatsLoading />
+                    ) : selectedStatRow ? (
+                      <div className="min-w-0 space-y-4">
+                        <motion.button
+                          type="button"
+                          layout
+                          initial={{ opacity: 0, y: -6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ type: "spring", stiffness: 500, damping: 38 }}
+                          onClick={() => setSelectedMetricKey(null)}
+                          className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#1e6f7c]/30 bg-[#1e6f7c] px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-[#1e6f7c]/25 transition hover:bg-[#155a64] sm:w-auto sm:justify-start"
+                        >
+                          חזרה לכל המדדים
+                        </motion.button>
+                        {(() => {
+                          const row = selectedStatRow;
+                          const chartSlices = buildDashboardChartSlices(
+                            row.metricKind,
+                            chartBundle,
+                            whatsAppThisMonth?.used ?? 0,
+                            chartBundle?.fetchedAt ?? null
+                          );
+                          const Icon = row.icon;
+                          const expandId = `dashboard-stat-${row.key}`;
+                          return (
+                            <motion.section
+                              layoutId={expandId}
+                              layout
+                              transition={STAT_MORPH_TRANSITION}
+                              className="relative scroll-mt-28 rounded-2xl border border-slate-100 bg-white/95 p-4 shadow-sm md:p-5 min-w-0"
+                            >
+                              <Link
+                                href={row.href}
+                                title="לדף הניהול"
+                                aria-label={`לדף הניהול — ${row.label}`}
+                                dir="rtl"
+                                className="absolute top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full end-3 border border-slate-100 bg-white text-teal-600 shadow-sm transition hover:bg-teal-50/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600/35 md:top-4 md:end-4"
+                              >
+                                <ExternalLink className="h-4 w-4" strokeWidth={2} aria-hidden />
+                              </Link>
+                              <div className="mb-4 flex flex-col gap-3 border-b border-slate-100 pb-3 pe-11 text-right sm:flex-row sm:items-center sm:justify-between md:pe-12">
+                                <div className="min-w-0">
+                                  <h3 className="text-base font-semibold text-slate-900">
+                                    {DASHBOARD_CHART_SECTION_TITLE[row.metricKind]}
+                                  </h3>
+                                  <p className="mt-1 text-sm text-slate-600">{row.label}</p>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-3 rounded-xl border border-slate-100 bg-white px-3 py-2 shadow-sm">
+                                  <motion.span
+                                    layoutId={`${expandId}-icon`}
+                                    transition={STAT_MORPH_TRANSITION}
+                                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-teal-50 text-teal-600 ring-1 ring-teal-700/5 md:h-10 md:w-10"
+                                  >
+                                    <Icon className="h-4 w-4 md:h-[1.05rem] md:w-[1.05rem]" strokeWidth={2} aria-hidden />
+                                  </motion.span>
+                                  <motion.p
+                                    layoutId={`${expandId}-value`}
+                                    transition={STAT_MORPH_TRANSITION}
+                                    className="text-lg font-bold leading-snug text-slate-900 tabular-nums md:text-2xl md:leading-tight"
+                                  >
+                                    {row.value !== null && row.value !== undefined ? row.value : "—"}
+                                  </motion.p>
+                                </div>
+                              </div>
+                              <motion.div
+                                initial={{ opacity: 0, y: 12, scale: 0.98 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                transition={{ duration: 0.32, delay: 0.05, ease: [0.25, 0.1, 0.25, 1] }}
+                              >
+                                <DashboardAnalyticsChartPanel
+                                  chartSlices={chartSlices}
+                                  granularity={expandedChartGranularity}
+                                  onGranularityChange={setExpandedChartGranularity}
+                                  formatChartY={formatChartYForMetric(row.metricKind)}
+                                  yValueKind={dashboardYValueKind(row.metricKind)}
+                                  pieData={
+                                    row.metricKind === "traffic"
+                                      ? trafficPieData
+                                      : row.metricKind === "popularService"
+                                        ? servicePopularityPieData
+                                        : undefined
+                                  }
+                                  pieEmptyHint={
+                                    row.metricKind === "traffic"
+                                      ? "אין עדיין נתוני מקור הגעה מספיקים להצגת הגרף. ודאו שהעתקתם את הקישורים ממחולל הקישורים כדי שנוכל לעקוב מאיפה הלקוחות מגיעים."
+                                      : undefined
+                                  }
+                                  pieEmptyActionLabel={
+                                    row.metricKind === "traffic" ? "למחולל הקישורים" : undefined
+                                  }
+                                  pieEmptyActionHref={
+                                    row.metricKind === "traffic"
+                                      ? `${adminBasePath}/settings#marketing-link-generator`
+                                      : undefined
+                                  }
+                                  chartSeriesLoading={chartSeriesLoading}
+                                />
+                              </motion.div>
+                            </motion.section>
+                          );
+                        })()}
+                      </div>
+                    ) : (
+                      <motion.div layout className="grid grid-cols-12 gap-6">
+                        {statCards.map((row) => (
+                          <AnalyticsStatCardWithGraphScroll
+                            key={row.key}
+                            label={row.label}
+                            value={row.value}
+                            href={row.href}
+                            icon={row.icon}
+                            title={row.title}
+                            gridClassName={row.gridClassName}
+                            bentoSize={row.bentoSize}
+                            expandLayoutId={`dashboard-stat-${row.key}`}
+                            sparklineValues={
+                              row.key === "revenue"
+                                ? heroSparklines.revenue
+                                : row.key === "bookingsToday"
+                                  ? heroSparklines.bookingsToday
+                                  : undefined
+                            }
+                            onOpenChart={() => setSelectedMetricKey(row.key)}
+                          />
+                        ))}
+                      </motion.div>
+                    )}
+                  </div>
+                </LayoutGroup>
+
+                <p className="relative z-10 mt-8 text-sm leading-relaxed text-[#64748B]">
                   בחר מהתפריט למעלה כדי לנהל תורים, לקוחות, השירותים והאתר.
                 </p>
               </div>
             </>
           )}
         </AdminCard>
-
-        {loading ? null : showCharts ? (
-          <div className="mt-8">
-            <h2 className="mb-2 text-lg font-semibold text-[#0F172A]">מגמות וגרפים</h2>
-            <p className="mb-8 text-sm text-slate-500">
-              לכל מדד יש כפתור גרף בכרטיס למעלה — לחיצה תגלול למקטע המתאים.
-            </p>
-            <div className="flex flex-col gap-12">
-              {statCards.map((row) => {
-                const chartSlices = buildDashboardChartSlices(
-                  row.metricKind,
-                  chartBundle,
-                  whatsAppThisMonth?.used ?? 0,
-                  chartBundle?.fetchedAt ?? null
-                );
-                return (
-                  <section
-                    key={row.key}
-                    id={`dashboard-chart-${row.key}`}
-                    className="scroll-mt-28 rounded-2xl border border-[#E2E8F0] bg-[rgba(30,111,124,0.04)] p-4 shadow-sm md:p-5"
-                  >
-                    <div className="mb-4 border-b border-[#E2E8F0]/90 pb-3">
-                      <h3 className="text-base font-semibold text-[#0F172A]">
-                        {DASHBOARD_CHART_SECTION_TITLE[row.metricKind]}
-                      </h3>
-                    </div>
-                    <DashboardAnalyticsChartPanel
-                      chartSlices={chartSlices}
-                      formatChartY={formatChartYForMetric(row.metricKind)}
-                      yValueKind={dashboardYValueKind(row.metricKind)}
-                      detailNote={chartDetailNoteForMetric(row.metricKind)}
-                      pieData={
-                        row.metricKind === "traffic"
-                          ? trafficPieData
-                          : row.metricKind === "popularService"
-                            ? servicePopularityPieData
-                            : undefined
-                      }
-                      pieTitle={row.metricKind === "popularService" ? "חלוקה לפי שירותים" : undefined}
-                      pieEmptyHint={
-                        row.metricKind === "traffic"
-                          ? "אין עדיין נתוני מקור הגעה מספיקים להצגת הגרף. ודאו שהעתקתם את הקישורים ממחולל הקישורים כדי שנוכל לעקוב מאיפה הלקוחות מגיעים."
-                          : undefined
-                      }
-                      pieEmptyActionLabel={row.metricKind === "traffic" ? "למחולל הקישורים" : undefined}
-                      pieEmptyActionHref={
-                        row.metricKind === "traffic"
-                          ? `${adminBasePath}/settings#marketing-link-generator`
-                          : undefined
-                      }
-                      chartSeriesLoading={chartSeriesLoading}
-                      href={row.href}
-                    />
-                  </section>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
       </div>
     </div>
   );

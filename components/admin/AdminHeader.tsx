@@ -19,7 +19,12 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { isOnTenantSubdomainClient, getAdminBasePath } from "@/lib/url";
+import { useTenantInfo } from "@/hooks/useTenantInfo";
+import {
+  isOnTenantSubdomainClient,
+  getAdminBasePath,
+  getPublicLandingPageUrlForSiteClient,
+} from "@/lib/url";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
 
 type SubMenuItem = {
@@ -146,6 +151,7 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
   const router = useRouter();
   const siteId = params?.siteId as string | null;
   const { user, loading: authLoading } = useAuth();
+  const { data: tenantInfo } = useTenantInfo();
   const adminBasePath =
     !siteId || siteId === "me"
       ? "/site/me/admin"
@@ -190,18 +196,27 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
     return unsub;
   }, [siteId]);
 
-  // Get public site URL: on tenant subdomain use /; on root use path without /admin
-  const getPublicPath = (): string => {
-    if (isOnTenantSubdomainClient()) return "/";
-    const publicPath = pathname.replace(/\/admin(\/.*)?$/, "");
-    return publicPath || "/";
-  };
+  const publicWebsiteUrl = useMemo(() => {
+    // Preferred source: resolved tenant URL (slug -> https://slug.caleno.co)
+    if (tenantInfo?.publicUrl) return tenantInfo.publicUrl;
+
+    // Resolve site id from route or tenant lookup (covers /site/me/admin)
+    const resolvedSiteId =
+      siteId && siteId !== "me" ? siteId : tenantInfo?.siteId && tenantInfo.siteId !== "me" ? tenantInfo.siteId : null;
+
+    if (resolvedSiteId) {
+      return getPublicLandingPageUrlForSiteClient(resolvedSiteId, tenantInfo?.slug ?? null);
+    }
+
+    // Last-resort fallback: preserve previous behavior for edge cases.
+    if (isOnTenantSubdomainClient()) return `${window.location.origin}/`;
+    const publicPath = pathname.replace(/\/admin(\/.*)?$/, "") || "/";
+    return `${window.location.origin}${publicPath}`;
+  }, [pathname, siteId, tenantInfo?.publicUrl, tenantInfo?.siteId, tenantInfo?.slug]);
 
   // Handle button click - open public site in NEW TAB
   const handleViewWebsite = () => {
-    const publicPath = getPublicPath();
-    const fullUrl = `${window.location.origin}${publicPath}`;
-    window.open(fullUrl, "_blank", "noopener,noreferrer");
+    window.open(publicWebsiteUrl, "_blank", "noopener,noreferrer");
   };
 
   const canViewSite = !authLoading && !!user;
@@ -306,7 +321,10 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
   }, [pathname]);
 
   return (
-    <header ref={headerRef} className="sticky top-0 z-[100] pt-3 pb-2 px-4 sm:px-6 lg:px-8">
+    <header
+      ref={headerRef}
+      className="sticky top-0 z-[100] bg-transparent pb-2 px-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] sm:px-6 lg:px-8"
+    >
       <div className="max-w-7xl mx-auto rounded-xl border border-[#E9F4F7] bg-[#FCFEFF] px-4 shadow-sm md:rounded-full md:shadow-md sm:px-6 md:px-6">
         {/* dir=ltr so left/right zones stay fixed: left = Caleno, right = tenant+nav */}
         <div className="flex items-center justify-between h-14 w-full" dir="ltr">
@@ -488,17 +506,19 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                     return (
                   <Link
                     href={item.href}
-                    className={`mx-3 my-1 flex items-center justify-between rounded-xl px-3 py-3.5 text-sm font-semibold transition-colors duration-200 active:scale-[0.99] ${
+                    className={`mx-3 my-1 flex w-[calc(100%-1.5rem)] items-center rounded-xl px-3 py-3.5 text-sm font-semibold transition-colors duration-200 active:scale-[0.99] ${
                       isActive(item.href)
                         ? "bg-[#1E6F7C] text-white shadow-sm"
                         : "text-slate-700 hover:bg-[#EEF8FA] active:bg-[#EEF8FA]"
                     }`}
                   >
-                    <span className="font-semibold">{item.label}</span>
-                    <span className={`rounded-lg p-2 ${isActive(item.href) ? "bg-white/20" : "bg-slate-100/70"}`}>
-                      {NavIcon ? (
-                        <NavIcon className={`h-4 w-4 shrink-0 ${isActive(item.href) ? "text-white" : "text-[#1E6F7C]"}`} aria-hidden />
-                      ) : null}
+                    <span className="flex items-center gap-3">
+                      <span className={`rounded-lg p-2 ${isActive(item.href) ? "bg-white/20" : "bg-slate-100/70"}`}>
+                        {NavIcon ? (
+                          <NavIcon className={`h-4 w-4 shrink-0 ${isActive(item.href) ? "text-white" : "text-[#1E6F7C]"}`} aria-hidden />
+                        ) : null}
+                      </span>
+                      <span className="font-semibold">{item.label}</span>
                     </span>
                   </Link>
                     );
@@ -540,17 +560,19 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                           <div key={subItem.href}>
                             <Link
                               href={subItem.href}
-                              className={`mx-3 my-1 flex items-center justify-between rounded-xl px-3 py-3 text-sm font-semibold transition-colors duration-200 ${
+                              className={`mx-3 my-1 flex items-center rounded-xl px-3 py-3 text-sm font-semibold transition-colors duration-200 ${
                                 isActive(subItem.href)
                                   ? "bg-[#E6F5F7] text-[#1E6F7C]"
                                   : "text-slate-600 hover:bg-[#eaf5f8]"
                               }`}
                             >
-                              <span>{subItem.label}</span>
-                              <span className="rounded-lg bg-white/80 p-1.5">
+                              <span className="flex items-center gap-3">
                                 {SubIcon ? (
-                                  <SubIcon className="h-3.5 w-3.5 shrink-0 text-[#1E6F7C]" aria-hidden />
+                                  <span className="rounded-lg bg-white/80 p-1.5">
+                                    <SubIcon className="h-3.5 w-3.5 shrink-0 text-[#1E6F7C]" aria-hidden />
+                                  </span>
                                 ) : null}
+                                <span>{subItem.label}</span>
                               </span>
                             </Link>
                             {subItem.items?.map((nested) => (

@@ -44,6 +44,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const customSegment =
     typeof (body as { message?: string }).message === "string" ? (body as { message: string }).message.trim() : "";
+  const campaignIdRaw =
+    typeof (body as { campaignId?: string }).campaignId === "string"
+      ? (body as { campaignId: string }).campaignId.trim()
+      : "";
+  const campaignId = campaignIdRaw || id;
   if (!customSegment) {
     return NextResponse.json({ ok: false, error: "כתבו את תוכן ההודעה המותאמת (החלק האמצעי)" }, { status: 400 });
   }
@@ -154,9 +159,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const { sid } = await sendWhatsApp({
         toE164: r.e164,
         body: bodyRendered,
+        template: {
+          name: "broadcast_message_v1",
+          language: "he",
+          variables: {
+            "1": r.name,
+            "2": salonName,
+            "3": customSegment,
+            // Dynamic button variable ({{1}} in button component): campaign/business ID.
+            button_1: { "1": campaignId },
+          },
+        },
         siteId: id,
         bypassAutomationKillSwitch: true,
-        meta: { automation: "owner_broadcast" },
+        meta: { automation: "owner_broadcast", templateName: "broadcast_message_v1" },
       });
       if (isWhatsAppOutboundDelivered(sid)) {
         sent += 1;

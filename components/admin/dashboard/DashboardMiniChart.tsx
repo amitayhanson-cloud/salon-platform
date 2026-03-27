@@ -1,15 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, SVGProps } from "react";
 import Box from "@mui/material/Box";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { BarChart } from "@mui/x-charts/BarChart";
 import type { BarProps } from "@mui/x-charts/BarChart";
-import { useAnimateBar } from "@mui/x-charts/hooks/animation";
 import { useDrawingArea, useXAxes } from "@mui/x-charts/hooks";
 import { cn } from "@/lib/utils";
 import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
+import { hebrewWeekdayLetterIsraelYmd } from "@/lib/hebrewWeekChartAxisLabel";
 import type { ChartGranularity } from "@/lib/fetchDashboardWeeklySeries";
 
 const IL_TZ = "Asia/Jerusalem";
@@ -59,22 +59,85 @@ export type DashboardChartYValueKind = "count" | "percent" | "currency";
 const COLOR_BOOKINGS_PAST = "#1e6f7c";
 const COLOR_BOOKINGS_FUTURE = "#9dc5cf";
 
-/** Slightly lift a bar fill so the “today” column reads as highlighted (band-style cue). */
-function todayBandColor(base: string, dataIndex: number, todayIdx: number | undefined): string {
-  if (todayIdx == null || todayIdx < 0 || dataIndex !== todayIdx) return base;
-  return `color-mix(in srgb, ${base} 84%, white)`;
+/** Keep bar colors uniform; “today” is framed by {@link TodaySlotHighlight}. */
+function todayBandColor(base: string, _dataIndex: number, _todayIdx: number | undefined): string {
+  return base;
 }
 
-/** Same stacking/animation as MUI `AnimatedBarElement`; column frame shows “today” (works when bar height is 0). */
-function makeTodayOutlineBar(todayIdx: number | undefined) {
+function finiteNum(v: unknown, fallback = 0): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : fallback;
+}
+
+function easeOutCubic(t: number): number {
+  return 1 - (1 - t) ** 3;
+}
+
+function useSlowAnimateBar(props: BarProps, durationMs = 620) {
+  const to = useMemo(
+    () => ({
+      x: finiteNum(props.x),
+      y: finiteNum(props.y),
+      width: finiteNum(props.width),
+      height: finiteNum(props.height),
+    }),
+    [props.x, props.y, props.width, props.height]
+  );
+
+  const initial = useMemo(
+    () => ({
+      x: props.layout === "vertical" ? finiteNum(props.x) : finiteNum(props.xOrigin),
+      y: props.layout === "vertical" ? finiteNum(props.yOrigin) : finiteNum(props.y),
+      width: props.layout === "vertical" ? finiteNum(props.width) : 0,
+      height: props.layout === "vertical" ? 0 : finiteNum(props.height),
+    }),
+    [props.layout, props.x, props.xOrigin, props.y, props.yOrigin, props.width, props.height]
+  );
+
+  const [animated, setAnimated] = useState(initial);
+  const currentRef = useRef(initial);
+
+  useEffect(() => {
+    if (props.skipAnimation) {
+      currentRef.current = to;
+      setAnimated(to);
+      return;
+    }
+
+    const from = currentRef.current;
+    let raf = 0;
+    const start = performance.now();
+
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / durationMs);
+      const e = easeOutCubic(t);
+      const next = {
+        x: from.x + (to.x - from.x) * e,
+        y: from.y + (to.y - from.y) * e,
+        width: from.width + (to.width - from.width) * e,
+        height: from.height + (to.height - from.height) * e,
+      };
+      currentRef.current = next;
+      setAnimated(next);
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [durationMs, props.skipAnimation, to]);
+
+  return animated;
+}
+
+/** Same stacking/animation as MUI `AnimatedBarElement`. */
+function makeTodayOutlineBar(_todayIdx: number | undefined) {
   function TodayOutlineBar(props: BarProps) {
     const { ownerState, skipAnimation, id, dataIndex, xOrigin, yOrigin, ...other } = props;
     void skipAnimation;
     void id;
+    void dataIndex;
     void xOrigin;
     void yOrigin;
-    const animatedProps = useAnimateBar(props);
-    const isToday = todayIdx != null && dataIndex === todayIdx;
+    const animatedBarGeom = useSlowAnimateBar(props, 620);
     const o = other as SVGProps<SVGRectElement> & { stroke?: string; strokeWidth?: number };
     return (
       <rect
@@ -83,7 +146,10 @@ function makeTodayOutlineBar(todayIdx: number | undefined) {
         opacity={ownerState.isFaded ? 0.3 : 1}
         data-highlighted={ownerState.isHighlighted || undefined}
         data-faded={ownerState.isFaded || undefined}
-        {...animatedProps}
+        x={animatedBarGeom.x}
+        y={animatedBarGeom.y}
+        width={animatedBarGeom.width}
+        height={animatedBarGeom.height}
         stroke={o.stroke ?? "none"}
         strokeWidth={o.strokeWidth ?? 0}
         style={{
@@ -96,14 +162,15 @@ function makeTodayOutlineBar(todayIdx: number | undefined) {
   return TodayOutlineBar;
 }
 
-/** Caleno teal (#1e6f7c) — soft slot cue, not a heavy frame */
-const TODAY_SLOT_STROKE = "rgba(30, 111, 124, 0.38)";
-const TODAY_SLOT_FILL = "rgba(30, 111, 124, 0.045)";
+/** Subtle Caleno teal border for the current-day frame + “היום” bubble (brand `#1e6f7c`). */
+const CALENO_TEAL = "#1e6f7c";
+const TODAY_SLOT_STROKE_SUBTLE = "rgba(30, 111, 124, 0.48)";
 
 /**
- * Rounded frame around the x-axis band for Israel “today”, full plot height (must render inside BarChart context).
+ * Rounded border around today’s x band plus a small “היום” bubble above the slot.
+ * Renders in BarChart context (above bars in z-order so the frame stays visible).
  */
-function TodayColumnFrame({ bandCategory }: { bandCategory: string | undefined }) {
+function TodaySlotHighlight({ bandCategory }: { bandCategory: string | undefined }) {
   const { top, height } = useDrawingArea();
   const { xAxis, xAxisIds } = useXAxes();
   const xScale = xAxisIds.length > 0 ? xAxis[xAxisIds[0]]?.scale : undefined;
@@ -114,32 +181,72 @@ function TodayColumnFrame({ bandCategory }: { bandCategory: string | undefined }
   const xs = xScale as BandScale;
   if (typeof xs.bandwidth !== "function" || typeof xs.step !== "function") return null;
 
-  const xCenter = xs(bandCategory);
-  if (!Number.isFinite(xCenter)) return null;
+  const scalePos = xs(bandCategory);
+  if (!Number.isFinite(scalePos)) return null;
 
   const step = xs.step();
   const bw = xs.bandwidth();
-  const leftEdge = xCenter - (step - bw) / 2;
-  const inset = Math.max(1, Math.min(3, step * 0.06));
-  const x = leftEdge + inset;
-  const w = Math.max(0, step - inset * 2);
-  const ry = Math.min(8, Math.max(3, bw * 0.12));
+  const leftEdge = scalePos - (step - bw) / 2;
+  const centerX = leftEdge + step / 2;
+
+  const strokeW = 1.5;
+  const inset = strokeW / 2 + 0.5;
+  const r = Math.min(8, step / 4);
+  const frameW = Math.max(0, step - inset * 2);
+  const frameH = Math.max(0, height - inset * 2);
+  const bubbleW = 46;
+  const bubbleH = 21;
+  /** Bubble sits just above the top of the slot (local origin at slot top center). */
+  const bubbleLift = 11;
 
   return (
-    <rect
-      x={x}
-      y={top}
-      width={w}
-      height={height}
-      rx={ry}
-      ry={ry}
-      fill={TODAY_SLOT_FILL}
-      stroke={TODAY_SLOT_STROKE}
-      strokeWidth={1.25}
-      vectorEffect="nonScalingStroke"
-      pointerEvents="none"
-      style={{ paintOrder: "stroke fill" }}
-    />
+    <g aria-hidden="true" pointerEvents="none">
+      <rect
+        x={leftEdge + inset}
+        y={top + inset}
+        width={frameW}
+        height={frameH}
+        rx={r}
+        ry={r}
+        fill="none"
+        stroke={TODAY_SLOT_STROKE_SUBTLE}
+        strokeWidth={strokeW}
+        vectorEffect="nonScalingStroke"
+      />
+      <g transform={`translate(${centerX}, ${top - bubbleLift})`}>
+        <rect
+          x={-bubbleW / 2}
+          y={-bubbleH / 2}
+          width={bubbleW}
+          height={bubbleH}
+          rx={bubbleH / 2}
+          ry={bubbleH / 2}
+          fill="rgba(255, 255, 255, 0.97)"
+          stroke={TODAY_SLOT_STROKE_SUBTLE}
+          strokeWidth={1}
+          vectorEffect="nonScalingStroke"
+        />
+        <text
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontSize={11}
+          fontWeight={700}
+          fill={CALENO_TEAL}
+          style={{ fontFamily: "inherit" }}
+        >
+          היום
+        </text>
+        {/* Tiny pointer tying the bubble to the slot */}
+        <path
+          d="M -5 10 L 0 16 L 5 10 Z"
+          fill="rgba(255, 255, 255, 0.97)"
+          stroke={TODAY_SLOT_STROKE_SUBTLE}
+          strokeWidth={1}
+          strokeLinejoin="round"
+          vectorEffect="nonScalingStroke"
+        />
+      </g>
+    </g>
   );
 }
 
@@ -188,6 +295,14 @@ function nullToZero(n: number | null | undefined): number {
   return n == null ? 0 : n;
 }
 
+/** When `calendarBucketIds` is missing (e.g. mock ticks), parse א–ש from long axis labels */
+function hebrewWeekLetterFromTickLabel(label: string): string | null {
+  if (/יום\s*ש/.test(label)) return "ש";
+  const m = label.match(/יום\s*([אבגדהו])\s*׳/);
+  if (m?.[1]) return m[1];
+  return null;
+}
+
 export function DashboardMiniChart({
   data,
   className,
@@ -202,6 +317,20 @@ export function DashboardMiniChart({
 }: Props) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [highlightedItem, setHighlightedItem] = useState<{ seriesId: string | number; dataIndex: number } | null>(null);
+  const [narrowViewport, setNarrowViewport] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const apply = () => setNarrowViewport(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
+  useEffect(() => {
+    setHoveredIndex(null);
+    setHighlightedItem(null);
+  }, [timeGranularity]);
 
   const { seriesData, axisLabels } = useMemo(() => {
     const n = data.length;
@@ -219,6 +348,17 @@ export function DashboardMiniChart({
     bookingsStacked.future.length === seriesData.length;
 
   const isWeekStrip = axisLabels.length === 7;
+
+  /** Mobile week: show only א–ש under bars (full date stays in title row via titleLabels / axisLabels) */
+  const chartXCategories = useMemo(() => {
+    if (!narrowViewport || !isWeekStrip || timeGranularity !== "week") return axisLabels;
+    return axisLabels.map((lbl, i) => {
+      const ymd = calendarBucketIds?.[i];
+      if (ymd && /^\d{4}-\d{2}-\d{2}$/.test(ymd)) return hebrewWeekdayLetterIsraelYmd(ymd);
+      return hebrewWeekLetterFromTickLabel(lbl) ?? lbl;
+    });
+  }, [axisLabels, calendarBucketIds, isWeekStrip, narrowViewport, timeGranularity]);
+
   const tiltXLabels = useMemo(
     () => !isWeekStrip && axisLabels.some((l) => l.length > 10),
     [axisLabels, isWeekStrip]
@@ -230,6 +370,27 @@ export function DashboardMiniChart({
     if (n <= 30) return 5;
     return 6;
   }, [axisLabels.length]);
+  /** On phones, show fewer x labels to avoid overlap */
+  const tickStride = useMemo(() => {
+    if (isWeekStrip || axisLabels.length <= 7) return 1;
+    const base = timelineStep;
+    if (!narrowViewport) return base;
+    if (axisLabels.length <= 12) return Math.max(base, 2);
+    if (axisLabels.length <= 24) return Math.max(base, 3);
+    return Math.max(base, 4);
+  }, [axisLabels.length, isWeekStrip, narrowViewport, timelineStep]);
+  const xLabelAngle = isWeekStrip ? 0 : narrowViewport ? -45 : tiltXLabels ? -35 : 0;
+  const xLabelAnchor = isWeekStrip ? "middle" : narrowViewport || tiltXLabels ? "end" : "middle";
+  const chartBottomMargin =
+    narrowViewport && !isWeekStrip
+      ? 80
+      : narrowViewport && isWeekStrip && timeGranularity === "week"
+        ? 36
+        : tiltXLabels
+          ? 56
+          : isWeekStrip
+            ? 48
+            : 44;
 
   const defaultActiveIndex = useMemo(() => {
     for (let i = seriesData.length - 1; i >= 0; i--) {
@@ -391,30 +552,54 @@ export function DashboardMiniChart({
         ]
       : null;
 
+  /** Let dense month/year charts scroll horizontally on narrow screens */
+  const chartMinWidth =
+    narrowViewport && !isWeekStrip && axisLabels.length > 8
+      ? Math.max(360, axisLabels.length * 20)
+      : undefined;
+
   return (
     <ThemeProvider theme={chartTheme}>
+      {/* Bidi isolate + flex center: RTL parents otherwise pin MUI grid to the physical right */}
       <Box
-        className={cn("w-full", className)}
-        dir="ltr"
+        component="div"
+        className={cn(
+          "flex w-full max-w-full justify-center",
+          chartMinWidth ? "overflow-x-auto overscroll-x-contain pb-1 [overflow-y:visible]" : "",
+          className
+        )}
         sx={{
-          height: 320,
-          "& .MuiChartsAxis-tickLabel": {
-            fontSize: isWeekStrip ? 11 : 10,
-            fill: "rgba(15, 23, 42, 0.72)",
-            fontWeight: isWeekStrip ? 500 : 400,
-          },
-          "& .MuiChartsAxis-line": { stroke: "rgba(226, 232, 240, 0.95)" },
-          "& .MuiChartsAxis-tick": { stroke: "rgba(226, 232, 240, 0.95)" },
-          "& rect[data-highlighted]": {
-            filter: "brightness(1.38) saturate(1.06) !important",
-            opacity: "1 !important",
-          },
-          "& rect[data-faded]": {
-            opacity: "1 !important",
-            filter: "none !important",
-          },
+          WebkitOverflowScrolling: chartMinWidth ? "touch" : undefined,
+          direction: "ltr",
+          unicodeBidi: "isolate",
         }}
+        dir="ltr"
       >
+        <Box
+          className="w-full max-w-full"
+          dir="ltr"
+          sx={{
+            minWidth: chartMinWidth ?? "100%",
+            maxWidth: "100%",
+            height: narrowViewport ? 340 : 320,
+            direction: "ltr",
+            "& .MuiChartsAxis-tickLabel": {
+              fontSize: isWeekStrip ? 11 : narrowViewport ? 9 : 10,
+              fill: "rgba(15, 23, 42, 0.72)",
+              fontWeight: isWeekStrip ? 500 : 400,
+            },
+            "& .MuiChartsAxis-line": { stroke: "rgba(226, 232, 240, 0.95)" },
+            "& .MuiChartsAxis-tick": { stroke: "rgba(226, 232, 240, 0.95)" },
+            "& rect[data-highlighted]": {
+              filter: "brightness(1.38) saturate(1.06) !important",
+              opacity: "1 !important",
+            },
+            "& rect[data-faded]": {
+              opacity: "1 !important",
+              filter: "none !important",
+            },
+          }}
+        >
         <div className="mb-1 text-center">
           <p className="text-xs font-semibold text-slate-600">{titleLine}</p>
           <p
@@ -428,11 +613,21 @@ export function DashboardMiniChart({
         </div>
         <BarChart
           height={300}
+          sx={{
+            width: "100%",
+            maxWidth: "100%",
+            direction: "ltr",
+            "& .MuiChartsWrapper-root": {
+              direction: "ltr",
+              width: "100%",
+              justifyItems: "stretch",
+            },
+          }}
           margin={{
-            top: 16,
-            right: 12,
-            bottom: tiltXLabels ? 56 : isWeekStrip ? 48 : 44,
-            left: 12,
+            top: highlightIdx != null ? 34 : 16,
+            right: narrowViewport ? 8 : 12,
+            bottom: chartBottomMargin,
+            left: narrowViewport ? 8 : 12,
           }}
           renderer="svg-single"
           slots={{ bar: barSlot }}
@@ -480,16 +675,18 @@ export function DashboardMiniChart({
           xAxis={[
             {
               scaleType: "band",
-              data: axisLabels,
+              data: chartXCategories,
               tickLabelInterval:
-                isWeekStrip || axisLabels.length <= 7
+                isWeekStrip || chartXCategories.length <= 7
                   ? () => true
                   : (_value, index) =>
-                      index === 0 || index === axisLabels.length - 1 || index % timelineStep === 0,
+                      index === 0 ||
+                      index === chartXCategories.length - 1 ||
+                      index % tickStride === 0,
               tickLabelStyle: {
-                angle: tiltXLabels ? -35 : 0,
-                textAnchor: tiltXLabels ? "end" : "middle",
-                fontSize: isWeekStrip ? 11 : 10,
+                angle: xLabelAngle,
+                textAnchor: xLabelAnchor,
+                fontSize: isWeekStrip ? 11 : narrowViewport ? 9 : 10,
               },
             },
           ]}
@@ -505,10 +702,11 @@ export function DashboardMiniChart({
             },
           }}
         >
-          <TodayColumnFrame
-            bandCategory={highlightIdx != null ? axisLabels[highlightIdx] : undefined}
+          <TodaySlotHighlight
+            bandCategory={highlightIdx != null ? chartXCategories[highlightIdx] : undefined}
           />
         </BarChart>
+        </Box>
       </Box>
     </ThemeProvider>
   );

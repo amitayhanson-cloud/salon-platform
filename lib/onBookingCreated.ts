@@ -155,10 +155,20 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
       const { sid } = await sendWhatsApp({
         toE164: customerPhoneE164,
         body: messageBody,
+        template: {
+          name: "booking_confirmed",
+          language: "he",
+          variables: {
+            "1": customerDisplayName,
+            "2": salonName,
+            "3": date,
+            "4": time,
+          },
+        },
         bookingId,
         siteId,
         bookingRef: `sites/${siteId}/bookings/${bookingId}`,
-        meta: { automation: "booking_confirmation" },
+        meta: { automation: "booking_confirmation", templateName: "booking_confirmed" },
       });
       confirmationSentOk = sid !== WHATSAPP_SKIPPED_USAGE_LIMIT_SID && sid !== "skipped-global-disabled";
       if (sid === WHATSAPP_SKIPPED_USAGE_LIMIT_SID) {
@@ -205,10 +215,24 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
       const { sid: reminderSid } = await sendWhatsApp({
         toE164: customerPhoneE164,
         body: reminderBody,
+        template: {
+          name: "appointment_reminder_v1",
+          language: "he",
+          variables: {
+            "1": customerDisplayName,
+            "2": salonName,
+            "3": date,
+            "4": timeStr,
+          },
+        },
         bookingId,
         siteId,
         bookingRef: `sites/${siteId}/bookings/${bookingId}`,
-        meta: { reminder_sent_immediately_due_to_last_minute_booking: true, automation: "reminder_24h" },
+        meta: {
+          reminder_sent_immediately_due_to_last_minute_booking: true,
+          automation: "reminder_24h",
+          templateName: "appointment_reminder_v1",
+        },
       });
 
       if (reminderSid === WHATSAPP_SKIPPED_USAGE_LIMIT_SID) {
@@ -271,10 +295,24 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
         const { sid: catchupSid } = await sendWhatsApp({
           toE164: customerPhoneE164,
           body: reminderBody,
+          template: {
+            name: "appointment_reminder_v1",
+            language: "he",
+            variables: {
+              "1": customerDisplayName,
+              "2": salonName,
+              "3": date,
+              "4": timeStr,
+            },
+          },
           bookingId,
           siteId,
           bookingRef: `sites/${siteId}/bookings/${bookingId}`,
-          meta: { reminder_sent_immediately_tomorrow_catchup: true, automation: "reminder_24h" },
+          meta: {
+            reminder_sent_immediately_tomorrow_catchup: true,
+            automation: "reminder_24h",
+            templateName: "appointment_reminder_v1",
+          },
         });
         if (catchupSid === WHATSAPP_SKIPPED_USAGE_LIMIT_SID) {
           console.warn("[onBookingCreated] tomorrow catch-up reminder not sent — monthly WhatsApp usage limit", {

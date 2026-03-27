@@ -7,6 +7,7 @@ import { Header } from "@/components/Header";
 import { HeroBackground } from "@/components/ui/HeroBackground";
 import { LandingHeader } from "@/components/landing/LandingHeader";
 import { LandingFooter } from "@/components/landing/LandingFooter";
+import { LandingPageBackground } from "@/components/landing/LandingPageBackground";
 import { PublicCookieBanner } from "@/components/legal/PublicCookieBanner";
 import { NavigationLoadingLayer } from "@/components/navigation/NavigationLoadingLayer";
 import { marketingNavigationPredicate } from "@/components/navigation/navigationLoadingPredicates";
@@ -37,11 +38,15 @@ export default function MainLayoutClient({
     ) : pathname === "/privacy" ||
       pathname === "/terms" ||
       pathname === "/pricing" ||
-      pathname === "/cookies" ? (
+        pathname === "/cookies" ||
+        pathname === "/waitlist" ? (
       <div
         dir="ltr"
-        className={`${inter.variable} ${inter.className} min-h-screen bg-white text-caleno-ink antialiased`}
+        className={`${inter.variable} ${inter.className} relative min-h-screen text-caleno-ink antialiased ${
+          pathname === "/waitlist" ? "" : "bg-white"
+        }`}
       >
+        {pathname === "/waitlist" ? <LandingPageBackground /> : null}
         <LandingHeader />
         <main>{children}</main>
         <LandingFooter />

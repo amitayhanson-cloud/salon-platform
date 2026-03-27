@@ -178,10 +178,20 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
       const { sid } = await sendWhatsApp({
         toE164: customerPhoneE164,
         body: reminderBody,
+        template: {
+          name: "appointment_reminder_v1",
+          language: "he",
+          variables: {
+            "1": customerDisplayName,
+            "2": salonName,
+            "3": dateStr,
+            "4": timeStr,
+          },
+        },
         bookingId: doc.id,
         siteId,
         bookingRef: `sites/${siteId}/bookings/${doc.id}`,
-        meta: { automation: "reminder_24h" },
+        meta: { automation: "reminder_24h", templateName: "appointment_reminder_v1" },
       });
 
       if (sid === WHATSAPP_SKIPPED_USAGE_LIMIT_SID) {

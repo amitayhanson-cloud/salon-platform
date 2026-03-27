@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  /** Barrel packages: smaller dev graphs & faster HMR (lucide has 1000+ icons). */
+  experimental: {
+    optimizePackageImports: ["lucide-react", "@mui/material", "@mui/x-charts"],
+  },
   images: {
     remotePatterns: [
       {

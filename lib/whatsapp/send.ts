@@ -23,18 +23,44 @@ import {
 function getTwilioEnv(): { accountSid: string; authToken: string; from: string } {
   const accountSid = process.env.TWILIO_ACCOUNT_SID ?? "";
   const authToken = process.env.TWILIO_AUTH_TOKEN ?? "";
-  const fromRaw = process.env.TWILIO_WHATSAPP_FROM?.trim() || "";
+  const fromRaw =
+    process.env.TWILIO_WHATSAPP_FROM?.trim() || process.env.TWILIO_WHATSAPP_NUMBER?.trim() || "";
   if (!accountSid || !authToken) {
     throw new Error("TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN are required");
   }
-  if (!fromRaw) throw new Error("TWILIO_WHATSAPP_FROM is required (e.g. whatsapp:+14155238886)");
+  if (!fromRaw) throw new Error("TWILIO_WHATSAPP_FROM is required (e.g. whatsapp:+14785004361)");
   const from = fromRaw.startsWith("whatsapp:") ? fromRaw : `whatsapp:${fromRaw}`;
   return { accountSid, authToken, from };
+}
+
+type WhatsAppTemplateName = "booking_confirmed" | "appointment_reminder_v1" | "broadcast_message_v1";
+
+function resolveTemplateContentSid(templateName: WhatsAppTemplateName): string {
+  switch (templateName) {
+    case "booking_confirmed":
+      return process.env.TWILIO_TEMPLATE_BOOKING_CONFIRMED_CONTENT_SID?.trim() || "";
+    case "appointment_reminder_v1":
+      return process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || "";
+    case "broadcast_message_v1":
+      return process.env.TWILIO_TEMPLATE_BROADCAST_MESSAGE_V1_CONTENT_SID?.trim() || "";
+    default:
+      return "";
+  }
 }
 
 export type SendWhatsAppParams = {
   toE164: string;
   body: string;
+  template?: {
+    name: WhatsAppTemplateName;
+    language?: "he";
+    /**
+     * Twilio content variables.
+     * Supports flat numeric keys (`"1"`, `"2"`, ...) and component-scoped objects
+     * such as button variables (`button_1: { "1": "campaignId" }`).
+     */
+    variables: Record<string, string | Record<string, string>>;
+  };
   /** Site/salon id (sites/{siteId}/...) */
   siteId?: string | null;
   /** Booking doc id */
@@ -81,6 +107,7 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
   const {
     toE164,
     body,
+    template,
     siteId: siteIdParam = null,
     bookingId = null,
     bookingRef = null,
@@ -134,7 +161,22 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
   let error: string | null = null;
 
   try {
-    const message = await client.messages.create({ body: outgoingBody, from, to });
+    const contentSid = template ? resolveTemplateContentSid(template.name) : "";
+    if (template && !contentSid) {
+      throw new Error(
+        `Missing content SID env for template '${template.name}'. Set TWILIO_TEMPLATE_*_CONTENT_SID env vars.`
+      );
+    }
+    const message = await client.messages.create(
+      template
+        ? {
+            from,
+            to,
+            contentSid,
+            contentVariables: JSON.stringify(template.variables),
+          }
+        : { body: outgoingBody, from, to }
+    );
     sid = message.sid;
   } catch (e) {
     status = "failed";
@@ -227,6 +269,9 @@ async function logOutbound(params: {
   };
   if (params.meta && typeof params.meta === "object") {
     Object.assign(doc, params.meta);
+  }
+  if (params.meta && typeof params.meta === "object" && "templateName" in params.meta) {
+    doc.templateName = (params.meta as { templateName?: string }).templateName ?? null;
   }
   await db.collection("whatsapp_messages").add(doc);
 }

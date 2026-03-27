@@ -14,10 +14,10 @@ export function FinalCtaSection() {
           </p>
           <div className="mt-8 flex justify-center">
             <Link
-              href="/signup"
+              href="/waitlist"
               className="inline-flex min-w-[180px] items-center justify-center rounded-full bg-caleno-deep px-8 py-4 text-base font-medium text-white shadow-sm transition-colors hover:bg-caleno-600 sm:w-auto"
             >
-              {FINAL_CTA.buttonLabel}
+              הצטרפו לרשימת ההמתנה
             </Link>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth/AuthProvider";
@@ -12,6 +12,13 @@ import {
   calenoDefaultIcons,
   tenantIconsFromLogoAbsoluteUrl,
 } from "@/lib/metadataTenantIcons";
+
+/** Lets `env(safe-area-inset-*)` reflect notch + home indicator on iOS PWAs / Safari. */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
 
 const ROOT_METADATA: Metadata = {
   title: "Caleno | מערכת ניהול מתקדמת לעסקים – זימון תורים ובניית אתרים",

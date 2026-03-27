@@ -35,6 +35,12 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
+/* Waitlist success: soften footer only — header pill matches main landing (no extra opacity on nav) */
+html[data-waitlist-success="true"] [data-waitlist-chrome="footer"] {
+  opacity: 0.6;
+  transition: opacity 200ms ease;
+}
+
 /* Site admin: sticky header stacks above in-page modals; hide header while a full-screen overlay is open. */
 body:has([data-admin-modal-overlay]) .admin-layout-header-root {
   visibility: hidden;

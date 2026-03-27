@@ -11,6 +11,7 @@ import { PricingSection } from "./PricingSection";
 import { ContactSection } from "./ContactSection";
 import { FinalCtaSection } from "./FinalCtaSection";
 import { LandingFooter } from "./LandingFooter";
+import { LandingPageBackground } from "./LandingPageBackground";
 import type { LandingContent } from "@/types/landingContent";
 
 /**
@@ -30,16 +31,7 @@ export function LandingPage() {
 
   return (
     <>
-      {/* Stationary gradient: Caleno at center spreading out, white at edges; fixed so content scrolls on top */}
-      <div
-        aria-hidden
-        className="fixed inset-0 -z-10"
-        style={{
-          backgroundImage: `
-            radial-gradient(ellipse 100% 100% at 50% 50%, #cceef1 0%, #e6f5f7 25%, #f0f9fa 50%, #f8fcfd 75%, #ffffff 100%)
-          `,
-        }}
-      />
+      <LandingPageBackground />
 
       {/* Navbar: full-width, sticky for entire page (unchanged) */}
       <LandingHeader />

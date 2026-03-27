@@ -19,12 +19,6 @@ const GRANULARITY_LABEL: Record<ChartGranularity, string> = {
   year: "שנה",
 };
 
-const RANGE_CAPTION: Record<ChartGranularity, string> = {
-  week: "השבוע הנוכחי (ראשון–שבת, לפי ישראל) · מתחת לכל עמודה שם היום והתאריך",
-  month: "החודש הנוכחי (לפי יום) · תורים: נספרים גם לימים עתידיים (עמודה בהירה)",
-  year: "12 החודשים האחרונים (לפי חודש)",
-};
-
 export type DashboardChartSlices = Record<
   ChartGranularity,
   {
@@ -44,14 +38,14 @@ type Props = {
   chartSlices: DashboardChartSlices;
   formatChartY?: (n: number) => string;
   yValueKind?: DashboardChartYValueKind;
-  detailNote?: string;
   pieData?: TrafficPieDatum[];
-  pieTitle?: string;
   pieEmptyHint?: string;
   pieEmptyActionLabel?: string;
   pieEmptyActionHref?: string;
   chartSeriesLoading?: boolean;
-  href: string;
+  /** When both are set, week/month/year is controlled by the parent (survives panel remounts). */
+  granularity?: ChartGranularity;
+  onGranularityChange?: (g: ChartGranularity) => void;
 };
 
 export type TrafficPieDatum = { id: string; label: string; value: number; color?: string };
@@ -96,66 +90,30 @@ export function DashboardAnalyticsChartPanel({
   chartSlices,
   formatChartY,
   yValueKind,
-  detailNote,
   pieData,
-  pieTitle = "חלוקה לפי מקור הגעה",
   pieEmptyHint,
   pieEmptyActionLabel,
   pieEmptyActionHref,
   chartSeriesLoading = false,
-  href,
+  granularity: granularityProp,
+  onGranularityChange,
 }: Props) {
-  const [granularity, setGranularity] = useState<ChartGranularity>("week");
+  const [internalGranularity, setInternalGranularity] = useState<ChartGranularity>("week");
+  const isControlled =
+    granularityProp !== undefined && typeof onGranularityChange === "function";
+  const granularity = isControlled ? granularityProp! : internalGranularity;
+  const setGranularity = (g: ChartGranularity) => {
+    if (isControlled) onGranularityChange(g);
+    else setInternalGranularity(g);
+  };
   const slice = chartSlices[granularity];
   /** Traffic row always passes `pieData` (maybe `[]`); other rows pass `undefined` → bars only. */
   const isTrafficSourcePie = pieData !== undefined;
   const hasPieSlices = !!pieData && pieData.length > 0;
 
   return (
-    <div className="relative rounded-xl bg-[rgba(255,255,255,0.6)] px-2 py-3 ring-1 ring-[#E2E8F0]/80">
-      {!isTrafficSourcePie ? (
-        <div
-          className="absolute left-2 top-2 z-10 flex rounded-lg border border-slate-200/90 bg-white/95 p-0.5 shadow-sm"
-          dir="ltr"
-          onClick={(e) => e.stopPropagation()}
-          role="group"
-          aria-label="יחידת זמן לגרף"
-        >
-          {(["week", "month", "year"] as const).map((g) => (
-            <button
-              key={g}
-              type="button"
-              onClick={() => setGranularity(g)}
-              className={cn(
-                "rounded-md px-2 py-1 text-[10px] font-semibold transition-colors sm:px-2.5 sm:text-[11px]",
-                granularity === g
-                  ? "bg-[#1e6f7c] text-white"
-                  : "text-slate-600 hover:bg-slate-100"
-              )}
-            >
-              {GRANULARITY_LABEL[g]}
-            </button>
-          ))}
-        </div>
-      ) : null}
-
-      {!isTrafficSourcePie ? (
-        <div className="mb-2 mt-7 space-y-1.5 text-center sm:mt-6">
-          <p className="text-[11px] font-medium text-slate-500">{RANGE_CAPTION[granularity]}</p>
-          {detailNote ? (
-            <p className="text-[10px] leading-snug text-slate-400">{detailNote}</p>
-          ) : null}
-        </div>
-      ) : (
-        <div className="mb-2 mt-1 space-y-1.5 text-center">
-          <p className="text-[11px] font-medium text-slate-500">{pieTitle}</p>
-          {detailNote ? (
-            <p className="text-[10px] leading-snug text-slate-400">{detailNote}</p>
-          ) : null}
-        </div>
-      )}
-
-      <div className="relative rounded-lg pt-1">
+    <div className="relative min-w-0 rounded-xl bg-[rgba(255,255,255,0.6)] px-2 py-3 ring-1 ring-[#E2E8F0]/80 sm:px-3">
+      <div className="relative min-w-0 rounded-lg pb-2 pt-1">
         {isTrafficSourcePie ? (
           chartSeriesLoading && !hasPieSlices ? (
             <DashboardChartSkeleton />
@@ -214,11 +172,35 @@ export function DashboardAnalyticsChartPanel({
           />
         )}
       </div>
-      <div className="mt-3 flex justify-center">
-        <Link href={href} className="text-sm font-medium text-[#1e6f7c] underline-offset-2 hover:underline">
-          מעבר למסך מלא
-        </Link>
-      </div>
+
+      {!isTrafficSourcePie ? (
+        <div
+          className="relative z-20 mt-3 flex justify-center border-t border-[#E2E8F0]/80 pt-3 isolate"
+          dir="ltr"
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          role="group"
+          aria-label="יחידת זמן לגרף"
+        >
+          <div className="inline-flex rounded-lg border border-slate-200/90 bg-white/95 p-0.5 shadow-sm">
+            {(["week", "month", "year"] as const).map((g) => (
+              <button
+                key={g}
+                type="button"
+                onClick={() => setGranularity(g)}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-[11px] font-semibold transition-colors sm:px-3.5 sm:text-xs",
+                  granularity === g
+                    ? "bg-[#1e6f7c] text-white"
+                    : "text-slate-600 hover:bg-slate-100"
+                )}
+              >
+                {GRANULARITY_LABEL[g]}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

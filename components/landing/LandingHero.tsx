@@ -59,10 +59,10 @@ export function LandingHero() {
           {/* Same-size buttons */}
           <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
             <Link
-              href="/signup"
+              href="/waitlist"
               className="inline-flex min-w-[180px] items-center justify-center rounded-full bg-neutral-900 px-6 py-4 text-sm font-medium text-white shadow shadow-[inset_0_1px_0_rgba(255,255,255,.15)] transition-colors hover:bg-neutral-800 sm:text-base"
             >
-              {HERO.primaryCta}
+              הצטרפו לרשימת ההמתנה + הטבה בלעדית 🎁
             </Link>
             <Link
               href="#how-it-works"
@@ -71,6 +71,10 @@ export function LandingHero() {
               {HERO.secondaryCta}
             </Link>
           </div>
+
+          <p className="mx-auto mt-4 max-w-[520px] text-sm font-medium leading-relaxed text-[#64748B] sm:text-base">
+            נרשמים עכשיו ומקבלים חודש ראשון ב-1₪ בלבד ביום ההשקה! 🚀
+          </p>
       </div>
 
       {/* Caleno box inside hero gradient */}

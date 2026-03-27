@@ -387,7 +387,7 @@ export default function AdminLayout({
       variant="caleno"
       shouldShowForNavigation={adminNavigationPredicate}
     >
-      <div className="min-h-screen w-full overflow-x-hidden relative">
+      <div className="relative min-h-screen w-full overflow-x-clip">
         {/* Fixed radial gradient: Caleno at center, white at edges (match landing) */}
         <div
           aria-hidden
@@ -405,7 +405,7 @@ export default function AdminLayout({
           </div>
         )}
         <UnsavedChangesProvider>
-          <div className="relative z-10 w-full overflow-x-hidden">
+          <div className="relative z-10 w-full overflow-x-clip">
             {/* z-40 keeps header above scrolling main; modals use data-admin-modal-overlay + globals.css to hide header while open */}
             <div className="relative z-40 admin-layout-header-root">
               <AdminHeader onOpenHelp={() => setHelpOpen(true)} />

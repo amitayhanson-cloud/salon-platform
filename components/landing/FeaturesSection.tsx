@@ -123,10 +123,10 @@ export default function FeaturesSection() {
             </AdminPanelLink>
           ) : (
             <Link
-              href="/signup"
+              href="/waitlist"
               className="inline-block min-h-[44px] px-6 py-3 bg-[#2EC4C6] hover:bg-[#22A6A8] text-white font-semibold rounded-xl shadow-sm transition-colors flex items-center justify-center"
             >
-              צור אתר עכשיו
+              הצטרפו לרשימת ההמתנה
             </Link>
           )}
         </div>
