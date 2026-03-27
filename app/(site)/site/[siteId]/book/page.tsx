@@ -650,6 +650,8 @@ export default function BookingPage() {
   const [clientPhone, setClientPhone] = useState("");
   /** Show Israeli format hint only after המשך with an invalid number (not while typing). */
   const [showPhoneInvalidAfterContinue, setShowPhoneInvalidAfterContinue] = useState(false);
+  /** Show required-field hint only after pressing "המשך" on step 1. */
+  const [showStep1RequiredAfterContinue, setShowStep1RequiredAfterContinue] = useState(false);
   const [clientNote, setClientNote] = useState("");
   /** After פרטים: fetch last booking for repeat-service prompt */
   const [checkingLastBooking, setCheckingLastBooking] = useState(false);
@@ -2047,7 +2049,11 @@ export default function BookingPage() {
 
   const handleNext = () => {
     if (step !== 1) return;
-    if (!clientName.trim() || !clientPhone.trim()) return;
+    if (!clientName.trim() || !clientPhone.trim()) {
+      setShowStep1RequiredAfterContinue(true);
+      return;
+    }
+    setShowStep1RequiredAfterContinue(false);
     if (!isBookingClientPhoneValid(clientPhone)) {
       setShowPhoneInvalidAfterContinue(true);
       return;
@@ -2070,6 +2076,7 @@ export default function BookingPage() {
       if (next === 1) {
         setCustomerEditCancelAnchorId(null);
         setShowPhoneInvalidAfterContinue(false);
+        setShowStep1RequiredAfterContinue(false);
       }
     }
   };
@@ -3011,7 +3018,10 @@ export default function BookingPage() {
                     type="text"
                     id="clientName"
                     value={clientName}
-                    onChange={(e) => setClientName(e.target.value)}
+                    onChange={(e) => {
+                      setShowStep1RequiredAfterContinue(false);
+                      setClientName(e.target.value);
+                    }}
                     className="w-full rounded-xl border px-4 py-3 text-right focus:outline-none focus:ring-2"
                     style={{
                       borderColor: "var(--border)",
@@ -3057,6 +3067,7 @@ export default function BookingPage() {
                       !isBookingClientPhoneValid(clientPhone)
                     }
                     onChange={(e) => {
+                      setShowStep1RequiredAfterContinue(false);
                       setShowPhoneInvalidAfterContinue(false);
                       setClientPhone(e.target.value.replace(/[^\d+\s\-]/g, "").slice(0, 22));
                     }}
@@ -3891,14 +3902,7 @@ export default function BookingPage() {
             </div>
           )}
 
-          {!isStepValid() && (step === 2 || step === 3) && (
-            <div className="mt-4 p-3 border rounded-xl text-right" style={{ backgroundColor: "#fef2f2", borderColor: "#fecaca" }}>
-              <p className="text-sm" style={{ color: "#991b1b" }}>
-                יש למלא את כל השדות הנדרשים לפני המשך
-              </p>
-            </div>
-          )}
-          {!isStepValid() && step === 1 && (
+          {showStep1RequiredAfterContinue && step === 1 && (
             <div className="mt-4 p-3 border rounded-xl text-right" style={{ backgroundColor: "#fef2f2", borderColor: "#fecaca" }}>
               <p className="text-sm" style={{ color: "#991b1b" }}>
                 {!clientName.trim()
