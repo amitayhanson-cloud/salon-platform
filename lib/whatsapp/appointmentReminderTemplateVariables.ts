@@ -15,11 +15,17 @@ export function buildAppointmentReminderTemplateVariables(input: {
   /** {{5}} — optional override; must stay non-empty for WhatsApp */
   closingMessage?: string;
 }): Record<string, string> {
-  const v1 = (input.customerDisplayName ?? "").trim() || "לקוח/ה";
-  const v2 = (input.salonName ?? "").trim() || "הסלון";
-  const v3 = (input.dateDisplay ?? "").trim() || "-";
-  const v4 = (input.timeDisplay ?? "").trim() || "-";
-  const v5 =
-    (input.closingMessage ?? "").trim() || DEFAULT_REMINDER_CLOSING_MESSAGE;
-  return { "1": v1, "2": v2, "3": v3, "4": v4, "5": v5 };
+  const customerName = (input.customerDisplayName ?? "").trim() || "לקוח";
+  const salonName = (input.salonName ?? "").trim() || "Luxure";
+  const formattedDate = (input.dateDisplay ?? "").trim() || "---";
+  const formattedTime = (input.timeDisplay ?? "").trim() || "---";
+  const closingLine = (input.closingMessage ?? "").trim() || DEFAULT_REMINDER_CLOSING_MESSAGE || "---";
+
+  return {
+    "1": customerName || "---",
+    "2": salonName || "---",
+    "3": formattedDate || "---",
+    "4": formattedTime || "---",
+    "5": closingLine || "---",
+  };
 }
