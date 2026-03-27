@@ -21,11 +21,11 @@ import { getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
 import { setWaOptInPending } from "@/lib/whatsapp/waOptInPending";
 import { skipPostBookingConfirmationBecauseReminderCovers } from "@/lib/whatsapp/postBookingConfirmationSkip";
 import { getPublicBookingPageAbsoluteUrlForSite, withTrackingSource } from "@/lib/url";
-import { formatIsraelDateShort, formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
 import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
 import { refreshClientAutomatedStatusFromBooking } from "@/lib/server/clientAutomatedStatus";
 import { buildWazeUrlFromAddress } from "@/lib/whatsapp/businessWaze";
 import { buildAppointmentReminderTemplateVariables } from "@/lib/whatsapp/appointmentReminderTemplateVariables";
+import { formatInTimeZone } from "date-fns-tz";
 
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 const ISRAEL_TZ = "Asia/Jerusalem";
@@ -113,8 +113,8 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
     data.startAt instanceof Timestamp
       ? data.startAt.toDate()
       : new Date((data.startAt?.seconds ?? 0) * 1000);
-  const date = formatIsraelDateShort(startAt);
-  const time = formatIsraelTime(startAt);
+  const date = formatInTimeZone(startAt, "Asia/Jerusalem", "dd/MM/yyyy");
+  const timeStr = formatInTimeZone(startAt, "Asia/Jerusalem", "HH:mm");
 
   const postMode = waSettings.postBookingConfirmationMode ?? "auto";
   const useWhatsAppOptIn = postMode === "whatsapp_opt_in";
@@ -173,7 +173,7 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
             "1": customerDisplayName,
             "2": salonName,
             "3": date,
-            "4": time,
+            "4": timeStr,
           },
         },
         bookingId,
@@ -206,7 +206,6 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
   const diffMs = startMs - nowMs;
 
   if (diffMs > 0 && diffMs <= TWENTY_FOUR_HOURS_MS) {
-    const timeStr = formatIsraelTime(startAt);
     if (waSettings.reminderEnabled) {
       console.log("[onBookingCreated] sendWhatsApp last_minute_reminder", {
         siteId,
@@ -301,7 +300,6 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
           bookingId,
           contentSid: process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || null,
         });
-        const timeStr = formatIsraelTime(startAt);
         const reminderBody = renderWhatsAppTemplate(waSettings.reminderTemplate, {
           שם_העסק: salonName,
           זמן_תור: timeStr,

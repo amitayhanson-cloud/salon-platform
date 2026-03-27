@@ -1,19 +1,18 @@
-/**
- * appointment_reminder_v1 (Content API): diagnostic hardcoded 5 variables.
- */
-
-export function buildAppointmentReminderTemplateVariables(input: {
+export const buildAppointmentReminderTemplateVariables = (params: {
   customerDisplayName: string;
   salonName: string;
   dateDisplay: string;
   timeDisplay: string;
-}): Record<string, string> {
-  void input;
+}) => {
+  const customerDisplayName = (params.customerDisplayName ?? "").trim();
+  const salonName = (params.salonName ?? "").trim();
+  const dateDisplay = (params.dateDisplay ?? "").trim();
+  const timeDisplay = (params.timeDisplay ?? "").trim();
+
   return {
-    "1": "אמתי",
-    "2": "Luxure",
-    "3": "27/03/2026",
-    "4": "12:30",
-    "5": "מחכים לראות אותך!",
+    "1": customerDisplayName || "לקוח",
+    "2": salonName || "Luxure",
+    "3": dateDisplay || "---",
+    "4": timeDisplay || "---",
   };
-}
+};
