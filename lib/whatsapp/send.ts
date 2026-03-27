@@ -19,18 +19,38 @@ import {
   type WhatsAppUsageCategory,
 } from "./usage";
 
+// Fail fast in production if Messaging Service is not configured.
+if (
+  process.env.NODE_ENV === "production" &&
+  !(process.env.TWILIO_MESSAGING_SERVICE_SID ?? "").trim()
+) {
+  throw new Error("TWILIO_MESSAGING_SERVICE_SID is required in production");
+}
+
 /** Read env at send time so tests and runtime can set TWILIO_* after module load. */
-function getTwilioEnv(): { accountSid: string; authToken: string; from: string } {
+function getTwilioEnv(): {
+  accountSid: string;
+  authToken: string;
+  messagingServiceSid: string;
+  fromForLogs: string;
+} {
   const accountSid = process.env.TWILIO_ACCOUNT_SID ?? "";
   const authToken = process.env.TWILIO_AUTH_TOKEN ?? "";
+  const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID?.trim() || "";
   const fromRaw =
     process.env.TWILIO_WHATSAPP_FROM?.trim() || process.env.TWILIO_WHATSAPP_NUMBER?.trim() || "";
   if (!accountSid || !authToken) {
     throw new Error("TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN are required");
   }
-  if (!fromRaw) throw new Error("TWILIO_WHATSAPP_FROM is required (e.g. whatsapp:+14785004361)");
-  const from = fromRaw.startsWith("whatsapp:") ? fromRaw : `whatsapp:${fromRaw}`;
-  return { accountSid, authToken, from };
+  if (!messagingServiceSid) {
+    throw new Error("TWILIO_MESSAGING_SERVICE_SID is required");
+  }
+  const fromForLogs = fromRaw
+    ? fromRaw.startsWith("whatsapp:")
+      ? fromRaw
+      : `whatsapp:${fromRaw}`
+    : `messagingService:${messagingServiceSid}`;
+  return { accountSid, authToken, messagingServiceSid, fromForLogs };
 }
 
 type WhatsAppTemplateName = "booking_confirmed" | "appointment_reminder_v1" | "broadcast_message_v1";
@@ -154,7 +174,7 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
     }
   }
 
-  const { accountSid, authToken, from } = getTwilioEnv();
+  const { accountSid, authToken, messagingServiceSid, fromForLogs } = getTwilioEnv();
   const to = toWhatsAppTo(toE164);
 
   const client = twilio(accountSid, authToken);
@@ -175,7 +195,7 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
       );
     }
     const message = await client.messages.create({
-      from,
+      messagingServiceSid,
       to,
       contentSid,
       contentVariables: JSON.stringify(template.variables),
@@ -187,7 +207,7 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
     sid = "";
     await logOutbound({
       toPhone: to,
-      fromPhone: from,
+      fromPhone: fromForLogs,
       body: outgoingBody,
       siteId,
       bookingId,
@@ -202,7 +222,7 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
 
   await logOutbound({
     toPhone: to,
-    fromPhone: from,
+    fromPhone: fromForLogs,
     body: outgoingBody,
     siteId,
     bookingId,
