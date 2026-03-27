@@ -145,10 +145,14 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
   } else {
     let confirmationSentOk = !waSettings.confirmationEnabled;
     if (waSettings.confirmationEnabled && !skipDuplicatePostBookingConfirmation) {
-      console.log(
-        "🚀 DEBUG: Sending WhatsApp with SID:",
-        process.env.TWILIO_TEMPLATE_BOOKING_CONFIRMED_CONTENT_SID
-      );
+      // One sendWhatsApp per booking; logs in send.ts ("Final Payload Keys") are per API call.
+      // If you see two HX512 lines, check for (a) client double-calling confirm-after-create or
+      // (b) this block plus the last-minute reminder below — reminders use a different template SID.
+      console.log("[onBookingCreated] sendWhatsApp booking_confirmation", {
+        siteId,
+        bookingId,
+        contentSid: process.env.TWILIO_TEMPLATE_BOOKING_CONFIRMED_CONTENT_SID?.trim() || null,
+      });
       const messageBody = renderBookingConfirmationMessageFromBookingData(waSettings, {
         salonName,
         bookingPublicUrl,
@@ -202,10 +206,11 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
   if (diffMs > 0 && diffMs <= TWENTY_FOUR_HOURS_MS) {
     const timeStr = formatIsraelTime(startAt);
     if (waSettings.reminderEnabled) {
-      console.log(
-        "🚀 DEBUG: Sending WhatsApp with SID:",
-        process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID
-      );
+      console.log("[onBookingCreated] sendWhatsApp last_minute_reminder", {
+        siteId,
+        bookingId,
+        contentSid: process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || null,
+      });
       const reminderBody = renderWhatsAppTemplate(waSettings.reminderTemplate, {
         שם_העסק: salonName,
         זמן_תור: timeStr,
@@ -287,10 +292,11 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
       const tomorrowIsrael = getTomorrowIsrael();
       const bookingDateIsrael = getDateYMDInTimezone(startAt, ISRAEL_TZ);
       if (bookingDateIsrael === tomorrowIsrael && waSettings.reminderEnabled) {
-        console.log(
-          "🚀 DEBUG: Sending WhatsApp with SID:",
-          process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID
-        );
+        console.log("[onBookingCreated] sendWhatsApp tomorrow_catchup_reminder", {
+          siteId,
+          bookingId,
+          contentSid: process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || null,
+        });
         const timeStr = formatIsraelTime(startAt);
         const reminderBody = renderWhatsAppTemplate(waSettings.reminderTemplate, {
           שם_העסק: salonName,

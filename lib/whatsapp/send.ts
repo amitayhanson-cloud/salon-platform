@@ -24,7 +24,8 @@ function getTwilioEnv(): {
   accountSid: string;
   authToken: string;
   messagingServiceSid: string;
-  fromForLogs: string;
+  /** Sender label for Firestore whatsapp_messages only — never pass to Twilio create(). */
+  senderLabelForLogs: string;
 } {
   const accountSid = process.env.TWILIO_ACCOUNT_SID ?? "";
   const authToken = process.env.TWILIO_AUTH_TOKEN ?? "";
@@ -37,12 +38,12 @@ function getTwilioEnv(): {
   if (!messagingServiceSid) {
     throw new Error("TWILIO_MESSAGING_SERVICE_SID is required");
   }
-  const fromForLogs = fromRaw
+  const senderLabelForLogs = fromRaw
     ? fromRaw.startsWith("whatsapp:")
       ? fromRaw
       : `whatsapp:${fromRaw}`
     : `messagingService:${messagingServiceSid}`;
-  return { accountSid, authToken, messagingServiceSid, fromForLogs };
+  return { accountSid, authToken, messagingServiceSid, senderLabelForLogs };
 }
 
 type WhatsAppTemplateName = "booking_confirmed" | "appointment_reminder_v1" | "broadcast_message_v1";
@@ -141,7 +142,7 @@ export function isWhatsAppOutboundDelivered(sid: string): boolean {
 export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: string }> {
   const {
     toE164,
-    body,
+    body: plaintextForFirestore,
     template,
     siteId: siteIdParam = null,
     bookingId = null,
@@ -158,7 +159,9 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
       ? (meta as { automation: string }).automation
       : "outbound";
   const sandboxMode = (process.env.TWILIO_WHATSAPP_SANDBOX_MODE ?? "").toLowerCase() === "true";
-  const outgoingBody = sandboxMode ? mapBodyForSandbox({ body, automation: automationName }) : body;
+  const outgoingBody = sandboxMode
+    ? mapBodyForSandbox({ body: plaintextForFirestore, automation: automationName })
+    : plaintextForFirestore;
 
   const enabled = bypassAutomationKillSwitch || (await isWhatsAppAutomationEnabled());
   if (!enabled) {
@@ -187,7 +190,7 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
     }
   }
 
-  const { accountSid, authToken, messagingServiceSid, fromForLogs } = getTwilioEnv();
+  const { accountSid, authToken, messagingServiceSid, senderLabelForLogs } = getTwilioEnv();
   const to = toWhatsAppTo(toE164);
 
   const client = twilio(accountSid, authToken);
@@ -201,32 +204,32 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
         "Template content send is required: pass template { name/contentSid, variables } so Twilio uses contentSid/contentVariables."
       );
     }
-    const contentSid = template.contentSid?.trim() || resolveTemplateContentSid(template.name);
-    if (!contentSid) {
+    const resolvedContentSid = template.contentSid?.trim() || resolveTemplateContentSid(template.name);
+    if (!resolvedContentSid) {
       throw new Error(
         `Missing content SID env for template '${template.name}'. Set TWILIO_TEMPLATE_*_CONTENT_SID env vars.`
       );
     }
-    console.log("🚀 DEBUG: Sending WhatsApp with SID:", contentSid);
-    const e164 = to.replace(/^whatsapp:/, "");
-    const params: any = {
-      to: `whatsapp:${e164}`,
-      messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID,
-      contentSid,
-      contentVariables: contentVariablesJsonForTwilio(template.variables),
-    };
-    // ABSOLUTELY ENSURE no 'from' or 'body' exists in the params
-    delete params.from;
-    delete params.body;
-    const message = await client.messages.create(params);
-    sid = message.sid;
+    {
+      // Clean-room Twilio payload: only these four keys. No `body` / `from` identifiers here.
+      const destinationE164 = to.replace(/^whatsapp:/, "");
+      const cleanPayload: Record<string, string> = {
+        to: `whatsapp:${destinationE164}`,
+        messagingServiceSid,
+        contentSid: resolvedContentSid,
+        contentVariables: contentVariablesJsonForTwilio(template.variables),
+      };
+      console.log("Final Payload Keys:", Object.keys(cleanPayload));
+      const message = await client.messages.create(cleanPayload as unknown as Parameters<typeof client.messages.create>[0]);
+      sid = message.sid;
+    }
   } catch (e) {
     status = "failed";
     error = e instanceof Error ? e.message : String(e);
     sid = "";
     await logOutbound({
       toPhone: to,
-      fromPhone: fromForLogs,
+      fromPhone: senderLabelForLogs,
       body: outgoingBody,
       siteId,
       bookingId,
@@ -241,7 +244,7 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
 
   await logOutbound({
     toPhone: to,
-    fromPhone: fromForLogs,
+    fromPhone: senderLabelForLogs,
     body: outgoingBody,
     siteId,
     bookingId,

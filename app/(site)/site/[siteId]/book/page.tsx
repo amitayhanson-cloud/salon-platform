@@ -2464,7 +2464,10 @@ export default function BookingPage() {
 
   // Keep selected hour in sync when date/worker/slots change — do NOT depend on `selectedTime`
   // (including it re-ran after every click and could fight the user's pick while slots recomputed).
+  // Once the user is on סיכום (6) or הצלחה (7), never clobber their choice: Firestore snapshots
+  // constantly refresh `bookingsForDate` and can briefly change slots / reset to the first hour (e.g. 09:00).
   useEffect(() => {
+    if (step >= 6) return;
     if (availableTimeSlots.length === 0) {
       setSelectedTime("");
       return;
@@ -2474,7 +2477,7 @@ export default function BookingPage() {
       if (prev) setTimeUpdatedByWorkerMessage(true);
       return availableTimeSlots[0] ?? "";
     });
-  }, [selectedWorker, selectedDate, availableTimeSlots]);
+  }, [step, selectedWorker, selectedDate, availableTimeSlots]);
 
   if (loading || !config) {
     return (
@@ -3749,8 +3752,6 @@ export default function BookingPage() {
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                   {availableTimeSlots.map((time) => {
                     const isSelected = selectedTime === time;
-                    const timeFlashKey = `time:${time}`;
-                    const isTimeGlowing = selectionGlowKey === timeFlashKey;
 
                     return (
                       <button
@@ -3759,16 +3760,15 @@ export default function BookingPage() {
                         onClick={() => {
                           setSelectedTime(time);
                           setTimeUpdatedByWorkerMessage(false);
-                          flashSelectionThen(timeFlashKey, () => setStep(6));
+                          // Advance immediately: delaying step 6 left us on step 5 while Firestore/slot
+                          // recomputation could reset selectedTime to the first slot (wrong hour on summary).
+                          setStep(6);
                         }}
                         className="p-3 rounded-xl border-2 text-sm font-medium transition-all hover:opacity-90"
                         style={{
-                          borderColor: isTimeGlowing ? "#22c55e" : isSelected ? "var(--primary)" : "var(--border)",
+                          borderColor: isSelected ? "var(--primary)" : "var(--border)",
                           backgroundColor: isSelected ? "var(--bg)" : "var(--surface)",
                           color: "var(--text)",
-                          boxShadow: isTimeGlowing
-                            ? "0 0 0 3px rgba(34, 197, 94, 0.45), 0 8px 28px rgba(34, 197, 94, 0.22)"
-                            : undefined,
                         }}
                       >
                         {time}
