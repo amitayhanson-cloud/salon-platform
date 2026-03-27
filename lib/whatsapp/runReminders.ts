@@ -180,6 +180,7 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
         body: reminderBody,
         template: {
           name: "appointment_reminder_v1",
+          contentSid: process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || undefined,
           language: "he",
           variables: {
             "1": customerDisplayName,

@@ -54,6 +54,7 @@ describe("sendWhatsApp", () => {
       TWILIO_ACCOUNT_SID: "ACtest",
       TWILIO_AUTH_TOKEN: "test-token",
       TWILIO_WHATSAPP_FROM: "whatsapp:+14155238886",
+      TWILIO_TEMPLATE_BOOKING_CONFIRMED_CONTENT_SID: "HXbooking",
     };
   });
 
@@ -98,6 +99,10 @@ describe("sendWhatsApp", () => {
       toE164: "+972501234567",
       body: "Broadcast",
       siteId: "site1",
+      template: {
+        name: "booking_confirmed",
+        variables: { "1": "לקוח", "2": "עסק", "3": "01.01.2026", "4": "10:00" },
+      },
       bypassAutomationKillSwitch: true,
       meta: { automation: "owner_broadcast" },
     });
@@ -116,13 +121,17 @@ describe("sendWhatsApp", () => {
       toE164: "+972501234567",
       body: "היי בדיקה",
       siteId: "site1",
+      template: {
+        name: "booking_confirmed",
+        variables: { "1": "לקוח", "2": "עסק", "3": "01.01.2026", "4": "10:00" },
+      },
       meta: { automation: "owner_broadcast" },
     });
 
     expect(twilioCreateMock).toHaveBeenCalledTimes(1);
     expect(firestoreAddMock).toHaveBeenCalledTimes(2);
-    const arg = twilioCreateMock.mock.calls[0]?.[0] as { body?: string };
-    expect(arg.body).toContain("*Sandbox*");
-    expect(arg.body).toContain("הודעה קבוצתית");
+    const arg = twilioCreateMock.mock.calls[0]?.[0] as { contentSid?: string; contentVariables?: string };
+    expect(arg.contentSid).toBe("HXbooking");
+    expect(typeof arg.contentVariables).toBe("string");
   });
 });

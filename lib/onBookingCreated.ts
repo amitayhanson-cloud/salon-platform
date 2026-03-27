@@ -157,6 +157,7 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
         body: messageBody,
         template: {
           name: "booking_confirmed",
+          contentSid: process.env.TWILIO_TEMPLATE_BOOKING_CONFIRMED_CONTENT_SID?.trim() || undefined,
           language: "he",
           variables: {
             "1": customerDisplayName,
@@ -217,6 +218,7 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
         body: reminderBody,
         template: {
           name: "appointment_reminder_v1",
+          contentSid: process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || undefined,
           language: "he",
           variables: {
             "1": customerDisplayName,
@@ -297,6 +299,7 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
           body: reminderBody,
           template: {
             name: "appointment_reminder_v1",
+            contentSid: process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || undefined,
             language: "he",
             variables: {
               "1": customerDisplayName,

@@ -53,6 +53,8 @@ export type SendWhatsAppParams = {
   body: string;
   template?: {
     name: WhatsAppTemplateName;
+    /** Optional explicit override; otherwise resolved from env by template name. */
+    contentSid?: string;
     language?: "he";
     /**
      * Twilio content variables.
@@ -161,22 +163,23 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
   let error: string | null = null;
 
   try {
-    const contentSid = template ? resolveTemplateContentSid(template.name) : "";
-    if (template && !contentSid) {
+    if (!template) {
+      throw new Error(
+        "Template content send is required: pass template { name/contentSid, variables } so Twilio uses contentSid/contentVariables."
+      );
+    }
+    const contentSid = template.contentSid?.trim() || resolveTemplateContentSid(template.name);
+    if (!contentSid) {
       throw new Error(
         `Missing content SID env for template '${template.name}'. Set TWILIO_TEMPLATE_*_CONTENT_SID env vars.`
       );
     }
-    const message = await client.messages.create(
-      template
-        ? {
-            from,
-            to,
-            contentSid,
-            contentVariables: JSON.stringify(template.variables),
-          }
-        : { body: outgoingBody, from, to }
-    );
+    const message = await client.messages.create({
+      from,
+      to,
+      contentSid,
+      contentVariables: JSON.stringify(template.variables),
+    });
     sid = message.sid;
   } catch (e) {
     status = "failed";

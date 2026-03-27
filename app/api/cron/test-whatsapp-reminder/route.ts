@@ -12,6 +12,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { getReminderWindow } from "@/lib/whatsapp/reminderWindow";
 import { sendWhatsApp, normalizeE164, isWhatsAppOutboundDelivered } from "@/lib/whatsapp";
+import { formatIsraelDateShort } from "@/lib/datetime/formatIsraelTime";
 
 export const maxDuration = 60;
 
@@ -137,6 +138,7 @@ export async function POST(request: NextRequest) {
     }
     const timeStr =
       startAt?.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" }) ?? "";
+    const dateStr = startAt ? formatIsraelDateShort(startAt) : "";
     try {
       const { sid } = await sendWhatsApp({
         toE164: customerPhoneE164,
@@ -147,6 +149,17 @@ export async function POST(request: NextRequest) {
 כן, אגיע
 או
 לא, נא לבטל`,
+        template: {
+          name: "appointment_reminder_v1",
+          contentSid: process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || undefined,
+          language: "he",
+          variables: {
+            "1": String(data.customerName ?? "").trim() || "לקוח/ה",
+            "2": salonName,
+            "3": dateStr,
+            "4": timeStr,
+          },
+        },
         bookingId,
         siteId,
         bookingRef: `sites/${siteId}/bookings/${bookingId}`,

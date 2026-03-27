@@ -161,6 +161,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         body: bodyRendered,
         template: {
           name: "broadcast_message_v1",
+          contentSid: process.env.TWILIO_TEMPLATE_BROADCAST_MESSAGE_V1_CONTENT_SID?.trim() || undefined,
           language: "he",
           variables: {
             "1": r.name,
