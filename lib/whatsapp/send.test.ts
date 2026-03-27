@@ -53,6 +53,7 @@ describe("sendWhatsApp", () => {
       ...env,
       TWILIO_ACCOUNT_SID: "ACtest",
       TWILIO_AUTH_TOKEN: "test-token",
+      TWILIO_MESSAGING_SERVICE_SID: "MGtest123",
       TWILIO_WHATSAPP_FROM: "whatsapp:+14155238886",
       TWILIO_TEMPLATE_BOOKING_CONFIRMED_CONTENT_SID: "HXbooking",
     };
@@ -130,8 +131,22 @@ describe("sendWhatsApp", () => {
 
     expect(twilioCreateMock).toHaveBeenCalledTimes(1);
     expect(firestoreAddMock).toHaveBeenCalledTimes(2);
-    const arg = twilioCreateMock.mock.calls[0]?.[0] as { contentSid?: string; contentVariables?: string };
+    const arg = twilioCreateMock.mock.calls[0]?.[0] as {
+      contentSid?: string;
+      contentVariables?: string;
+      body?: string;
+      from?: string;
+      messagingServiceSid?: string;
+      to?: string;
+    };
     expect(arg.contentSid).toBe("HXbooking");
     expect(typeof arg.contentVariables).toBe("string");
+    expect(arg.body).toBeUndefined();
+    expect(arg.from).toBeUndefined();
+    expect(arg.messagingServiceSid).toBe("MGtest123");
+    expect(arg.to).toBe("whatsapp:+972501234567");
+    expect(arg.contentVariables).toBe(
+      JSON.stringify({ "1": "לקוח", "2": "עסק", "3": "01.01.2026", "4": "10:00" })
+    );
   });
 });

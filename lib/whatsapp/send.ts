@@ -60,6 +60,27 @@ function resolveTemplateContentSid(templateName: WhatsAppTemplateName): string {
   }
 }
 
+/**
+ * Twilio Content API expects JSON keys as strings. Normalize caller objects so
+ * numeric-like keys and nested maps (e.g. button_1) stringify consistently.
+ */
+function contentVariablesJsonForTwilio(variables: Record<string, string | Record<string, string>>): string {
+  const normalized: Record<string, string | Record<string, string>> = {};
+  for (const [rawKey, val] of Object.entries(variables)) {
+    const key = String(rawKey);
+    if (val !== null && typeof val === "object" && !Array.isArray(val)) {
+      const inner: Record<string, string> = {};
+      for (const [innerRaw, innerVal] of Object.entries(val as Record<string, string>)) {
+        inner[String(innerRaw)] = String(innerVal ?? "");
+      }
+      normalized[key] = inner;
+    } else {
+      normalized[key] = String(val ?? "");
+    }
+  }
+  return JSON.stringify(normalized);
+}
+
 export type SendWhatsAppParams = {
   toE164: string;
   body: string;
@@ -187,24 +208,17 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
       );
     }
     console.log("🚀 DEBUG: Sending WhatsApp with SID:", contentSid);
-    const payload: {
-      messagingServiceSid: string;
-      to: string;
-      contentSid: string;
-      contentVariables: string;
-      body?: string;
-    } = {
-      messagingServiceSid,
-      to,
+    const e164 = to.replace(/^whatsapp:/, "");
+    const params: any = {
+      to: `whatsapp:${e164}`,
+      messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID,
       contentSid,
-      contentVariables: JSON.stringify(template.variables),
-      body: outgoingBody,
+      contentVariables: contentVariablesJsonForTwilio(template.variables),
     };
-    // Strict enforcement: never send freeform body when Content API SID is present.
-    if (contentSid) {
-      delete payload.body;
-    }
-    const message = await client.messages.create(payload);
+    // ABSOLUTELY ENSURE no 'from' or 'body' exists in the params
+    delete params.from;
+    delete params.body;
+    const message = await client.messages.create(params);
     sid = message.sid;
   } catch (e) {
     status = "failed";
