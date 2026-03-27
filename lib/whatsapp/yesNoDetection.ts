@@ -6,9 +6,14 @@
 const raw = (body: string): string => (body ?? "").trim();
 const msg = (body: string): string => raw(body).toLowerCase();
 
+/** Strip direction marks / embedding chars so "כן, אגיע" from templates matches after normalization. */
+function stripBidiAndEmbedding(s: string): string {
+  return s.replace(/[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, "");
+}
+
 /** Normalize for matching: collapse spaces, trim, remove punctuation and slash, lowercase */
 function normalizeForMatch(s: string): string {
-  return s
+  return stripBidiAndEmbedding(s)
     .replace(/\s+/g, " ")
     .replace(/\//g, "") // "לא מגיע/ה" -> "לא מגיעה"
     .replace(/[.,!?\s]+/g, " ")
