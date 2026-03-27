@@ -1,5 +1,5 @@
 /**
- * appointment_reminder_v1 (Content API): currently approved as 4 variables.
+ * appointment_reminder_v1 (Content API): diagnostic hardcoded 5 variables.
  */
 
 export function buildAppointmentReminderTemplateVariables(input: {
@@ -14,5 +14,6 @@ export function buildAppointmentReminderTemplateVariables(input: {
     "2": "Luxure",
     "3": "27/03/2026",
     "4": "12:30",
+    "5": "מחכים לראות אותך!",
   };
 }
