@@ -194,12 +194,25 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
         `Missing content SID env for template '${template.name}'. Set TWILIO_TEMPLATE_*_CONTENT_SID env vars.`
       );
     }
-    const message = await client.messages.create({
+    console.log("🚀 DEBUG: Sending WhatsApp with SID:", contentSid);
+    const payload: {
+      messagingServiceSid: string;
+      to: string;
+      contentSid: string;
+      contentVariables: string;
+      body?: string;
+    } = {
       messagingServiceSid,
       to,
       contentSid,
       contentVariables: JSON.stringify(template.variables),
-    });
+      body: outgoingBody,
+    };
+    // Strict enforcement: never send freeform body when Content API SID is present.
+    if (contentSid) {
+      delete payload.body;
+    }
+    const message = await client.messages.create(payload);
     sid = message.sid;
   } catch (e) {
     status = "failed";

@@ -30,10 +30,13 @@ export async function sendWhatsAppMessage(
 
   let sid: string;
   try {
+    const contentSid = config.twilio.legacyContentSid;
+    const contentVariables = JSON.stringify({ "1": body });
     const message = await client.messages.create({
-      body,
-      from,
+      messagingServiceSid: config.twilio.messagingServiceSid,
       to,
+      contentSid,
+      contentVariables,
     });
     sid = message.sid;
     await logOutboundMessage({
