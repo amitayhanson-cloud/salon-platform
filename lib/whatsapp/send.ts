@@ -19,14 +19,6 @@ import {
   type WhatsAppUsageCategory,
 } from "./usage";
 
-// Fail fast in production if Messaging Service is not configured.
-if (
-  process.env.NODE_ENV === "production" &&
-  !(process.env.TWILIO_MESSAGING_SERVICE_SID ?? "").trim()
-) {
-  throw new Error("TWILIO_MESSAGING_SERVICE_SID is required in production");
-}
-
 /** Read env at send time so tests and runtime can set TWILIO_* after module load. */
 function getTwilioEnv(): {
   accountSid: string;
