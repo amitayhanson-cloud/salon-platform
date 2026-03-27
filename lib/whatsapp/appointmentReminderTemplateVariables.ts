@@ -12,7 +12,8 @@ export const buildAppointmentReminderTemplateVariables = (params: {
   return {
     "1": customerDisplayName || "לקוח",
     "2": salonName || "Luxure",
-    "3": dateDisplay || "---",
-    "4": timeDisplay || "---",
+    "3": dateDisplay,
+    "4": timeDisplay,
+    "5": "מחכים לראות אותך!",
   };
 };
