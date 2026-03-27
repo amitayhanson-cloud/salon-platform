@@ -48,9 +48,80 @@ import {
 } from "@/lib/analytics/MockData";
 import { bookingDayYmdIsrael } from "@/lib/bookingDayKey";
 import { isDocCancelled } from "@/lib/cancelledBookingShared";
-import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
+import { getDateYMDInTimezone, zonedDayRangeEpochMs } from "@/lib/expiredCleanupUtils";
 
 const DASHBOARD_DAY_TZ = "Asia/Jerusalem";
+
+/** Israel wall-calendar day step (sparkline windows). */
+function addDaysIsraelWallYmd(ymd: string, deltaDays: number): string {
+  const { start } = zonedDayRangeEpochMs(ymd, DASHBOARD_DAY_TZ);
+  const target = new Date(start + deltaDays * 86400000);
+  return getDateYMDInTimezone(target, DASHBOARD_DAY_TZ);
+}
+
+/** Inclusive rolling N days ending at `endYmd` (…, endYmd), oldest → newest. */
+function lastNRollingIsraelDaysEndingInclusive(endYmd: string, n: number): string[] {
+  return Array.from({ length: n }, (_, i) => addDaysIsraelWallYmd(endYmd, -(n - 1 - i)));
+}
+
+/**
+ * Hero card sparklines only: last 7 Israel days ending today (not Sun–Sat week).
+ * Uses month series so early-week days still have data; days before current month bucket → 0.
+ */
+function heroSparklineRolling7FromSlices(
+  metric: "revenue" | "bookings",
+  slices: DashboardChartSlices
+): (number | null)[] {
+  const todayIl = getDateYMDInTimezone(new Date(), DASHBOARD_DAY_TZ);
+  const windowYmds = lastNRollingIsraelDaysEndingInclusive(todayIl, 7);
+  const month = slices.month;
+  const ids = month.xCalendarIds;
+  const vals = month.values;
+
+  if (ids?.length === vals.length && ids.length > 0) {
+    const idxByYmd = new Map(ids.map((id, i) => [id, i]));
+    const out: (number | null)[] = [];
+
+    if (metric === "bookings" && month.bookingsStacked) {
+      const { past, future } = month.bookingsStacked;
+      for (const ymd of windowYmds) {
+        const idx = idxByYmd.get(ymd);
+        if (idx === undefined) out.push(0);
+        else out.push((past[idx] ?? 0) + (future[idx] ?? 0));
+      }
+      return out;
+    }
+
+    for (const ymd of windowYmds) {
+      const idx = idxByYmd.get(ymd);
+      if (idx === undefined) out.push(0);
+      else {
+        const v = vals[idx];
+        out.push(v === null || v === undefined ? 0 : v);
+      }
+    }
+    return out;
+  }
+
+  // Fallback: calendar week slice — drop future days and intersect rolling-window start.
+  const week = slices.week;
+  const wIds = week.xCalendarIds;
+  let wVals = [...week.values];
+  if (metric === "bookings" && week.bookingsStacked) {
+    const { past, future } = week.bookingsStacked;
+    wVals = past.map((p, i) => (p ?? 0) + (future[i] ?? 0));
+  }
+  if (!wIds || wIds.length !== wVals.length) return wVals;
+  const startRolling = addDaysIsraelWallYmd(todayIl, -6);
+  const out: (number | null)[] = [];
+  for (let i = 0; i < wIds.length; i++) {
+    const id = wIds[i]!;
+    if (id < startRolling) continue;
+    if (id > todayIl) break;
+    out.push(wVals[i] ?? 0);
+  }
+  return out.length > 0 ? out : wVals;
+}
 
 const BENTO_GRID_CLASS = {
   hero: "col-span-12 md:col-span-6",
@@ -592,16 +663,11 @@ export default function AdminHomePage() {
   const heroSparklines = useMemo(() => {
     const w = whatsAppThisMonth?.used ?? 0;
     const fa = chartBundle?.fetchedAt ?? null;
-    const revWeek = buildDashboardChartSlices("revenue", chartBundle, w, fa).week;
-    const bookWeek = buildDashboardChartSlices("bookings", chartBundle, w, fa).week;
-    let bookingsVals: (number | null)[] = [...bookWeek.values];
-    if (bookWeek.bookingsStacked) {
-      const { past, future } = bookWeek.bookingsStacked;
-      bookingsVals = past.map((p, i) => (p ?? 0) + (future[i] ?? 0));
-    }
+    const revSlices = buildDashboardChartSlices("revenue", chartBundle, w, fa);
+    const bookSlices = buildDashboardChartSlices("bookings", chartBundle, w, fa);
     return {
-      revenue: revWeek.values,
-      bookingsToday: bookingsVals,
+      revenue: heroSparklineRolling7FromSlices("revenue", revSlices),
+      bookingsToday: heroSparklineRolling7FromSlices("bookings", bookSlices),
     };
   }, [chartBundle, whatsAppThisMonth]);
 

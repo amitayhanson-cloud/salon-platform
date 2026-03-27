@@ -14,6 +14,7 @@ import { getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
 import { formatIsraelDateShort, formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
 import { getRelatedBookingIds } from "@/lib/whatsapp/relatedBookings";
 import { getPublicBookingPageAbsoluteUrlForSite, withTrackingSource } from "@/lib/url";
+import { buildAppointmentReminderTemplateVariables } from "@/lib/whatsapp/appointmentReminderTemplateVariables";
 
 export type ReminderDetail = {
   bookingRef: string;
@@ -133,7 +134,8 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
     try {
       const siteSnap = await db.collection("sites").doc(siteId).get();
       const config = siteSnap.data()?.config;
-      salonName = config?.salonName ?? config?.whatsappBrandName ?? salonName;
+      salonName =
+        String(config?.salonName ?? config?.whatsappBrandName ?? salonName).trim() || salonName;
       const rawSlug = siteSnap.data()?.slug;
       tenantSlug = typeof rawSlug === "string" && rawSlug.trim() ? rawSlug.trim() : null;
     } catch {
@@ -151,8 +153,8 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
       continue;
     }
 
-    const timeStr = startAt ? formatIsraelTime(startAt) : "";
-    const dateStr = startAt ? formatIsraelDateShort(startAt) : "";
+    const timeStr = startAt ? formatIsraelTime(startAt) : "-";
+    const dateStr = startAt ? formatIsraelDateShort(startAt) : "-";
     const customerDisplayName = String(data.customerName ?? "").trim() || "לקוח/ה";
     const trackedBookingUrl = withTrackingSource(
       getPublicBookingPageAbsoluteUrlForSite(siteId, tenantSlug),
@@ -182,12 +184,12 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
           name: "appointment_reminder_v1",
           contentSid: process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || undefined,
           language: "he",
-          variables: {
-            "1": customerDisplayName,
-            "2": salonName,
-            "3": dateStr,
-            "4": timeStr,
-          },
+          variables: buildAppointmentReminderTemplateVariables({
+            customerDisplayName,
+            salonName,
+            dateDisplay: dateStr,
+            timeDisplay: timeStr,
+          }),
         },
         bookingId: doc.id,
         siteId,

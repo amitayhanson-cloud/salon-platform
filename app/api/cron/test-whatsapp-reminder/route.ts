@@ -12,7 +12,8 @@ import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { getReminderWindow } from "@/lib/whatsapp/reminderWindow";
 import { sendWhatsApp, normalizeE164, isWhatsAppOutboundDelivered } from "@/lib/whatsapp";
-import { formatIsraelDateShort } from "@/lib/datetime/formatIsraelTime";
+import { formatIsraelDateShort, formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
+import { buildAppointmentReminderTemplateVariables } from "@/lib/whatsapp/appointmentReminderTemplateVariables";
 
 export const maxDuration = 60;
 
@@ -132,13 +133,13 @@ export async function POST(request: NextRequest) {
     try {
       const siteSnap = await db.collection("sites").doc(siteId).get();
       const config = siteSnap.data()?.config;
-      salonName = config?.salonName ?? config?.whatsappBrandName ?? salonName;
+      salonName =
+        String(config?.salonName ?? config?.whatsappBrandName ?? salonName).trim() || salonName;
     } catch {
       // keep default
     }
-    const timeStr =
-      startAt?.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" }) ?? "";
-    const dateStr = startAt ? formatIsraelDateShort(startAt) : "";
+    const timeStr = startAt ? formatIsraelTime(startAt) : "-";
+    const dateStr = startAt ? formatIsraelDateShort(startAt) : "-";
     try {
       const { sid } = await sendWhatsApp({
         toE164: customerPhoneE164,
@@ -153,12 +154,12 @@ export async function POST(request: NextRequest) {
           name: "appointment_reminder_v1",
           contentSid: process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || undefined,
           language: "he",
-          variables: {
-            "1": String(data.customerName ?? "").trim() || "לקוח/ה",
-            "2": salonName,
-            "3": dateStr,
-            "4": timeStr,
-          },
+          variables: buildAppointmentReminderTemplateVariables({
+            customerDisplayName: String(data.customerName ?? "").trim() || "לקוח/ה",
+            salonName,
+            dateDisplay: dateStr,
+            timeDisplay: timeStr,
+          }),
         },
         bookingId,
         siteId,

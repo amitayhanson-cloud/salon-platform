@@ -25,6 +25,7 @@ import { formatIsraelDateShort, formatIsraelTime } from "@/lib/datetime/formatIs
 import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
 import { refreshClientAutomatedStatusFromBooking } from "@/lib/server/clientAutomatedStatus";
 import { buildWazeUrlFromAddress } from "@/lib/whatsapp/businessWaze";
+import { buildAppointmentReminderTemplateVariables } from "@/lib/whatsapp/appointmentReminderTemplateVariables";
 
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 const ISRAEL_TZ = "Asia/Jerusalem";
@@ -50,7 +51,8 @@ async function getSiteSalonNameAndWazeUrl(
 ): Promise<{ salonName: string; wazeUrl: string; slug: string | null }> {
   const siteSnap = await db.collection("sites").doc(siteId).get();
   const config = siteSnap.data()?.config;
-  const salonName = config?.salonName ?? config?.whatsappBrandName ?? "הסלון";
+  const salonName =
+    String(config?.salonName ?? config?.whatsappBrandName ?? "הסלון").trim() || "הסלון";
   const wazeUrl = buildWazeUrlFromAddress(config?.address);
   const rawSlug = siteSnap.data()?.slug;
   const slug = typeof rawSlug === "string" && rawSlug.trim() ? rawSlug.trim() : null;
@@ -233,12 +235,12 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
           name: "appointment_reminder_v1",
           contentSid: process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || undefined,
           language: "he",
-          variables: {
-            "1": customerDisplayName,
-            "2": salonName,
-            "3": date,
-            "4": timeStr,
-          },
+          variables: buildAppointmentReminderTemplateVariables({
+            customerDisplayName,
+            salonName,
+            dateDisplay: date,
+            timeDisplay: timeStr,
+          }),
         },
         bookingId,
         siteId,
@@ -319,12 +321,12 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
             name: "appointment_reminder_v1",
             contentSid: process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || undefined,
             language: "he",
-            variables: {
-              "1": customerDisplayName,
-              "2": salonName,
-              "3": date,
-              "4": timeStr,
-            },
+            variables: buildAppointmentReminderTemplateVariables({
+              customerDisplayName,
+              salonName,
+              dateDisplay: date,
+              timeDisplay: timeStr,
+            }),
           },
           bookingId,
           siteId,
