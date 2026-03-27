@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { PartyPopper } from "lucide-react";
+import confetti from "canvas-confetti";
 import { getMarketingSocialUrls } from "@/lib/marketingSocialUrls";
 
 type SubmitState =
@@ -20,6 +21,25 @@ function sanitizePhone(input: string): string {
 
 const waitlistCardClassName =
   "mx-auto max-w-xl overflow-hidden rounded-3xl border border-caleno-200/90 bg-gradient-to-b from-caleno-50/95 via-white to-caleno-100/80 p-6 shadow-[0_20px_50px_-24px_rgba(15,69,80,0.35)] ring-2 ring-caleno-200/70 ring-offset-2 ring-offset-[#f0f9fa] sm:p-8";
+
+function launchWaitlistConfetti() {
+  const colors = [
+    "#0f4550", // caleno deep
+    "#1e6f7c", // caleno brand
+    "#2c8a97", // caleno accent
+    "#7bc3ca", // caleno light accent
+    "#e8f7f9", // soft neutral
+  ];
+  confetti({
+    particleCount: 170,
+    spread: 90,
+    startVelocity: 45,
+    origin: { x: 0.5, y: 0.5 },
+    colors,
+    zIndex: 3000,
+    ticks: 250,
+  });
+}
 
 export default function WaitlistPage() {
   const [name, setName] = useState("");
@@ -59,6 +79,7 @@ export default function WaitlistPage() {
         setSubmitState({ status: "error", message: data?.error || "שגיאה בשליחה. נסו שוב." });
         return;
       }
+      launchWaitlistConfetti();
       setSubmitState({ status: "success" });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

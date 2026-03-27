@@ -36,6 +36,17 @@ import { AdminCard } from "@/components/admin/AdminCard";
 
 // Module-level guard: only one create can run at a time (survives Strict Mode remount / duplicate triggers).
 let createServiceInProgress = false;
+const DEFAULT_SERVICE_COLOR = "#3B82F6";
+const SERVICE_DEFAULT_COLOR_PALETTE = [
+  "#3B82F6",
+  "#10B981",
+  "#F59E0B",
+  "#EF4444",
+  "#8B5CF6",
+  "#06B6D4",
+  "#EC4899",
+  "#84CC16",
+];
 
 export default function ServicesPage() {
   const params = useParams();
@@ -67,7 +78,7 @@ export default function ServicesPage() {
   const NEW_SERVICE_DRAFT: SiteService = {
     id: "new",
     name: "",
-    color: "#3B82F6",
+    color: DEFAULT_SERVICE_COLOR,
     description: "",
     price: 0,
     enabled: true,
@@ -603,7 +614,7 @@ export default function ServicesPage() {
         const payload: Omit<SiteService, "id"> = {
           name: editingService.name.trim(),
           enabled: editingService.enabled !== false,
-          color: editingService.color || "#3B82F6",
+          color: editingService.color || getNextDefaultServiceColor(),
           description: description ?? undefined,
           price: price != null && price >= 0 ? price : undefined,
         };
@@ -620,7 +631,7 @@ export default function ServicesPage() {
         ...editingService,
         name: editingService.name.trim(),
         enabled: editingService.enabled !== false,
-        color: editingService.color || "#3B82F6",
+        color: editingService.color || DEFAULT_SERVICE_COLOR,
         description: description ?? undefined,
         price: price ?? undefined,
         imageUrl: existingService?.imageUrl ?? editingService.imageUrl,
@@ -795,6 +806,17 @@ export default function ServicesPage() {
     return !!sid && services.some((s) => s.id === sid || s.name === sid);
   });
 
+  const getNextDefaultServiceColor = useCallback((): string => {
+    const usedColors = new Set(
+      services
+        .map((s) => (s.color || "").trim().toUpperCase())
+        .filter((c) => /^#[0-9A-F]{6}$/.test(c))
+    );
+    const firstUnused = SERVICE_DEFAULT_COLOR_PALETTE.find((c) => !usedColors.has(c.toUpperCase()));
+    if (firstUnused) return firstUnused;
+    return SERVICE_DEFAULT_COLOR_PALETTE[services.length % SERVICE_DEFAULT_COLOR_PALETTE.length]!;
+  }, [services]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -837,7 +859,9 @@ export default function ServicesPage() {
               </p>
               <button
                 type="button"
-                onClick={() => setEditingService({ ...NEW_SERVICE_DRAFT })}
+                onClick={() =>
+                  setEditingService({ ...NEW_SERVICE_DRAFT, color: getNextDefaultServiceColor() })
+                }
                 className="min-h-[44px] px-4 py-3 sm:py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium transition-colors inline-flex items-center justify-center gap-2 touch-manipulation"
               >
                 <Plus className="w-4 h-4" />
@@ -909,7 +933,9 @@ export default function ServicesPage() {
                 <div className="mt-3 flex justify-end">
                   <button
                     type="button"
-                    onClick={() => setEditingService({ ...NEW_SERVICE_DRAFT })}
+                    onClick={() =>
+                      setEditingService({ ...NEW_SERVICE_DRAFT, color: getNextDefaultServiceColor() })
+                    }
                     className="shrink-0 min-h-[44px] px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 touch-manipulation"
                   >
                     <Plus className="w-4 h-4" />
@@ -1347,7 +1373,7 @@ export default function ServicesPage() {
                 <div className="flex items-center gap-3">
                   <input
                     type="color"
-                    value={editingService.color || "#3B82F6"}
+                    value={editingService.color || DEFAULT_SERVICE_COLOR}
                     onChange={(e) =>
                       setEditingService({ ...editingService, color: e.target.value })
                     }
@@ -1355,15 +1381,15 @@ export default function ServicesPage() {
                   />
                   <input
                     type="text"
-                    value={editingService.color || "#3B82F6"}
+                    value={editingService.color || DEFAULT_SERVICE_COLOR}
                     onChange={(e) => {
                       const value = e.target.value;
                       // Validate hex color format
                       if (/^#[0-9A-Fa-f]{6}$/.test(value) || value === "") {
-                        setEditingService({ ...editingService, color: value || "#3B82F6" });
+                        setEditingService({ ...editingService, color: value || DEFAULT_SERVICE_COLOR });
                       }
                     }}
-                    placeholder="#3B82F6"
+                    placeholder={DEFAULT_SERVICE_COLOR}
                     className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep font-mono text-sm"
                   />
                 </div>

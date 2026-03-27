@@ -1064,20 +1064,17 @@ function MarketingLinkGenerator({
   slug?: string | null;
 }) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [customSource, setCustomSource] = useState("");
   const bookingBaseUrl = getPublicBookingPageUrlForSiteClient(siteId, slug);
 
-  const buildTrackedLink = (
-    source: "instagram" | "whatsapp" | "facebook" | "tiktok" | "linkedin"
-  ) => {
+  const buildTrackedLink = (source: string) => {
     if (!bookingBaseUrl) return "";
     const url = new URL(bookingBaseUrl);
     url.searchParams.set("source", source);
     return url.toString();
   };
 
-  const copyLink = async (
-    source: "instagram" | "whatsapp" | "facebook" | "tiktok" | "linkedin"
-  ) => {
+  const copyLink = async (source: string) => {
     const tracked = buildTrackedLink(source);
     if (!tracked) return;
     try {
@@ -1088,6 +1085,9 @@ function MarketingLinkGenerator({
       setCopiedKey(null);
     }
   };
+
+  const normalizedCustomSource = customSource.trim().toLowerCase().replace(/\s+/g, "-");
+  const customPreview = normalizedCustomSource ? buildTrackedLink(normalizedCustomSource) : "";
 
   return (
     <div id="marketing-link-generator" className="mt-6 scroll-mt-28 space-y-3 rounded-2xl border border-[#E2E8F0] bg-slate-50/70 p-4">
@@ -1144,6 +1144,32 @@ function MarketingLinkGenerator({
           <Linkedin className="h-3.5 w-3.5" aria-hidden />
           {copiedKey === "linkedin" ? "הועתק!" : "Copy LinkedIn Link"}
         </button>
+      </div>
+      <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
+        <label className="block text-xs font-medium text-slate-700">
+          מקור מעקב מותאם אישית
+        </label>
+        <p className="text-[11px] text-slate-500">
+          כאן אפשר ליצור קישור ייחודי לכל קמפיין (למשל מודעה, סטורי או שיתוף מסוים), כדי לראות בדשבורד מאיזה מקור הגיעו ההזמנות.
+        </p>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            type="text"
+            value={customSource}
+            onChange={(e) => setCustomSource(e.target.value)}
+            placeholder="למשל: ad-1"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-caleno-deep"
+          />
+          <button
+            type="button"
+            onClick={() => void copyLink(normalizedCustomSource)}
+            disabled={!normalizedCustomSource}
+            className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {copiedKey === normalizedCustomSource && normalizedCustomSource ? "הועתק!" : "Copy Custom Link"}
+          </button>
+        </div>
+        {customPreview ? <p className="text-[11px] text-slate-500">{customPreview}</p> : null}
       </div>
     </div>
   );

@@ -25,10 +25,21 @@ import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
 import { refreshClientAutomatedStatusFromBooking } from "@/lib/server/clientAutomatedStatus";
 import { buildWazeUrlFromAddress } from "@/lib/whatsapp/businessWaze";
 import { buildAppointmentReminderTemplateVariables } from "@/lib/whatsapp/appointmentReminderTemplateVariables";
-import { formatInTimeZone } from "date-fns-tz";
+import { formatInTimeZone, getTimezoneOffset } from "date-fns-tz";
 
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 const ISRAEL_TZ = "Asia/Jerusalem";
+
+/**
+ * During DST cutovers, upstream booking timestamps can be written with the previous offset.
+ * Normalize display to Israel's *current* offset so reminder messages match today's wall clock.
+ */
+function normalizeToCurrentIsraelOffset(date: Date): Date {
+  const nowOffsetMs = getTimezoneOffset(ISRAEL_TZ, new Date());
+  const dateOffsetMs = getTimezoneOffset(ISRAEL_TZ, date);
+  const offsetDeltaMs = nowOffsetMs - dateOffsetMs;
+  return new Date(date.getTime() + offsetDeltaMs);
+}
 
 /** Tomorrow's date YYYY-MM-DD in Asia/Jerusalem. */
 function getTomorrowIsrael(): string {
@@ -113,8 +124,19 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
     data.startAt instanceof Timestamp
       ? data.startAt.toDate()
       : new Date((data.startAt?.seconds ?? 0) * 1000);
-  const date = formatInTimeZone(startAt, "Asia/Jerusalem", "dd/MM/yyyy");
-  const timeStr = formatInTimeZone(startAt, "Asia/Jerusalem", "HH:mm");
+  const startAtForIsraelWallClock = normalizeToCurrentIsraelOffset(startAt);
+  const date = formatInTimeZone(startAtForIsraelWallClock, ISRAEL_TZ, "dd/MM/yyyy");
+  const timeStr = formatInTimeZone(startAtForIsraelWallClock, ISRAEL_TZ, "HH:mm");
+  console.log("[onBookingCreated] israel_wall_time", {
+    siteId,
+    bookingId,
+    startAtIso: startAt.toISOString(),
+    startAtForIsraelWallClockIso: startAtForIsraelWallClock.toISOString(),
+    nowIsrael: formatInTimeZone(new Date(), ISRAEL_TZ, "dd/MM/yyyy HH:mm"),
+    bookingIsrael: `${date} ${timeStr}`,
+    currentOffsetMinutes: getTimezoneOffset(ISRAEL_TZ, new Date()) / (60 * 1000),
+    bookingOffsetMinutes: getTimezoneOffset(ISRAEL_TZ, startAt) / (60 * 1000),
+  });
 
   const postMode = waSettings.postBookingConfirmationMode ?? "auto";
   const useWhatsAppOptIn = postMode === "whatsapp_opt_in";

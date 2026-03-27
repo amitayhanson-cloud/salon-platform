@@ -49,8 +49,17 @@ import {
 import { bookingDayYmdIsrael } from "@/lib/bookingDayKey";
 import { isDocCancelled } from "@/lib/cancelledBookingShared";
 import { getDateYMDInTimezone, zonedDayRangeEpochMs } from "@/lib/expiredCleanupUtils";
+import { subscribeSiteServices } from "@/lib/firestoreSiteServices";
 
 const DASHBOARD_DAY_TZ = "Asia/Jerusalem";
+const TRAFFIC_SOURCE_COLORS: Record<string, string> = {
+  instagram: "#E1306C",
+  whatsapp: "#25D366",
+  facebook: "#1877F2",
+  tiktok: "#000000",
+  linkedin: "#0A66C2",
+};
+const TRAFFIC_SOURCE_FALLBACK_COLORS = ["#1e6f7c", "#2fb7b5", "#7eddd8", "#0f4550", "#155969", "#94a3b8"];
 
 /** Israel wall-calendar day step (sparkline windows). */
 function addDaysIsraelWallYmd(ymd: string, deltaDays: number): string {
@@ -268,6 +277,16 @@ type DashboardMetrics = {
   servicePopularity?: { service: string; count: number }[];
 };
 
+const DASHBOARD_SERVICE_FALLBACK_COLORS = [
+  "#1e6f7c",
+  "#2fb7b5",
+  "#7eddd8",
+  "#0f4550",
+  "#155969",
+  "#94a3b8",
+  "#0ea5a4",
+];
+
 export default function AdminHomePage() {
   const params = useParams();
   const router = useRouter();
@@ -285,7 +304,30 @@ export default function AdminHomePage() {
   const [selectedMetricKey, setSelectedMetricKey] = useState<string | null>(null);
   /** Lifted from chart panel so week/month/year survives remounts when `chartSlices` is rebuilt each render. */
   const [expandedChartGranularity, setExpandedChartGranularity] = useState<ChartGranularity>("week");
+  const [serviceColorByName, setServiceColorByName] = useState<Record<string, string>>({});
   const adminBasePath = getAdminBasePathFromSiteId(siteId);
+
+  useEffect(() => {
+    if (!siteId || siteId === "me") {
+      setServiceColorByName({});
+      return;
+    }
+    const unsubscribe = subscribeSiteServices(
+      siteId,
+      (services) => {
+        const map: Record<string, string> = {};
+        for (const service of services) {
+          const name = String(service?.name ?? "").trim();
+          const color = String(service?.color ?? "").trim();
+          if (!name || !/^#[0-9A-Fa-f]{6}$/.test(color)) continue;
+          map[name] = color;
+        }
+        setServiceColorByName(map);
+      },
+      () => setServiceColorByName({})
+    );
+    return () => unsubscribe();
+  }, [siteId]);
 
   const chartSwrKey =
     siteId && siteId !== "me" && firebaseUser
@@ -508,19 +550,20 @@ export default function AdminHomePage() {
     if (src.length === 0) return [];
     const top = src.slice(0, 5);
     const other = src.slice(5).reduce((s, x) => s + x.count, 0);
-    const colors = ["#1e6f7c", "#2fb7b5", "#7eddd8", "#0f4550", "#155969", "#94a3b8"];
     const base = top.map((t, i) => ({
       id: `${t.source}-${i}`,
       label: t.source,
       value: t.count,
-      color: colors[i % colors.length],
+      color:
+        TRAFFIC_SOURCE_COLORS[t.source.trim().toLowerCase()] ??
+        TRAFFIC_SOURCE_FALLBACK_COLORS[i % TRAFFIC_SOURCE_FALLBACK_COLORS.length],
     }));
     if (other > 0) {
       base.push({
         id: "other",
         label: "אחר",
         value: other,
-        color: colors[colors.length - 1],
+        color: "#94a3b8",
       });
     }
     return base;
@@ -531,14 +574,13 @@ export default function AdminHomePage() {
   const servicePopularityPieData = useMemo(() => {
     const rows = dashMetrics?.servicePopularity ?? [];
     if (rows.length === 0) return [];
-    const colors = ["#1e6f7c", "#2fb7b5", "#7eddd8", "#0f4550", "#155969", "#94a3b8", "#0ea5a4"];
     return rows.map((row, i) => ({
       id: `service-${i}`,
       label: row.service,
       value: row.count,
-      color: colors[i % colors.length],
+      color: serviceColorByName[row.service] ?? DASHBOARD_SERVICE_FALLBACK_COLORS[i % DASHBOARD_SERVICE_FALLBACK_COLORS.length],
     }));
-  }, [dashMetrics?.servicePopularity]);
+  }, [dashMetrics?.servicePopularity, serviceColorByName]);
 
   const statCards = useMemo((): DashboardStatRow[] => {
     const trafficLeader = (dashMetrics?.trafficBySource ?? [])[0] ?? null;
