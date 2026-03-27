@@ -17,15 +17,16 @@ export function buildAppointmentReminderTemplateVariables(input: {
 }): Record<string, string> {
   const customerName = (input.customerDisplayName ?? "").trim() || "לקוח";
   const salonName = (input.salonName ?? "").trim() || "Luxure";
-  const formattedDate = (input.dateDisplay ?? "").trim() || "---";
-  const formattedTime = (input.timeDisplay ?? "").trim() || "---";
-  const closingLine = (input.closingMessage ?? "").trim() || DEFAULT_REMINDER_CLOSING_MESSAGE || "---";
+  const formattedDate = (input.dateDisplay ?? "").trim() || "תאריך";
+  const formattedTime = (input.timeDisplay ?? "").trim() || "שעה";
+  const closingLine = DEFAULT_REMINDER_CLOSING_MESSAGE;
 
-  return {
+  const vars: Record<string, string> = {
     "1": customerName || "---",
     "2": salonName || "---",
-    "3": formattedDate || "---",
-    "4": formattedTime || "---",
+    "3": formattedDate || "תאריך",
+    "4": formattedTime || "שעה",
     "5": closingLine || "---",
   };
+  return vars;
 }

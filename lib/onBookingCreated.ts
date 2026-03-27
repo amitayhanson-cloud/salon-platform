@@ -227,6 +227,13 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
         custom_text: waSettings.reminderCustomText ?? "",
         waze_link: "",
       });
+      const contentVariables = buildAppointmentReminderTemplateVariables({
+        customerDisplayName,
+        salonName,
+        dateDisplay: date,
+        timeDisplay: timeStr,
+      });
+      console.log("DEBUG_REMINDER_VARS:", JSON.stringify(contentVariables, null, 2));
 
       const { sid: reminderSid } = await sendWhatsApp({
         toE164: customerPhoneE164,
@@ -235,12 +242,7 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
           name: "appointment_reminder_v1",
           contentSid: process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || undefined,
           language: "he",
-          variables: buildAppointmentReminderTemplateVariables({
-            customerDisplayName,
-            salonName,
-            dateDisplay: date,
-            timeDisplay: timeStr,
-          }),
+          variables: contentVariables,
         },
         bookingId,
         siteId,
@@ -314,6 +316,13 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
           custom_text: waSettings.reminderCustomText ?? "",
           waze_link: "",
         });
+        const contentVariables = buildAppointmentReminderTemplateVariables({
+          customerDisplayName,
+          salonName,
+          dateDisplay: date,
+          timeDisplay: timeStr,
+        });
+        console.log("DEBUG_REMINDER_VARS:", JSON.stringify(contentVariables, null, 2));
         const { sid: catchupSid } = await sendWhatsApp({
           toE164: customerPhoneE164,
           body: reminderBody,
@@ -321,12 +330,7 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
             name: "appointment_reminder_v1",
             contentSid: process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || undefined,
             language: "he",
-            variables: buildAppointmentReminderTemplateVariables({
-              customerDisplayName,
-              salonName,
-              dateDisplay: date,
-              timeDisplay: timeStr,
-            }),
+            variables: contentVariables,
           },
           bookingId,
           siteId,
