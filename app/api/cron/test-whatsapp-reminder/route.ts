@@ -11,7 +11,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { getReminderWindow } from "@/lib/whatsapp/reminderWindow";
-import { sendWhatsApp, normalizeE164, isWhatsAppOutboundDelivered } from "@/lib/whatsapp";
+import {
+  sendWhatsApp,
+  normalizeE164,
+  isWhatsAppOutboundDelivered,
+  getTwilioTemplateContentSidFromEnv,
+} from "@/lib/whatsapp";
 import { formatIsraelDateShort, formatIsraelTime } from "@/lib/datetime/formatIsraelTime";
 import { buildAppointmentReminderTemplateVariables } from "@/lib/whatsapp/appointmentReminderTemplateVariables";
 
@@ -143,16 +148,10 @@ export async function POST(request: NextRequest) {
     try {
       const { sid } = await sendWhatsApp({
         toE164: customerPhoneE164,
-        body: `${salonName} ✂️
-תזכורת: התור שלך מחר בשעה ${timeStr}.
-
-מגיעים? השיבו להודעה זו:
-כן, אגיע
-או
-לא, נא לבטל`,
+        body: `[בדיקה] תזכורת לתור — ${dateStr} ${timeStr} (${salonName})`,
         template: {
           name: "appointment_reminder_v1",
-          contentSid: process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || undefined,
+          contentSid: getTwilioTemplateContentSidFromEnv("appointment_reminder_v1"),
           language: "he",
           variables: buildAppointmentReminderTemplateVariables({
             customerDisplayName: String(data.customerName ?? "").trim() || "לקוח/ה",

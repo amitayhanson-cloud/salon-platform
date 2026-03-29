@@ -39,11 +39,20 @@ export type WhatsAppSettingsDoc = {
 /** Max length for optional automation custom paragraphs (stored per field). */
 export const MAX_AUTOMATION_CUSTOM_TEXT_LEN = 700;
 
-export const DEFAULT_CONFIRMATION_TEMPLATE = `היי {client_name}, התור שלך ב-{business_name} בתאריך {date} בשעה {time}.
+/** Stored verbatim in older sites — normalized to {@link DEFAULT_CONFIRMATION_TEMPLATE} on read. */
+export const LEGACY_CONFIRMATION_TEMPLATE_V1 = `היי {client_name}, התור שלך ב-{business_name} בתאריך {date} בשעה {time}.
 
 {custom_text}`;
 
-export const DEFAULT_REMINDER_TEMPLATE = `תזכורת: היי {client_name}, מחכים לך ב-{business_name} בתאריך {date} בשעה {time}.
+/** Aligns with Meta-approved booking_confirmed template: {{1}}–{{4}} → client, business, date, time. */
+export const DEFAULT_CONFIRMATION_TEMPLATE = `היי {client_name}, תודה שקבעת תור ב-{business_name}.
+התור נקבע לתאריך {date} בשעה {time}.
+מחכים לראותך, המשך יום נעים!
+
+{custom_text}`;
+
+/** Stored verbatim in older sites — normalized to {@link DEFAULT_REMINDER_TEMPLATE} on read. */
+export const LEGACY_REMINDER_TEMPLATE_V1 = `תזכורת: היי {client_name}, מחכים לך ב-{business_name} בתאריך {date} בשעה {time}.
 
 {custom_text}
 
@@ -52,13 +61,26 @@ export const DEFAULT_REMINDER_TEMPLATE = `תזכורת: היי {client_name}, מ
 או
 לא, נא לבטל`;
 
-/** Manual broadcast: fixed wording; only `{custom_text}` is free-form from the admin. */
-export const DEFAULT_BROADCAST_TEMPLATE =
-  "היי {client_name}, הודעה מ-{business_name}, {custom_text}. לחצו כאן לפרטים: {link}";
+/** Aligns with Meta-approved appointment reminder: {{1}}–{{4}}; optional `{custom_text}` is admin-only (not sent as a Meta variable). */
+export const DEFAULT_REMINDER_TEMPLATE = `היי {שם_לקוח}, תזכורת לתור שלך ב-{שם_העסק}.
+התור נקבע לתאריך {תאריך_תור} בשעה {זמן_תור}.
+
+{custom_text}
+
+מגיעים? נשמח אם תאשרו לנו בלחיצה על הכפתור למטה:`;
+
+/** Manual broadcast — matches Meta body: {{1}} name, {{2}} business, {{3}} custom segment. */
+export const DEFAULT_BROADCAST_TEMPLATE = `היי {client_name}, יש לנו עדכון מרגש מ-{business_name}!
+{custom_text}
+מחכים לראותך!`;
 
 /** Previous default — migrated to {@link DEFAULT_BROADCAST_TEMPLATE} in normalize (read path). */
 export const LEGACY_BROADCAST_TEMPLATE_V1 =
   "היי {client_name}! הודעה מ-{business_name}: {custom_text}. לפרטים: {link}";
+
+/** Older default (before Meta-approved broadcast body without booking link in template). */
+export const LEGACY_BROADCAST_TEMPLATE_V2 =
+  "היי {client_name}, הודעה מ-{business_name}, {custom_text}. לחצו כאן לפרטים: {link}";
 
 export const DEFAULT_CLIENT_CONFIRM_REPLY_TEMPLATE = `אושר ✅ נתראה ב-{time} ב-{business_name}.
 

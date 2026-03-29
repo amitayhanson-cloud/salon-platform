@@ -6,6 +6,14 @@ export {
   logInboundWhatsApp,
   logAmbiguousWhatsApp,
 } from "./send";
+export {
+  APPOINTMENT_REMINDER_SID,
+  BOOKING_CONFIRMED_SID,
+  BROADCAST_SID,
+  getTwilioTemplateContentSidFromEnv,
+  resolveTwilioTemplateContentSid,
+  type TwilioWhatsAppTemplateKind,
+} from "./twilioContentTemplateSids";
 export { normalizeE164, normalizeToE164, toWhatsAppTo, isValidE164 } from "./e164";
 export { getBookingPhoneE164 } from "./getBookingPhone";
 export type { BookingLike } from "./getBookingPhone";
@@ -14,7 +22,15 @@ export {
   getWebhookUrl,
   type WebhookUrlSource,
 } from "./validateSignature";
-export { normalizeInboundBody, isYes, isNo, normalizeInbound, type InboundIntent } from "./yesNoDetection";
+export {
+  normalizeInboundBody,
+  isYes,
+  isNo,
+  normalizeInbound,
+  isBroadcastWaitlistOptOut,
+  intentFromInteractiveTemplate,
+  type InboundIntent,
+} from "./yesNoDetection";
 export {
   findNextAwaitingConfirmationByPhone,
   findAwaitingConfirmationByPhone,

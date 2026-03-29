@@ -7,7 +7,12 @@
 import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { assertNoAwaitingConfirmationWithConfirmed } from "@/lib/bookingStatusForWrite";
-import { sendWhatsApp, normalizeE164, WHATSAPP_SKIPPED_USAGE_LIMIT_SID } from "@/lib/whatsapp";
+import {
+  sendWhatsApp,
+  normalizeE164,
+  getTwilioTemplateContentSidFromEnv,
+  WHATSAPP_SKIPPED_USAGE_LIMIT_SID,
+} from "@/lib/whatsapp";
 import { getTomorrowReminderWindow } from "@/lib/whatsapp/reminderWindow";
 import { renderWhatsAppTemplate } from "@/lib/whatsapp/templateRender";
 import { getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
@@ -182,7 +187,7 @@ export async function runReminders(db: ReturnType<typeof getAdminDb>): Promise<R
         body: reminderBody,
         template: {
           name: "appointment_reminder_v1",
-          contentSid: process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || undefined,
+          contentSid: getTwilioTemplateContentSidFromEnv("appointment_reminder_v1"),
           language: "he",
           variables: buildAppointmentReminderTemplateVariables({
             customerDisplayName,

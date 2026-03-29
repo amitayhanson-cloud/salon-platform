@@ -18,6 +18,7 @@ import {
   resolveOutboundUsageCategory,
   type WhatsAppUsageCategory,
 } from "./usage";
+import { resolveTwilioTemplateContentSid } from "./twilioContentTemplateSids";
 
 /** Read env at send time so tests and runtime can set TWILIO_* after module load. */
 function getTwilioEnv(): {
@@ -49,15 +50,55 @@ function getTwilioEnv(): {
 type WhatsAppTemplateName = "booking_confirmed" | "appointment_reminder_v1" | "broadcast_message_v1";
 
 function resolveTemplateContentSid(templateName: WhatsAppTemplateName): string {
-  switch (templateName) {
-    case "booking_confirmed":
-      return process.env.TWILIO_TEMPLATE_BOOKING_CONFIRMED_CONTENT_SID?.trim() || "";
-    case "appointment_reminder_v1":
-      return process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || "";
-    case "broadcast_message_v1":
-      return process.env.TWILIO_TEMPLATE_BROADCAST_MESSAGE_V1_CONTENT_SID?.trim() || "";
-    default:
-      return "";
+  return resolveTwilioTemplateContentSid(templateName);
+}
+
+/** Enforce Meta/Twilio variable counts to avoid 63005-style mismatches. */
+function assertContentVariablesForTemplate(
+  templateName: WhatsAppTemplateName,
+  variables: Record<string, string | Record<string, string>>
+): void {
+  const keys = Object.keys(variables);
+  if (templateName === "appointment_reminder_v1") {
+    const body = keys.filter((k) => !k.startsWith("button_")).sort();
+    const expected = ["1", "2", "3", "4"];
+    const ok = body.length === 4 && expected.every((k, i) => body[i] === k);
+    if (!ok) {
+      throw new Error(
+        `appointment_reminder_v1 expects body variables "1".."4" only; got [${body.join(", ")}]`
+      );
+    }
+    return;
+  }
+  if (templateName === "booking_confirmed") {
+    const body = keys.filter((k) => !k.startsWith("button_")).sort();
+    const expected = ["1", "2", "3", "4"];
+    const ok = body.length === 4 && expected.every((k, i) => body[i] === k);
+    if (!ok) {
+      throw new Error(
+        `booking_confirmed expects body variables "1".."4" only; got [${body.join(", ")}]`
+      );
+    }
+    return;
+  }
+  if (templateName === "broadcast_message_v1") {
+    const body = keys.filter((k) => !k.startsWith("button_")).sort();
+    const expectedBody = ["1", "2", "3"];
+    const bodyOk = body.length === 3 && expectedBody.every((k, i) => body[i] === k);
+    const urlButton = variables["button_1"];
+    const urlOk =
+      urlButton != null &&
+      typeof urlButton === "object" &&
+      !Array.isArray(urlButton) &&
+      String((urlButton as Record<string, string>)["1"] ?? "").length > 0;
+    if (!bodyOk) {
+      throw new Error(
+        `broadcast_message_v1 expects body variables "1".."3"; got [${body.join(", ")}]`
+      );
+    }
+    if (!urlOk) {
+      throw new Error(`broadcast_message_v1 expects button_1: { "1": "<dynamic url or path segment>" }`);
+    }
   }
 }
 
@@ -215,10 +256,9 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
     if (template) {
       const resolvedContentSid = template.contentSid?.trim() || resolveTemplateContentSid(template.name);
       if (!resolvedContentSid) {
-        throw new Error(
-          `Missing content SID env for template '${template.name}'. Set TWILIO_TEMPLATE_*_CONTENT_SID env vars.`
-        );
+        throw new Error(`Missing content SID for template '${template.name}'.`);
       }
+      assertContentVariablesForTemplate(template.name, template.variables);
       // Template / business-initiated (outside 24h): MUST NOT include `body` — Twilio treats mixed payloads as freeform → 63016.
       createPayload = {
         to: toParam,

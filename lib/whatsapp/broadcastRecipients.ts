@@ -46,6 +46,7 @@ function tryAddClientDoc(
   if (!docSnap.exists) return;
   const data = docSnap.data() as Record<string, unknown>;
   if (data.archived === true) return;
+  if (data.isSubscribed === false) return;
 
   const phoneRaw =
     typeof data.phone === "string" && data.phone.trim() ? data.phone.trim() : docSnap.id;

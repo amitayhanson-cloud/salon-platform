@@ -39,7 +39,8 @@ export default function MainLayoutClient({
       pathname === "/terms" ||
       pathname === "/pricing" ||
         pathname === "/cookies" ||
-        pathname === "/waitlist" ? (
+        pathname === "/waitlist" ||
+        pathname === "/unsubscribe" ? (
       <div
         dir="ltr"
         className={`${inter.variable} ${inter.className} relative min-h-screen text-caleno-ink antialiased ${

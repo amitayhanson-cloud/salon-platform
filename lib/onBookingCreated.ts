@@ -14,7 +14,12 @@
 
 import { Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
-import { sendWhatsApp, getBookingPhoneE164, WHATSAPP_SKIPPED_USAGE_LIMIT_SID } from "@/lib/whatsapp";
+import {
+  sendWhatsApp,
+  getBookingPhoneE164,
+  getTwilioTemplateContentSidFromEnv,
+  WHATSAPP_SKIPPED_USAGE_LIMIT_SID,
+} from "@/lib/whatsapp";
 import { renderWhatsAppTemplate } from "@/lib/whatsapp/templateRender";
 import { renderBookingConfirmationMessageFromBookingData } from "@/lib/whatsapp/renderBookingConfirmationMessage";
 import { getSiteWhatsAppSettings } from "@/lib/whatsapp/siteWhatsAppSettings";
@@ -175,7 +180,7 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
       console.log("[onBookingCreated] sendWhatsApp booking_confirmation", {
         siteId,
         bookingId,
-        contentSid: process.env.TWILIO_TEMPLATE_BOOKING_CONFIRMED_CONTENT_SID?.trim() || null,
+        contentSid: getTwilioTemplateContentSidFromEnv("booking_confirmed") ?? null,
       });
       // `body` is for Firestore / ops visibility only. Twilio Content uses `template.variables` only — never mix body into the REST payload for templates (63016).
       const messageBody = renderBookingConfirmationMessageFromBookingData(waSettings, {
@@ -190,7 +195,7 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
         body: messageBody,
         template: {
           name: "booking_confirmed",
-          contentSid: process.env.TWILIO_TEMPLATE_BOOKING_CONFIRMED_CONTENT_SID?.trim() || undefined,
+          contentSid: getTwilioTemplateContentSidFromEnv("booking_confirmed"),
           language: "he",
           variables: {
             "1": customerDisplayName,
@@ -233,7 +238,7 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
       console.log("[onBookingCreated] sendWhatsApp last_minute_reminder", {
         siteId,
         bookingId,
-        contentSid: process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || null,
+        contentSid: getTwilioTemplateContentSidFromEnv("appointment_reminder_v1") ?? null,
       });
       // `reminderBody` = log / preview only; Twilio reminder uses `contentVariables` from the helper below.
       const reminderBody = renderWhatsAppTemplate(waSettings.reminderTemplate, {
@@ -263,7 +268,7 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
         body: reminderBody,
         template: {
           name: "appointment_reminder_v1",
-          contentSid: process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || undefined,
+          contentSid: getTwilioTemplateContentSidFromEnv("appointment_reminder_v1"),
           language: "he",
           variables: contentVariables,
         },
@@ -322,7 +327,7 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
         console.log("[onBookingCreated] sendWhatsApp tomorrow_catchup_reminder", {
           siteId,
           bookingId,
-          contentSid: process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || null,
+          contentSid: getTwilioTemplateContentSidFromEnv("appointment_reminder_v1") ?? null,
         });
         const reminderBodyCatchup = renderWhatsAppTemplate(waSettings.reminderTemplate, {
           שם_העסק: salonName,
@@ -350,7 +355,7 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
           body: reminderBodyCatchup,
           template: {
             name: "appointment_reminder_v1",
-            contentSid: process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || undefined,
+            contentSid: getTwilioTemplateContentSidFromEnv("appointment_reminder_v1"),
             language: "he",
             variables: contentVariables,
           },

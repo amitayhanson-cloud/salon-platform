@@ -29,6 +29,7 @@ export function buildReminderMessage(
     time: timeStr,
     client_name: clientName,
     date: dateStr,
+    custom_text: "",
     ...(wazeUrl ? { waze_link: wazeUrl } : {}),
   });
 }

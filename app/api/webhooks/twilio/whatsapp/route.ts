@@ -12,6 +12,8 @@ import {
   logAmbiguousWhatsApp,
   normalizeE164,
   normalizeInbound,
+  isBroadcastWaitlistOptOut,
+  intentFromInteractiveTemplate,
   findBookingsAwaitingConfirmationByPhoneMulti,
   markBookingConfirmed,
   getBookingByRefIfAwaitingConfirmation,
@@ -27,6 +29,7 @@ import {
   inferAuditTypeFromTwiMLReply,
   bookingIdFromBookingRef,
 } from "@/lib/whatsapp";
+import { markUnsubscribedByPhone } from "@/lib/marketing/markUnsubscribedByPhone";
 import { getAdminProjectId } from "@/lib/firebaseAdmin";
 import {
   getInboundByMessageSid,
@@ -60,37 +63,6 @@ const WEBHOOK_PATH = "/api/webhooks/twilio/whatsapp";
 
 /** TwiML with no outbound message — avoids spending quota on unknown inbound. */
 const EMPTY_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
-
-async function markUnsubscribedByPhone(phoneE164: string): Promise<number> {
-  const db = getAdminDb();
-  let updated = 0;
-  const now = Timestamp.now();
-  const candidates = [phoneE164, phoneE164.replace(/^\+/, "")].filter(Boolean);
-  const userSnaps = await Promise.all(
-    candidates.map((p) => db.collection("users").where("phone", "==", p).limit(50).get())
-  );
-  for (const snap of userSnaps) {
-    for (const doc of snap.docs) {
-      await doc.ref.set({ isSubscribed: false, updatedAt: now }, { merge: true });
-      updated += 1;
-    }
-  }
-
-  const clientFieldQueries = [
-    db.collectionGroup("clients").where("phone", "==", phoneE164).limit(200).get(),
-    db.collectionGroup("clients").where("customerPhone", "==", phoneE164).limit(200).get(),
-    db.collectionGroup("clients").where("customerPhoneE164", "==", phoneE164).limit(200).get(),
-  ];
-  const clientSnaps = await Promise.allSettled(clientFieldQueries);
-  for (const res of clientSnaps) {
-    if (res.status !== "fulfilled") continue;
-    for (const doc of res.value.docs) {
-      await doc.ref.set({ isSubscribed: false, updatedAt: now }, { merge: true });
-      updated += 1;
-    }
-  }
-  return updated;
-}
 
 /** Twilio sandbox: user must send `join <code>` before messaging the sandbox number. */
 function isSandboxJoinCommand(body: string): boolean {
@@ -321,12 +293,18 @@ export async function POST(request: NextRequest) {
       twilioMessageSid: MessageSid,
     });
 
-    const { intent, selection } = normalizeInbound(inboundBody, ButtonPayload || null);
+    const { intent: parsedIntent, selection } = normalizeInbound(inboundBody, ButtonPayload || null);
+    /** Reminder/broadcast template buttons: Twilio puts the label on ButtonText; Body may be empty. */
+    const intent = intentFromInteractiveTemplate(Body, ButtonText, ButtonPayload) ?? parsedIntent;
 
-    if (normalizeInbound(inboundBody).normalized === "הסר אותי מהרשימה") {
+    if (
+      isBroadcastWaitlistOptOut(Body) ||
+      isBroadcastWaitlistOptOut(ButtonText) ||
+      isBroadcastWaitlistOptOut(ButtonPayload)
+    ) {
       try {
         const hits = await markUnsubscribedByPhone(fromE164);
-        console.log("[WA_WEBHOOK] unsubscribed", { fromE164, updated: hits });
+        console.log("[WA_WEBHOOK] unsubscribed", { fromE164, updated: hits, waitlistOptOut: true });
       } catch (e) {
         console.error("[WA_WEBHOOK] unsubscribe_failed", e);
       }

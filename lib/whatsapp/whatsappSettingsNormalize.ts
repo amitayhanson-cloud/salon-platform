@@ -9,6 +9,9 @@ import {
   DEFAULT_REMINDER_TEMPLATE,
   DEFAULT_BROADCAST_TEMPLATE,
   LEGACY_BROADCAST_TEMPLATE_V1,
+  LEGACY_BROADCAST_TEMPLATE_V2,
+  LEGACY_CONFIRMATION_TEMPLATE_V1,
+  LEGACY_REMINDER_TEMPLATE_V1,
   DEFAULT_CLIENT_CONFIRM_REPLY_TEMPLATE,
   DEFAULT_CLIENT_CANCEL_REPLY_TEMPLATE,
   MAX_AUTOMATION_CUSTOM_TEXT_LEN,
@@ -79,27 +82,32 @@ export function normalizeWhatsAppSettingsDoc(raw: Record<string, unknown> | unde
   if (!raw || typeof raw !== "object") {
     return { ...DEFAULT_WHATSAPP_SETTINGS };
   }
+  const rawConfirmation =
+    typeof raw.confirmationTemplate === "string" && raw.confirmationTemplate.trim()
+      ? raw.confirmationTemplate.trim()
+      : DEFAULT_CONFIRMATION_TEMPLATE;
+  const confirmationBase =
+    rawConfirmation === LEGACY_CONFIRMATION_TEMPLATE_V1 ? DEFAULT_CONFIRMATION_TEMPLATE : rawConfirmation;
+  const rawReminder =
+    typeof raw.reminderTemplate === "string" && raw.reminderTemplate.trim()
+      ? raw.reminderTemplate.trim()
+      : DEFAULT_REMINDER_TEMPLATE;
+  const reminderBase = rawReminder === LEGACY_REMINDER_TEMPLATE_V1 ? DEFAULT_REMINDER_TEMPLATE : rawReminder;
   return {
     confirmationEnabled:
       typeof raw.confirmationEnabled === "boolean" ? raw.confirmationEnabled : DEFAULT_WHATSAPP_SETTINGS.confirmationEnabled,
-    confirmationTemplate: ensureConfirmationCustomSlot(
-      typeof raw.confirmationTemplate === "string" && raw.confirmationTemplate.trim()
-        ? raw.confirmationTemplate
-        : DEFAULT_CONFIRMATION_TEMPLATE
-    ),
+    confirmationTemplate: ensureConfirmationCustomSlot(confirmationBase),
     confirmationCustomText: clampAutomationCustomText(raw.confirmationCustomText, ""),
     reminderEnabled:
       typeof raw.reminderEnabled === "boolean" ? raw.reminderEnabled : DEFAULT_WHATSAPP_SETTINGS.reminderEnabled,
-    reminderTemplate: ensureReminderCustomSlot(
-      typeof raw.reminderTemplate === "string" && raw.reminderTemplate.trim()
-        ? raw.reminderTemplate
-        : DEFAULT_REMINDER_TEMPLATE
-    ),
+    reminderTemplate: ensureReminderCustomSlot(reminderBase),
     reminderCustomText: clampAutomationCustomText(raw.reminderCustomText, ""),
     broadcastTemplate: (() => {
       const t = typeof raw.broadcastTemplate === "string" ? raw.broadcastTemplate.trim() : "";
       if (!t) return DEFAULT_BROADCAST_TEMPLATE;
-      if (t === LEGACY_BROADCAST_TEMPLATE_V1) return DEFAULT_BROADCAST_TEMPLATE;
+      if (t === LEGACY_BROADCAST_TEMPLATE_V1 || t === LEGACY_BROADCAST_TEMPLATE_V2) {
+        return DEFAULT_BROADCAST_TEMPLATE;
+      }
       return t;
     })(),
     reminderHoursBefore: clampHours(raw.reminderHoursBefore),

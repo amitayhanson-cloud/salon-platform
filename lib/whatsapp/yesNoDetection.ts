@@ -1,6 +1,10 @@
 /**
  * Normalize inbound message body and detect YES/NO/selection for booking confirmation.
  * Hebrew + English. Normalize: trim, lowercase, collapse spaces.
+ *
+ * Reminder template buttons (Meta/Twilio): match interactive labels such as `כן, אגיע` and
+ * `לא, נא לבטל` via {@link normalizeForMatch} (commas stripped → `כן אגיע`, `לא נא לבטל`).
+ * {@link intentFromInteractiveTemplate} reads `ButtonText` first when `Body` is empty.
  */
 
 const raw = (body: string): string => (body ?? "").trim();
@@ -44,7 +48,9 @@ const YES_PHRASES = new Set([
   "אישור",
 ]);
 
-/** Hebrew NO phrases */
+/**
+ * Hebrew NO phrases (keep in sync with reminder List/Message button labels, e.g. `לא, נא לבטל`).
+ */
 const NO_PHRASES = new Set([
   "no",
   "n",
@@ -68,6 +74,8 @@ const NO_PHRASES = new Set([
   "canceled",
   "מבטל",
   "מבטלת",
+  /** Reminder template quick reply (Meta/Twilio) */
+  "לא נא לבטל",
 ]);
 
 /** Treat as YES if msg matches any of the allowed YES phrases (Hebrew + English). */
@@ -144,4 +152,28 @@ export function normalizeInbound(
   )
     return { normalized: m, intent: "no", selection: null };
   return { normalized: m, intent: null, selection: null };
+}
+
+/** Broadcast quick reply "הסר אותי מהרשימה" — match Body, ButtonText, or ButtonPayload. */
+export function isBroadcastWaitlistOptOut(text: string): boolean {
+  const t = (text ?? "").trim();
+  if (!t) return false;
+  return normalizeForMatch(msg(t)) === normalizeForMatch(msg("הסר אותי מהרשימה"));
+}
+
+/**
+ * Template / list-reply buttons: Twilio often sends the label on `ButtonText` with an empty `Body`.
+ * Prefer this over {@link normalizeInbound} when quick-reply labels must win (e.g. "כן, אגיע").
+ */
+export function intentFromInteractiveTemplate(
+  body: string,
+  buttonText: string,
+  buttonPayload: string | null | undefined
+): InboundIntent {
+  for (const raw of [buttonText, body, buttonPayload ?? ""]) {
+    if (!(raw ?? "").trim()) continue;
+    if (isYes(raw)) return "yes";
+    if (isNo(raw)) return "no";
+  }
+  return null;
 }

@@ -11,6 +11,7 @@ import { checkRateLimit } from "@/lib/server/rateLimit";
 import {
   sendWhatsApp,
   isWhatsAppOutboundDelivered,
+  getTwilioTemplateContentSidFromEnv,
   WHATSAPP_SKIPPED_GLOBAL_AUTOMATIONS_SID,
   WHATSAPP_SKIPPED_USAGE_LIMIT_SID,
 } from "@/lib/whatsapp";
@@ -132,6 +133,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     getPublicBookingPageAbsoluteUrlForSite(id, tenantSlug),
     "whatsapp"
   );
+  /**
+   * Broadcast template URL button 1: https://caleno.co/{{1}} — business slug (fallback: site id).
+   * Button 2 is static in Twilio (https://caleno.co/unsubscribe); no variable sent from code.
+   * Optional: append e.g. ?phone=... to the static URL in Content Builder to tie opt-out to a number.
+   */
+  const slugForBookingUrlButton = (tenantSlug && tenantSlug.trim()) || id;
   const waSettings = await getSiteWhatsAppSettings(id);
   const broadcastTemplate = waSettings.broadcastTemplate;
 
@@ -161,19 +168,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         body: bodyRendered,
         template: {
           name: "broadcast_message_v1",
-          contentSid: process.env.TWILIO_TEMPLATE_BROADCAST_MESSAGE_V1_CONTENT_SID?.trim() || undefined,
+          contentSid: getTwilioTemplateContentSidFromEnv("broadcast_message_v1"),
           language: "he",
           variables: {
             "1": r.name,
             "2": salonName,
             "3": customSegment,
-            // Dynamic button variable ({{1}} in button component): campaign/business ID.
-            button_1: { "1": campaignId },
+            button_1: { "1": slugForBookingUrlButton },
           },
         },
         siteId: id,
         bypassAutomationKillSwitch: true,
-        meta: { automation: "owner_broadcast", templateName: "broadcast_message_v1" },
+        meta: {
+          automation: "owner_broadcast",
+          templateName: "broadcast_message_v1",
+          broadcastCampaignId: campaignId,
+        },
       });
       if (isWhatsAppOutboundDelivered(sid)) {
         sent += 1;
