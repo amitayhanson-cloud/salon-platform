@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { X } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import {
@@ -40,6 +40,11 @@ function generateTimeOptions(): string[] {
 }
 
 const TIME_OPTIONS = generateTimeOptions();
+
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
 
 const HEBREW_WEEKDAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
 
@@ -226,6 +231,53 @@ export default function AdminBookingFormSimple({
     if (initialData.phase2Id) ids.push(initialData.phase2Id);
     return ids;
   }, [mode, initialData]);
+
+  /** Start times where the selected worker has no overlapping booking (same rules as submit validation). */
+  const availableTimeOptions = useMemo(() => {
+    if (!workerId) return TIME_OPTIONS;
+    const out: string[] = [];
+    for (const t of TIME_OPTIONS) {
+      const [y, m, d] = date.split("-").map(Number);
+      const [hh, mm] = t.split(":").map(Number);
+      const slotStart = new Date(y, (m ?? 1) - 1, d ?? 1, hh || 0, mm || 0, 0, 0);
+      const slotEnd = new Date(slotStart.getTime() + durationMin * 60 * 1000);
+      const { hasConflict } = findWorkerConflictFromBookings(
+        bookingsForDate,
+        workerId,
+        date,
+        slotStart,
+        slotEnd,
+        excludeBookingIds
+      );
+      if (!hasConflict) out.push(t);
+    }
+    if (time && !out.includes(time)) {
+      const [y, m, d] = date.split("-").map(Number);
+      const [hh, mm] = time.split(":").map(Number);
+      const slotStart = new Date(y, (m ?? 1) - 1, d ?? 1, hh || 0, mm || 0, 0, 0);
+      const slotEnd = new Date(slotStart.getTime() + durationMin * 60 * 1000);
+      const { hasConflict } = findWorkerConflictFromBookings(
+        bookingsForDate,
+        workerId,
+        date,
+        slotStart,
+        slotEnd,
+        excludeBookingIds
+      );
+      if (!hasConflict) {
+        out.push(time);
+        out.sort((a, b) => timeToMinutes(a) - timeToMinutes(b));
+      }
+    }
+    return out;
+  }, [bookingsForDate, workerId, date, durationMin, excludeBookingIds, time]);
+
+  useEffect(() => {
+    if (!workerId) return;
+    if (availableTimeOptions.length === 0) return;
+    if (availableTimeOptions.includes(time)) return;
+    setTime(availableTimeOptions[0]!);
+  }, [workerId, availableTimeOptions, time]);
 
   const startAt = useMemo(() => {
     const [y, m, d] = date.split("-").map(Number);
@@ -449,16 +501,23 @@ export default function AdminBookingFormSimple({
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">שעת התחלה *</label>
           <select
-            value={time}
+            value={availableTimeOptions.includes(time) ? time : (availableTimeOptions[0] ?? time)}
             onChange={(e) => setTime(e.target.value)}
             className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right bg-white"
           >
-            {TIME_OPTIONS.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
+            {availableTimeOptions.length === 0 ? (
+              <option value={time}>{time}</option>
+            ) : (
+              availableTimeOptions.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))
+            )}
           </select>
+          {workerId && availableTimeOptions.length === 0 && (
+            <p className="text-xs text-amber-700 mt-0.5">אין שעות פנויות למטפל ולמשך שנבחרו.</p>
+          )}
           {errors.time && <p className="text-xs text-red-600 mt-0.5">{errors.time}</p>}
         </div>
 
