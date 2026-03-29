@@ -9,6 +9,7 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     now: new Date().toISOString(),
-    webhook: "/api/webhooks/twilio/whatsapp",
+    webhook: "/api/webhooks/whatsapp",
+    webhookLegacy: "/api/webhooks/twilio/whatsapp",
   });
 }
