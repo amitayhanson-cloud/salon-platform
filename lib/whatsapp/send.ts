@@ -84,7 +84,15 @@ function contentVariablesJsonForTwilio(variables: Record<string, string | Record
 
 export type SendWhatsAppParams = {
   toE164: string;
+  /**
+   * Plaintext for Firestore logs and for freeform Twilio sends (see `template`).
+   * When sending a Content template (`contentSid`), this is NOT sent to Twilio — only `contentVariables` are.
+   */
   body: string;
+  /**
+   * Content template send: `contentSid` + `contentVariables` only (no `body` on the Twilio API — avoids 63016 outside the 24h window).
+   * Omit for freeform session messages (webhook-style replies in-window); Twilio payload uses `body` only.
+   */
   template?: {
     name: WhatsAppTemplateName;
     /** Optional explicit override; otherwise resolved from env by template name. */
@@ -199,30 +207,43 @@ export async function sendWhatsApp(params: SendWhatsAppParams): Promise<{ sid: s
   let error: string | null = null;
 
   try {
-    if (!template) {
-      throw new Error(
-        "Template content send is required: pass template { name/contentSid, variables } so Twilio uses contentSid/contentVariables."
-      );
-    }
-    const resolvedContentSid = template.contentSid?.trim() || resolveTemplateContentSid(template.name);
-    if (!resolvedContentSid) {
-      throw new Error(
-        `Missing content SID env for template '${template.name}'. Set TWILIO_TEMPLATE_*_CONTENT_SID env vars.`
-      );
-    }
-    {
-      // Clean-room Twilio payload: only these four keys. No `body` / `from` identifiers here.
-      const destinationE164 = to.replace(/^whatsapp:/, "");
-      const cleanPayload: Record<string, string> = {
-        to: `whatsapp:${destinationE164}`,
+    const destinationE164 = to.replace(/^whatsapp:/, "");
+    const toParam = `whatsapp:${destinationE164}`;
+
+    let createPayload: Record<string, string>;
+
+    if (template) {
+      const resolvedContentSid = template.contentSid?.trim() || resolveTemplateContentSid(template.name);
+      if (!resolvedContentSid) {
+        throw new Error(
+          `Missing content SID env for template '${template.name}'. Set TWILIO_TEMPLATE_*_CONTENT_SID env vars.`
+        );
+      }
+      // Template / business-initiated (outside 24h): MUST NOT include `body` — Twilio treats mixed payloads as freeform → 63016.
+      createPayload = {
+        to: toParam,
         messagingServiceSid,
         contentSid: resolvedContentSid,
         contentVariables: contentVariablesJsonForTwilio(template.variables),
       };
-      console.log("Final Payload Keys:", Object.keys(cleanPayload));
-      const message = await client.messages.create(cleanPayload as unknown as Parameters<typeof client.messages.create>[0]);
-      sid = message.sid;
+    } else {
+      const freeformBody = (outgoingBody ?? "").trim();
+      if (!freeformBody) {
+        throw new Error("Freeform WhatsApp send requires a non-empty body (or pass template for Content API / template send).");
+      }
+      // In-session reply: body only — never send contentSid/contentVariables with body.
+      createPayload = {
+        to: toParam,
+        messagingServiceSid,
+        body: freeformBody,
+      };
     }
+
+    console.log("Final Payload Keys:", Object.keys(createPayload));
+    const message = await client.messages.create(
+      createPayload as unknown as Parameters<typeof client.messages.create>[0]
+    );
+    sid = message.sid;
   } catch (e) {
     status = "failed";
     error = e instanceof Error ? e.message : String(e);

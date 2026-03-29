@@ -177,6 +177,7 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
         bookingId,
         contentSid: process.env.TWILIO_TEMPLATE_BOOKING_CONFIRMED_CONTENT_SID?.trim() || null,
       });
+      // `body` is for Firestore / ops visibility only. Twilio Content uses `template.variables` only — never mix body into the REST payload for templates (63016).
       const messageBody = renderBookingConfirmationMessageFromBookingData(waSettings, {
         salonName,
         bookingPublicUrl,
@@ -234,6 +235,7 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
         bookingId,
         contentSid: process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || null,
       });
+      // `reminderBody` = log / preview only; Twilio reminder uses `contentVariables` from the helper below.
       const reminderBody = renderWhatsAppTemplate(waSettings.reminderTemplate, {
         שם_העסק: salonName,
         זמן_תור: timeStr,
@@ -322,7 +324,7 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
           bookingId,
           contentSid: process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || null,
         });
-        const reminderBody = renderWhatsAppTemplate(waSettings.reminderTemplate, {
+        const reminderBodyCatchup = renderWhatsAppTemplate(waSettings.reminderTemplate, {
           שם_העסק: salonName,
           זמן_תור: timeStr,
           שם_לקוח: customerDisplayName,
@@ -345,7 +347,7 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
         console.log("DEBUG_REMINDER_VARS:", JSON.stringify(contentVariables, null, 2));
         const { sid: catchupSid } = await sendWhatsApp({
           toE164: customerPhoneE164,
-          body: reminderBody,
+          body: reminderBodyCatchup,
           template: {
             name: "appointment_reminder_v1",
             contentSid: process.env.TWILIO_TEMPLATE_APPOINTMENT_REMINDER_V1_CONTENT_SID?.trim() || undefined,

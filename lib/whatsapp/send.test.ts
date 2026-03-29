@@ -145,8 +145,28 @@ describe("sendWhatsApp", () => {
     expect(arg.from).toBeUndefined();
     expect(arg.messagingServiceSid).toBe("MGtest123");
     expect(arg.to).toBe("whatsapp:+972501234567");
+    expect(Object.keys(arg).sort()).toEqual(["contentSid", "contentVariables", "messagingServiceSid", "to"]);
     expect(arg.contentVariables).toBe(
       JSON.stringify({ "1": "לקוח", "2": "עסק", "3": "01.01.2026", "4": "10:00" })
     );
+  });
+
+  it("freeform send includes body only (no contentSid)", async () => {
+    vi.mocked(isWhatsAppAutomationEnabled).mockResolvedValue(true);
+
+    await sendWhatsApp({
+      toE164: "+972501234567",
+      body: "Session reply text",
+      siteId: "site1",
+      bookingId: "b-free",
+      meta: { automation: "test_freeform" },
+    });
+
+    expect(twilioCreateMock).toHaveBeenCalledTimes(1);
+    const arg = twilioCreateMock.mock.calls[0]?.[0] as Record<string, string>;
+    expect(arg.body).toBe("Session reply text");
+    expect(arg.contentSid).toBeUndefined();
+    expect(arg.contentVariables).toBeUndefined();
+    expect(Object.keys(arg).sort()).toEqual(["body", "messagingServiceSid", "to"]);
   });
 });
