@@ -706,6 +706,19 @@ export function AdminSiteTab({
               placeholder="הקלד את שם הסלון"
             />
           </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">
+              השם שיופיע ב“ברוך שובך”
+            </label>
+            <input
+              type="text"
+              value={siteConfig.adminDisplayName || ""}
+              onChange={(e) => onChange({ adminDisplayName: e.target.value })}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right text-sm focus:outline-none focus:ring-2 focus:ring-2 focus:ring-caleno-deep focus:border-caleno-deep"
+              placeholder="למשל: אמיתי"
+            />
+          </div>
         </div>
       </div>
       )}

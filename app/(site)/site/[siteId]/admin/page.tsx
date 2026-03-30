@@ -50,6 +50,8 @@ import { bookingDayYmdIsrael } from "@/lib/bookingDayKey";
 import { isDocCancelled } from "@/lib/cancelledBookingShared";
 import { getDateYMDInTimezone, zonedDayRangeEpochMs } from "@/lib/expiredCleanupUtils";
 import { subscribeSiteServices } from "@/lib/firestoreSiteServices";
+import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
+import type { SiteConfig } from "@/types/siteConfig";
 
 const DASHBOARD_DAY_TZ = "Asia/Jerusalem";
 const TRAFFIC_SOURCE_COLORS: Record<string, string> = {
@@ -306,6 +308,7 @@ export default function AdminHomePage() {
   const [expandedChartGranularity, setExpandedChartGranularity] = useState<ChartGranularity>("week");
   const [serviceColorByName, setServiceColorByName] = useState<Record<string, string>>({});
   const adminBasePath = getAdminBasePathFromSiteId(siteId);
+  const [siteConfig, setSiteConfig] = useState<SiteConfig | null>(null);
 
   useEffect(() => {
     if (!siteId || siteId === "me") {
@@ -327,6 +330,19 @@ export default function AdminHomePage() {
       () => setServiceColorByName({})
     );
     return () => unsubscribe();
+  }, [siteId]);
+
+  useEffect(() => {
+    if (!siteId || siteId === "me") {
+      setSiteConfig(null);
+      return;
+    }
+    const unsubscribe = subscribeSiteConfig(
+      siteId,
+      (cfg) => setSiteConfig(cfg),
+      (e) => console.error("[AdminHomePage] subscribeSiteConfig error", e)
+    );
+    return () => unsubscribe?.();
   }, [siteId]);
 
   const chartSwrKey =
@@ -411,9 +427,8 @@ export default function AdminHomePage() {
 
   const chartSeriesLoading = chartSeriesIsLoading && !chartBundle;
 
-  const welcomeMessage = user?.name
-    ? `ברוך שובך – ${user.name}`
-    : "ברוך שובך";
+  const welcomeName = siteConfig?.adminDisplayName?.trim() || user?.name?.trim() || "";
+  const welcomeMessage = welcomeName ? `ברוך שובך – ${welcomeName}` : "ברוך שובך";
 
   useEffect(() => {
     setSelectedMetricKey(null);

@@ -102,6 +102,7 @@ function getMenuItems(basePath: string): MenuItem[] {
         { label: "הגדרות", href: `${basePath}/settings` },
         { label: "אתר", href: `${basePath}/site` },
         { label: "שירותים", href: `${basePath}/services` },
+        { label: "מוצרים", href: `${basePath}/website-management/products` },
       ],
     },
   ];

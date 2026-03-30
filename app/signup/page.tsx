@@ -6,7 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useAuth } from "@/components/auth/AuthProvider";
 
-type Step = "choose" | "otp";
+type Step = "phone" | "otp";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -14,7 +14,7 @@ export default function SignupPage() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [otpCode, setOtpCode] = useState("");
-  const [step, setStep] = useState<Step>("choose");
+  const [step, setStep] = useState<Step>("phone");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -165,7 +165,7 @@ export default function SignupPage() {
               </div>
             </div>
 
-            {step === "choose" ? (
+            {step === "phone" ? (
               <form onSubmit={handleSendOtp} className="space-y-5">
                 <div>
                   <label htmlFor="name" className="block text-sm font-medium text-caleno-ink mb-2">
@@ -198,7 +198,7 @@ export default function SignupPage() {
                     dir="ltr"
                   />
                   <p className="mt-1.5 text-xs text-caleno-700/80">
-                    נשלח אליך קוד חד-פעמי בן 6 ספרות ב-SMS.
+                    נשלח אליך קוד חד-פעמי בן 6 ספרות ב-WhatsApp (או SMS אם WhatsApp לא זמין).
                   </p>
                 </div>
                 {error && (
@@ -246,13 +246,13 @@ export default function SignupPage() {
                   disabled={loading}
                   className="w-full rounded-lg bg-gradient-to-l from-caleno-ink to-caleno-700 px-6 py-3 font-semibold text-white shadow-md shadow-caleno-deep/15 transition-all duration-200 hover:from-[#1E293B] hover:to-caleno-800 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? "מאמת..." : "אמת והמשך"}
+                  {loading ? "מאמת..." : "Verify & Sign Up"}
                 </button>
                 <button
                   type="button"
                   disabled={loading}
                   onClick={() => {
-                    setStep("choose");
+                    setStep("phone");
                     setOtpCode("");
                     setError(null);
                   }}

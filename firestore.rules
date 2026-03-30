@@ -59,6 +59,17 @@ service cloud.firestore {
             || get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUserId == request.auth.uid);
     }
 
+    // Products: public may read only visible rows; site owner full access.
+    match /sites/{siteId}/products/{productId} {
+      allow read: if resource.data.isVisible == true
+        || (request.auth != null
+            && (get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUid == request.auth.uid
+                || get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUserId == request.auth.uid));
+      allow create, update, delete: if request.auth != null
+        && (get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUid == request.auth.uid
+            || get(/databases/$(database)/documents/sites/$(siteId)).data.ownerUserId == request.auth.uid);
+    }
+
     // Clients: public read/update (getOrCreateClient, personal pricing when submitting booking); delete only site owner.
     match /sites/{siteId}/clients/{clientId} {
       allow read, create, update: if true;

@@ -58,6 +58,16 @@ export function clientDoc(siteId: string, clientId: string) {
   return doc(db, "sites", siteId, "clients", clientId);
 }
 
+export function productsCollection(siteId: string) {
+  if (!db) throw new Error("Firestore db not initialized");
+  return collection(db, "sites", siteId, "products");
+}
+
+export function productDoc(siteId: string, productId: string) {
+  if (!db) throw new Error("Firestore db not initialized");
+  return doc(db, "sites", siteId, "products", productId);
+}
+
 /**
  * One archived visit per (client, service type) under this subcollection.
  * Document id is {@link getDeterministicArchiveDocId} in practice: `{clientKey}__{serviceTypeId}` or

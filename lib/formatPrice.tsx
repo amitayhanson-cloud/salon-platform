@@ -1,5 +1,18 @@
 import React from "react";
 
+/** Format a numeric amount as ILS for Hebrew locale (plain string). */
+export function formatIlsPrice(amount: number): string {
+  try {
+    return new Intl.NumberFormat("he-IL", {
+      style: "currency",
+      currency: "ILS",
+      maximumFractionDigits: amount % 1 === 0 ? 0 : 2,
+    }).format(amount);
+  } catch {
+    return `₪${amount.toFixed(amount % 1 === 0 ? 0 : 2)}`;
+  }
+}
+
 /**
  * Format a price for display, handling both single prices and ranges
  * Uses dir="ltr" for ranges to prevent RTL reversal issues

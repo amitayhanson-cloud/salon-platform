@@ -76,7 +76,7 @@ type AuthContextType = {
   firebaseUser: FirebaseUser | null;
   loginWithGoogle: () => Promise<{ success: boolean; error?: string; redirectPath?: string }>;
   signupWithGoogle: () => Promise<{ success: boolean; error?: string; userId?: string; needsProfile?: boolean }>;
-  /** Twilio Verify: send 6-digit SMS OTP */
+  /** Twilio Verify OTP: WhatsApp preferred, SMS fallback */
   sendPhoneOtp: (rawPhone: string) => Promise<{ success: boolean; error?: string; errorCode?: string }>;
   /** After OTP verified server-side, signs in with Firebase custom token */
   verifyPhoneOtp: (params: {
@@ -392,10 +392,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const sendPhoneOtp = useCallback(async (rawPhone: string): Promise<{ success: boolean; error?: string; errorCode?: string }> => {
     try {
-      const res = await fetch("/api/auth/phone-otp/send", {
+      const res = await fetch("/api/auth/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: rawPhone }),
+        body: JSON.stringify({ phoneNumber: rawPhone }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
@@ -419,18 +419,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: "Firebase לא מאותחל.", errorCode: "no_auth" };
       }
       try {
-        const body: Record<string, string> = {
-          phone: params.rawPhone,
-          code: params.code,
-          intent: params.intent,
-        };
-        if (params.intent === "signup" && params.fullName) {
-          body.fullName = params.fullName;
-        }
-        const res = await fetch("/api/auth/phone-otp/verify", {
+        const res = await fetch("/api/auth/verify-otp", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
+          body: JSON.stringify({
+            phoneNumber: params.rawPhone,
+            code: params.code,
+            intent: params.intent,
+            fullName: params.fullName,
+          }),
         });
         const data = (await res.json().catch(() => ({}))) as { error?: string; customToken?: string };
         if (!res.ok) {

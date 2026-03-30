@@ -69,6 +69,8 @@ export default function SalonHeader({
   headerCtaBg,
   headerCtaText,
   contentHeader,
+  showShopLink = false,
+  shopHref,
 }: {
   salonName: string;
   siteId: string;
@@ -84,6 +86,9 @@ export default function SalonHeader({
   headerCtaBg?: string;
   headerCtaText?: string;
   contentHeader?: SiteContent["header"];
+  /** When true with shopHref, show Shop nav link to full catalog */
+  showShopLink?: boolean;
+  shopHref?: string;
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pillRef = useRef<HTMLElement>(null);
@@ -104,6 +109,8 @@ export default function SalonHeader({
 
   const navLabel = (key: keyof NonNullable<SiteContent["header"]>) =>
     contentHeader?.[key]?.trim() ? contentHeader[key]! : DEFAULT_CONTENT.header[key];
+
+  const resolvedShopHref = shopHref?.trim() || getSiteUrl(slug, siteId, "/shop");
 
   const handleNavClick = (id: string) => {
     scrollToSection(id);
@@ -228,6 +235,15 @@ export default function SalonHeader({
                   {navLabel(key)}
                 </button>
               ))}
+              {showShopLink ? (
+                <Link
+                  href={resolvedShopHref}
+                  className="rounded-full px-4 py-2 text-sm font-medium transition-colors duration-200 hover:bg-white/15 focus:outline-none focus-visible:bg-white/15 focus-visible:ring-2 focus-visible:ring-white/35"
+                  style={{ color: linkColor }}
+                >
+                  {navLabel("navShop")}
+                </Link>
+              ) : null}
               {isBookingEnabled ? (
                 <BookNowNavButton
                   href={getSiteUrl(slug, siteId, "/book")}
@@ -326,6 +342,16 @@ export default function SalonHeader({
                 {navLabel(key)}
               </button>
             ))}
+            {showShopLink ? (
+              <Link
+                href={resolvedShopHref}
+                onClick={() => setMobileMenuOpen(false)}
+                className="block w-full rounded-full py-3 pr-3 pl-2 text-right text-base font-medium transition-colors hover:bg-white/12 focus:outline-none focus-visible:bg-white/12"
+                style={{ color: linkColor }}
+              >
+                {navLabel("navShop")}
+              </Link>
+            ) : null}
             {isBookingEnabled ? (
               <BookNowNavButton
                 href={getSiteUrl(slug, siteId, "/book")}

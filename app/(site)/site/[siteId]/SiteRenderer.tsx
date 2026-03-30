@@ -9,10 +9,13 @@ import {
   getTemplateForConfig,
 } from "@/lib/templateLibrary";
 import HairLuxurySite from "./HairLuxurySite";
+import type { Product } from "@/types/product";
+import { subscribeSiteProducts } from "@/lib/firestoreProducts";
 
 export default function SiteRenderer({ siteId }: { siteId: string }) {
   const [config, setConfig] = useState<SiteConfig | null>(null);
   const [services, setServices] = useState<SiteService[]>([]);
+  const [visibleProducts, setVisibleProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -144,6 +147,17 @@ export default function SiteRenderer({ siteId }: { siteId: string }) {
     };
   }, [siteId]);
 
+  useEffect(() => {
+    if (!siteId) return;
+    const unsubscribe = subscribeSiteProducts(
+      siteId,
+      true,
+      setVisibleProducts,
+      (err) => console.error("[SiteRenderer] products subscription", err)
+    );
+    return unsubscribe;
+  }, [siteId]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: defaultThemeColors.background }}>
@@ -168,6 +182,14 @@ export default function SiteRenderer({ siteId }: { siteId: string }) {
   // Get template and render
   const template = getTemplateForConfig(config);
 
-  return <HairLuxurySite config={config} template={template} siteId={siteId} services={services} />;
+  return (
+    <HairLuxurySite
+      config={config}
+      template={template}
+      siteId={siteId}
+      services={services}
+      visibleProducts={visibleProducts}
+    />
+  );
 }
 

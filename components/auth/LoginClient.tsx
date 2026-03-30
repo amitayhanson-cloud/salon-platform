@@ -303,7 +303,7 @@ function LoginForm() {
                     dir="ltr"
                   />
                   <p className="mt-1.5 text-xs text-[#64748B]">
-                    נשלח קוד אימות בן 6 ספרות ב-SMS לאותו מספר.
+                    נשלח קוד אימות בן 6 ספרות ב-WhatsApp (או SMS).
                   </p>
                 </div>
                 {error && (

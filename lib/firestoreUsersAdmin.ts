@@ -19,6 +19,8 @@ export async function createPhonePrimaryUserDocumentAdmin(
       phone: phoneE164,
       siteId: null,
       primaryLoginMethod: "phone",
+      // Used by platform logic/admin to represent the account owning the tenant/site.
+      role: "OWNER",
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     },

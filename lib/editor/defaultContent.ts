@@ -11,6 +11,7 @@ export const DEFAULT_CONTENT: Required<SiteContent> = {
     navAbout: "אודות",
     navServices: "שירותים",
     navGallery: "גלריה",
+    navShop: "חנות",
     navCtaBook: "קביעת תור",
     navCtaContact: "צור קשר",
   },
@@ -50,6 +51,10 @@ export const DEFAULT_CONTENT: Required<SiteContent> = {
   map: {
     title: "",
     placeholderText: "כאן תופיע מפה אינטראקטיבית (Google Maps / Waze)",
+  },
+  products: {
+    sectionTitle: "מוצרים נבחרים",
+    sectionSubtitle: "מבחר פריטים איכותיים מהסלון — זמינים לצפייה ולהזמנה.",
   },
   footer: {
     copyright: "נבנה ב-Caleno",

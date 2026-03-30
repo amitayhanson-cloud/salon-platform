@@ -35,6 +35,8 @@ export type SiteContent = {
     navAbout?: string;
     navServices?: string;
     navGallery?: string;
+    /** Shop page link label when showProductsSection is enabled */
+    navShop?: string;
     navCtaBook?: string;
     navCtaContact?: string;
   };
@@ -72,6 +74,10 @@ export type SiteContent = {
   map?: {
     title?: string;
     placeholderText?: string;
+  };
+  products?: {
+    sectionTitle?: string;
+    sectionSubtitle?: string;
   };
   footer?: {
     copyright?: string;
@@ -156,6 +162,15 @@ export type SectionStyles = {
     buttonBg?: string;
     buttonText?: string;
   };
+  products?: {
+    bg?: string;
+    titleText?: string;
+    text?: string;
+    cardBg?: string;
+    cardText?: string;
+    priceText?: string;
+    border?: string;
+  };
   footer?: {
     bg?: string;
     text?: string;
@@ -189,6 +204,8 @@ export type SiteConfig = {
   /** Tenant subdomain slug (e.g. "alice" → alice.caleno.co). Set when tenant is created. */
   slug?: string | null;
   salonName: string;
+  /** Name shown in the admin dashboard greeting ("ברוך שובך – ..."). */
+  adminDisplayName?: string;
   salonType: "hair" | "nails" | "barber" | "spa" | "mixed" | "other";
   city?: string; // Deprecated - kept for backward compatibility, use address instead
   neighborhood?: string; // Deprecated - kept for backward compatibility, use address instead
@@ -240,6 +257,8 @@ export type SiteConfig = {
   archiveRetention?: ArchiveRetention;
   /** Per-site branding (logo for header) */
   branding?: SiteBranding;
+  /** When true, homepage shows the products section and optional Shop nav link */
+  showProductsSection?: boolean;
 }
 
 /** Per-site branding (logo shown in public header) */
@@ -276,6 +295,7 @@ export const defaultThemeColors = {
 
 export const defaultSiteConfig: SiteConfig = {
   salonName: "",
+  adminDisplayName: "",
   salonType: "hair",
   city: "", // Deprecated - kept for backward compatibility
   neighborhood: "", // Deprecated - kept for backward compatibility
@@ -300,5 +320,6 @@ export const defaultSiteConfig: SiteConfig = {
   themeColors: defaultThemeColors,
   dividerStyle: "wave",
   dividerHeight: 48,
+  showProductsSection: false,
 };
 

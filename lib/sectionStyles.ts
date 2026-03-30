@@ -78,6 +78,15 @@ const SECTION_FALLBACKS: Record<string, Record<string, ThemeKey>> = {
     buttonBg: "primary",
     buttonText: "primaryText",
   },
+  products: {
+    bg: "background",
+    titleText: "text",
+    text: "mutedText",
+    cardBg: "surface",
+    cardText: "text",
+    priceText: "text",
+    border: "border",
+  },
   footer: {
     bg: "background",
     text: "mutedText",

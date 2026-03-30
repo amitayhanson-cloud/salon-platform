@@ -9,6 +9,7 @@ import type { SiteConfig } from "@/types/siteConfig";
 import type { TemplateDefinition } from "@/lib/templateLibrary";
 import { bookingEnabled } from "@/lib/bookingEnabled";
 import type { SiteService, ReviewItem } from "@/types/siteConfig";
+import type { Product } from "@/types/product";
 import {
   HAIR_HERO_IMAGES,
   HAIR_ABOUT_IMAGES,
@@ -29,6 +30,7 @@ import ContactIconsBar from "./components/ContactIconsBar";
 import SalonHeader from "./components/SalonHeader";
 import ServiceCard from "./components/ServiceCard";
 import { TestimonialCarousel, type TestimonialItem } from "@/components/ui/testimonial-carousel";
+import ProductSection from "@/components/publicSite/ProductSection";
 
 /**
  * Header label when there is no logo: prefer the site’s salon name. Ignore editor
@@ -197,12 +199,15 @@ export default function HairLuxurySite({
   template,
   siteId,
   services,
+  visibleProducts = [],
   editorMode = false,
 }: {
   config: SiteConfig;
   template: TemplateDefinition;
   siteId: string;
   services: SiteService[];
+  /** Catalog items visible on the public site (isVisible, realtime) */
+  visibleProducts?: Product[];
   editorMode?: boolean;
 }) {
   // Public site - no admin access, no auth needed (editorMode true only inside visual editor)
@@ -353,6 +358,8 @@ export default function HairLuxurySite({
               headerCtaBg={getSectionColorResolved(config, "header", "primaryBtnBg")}
               headerCtaText={getSectionColorResolved(config, "header", "primaryBtnText")}
               contentHeader={content.header}
+              showShopLink={config.showProductsSection === true}
+              shopHref={getSiteUrl(config.slug ?? null, siteId, "/shop")}
             />
           </div>
         </div>
@@ -633,6 +640,8 @@ export default function HairLuxurySite({
         </div>
       </section>
       )}
+
+      <ProductSection config={config} siteId={siteId} products={visibleProducts} />
 
       {/* Gallery Section - section-scoped colors */}
       <section

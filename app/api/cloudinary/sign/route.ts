@@ -70,16 +70,41 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "site not found" }, { status: 404 });
     }
     const siteData = siteSnap.data();
-    const ownerUid = siteData && typeof siteData === "object" && "ownerUid" in siteData
-      ? (siteData as { ownerUid: unknown }).ownerUid
-      : undefined;
-    if (typeof ownerUid !== "string" || ownerUid !== uid) {
+    const ownerUid =
+      siteData && typeof siteData === "object" && "ownerUid" in siteData
+        ? (siteData as { ownerUid: unknown }).ownerUid
+        : undefined;
+    const ownerUserId =
+      siteData && typeof siteData === "object" && "ownerUserId" in siteData
+        ? (siteData as { ownerUserId: unknown }).ownerUserId
+        : undefined;
+    const isOwner =
+      (typeof ownerUid === "string" && ownerUid === uid) ||
+      (typeof ownerUserId === "string" && ownerUserId === uid);
+    if (!isOwner) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
 
+    const kind =
+      body && typeof body === "object" && (body as { kind?: unknown }).kind === "product" ? "product" : "logo";
     const timestamp = Math.floor(Date.now() / 1000);
-    const folder = `sites/${siteId}/branding`;
-    const publicId = "logo";
+    let folder = `sites/${siteId}/branding`;
+    let publicId = "logo";
+    if (kind === "product") {
+      folder = `sites/${siteId}/products`;
+      const suffixRaw =
+        body && typeof body === "object" && "publicIdSuffix" in body
+          ? (body as { publicIdSuffix?: unknown }).publicIdSuffix
+          : undefined;
+      const safeSuffix =
+        typeof suffixRaw === "string" && suffixRaw.trim()
+          ? suffixRaw
+              .trim()
+              .replace(/[^a-zA-Z0-9_-]/g, "_")
+              .slice(0, 80)
+          : `img_${timestamp}_${Math.random().toString(36).slice(2, 10)}`;
+      publicId = safeSuffix;
+    }
     const paramsToSign: Record<string, string | number> = {
       folder,
       public_id: publicId,
