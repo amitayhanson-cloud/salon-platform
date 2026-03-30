@@ -34,30 +34,30 @@ export function validateMultiBookingComboInput(input: MultiBookingComboInput): {
   const triggerSet = new Set(input.triggerServiceTypeIds);
   const orderedSet = new Set(input.orderedServiceTypeIds);
   if (input.triggerServiceTypeIds.length === 0) {
-    return { valid: false, error: "triggerServiceTypeIds cannot be empty" };
+    return { valid: false, error: "נא לבחור לפחות שירות אחד בתנאי ההפעלה." };
   }
   if (input.orderedServiceTypeIds.length === 0) {
-    return { valid: false, error: "orderedServiceTypeIds cannot be empty" };
+    return { valid: false, error: "נא להגדיר את סדר השירותים ביומן." };
   }
   if (input.orderedServiceTypeIds.length !== orderedSet.size) {
-    return { valid: false, error: "orderedServiceTypeIds must not contain duplicates" };
+    return { valid: false, error: "אותו סוג שירות לא יכול להופיע פעמיים בסדר." };
   }
   for (const id of triggerSet) {
     if (!orderedSet.has(id)) {
-      return { valid: false, error: "orderedServiceTypeIds must contain every triggerServiceTypeId" };
+      return { valid: false, error: "כל השירותים שבחרת בתנאים חייבים להופיע גם בסדר היומן." };
     }
   }
   if (input.autoSteps?.length) {
     for (let i = 0; i < input.autoSteps.length; i++) {
       const step = input.autoSteps[i]!;
       if (!step.serviceId?.trim()) {
-        return { valid: false, error: `autoSteps[${i}]: serviceId is required` };
+        return { valid: false, error: "בשלב הנוסף חסר בחירת שירות." };
       }
       if (!Number.isFinite(step.durationMinutesOverride) || step.durationMinutesOverride < 1) {
-        return { valid: false, error: `autoSteps[${i}]: durationMinutesOverride must be at least 1` };
+        return { valid: false, error: "משך הזמן המותאם לשלב נוסף חייב להיות לפחות דקה אחת." };
       }
       if (step.position !== "end" && (typeof step.position !== "number" || step.position < 0)) {
-        return { valid: false, error: `autoSteps[${i}]: position must be "end" or a non-negative number` };
+        return { valid: false, error: "תצורת החבילה לא תקינה. נא לנסות שוב או לרענן את הדף." };
       }
     }
   }

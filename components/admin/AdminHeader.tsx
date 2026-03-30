@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef, useLayoutEffect, useMemo } from "react";
+import { useState, useEffect, useRef, useLayoutEffect, useMemo, useId } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import Image from "next/image";
-import { usePathname, useParams, useRouter } from "next/navigation";
+import { usePathname, useParams } from "next/navigation";
 import {
   ChevronDown,
   Menu,
@@ -43,10 +42,11 @@ type MenuItem = {
 };
 
 function AiSparklesGradientIcon({ className = "h-4 w-4" }: { className?: string }) {
+  const gradientId = useId();
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
       <defs>
-        <linearGradient id="ai-sparkle-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#1E3A8A" />
           <stop offset="55%" stopColor="#0F766E" />
           <stop offset="100%" stopColor="#7DD3FC" />
@@ -54,15 +54,15 @@ function AiSparklesGradientIcon({ className = "h-4 w-4" }: { className?: string 
       </defs>
       <path
         d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.937A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.063A2 2 0 0 0 14.063 15.5l-1.582 6.135a.5.5 0 0 1-.962 0z"
-        stroke="url(#ai-sparkle-gradient)"
+        stroke={`url(#${gradientId})`}
         strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <path d="M20 3v4" stroke="url(#ai-sparkle-gradient)" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M22 5h-4" stroke="url(#ai-sparkle-gradient)" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M4 17v2" stroke="url(#ai-sparkle-gradient)" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M5 18H3" stroke="url(#ai-sparkle-gradient)" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M20 3v4" stroke={`url(#${gradientId})`} strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M22 5h-4" stroke={`url(#${gradientId})`} strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M4 17v2" stroke={`url(#${gradientId})`} strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M5 18H3" stroke={`url(#${gradientId})`} strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
@@ -108,7 +108,7 @@ function getMenuItems(basePath: string): MenuItem[] {
   ];
 }
 
-/** Desktop (LTR cluster): dashboard to the right of "ניהול אתר", toward tenant logo. */
+/** Desktop (LTR cluster): nav links to the right of business branding. */
 const ADMIN_NAV_ORDER_DESKTOP = [
   "ניהול אתר",
   "צוות",
@@ -149,7 +149,6 @@ type AdminHeaderProps = {
 export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
   const pathname = usePathname();
   const params = useParams();
-  const router = useRouter();
   const siteId = params?.siteId as string | null;
   const { user, loading: authLoading } = useAuth();
   const { data: tenantInfo } = useTenantInfo();
@@ -196,6 +195,8 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
     );
     return unsub;
   }, [siteId]);
+
+  const headerDisplayName = siteName.trim() || user?.name?.trim() || "פאנל ניהול";
 
   const publicWebsiteUrl = useMemo(() => {
     // Preferred source: resolved tenant URL (slug -> https://slug.caleno.co)
@@ -327,49 +328,31 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
       className="sticky top-0 z-[100] bg-transparent pb-2 px-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] sm:px-6 lg:px-8"
     >
       <div className="max-w-7xl mx-auto rounded-xl border border-[#E9F4F7] bg-[#FCFEFF] px-4 shadow-sm md:rounded-full md:shadow-md sm:px-6 md:px-6">
-        {/* dir=ltr so left/right zones stay fixed: left = Caleno, right = tenant+nav */}
+        {/* dir=ltr: left = business branding, right = nav */}
         <div className="flex items-center justify-between h-14 w-full" dir="ltr">
-          {/* LEFT: mobile salon branding / desktop Caleno logo */}
-          <div className="flex shrink-0 items-center">
+          <div className="flex min-w-0 shrink-0 items-center pe-2">
             <Link
               href={adminBasePath}
-              className="flex h-9 min-w-0 items-center text-[#0F172A] transition-colors hover:text-[#1E6F7C] md:hidden"
-              aria-label={siteName || "פאנל ניהול"}
+              className="flex h-9 min-w-0 items-center text-[#0F172A] transition-colors hover:text-[#1E6F7C]"
+              aria-label={headerDisplayName}
             >
               {siteLogoUrl ? (
                 <img
                   src={siteLogoUrl}
-                  alt={siteName || "לוגו"}
-                  className="h-8 w-auto object-contain max-w-[140px]"
-                  width={140}
-                  height={32}
+                  alt={headerDisplayName}
+                  className="h-8 w-auto max-w-[140px] object-contain md:h-9 md:max-w-[200px]"
+                  width={200}
+                  height={36}
                 />
               ) : (
-                <div className="max-w-[150px] truncate text-sm font-semibold">
-                  {siteName || "פאנל ניהול"}
+                <div className="max-w-[150px] truncate text-sm font-semibold md:max-w-[240px] md:text-base">
+                  {headerDisplayName}
                 </div>
               )}
             </Link>
-            <Link
-              href={adminBasePath}
-              className="relative hidden shrink-0 items-center py-1 transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-caleno-deep focus-visible:ring-offset-2 rounded md:flex"
-              aria-label="Caleno – פאנל ניהול"
-            >
-              <span className="relative block h-9 w-[140px] shrink-0 md:h-11 md:min-w-[180px] md:w-[205px]">
-                <Image
-                  src="/brand/caleno logo/caleno_logo_new.png"
-                  alt="Caleno"
-                  fill
-                  className="object-contain object-left"
-                  priority
-                  sizes="(max-width: 768px) 140px, 205px"
-                />
-              </span>
-            </Link>
           </div>
 
-          {/* RIGHT: tenant branding + navbar (one cluster) */}
-          <div className="flex items-center gap-4 md:gap-6 shrink-0">
+          <div className="flex shrink-0 items-center gap-4 md:gap-6">
             {/* Navbar */}
             <nav dir="rtl" className="hidden md:flex items-center gap-2 whitespace-nowrap rounded-full bg-[#FBFEFF] px-2 py-1">
               {desktopNavItems.map((item) => (
@@ -458,29 +441,6 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
               )}
             </nav>
 
-            {/* Tenant logo or name (far right) */}
-            <div className="hidden items-center gap-2 min-w-0 md:flex">
-              <Link
-                href={adminBasePath}
-                className="flex h-9 items-center text-[#0F172A] transition-colors hover:text-[#1E6F7C]"
-                aria-label={siteName || "פאנל ניהול"}
-              >
-                {siteLogoUrl ? (
-                  <img
-                    src={siteLogoUrl}
-                    alt={siteName || "לוגו"}
-                    className="h-9 w-auto object-contain max-w-[140px] sm:max-w-[180px]"
-                    width={180}
-                    height={36}
-                  />
-                ) : (
-                  <div className="max-w-[220px] truncate text-base font-semibold">
-                    {siteName || "פאנל ניהול"}
-                  </div>
-                )}
-              </Link>
-            </div>
-
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="shrink-0 rounded-lg p-2 text-[#0F172A] transition-colors hover:bg-[rgba(15,23,42,0.04)] md:hidden"
@@ -495,10 +455,28 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
           </div>
         </div>
 
-        {/* Mobile Navigation */}
+        {/* Mobile Navigation Drawer */}
         {mobileMenuOpen && (
-          <nav className="md:hidden mx-2 mt-1 mb-2 pb-3 animate-[dropdown_0.2s_ease-out_forwards] overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-[0_20px_35px_-20px_rgba(15,23,42,0.35)]">
-            <div className="backdrop-blur-lg">
+          <>
+            <button
+              type="button"
+              aria-label="סגור תפריט"
+              onClick={() => setMobileMenuOpen(false)}
+              className="md:hidden fixed inset-0 z-[109] bg-black/40"
+            />
+            <nav className="md:hidden fixed right-0 top-0 z-[110] h-full w-[62.5vw] overflow-y-auto border-l border-slate-100 bg-white shadow-2xl animate-[slide-in-right_0.22s_ease-out_forwards]">
+              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-4 py-3">
+                <p className="text-sm font-semibold text-slate-900">ניווט</p>
+                <button
+                  type="button"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100"
+                  aria-label="סגור"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="backdrop-blur-lg pb-3">
             {mobileNavItems.map((item) => (
               <div key={item.label} className="border-b border-slate-100/80 last:border-0">
                 {item.href ? (
@@ -637,7 +615,8 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                 </button>
               </div>
             )}
-          </nav>
+            </nav>
+          </>
         )}
       </div>
 

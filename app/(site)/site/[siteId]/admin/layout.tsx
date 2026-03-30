@@ -1,13 +1,18 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, type ReactNode } from "react";
 import { useParams, useRouter, usePathname } from "next/navigation";
 
 // Admin routes are dynamic - they require authentication and load user data
 export const dynamic = "force-dynamic";
 import AdminHeader from "@/components/admin/AdminHeader";
+import { AdminPanelFooter } from "@/components/admin/AdminPanelFooter";
 import { AdminHelpPanel } from "@/components/admin/AdminHelpPanel";
 import { UnsavedChangesProvider } from "@/components/admin/UnsavedChangesContext";
+import {
+  MobileImmersiveSiteEditorProvider,
+  useMobileImmersiveSiteEditor,
+} from "@/components/admin/MobileImmersiveSiteEditorContext";
 import { NavigationLoadingLayer } from "@/components/navigation/NavigationLoadingLayer";
 import { adminNavigationPredicate } from "@/components/navigation/navigationLoadingPredicates";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -405,21 +410,43 @@ export default function AdminLayout({
           </div>
         )}
         <UnsavedChangesProvider>
-          <div className="relative z-10 w-full overflow-x-clip">
-            {/* z-40 keeps header above scrolling main; modals use data-admin-modal-overlay + globals.css to hide header while open */}
-            <div className="relative z-40 admin-layout-header-root">
-              <AdminHeader onOpenHelp={() => setHelpOpen(true)} />
-            </div>
-            <AdminHelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} />
-            {/* Full-width content area: no top padding on day view so calendar sits under header */}
-            <main
-              className={`relative z-0 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ${isDayView ? "pt-0 pb-4" : "py-8"}`}
-            >
+          <MobileImmersiveSiteEditorProvider>
+            <AdminStandardChrome isDayView={isDayView} helpOpen={helpOpen} setHelpOpen={setHelpOpen}>
               {children}
-            </main>
-          </div>
+            </AdminStandardChrome>
+          </MobileImmersiveSiteEditorProvider>
         </UnsavedChangesProvider>
       </div>
     </NavigationLoadingLayer>
+  );
+}
+
+type AdminStandardChromeProps = {
+  children: ReactNode;
+  isDayView: boolean;
+  helpOpen: boolean;
+  setHelpOpen: (open: boolean) => void;
+};
+
+function AdminStandardChrome({ children, isDayView, helpOpen, setHelpOpen }: AdminStandardChromeProps) {
+  const { immersiveMobileSiteEditor } = useMobileImmersiveSiteEditor();
+
+  return (
+    <div className="relative z-10 w-full overflow-x-clip">
+      <div
+        className={`relative z-40 admin-layout-header-root${immersiveMobileSiteEditor ? " max-md:hidden" : ""}`}
+      >
+        <AdminHeader onOpenHelp={() => setHelpOpen(true)} />
+      </div>
+      <AdminHelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} />
+      <main
+        className={`relative z-0 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 ${isDayView ? "pt-0 pb-4" : "py-8"} ${
+          immersiveMobileSiteEditor ? "max-md:max-w-none max-md:px-0 max-md:py-0" : ""
+        }`}
+      >
+        {children}
+      </main>
+      {!immersiveMobileSiteEditor ? <AdminPanelFooter /> : null}
+    </div>
   );
 }

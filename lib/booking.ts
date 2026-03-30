@@ -449,7 +449,7 @@ export async function saveMultiServiceBooking(
   const multiPayload = options?.multiPayload;
   if (multiPayload) {
     if (multiPayload.multiBookingComboId == null || String(multiPayload.multiBookingComboId).trim() === "") {
-      throw new Error("Multi-booking requires a valid combo match.");
+      throw new Error("חבילת השירותים שנבחרה אינה תואמת כלל במערכת. נא לפנות לניהול.");
     }
   }
   if (workers.length > 0) {

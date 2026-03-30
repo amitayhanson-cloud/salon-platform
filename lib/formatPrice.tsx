@@ -18,15 +18,20 @@ export function formatIlsPrice(amount: number): string {
  * Uses dir="ltr" for ranges to prevent RTL reversal issues
  * 
  * @param item - Object with price or priceRangeMin/priceRangeMax
+ * @param options.combineFollowUp - If true, show one total (main + follow-up price) instead of "₪X + המשך ₪Y"
  * @returns React element with properly formatted price
  */
-export function formatPriceDisplay(item: {
-  price?: number | null;
-  priceRangeMin?: number | null;
-  priceRangeMax?: number | null;
-  hasFollowUp?: boolean;
-  followUp?: { price?: number } | null;
-}): React.ReactNode {
+export function formatPriceDisplay(
+  item: {
+    price?: number | null;
+    priceRangeMin?: number | null;
+    priceRangeMax?: number | null;
+    hasFollowUp?: boolean;
+    followUp?: { price?: number } | null;
+  },
+  options?: { combineFollowUp?: boolean }
+): React.ReactNode {
+  const combineFollowUp = options?.combineFollowUp === true;
   const fu =
     item.hasFollowUp && item.followUp && typeof item.followUp.price === "number"
       ? Math.max(0, item.followUp.price)
@@ -41,6 +46,13 @@ export function formatPriceDisplay(item: {
   ) {
     const min = Math.min(item.priceRangeMin, item.priceRangeMax);
     const max = Math.max(item.priceRangeMin, item.priceRangeMax);
+    if (fu > 0 && combineFollowUp) {
+      return (
+        <span dir="ltr" className="inline-block">
+          ₪{min + fu}–₪{max + fu}
+        </span>
+      );
+    }
     if (fu > 0) {
       return (
         <span dir="rtl" className="inline-block text-sm">
@@ -59,6 +71,9 @@ export function formatPriceDisplay(item: {
   }
 
   if (item.price !== undefined && item.price !== null) {
+    if (fu > 0 && combineFollowUp) {
+      return `₪${item.price + fu}`;
+    }
     return fu > 0 ? `₪${item.price} + המשך ₪${fu}` : `₪${item.price}`;
   }
 

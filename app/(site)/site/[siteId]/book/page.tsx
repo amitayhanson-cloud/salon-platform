@@ -704,6 +704,16 @@ export default function BookingPage() {
   }, [step]);
 
   const prevBookingStepRef = useRef<BookingStep>(step);
+  const prevBookingStepScrollRef = useRef<BookingStep>(step);
+  useEffect(() => {
+    const prev = prevBookingStepScrollRef.current;
+    prevBookingStepScrollRef.current = step;
+    if (step <= prev) return;
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [step]);
+
   useEffect(() => {
     const prev = prevBookingStepRef.current;
     prevBookingStepRef.current = step;
@@ -3182,7 +3192,7 @@ export default function BookingPage() {
               {isMultiBooking && selectedServices.length > 1 && !hasValidMultiBookingCombo && (
                 <div className="mb-4 p-3 border rounded-xl text-right" style={{ backgroundColor: "#fef2f2", borderColor: "#fecaca" }}>
                   <p className="text-sm" style={{ color: "#991b1b" }}>
-                    לא קיימת קומבינציה עבור השירותים שנבחרו. אנא צרו קשר עם העסק להמשך בירור.
+                    אין חבילת שירותים מוגדרת עבור השילוב הזה. צרו קשר עם העסק להמשך טיפול.
                   </p>
                 </div>
               )}

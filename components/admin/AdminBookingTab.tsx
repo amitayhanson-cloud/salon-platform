@@ -1,9 +1,37 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useCallback, useMemo, useState } from "react";
 import { Trash2 } from "lucide-react";
-import type { SalonBookingState } from "@/types/booking";
+import type { OpeningHours, SalonBookingState } from "@/types/booking";
 import { getBreaksErrorForDay } from "@/lib/openingHoursValidation";
+
+function cloneBreaks(breaks?: OpeningHours["breaks"]): OpeningHours["breaks"] | undefined {
+  if (!breaks?.length) return undefined;
+  return breaks.map((b) => ({ ...b }));
+}
+
+function TimeField({
+  value,
+  disabled,
+  onChange,
+  ariaLabel,
+}: {
+  value: string;
+  disabled?: boolean;
+  onChange: (v: string) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <input
+      type="time"
+      value={value}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label={ariaLabel}
+      className="min-h-[48px] min-w-0 flex-1 rounded-xl border border-slate-200/90 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm transition-colors focus:border-caleno-deep/40 focus:outline-none focus:ring-2 focus:ring-caleno-deep/15 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 disabled:opacity-70"
+    />
+  );
+}
 
 function ClosedDatesEditor({
   closedDates,
@@ -185,6 +213,49 @@ export function AdminBookingTab({
     updateDayBreaks(dayIndex, existing);
   };
 
+  const firstActiveDayIndex = useMemo(
+    () => state.openingHours.findIndex((d) => d.open && d.close),
+    [state.openingHours]
+  );
+
+  const copyFirstActiveToAllWeek = useCallback(() => {
+    if (firstActiveDayIndex < 0) return;
+    const src = state.openingHours[firstActiveDayIndex]!;
+    const open = src.open;
+    const close = src.close;
+    const breaksClone = cloneBreaks(src.breaks);
+    const updated: SalonBookingState = {
+      ...state,
+      openingHours: state.openingHours.map((d) => ({
+        ...d,
+        open,
+        close,
+        breaks: breaksClone ? breaksClone.map((b) => ({ ...b })) : undefined,
+      })),
+    };
+    onChange(updated);
+  }, [firstActiveDayIndex, onChange, state]);
+
+  const renderDaySwitch = (closed: boolean, index: number) => (
+    <button
+      type="button"
+      dir="ltr"
+      role="switch"
+      aria-checked={!closed}
+      aria-label={closed ? "סגור – לחץ לפתיחה" : "פתוח – לחץ לסגירה"}
+      onClick={() => toggleClosed(index)}
+      className={`relative h-7 w-12 shrink-0 cursor-pointer rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/60 focus:ring-offset-2 touch-manipulation ${
+        closed ? "bg-slate-300" : "bg-emerald-500"
+      }`}
+    >
+      <span
+        className={`pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow transition-[inset-inline-start] duration-200 ease-out ${
+          closed ? "start-1" : "start-[calc(100%-1.25rem-0.25rem)]"
+        }`}
+      />
+    </button>
+  );
+
   const inner = (
     <>
       <h2 className="text-lg sm:text-xl font-bold text-slate-900">{headingTitle}</h2>
@@ -202,116 +273,207 @@ export function AdminBookingTab({
         </div>
       )}
 
-      <div className="overflow-x-auto -mx-1 sm:mx-0 mt-4 rounded-lg border border-slate-200/60">
-        <table className="w-full text-xs border-collapse min-w-[280px]" style={{ borderCollapse: "separate", borderSpacing: "0 0.5rem" }}>
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="py-2.5 px-2 sm:px-3 text-right font-medium text-slate-600">יום</th>
-              <th className="py-2.5 px-2 sm:px-3 text-right font-medium text-slate-600">פתיחה</th>
-              <th className="py-2.5 px-2 sm:px-3 text-right font-medium text-slate-600">סגירה</th>
-              <th className="py-2.5 px-2 sm:px-3 text-right font-medium text-slate-600">מצב</th>
-            </tr>
-          </thead>
-          <tbody>
-            {state.openingHours.map((day, index) => {
-              const closed = !day.open && !day.close;
-              const breaks = day.breaks ?? [];
-              const breaksError = getBreaksErrorForDay(day);
-              return (
-                <Fragment key={day.day}>
-                  <tr
-                    className={`[&>td]:border-slate-200/60 [&>td]:bg-white [&>td:first-child]:border-r [&>td:last-child]:border-l ${
-                      closed
-                        ? "[&>td]:border [&>td:first-child]:rounded-r-lg [&>td:last-child]:rounded-l-lg"
-                        : "[&>td]:border-t [&>td]:border-x [&>td]:border-b-0 [&>td:first-child]:rounded-t-r-lg [&>td:last-child]:rounded-t-l-lg"
-                    }`}
-                  >
-                    <td className="py-2.5 px-2 sm:px-3 text-slate-800 whitespace-nowrap">{day.label}</td>
-                    <td className="py-2.5 px-2 sm:px-3">
-                      <input
-                        type="time"
+      <div className="mt-5 flex flex-col gap-3 sm:mt-6">
+        <button
+          type="button"
+          onClick={copyFirstActiveToAllWeek}
+          disabled={firstActiveDayIndex < 0}
+          title={
+            firstActiveDayIndex < 0
+              ? "אין יום פעיל — הפעיל לפחות יום אחד"
+              : "מעתיק פתיחה, סגירה והפסקות מהיום הפעול הראשון לכל השבוע"
+          }
+          className="self-start rounded-xl border border-slate-200/90 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          העתק לכל השבוע
+        </button>
+
+        {/* Mobile: card stack */}
+        <div className="space-y-4 md:hidden">
+          {state.openingHours.map((day, index) => {
+            const closed = !day.open && !day.close;
+            const breaks = day.breaks ?? [];
+            const breaksError = getBreaksErrorForDay(day);
+            return (
+              <div
+                key={day.day}
+                className={`rounded-2xl border p-4 transition-colors ${
+                  closed
+                    ? "border-slate-100 bg-slate-50/80 text-slate-500 shadow-none"
+                    : "border-slate-100 bg-white shadow-[0_2px_12px_rgba(15,23,42,0.05)]"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3" dir="rtl">
+                  <span className={`text-base font-semibold ${closed ? "text-slate-500" : "text-slate-900"}`}>
+                    {day.label}
+                  </span>
+                  {renderDaySwitch(closed, index)}
+                </div>
+
+                {!closed && (
+                  <>
+                    <div className="mt-4 flex gap-3" dir="rtl">
+                      <TimeField
                         value={day.open ?? ""}
                         disabled={closed}
-                        onChange={(e) => updateHours(index, "open", e.target.value)}
-                        className="w-full min-w-[72px] sm:w-24 rounded border border-slate-300 px-2 py-1.5 sm:py-1 text-xs text-right disabled:bg-slate-50 disabled:text-slate-400 touch-manipulation"
+                        onChange={(v) => updateHours(index, "open", v)}
+                        ariaLabel={`שעת פתיחה — ${day.label}`}
                       />
-                    </td>
-                    <td className="py-2.5 px-2 sm:px-3">
-                      <input
-                        type="time"
+                      <TimeField
                         value={day.close ?? ""}
                         disabled={closed}
-                        onChange={(e) => updateHours(index, "close", e.target.value)}
-                        className="w-full min-w-[72px] sm:w-24 rounded border border-slate-300 px-2 py-1.5 sm:py-1 text-xs text-right disabled:bg-slate-50 disabled:text-slate-400 touch-manipulation"
+                        onChange={(v) => updateHours(index, "close", v)}
+                        ariaLabel={`שעת סגירה — ${day.label}`}
                       />
-                    </td>
-                    <td className="py-2.5 px-2 sm:px-3" dir="ltr">
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={!closed}
-                        aria-label={closed ? "סגור – לחץ לפתיחה" : "פתוח – לחץ לסגירה"}
-                        onClick={() => toggleClosed(index)}
-                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 touch-manipulation ${
-                          closed ? "bg-slate-300" : "bg-emerald-500"
-                        }`}
-                      >
-                        <span
-                          className={`pointer-events-none block h-5 w-5 shrink-0 transform rounded-full bg-white shadow ring-0 transition-transform ${
-                            closed ? "translate-x-0.5" : "translate-x-5"
-                          }`}
-                        />
-                      </button>
-                    </td>
-                  </tr>
-                  {!closed && (
-                    <tr className="[&>td]:border [&>td]:border-t-0 [&>td]:border-slate-200/60 [&>td]:rounded-b-lg bg-slate-50/50">
-                      <td colSpan={4} className="py-2 px-2 sm:px-3 rounded-b-lg">
-                        <div className="text-xs flex flex-wrap items-center gap-2 gap-y-2">
-                          <span className="font-medium text-slate-600">הפסקות</span>
+                    </div>
+
+                    <div className="mt-4 space-y-3 border-t border-slate-100/90 pt-4">
+                      <p className="text-xs font-medium text-slate-500">הפסקות</p>
+                      {breaks.map((b, bi) => (
+                        <div key={bi} className="flex flex-wrap items-center gap-2" dir="rtl">
+                          <input
+                            type="time"
+                            value={b.start}
+                            onChange={(e) => updateBreak(index, bi, "start", e.target.value)}
+                            className="min-h-[44px] min-w-[7.5rem] flex-1 rounded-xl border border-slate-200/90 px-3 py-2 text-sm text-right shadow-sm focus:border-caleno-deep/40 focus:outline-none focus:ring-2 focus:ring-caleno-deep/15 sm:flex-none"
+                          />
+                          <span className="text-slate-300">–</span>
+                          <input
+                            type="time"
+                            value={b.end}
+                            onChange={(e) => updateBreak(index, bi, "end", e.target.value)}
+                            className="min-h-[44px] min-w-[7.5rem] flex-1 rounded-xl border border-slate-200/90 px-3 py-2 text-sm text-right shadow-sm focus:border-caleno-deep/40 focus:outline-none focus:ring-2 focus:ring-caleno-deep/15 sm:flex-none"
+                          />
                           <button
                             type="button"
-                            onClick={() => addBreak(index)}
-                            className="min-h-[40px] px-2.5 py-2 sm:py-1 rounded-md border border-slate-300 bg-white text-caleno-deep hover:bg-slate-50 hover:border-caleno-deep/50 text-sm font-medium transition-colors touch-manipulation"
+                            onClick={() => removeBreak(index, bi)}
+                            className="rounded-xl p-2.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                            title="מחק הפסקה"
+                            aria-label="מחק הפסקה"
                           >
-                            הוסף הפסקה
+                            <Trash2 className="h-4 w-4" />
                           </button>
-                          {breaks.map((b, bi) => (
-                            <div key={bi} className="flex flex-wrap items-center gap-2">
-                              <input
-                                type="time"
-                                value={b.start}
-                                onChange={(e) => updateBreak(index, bi, "start", e.target.value)}
-                                className="w-20 min-w-[70px] rounded border border-slate-300 px-1.5 py-1 sm:py-0.5 text-right touch-manipulation"
-                              />
-                              <span className="text-slate-400">–</span>
-                              <input
-                                type="time"
-                                value={b.end}
-                                onChange={(e) => updateBreak(index, bi, "end", e.target.value)}
-                                className="w-20 min-w-[70px] rounded border border-slate-300 px-1.5 py-1 sm:py-0.5 text-right touch-manipulation"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => removeBreak(index, bi)}
-                                className="p-2 sm:p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors touch-manipulation"
-                                title="מחק הפסקה"
-                                aria-label="מחק הפסקה"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          ))}
-                          {breaksError && <p className="text-red-600 mt-0.5">{breaksError}</p>}
                         </div>
+                      ))}
+                      {breaksError && <p className="text-sm text-red-600">{breaksError}</p>}
+                    </div>
+
+                    <div className="mt-5 flex justify-center border-t border-slate-100/90 pt-4">
+                      <button
+                        type="button"
+                        onClick={() => addBreak(index)}
+                        className="rounded-xl px-4 py-2.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-caleno-deep"
+                      >
+                        + הוסף הפסקה
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Desktop: table */}
+        <div className="hidden overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-[0_2px_12px_rgba(15,23,42,0.04)] md:block">
+          <table
+            className="w-full min-w-[520px] border-collapse text-xs"
+            style={{ borderCollapse: "separate", borderSpacing: "0 0.5rem" }}
+          >
+            <thead className="bg-slate-50/90">
+              <tr>
+                <th className="px-4 py-3 text-right text-sm font-medium text-slate-600">יום</th>
+                <th className="px-4 py-3 text-right text-sm font-medium text-slate-600">פתיחה</th>
+                <th className="px-4 py-3 text-right text-sm font-medium text-slate-600">סגירה</th>
+                <th className="px-4 py-3 text-right text-sm font-medium text-slate-600">מצב</th>
+              </tr>
+            </thead>
+            <tbody>
+              {state.openingHours.map((day, index) => {
+                const closed = !day.open && !day.close;
+                const breaks = day.breaks ?? [];
+                const breaksError = getBreaksErrorForDay(day);
+                return (
+                  <Fragment key={day.day}>
+                    <tr
+                      className={`[&>td]:border-slate-100 [&>td]:bg-white [&>td:first-child]:border-r [&>td:last-child]:border-l ${
+                        closed
+                          ? "[&>td]:border [&>td:first-child]:rounded-r-xl [&>td:last-child]:rounded-l-xl [&>td]:opacity-80"
+                          : "[&>td]:border-t [&>td]:border-x [&>td]:border-b-0 [&>td:first-child]:rounded-t-r-xl [&>td:last-child]:rounded-t-l-xl"
+                      }`}
+                    >
+                      <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-800">{day.label}</td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="time"
+                          value={day.open ?? ""}
+                          disabled={closed}
+                          onChange={(e) => updateHours(index, "open", e.target.value)}
+                          className="max-w-[9rem] w-full rounded-xl border border-slate-200/90 px-3 py-2 text-sm text-right shadow-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="time"
+                          value={day.close ?? ""}
+                          disabled={closed}
+                          onChange={(e) => updateHours(index, "close", e.target.value)}
+                          className="max-w-[9rem] w-full rounded-xl border border-slate-200/90 px-3 py-2 text-sm text-right shadow-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                        />
+                      </td>
+                      <td className="px-4 py-3" dir="ltr">
+                        {renderDaySwitch(closed, index)}
                       </td>
                     </tr>
-                  )}
-                </Fragment>
-              );
-            })}
-          </tbody>
-        </table>
+                    {!closed && (
+                      <tr className="[&>td]:border [&>td]:border-t-0 [&>td]:border-slate-100 [&>td]:rounded-b-xl [&>td]:bg-slate-50/40">
+                        <td colSpan={4} className="rounded-b-xl px-4 py-3">
+                          <div className="flex flex-wrap items-center gap-3 text-xs">
+                            <span className="font-medium text-slate-600">הפסקות</span>
+                            <button
+                              type="button"
+                              onClick={() => addBreak(index)}
+                              className="rounded-xl border border-slate-200/90 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition-colors hover:border-caleno-deep/30 hover:text-caleno-deep"
+                            >
+                              הוסף הפסקה
+                            </button>
+                            {breaks.map((b, bi) => (
+                              <div key={bi} className="flex flex-wrap items-center gap-2">
+                                <input
+                                  type="time"
+                                  value={b.start}
+                                  onChange={(e) => updateBreak(index, bi, "start", e.target.value)}
+                                  className="w-24 rounded-xl border border-slate-200/90 px-2 py-1.5 text-right shadow-sm"
+                                />
+                                <span className="text-slate-400">–</span>
+                                <input
+                                  type="time"
+                                  value={b.end}
+                                  onChange={(e) => updateBreak(index, bi, "end", e.target.value)}
+                                  className="w-24 rounded-xl border border-slate-200/90 px-2 py-1.5 text-right shadow-sm"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => removeBreak(index, bi)}
+                                  className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600"
+                                  title="מחק הפסקה"
+                                  aria-label="מחק הפסקה"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
+                            {breaksError && <p className="w-full text-red-600">{breaksError}</p>}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="border-t border-slate-200 pt-4 sm:pt-6">

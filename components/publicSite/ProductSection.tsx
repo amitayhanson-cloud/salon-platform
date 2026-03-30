@@ -52,7 +52,7 @@ export default function ProductSection({
               style={{ color: "var(--products-titleText)" }}
             >
               <Store className="h-3.5 w-3.5" aria-hidden />
-              מוצרים
+              חנות
             </p>
             <h2 className="text-2xl font-bold tracking-tight sm:text-3xl" style={{ color: "var(--products-titleText)" }}>
               {title}
@@ -71,7 +71,7 @@ export default function ProductSection({
               color: "var(--products-titleText)",
             }}
           >
-            לכל המוצרים
+            לכל החנות
             <ArrowRight className="h-4 w-4 rtl:rotate-180" aria-hidden />
           </Link>
         </div>

@@ -38,6 +38,37 @@ function EditableLaterHint() {
   );
 }
 
+/**
+ * Domain hint arrow for Step 2 (subdomain/domain input).
+ * Desktop: anchored top-left near the input.
+ * Mobile: anchored bottom-middle near the input.
+ */
+function DomainHintArrow() {
+  return (
+    <>
+      {/* Desktop hint: bubble above + arrow pointing down */}
+      <div className="hidden sm:block absolute -top-20 left-0 z-[5] pointer-events-none">
+        <div className="relative rounded-xl border border-slate-200 bg-white/95 px-4 py-3 shadow-sm">
+          <p className="text-xs font-semibold text-slate-900">דומיין</p>
+          <p className="mt-1 text-xs leading-relaxed text-slate-600">
+            זו הכתובת של האתר בשורת הכתובת בדפדפן.
+          </p>
+          <div className="absolute -bottom-2 left-6 h-4 w-4 rotate-45 border-l border-b border-slate-200 bg-white/95" />
+        </div>
+      </div>
+
+      {/* Mobile hint: bubble below + arrow pointing up */}
+      <div className="sm:hidden absolute -bottom-20 left-1/2 -translate-x-1/2 z-[5] pointer-events-none">
+        <div className="relative rounded-xl border border-slate-200 bg-white/95 px-4 py-3 shadow-sm">
+          <p className="text-xs font-semibold text-slate-900">דומיין</p>
+          <p className="mt-1 text-xs leading-relaxed text-slate-600">הכתובת של האתר. בחרו שם שיופיע לפני ‎.caleno.co</p>
+          <div className="absolute -top-2 left-1/2 -translate-x-1/2 h-4 w-4 rotate-45 border-l border-t border-slate-200 bg-white/95" />
+        </div>
+      </div>
+    </>
+  );
+}
+
 /** Same subtle wash as tenant admin + signup (radial teal + soft blobs). */
 function BuilderCalenoBackground() {
   return (
@@ -165,6 +196,7 @@ export default function BuilderPage() {
     };
   });
   const [step, setStep] = useState(1);
+  const prevBuilderStepRef = useRef(step);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [wizardSlug, setWizardSlug] = useState("");
@@ -199,6 +231,15 @@ export default function BuilderPage() {
   const checkoutReturnHandledRef = useRef(false);
 
   const totalSteps = 7;
+
+  useEffect(() => {
+    const prev = prevBuilderStepRef.current;
+    prevBuilderStepRef.current = step;
+    if (step <= prev) return;
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [step]);
 
   useEffect(() => {
     setBuilderFormVisible(false);
@@ -891,9 +932,10 @@ export default function BuilderPage() {
                 </label>
                 <div className="flex flex-wrap items-stretch gap-2">
                   <div
-                    className="flex min-w-[200px] flex-1 items-stretch overflow-hidden rounded-lg border border-caleno-border bg-white shadow-sm transition-[box-shadow,border-color] focus-within:border-caleno-deep focus-within:ring-[3px] focus-within:ring-[rgba(30,111,124,0.15)]"
+                    className="relative flex min-w-[200px] flex-1 items-stretch overflow-hidden rounded-lg border border-caleno-border bg-white shadow-sm transition-[box-shadow,border-color] focus-within:border-caleno-deep focus-within:ring-[3px] focus-within:ring-[rgba(30,111,124,0.15)]"
                     dir="ltr"
                   >
+                    <DomainHintArrow />
                     <input
                       type="text"
                       id="wizardSlug"

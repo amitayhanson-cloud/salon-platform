@@ -19,6 +19,7 @@ import { VisualSiteEditor, type VisualSiteEditorHandle } from "@/components/edit
 import { AdminPageHero } from "@/components/admin/AdminPageHero";
 import { AdminCard } from "@/components/admin/AdminCard";
 import { useUnsavedChanges } from "@/components/admin/UnsavedChangesContext";
+import { useMobileImmersiveSiteEditor } from "@/components/admin/MobileImmersiveSiteEditorContext";
 
 const SITE_PAGE_TABS_DESKTOP = [
   { key: "basic", label: "מידע בסיסי" },
@@ -49,11 +50,11 @@ export default function AdminSitePage() {
   const { siteConfig, isSaving, saveMessage, hasUnsavedChanges, handleConfigChange, handleSaveConfig } =
     useSiteConfig(siteId);
   const unsavedCtx = useUnsavedChanges();
+  const { setImmersiveMobileSiteEditor } = useMobileImmersiveSiteEditor();
 
   const [isMobileTabs, setIsMobileTabs] = useState(false);
   const [activeSiteTab, setActiveSiteTab] = useState<SiteTabKey>("basic");
   const [designDirty, setDesignDirty] = useState(false);
-  const [showRotateHintModal, setShowRotateHintModal] = useState(false);
   const [leaveDesignModalOpen, setLeaveDesignModalOpen] = useState(false);
   const [pendingSiteTab, setPendingSiteTab] = useState<SiteTabKey | null>(null);
   const [tabSwitchSaving, setTabSwitchSaving] = useState(false);
@@ -72,10 +73,16 @@ export default function AdminSitePage() {
 
   const applySiteTab = useCallback((key: SiteTabKey) => {
     setActiveSiteTab(key);
-    if (key === "design" && typeof window !== "undefined" && window.innerWidth < 768) {
-      setShowRotateHintModal(true);
-    }
   }, []);
+
+  const handleRequestExitEditor = useCallback(() => {
+    if (designDirty) {
+      setPendingSiteTab("basic");
+      setLeaveDesignModalOpen(true);
+    } else {
+      applySiteTab("basic");
+    }
+  }, [designDirty, applySiteTab]);
 
   const handleSiteTabChange = useCallback(
     (key: SiteTabKey) => {
@@ -116,6 +123,12 @@ export default function AdminSitePage() {
   useEffect(() => {
     if (activeSiteTab !== "design") setDesignDirty(false);
   }, [activeSiteTab]);
+
+  useEffect(() => {
+    const immersive = activeSiteTab === "design" && isMobileTabs;
+    setImmersiveMobileSiteEditor(immersive);
+    return () => setImmersiveMobileSiteEditor(false);
+  }, [activeSiteTab, isMobileTabs, setImmersiveMobileSiteEditor]);
 
   const anyUnsaved = hasUnsavedChanges || designDirty || hoursUnsaved;
   useEffect(() => {
@@ -191,9 +204,9 @@ export default function AdminSitePage() {
     <div dir="rtl" className={isDesignTab ? "" : "flex flex-col min-h-0 h-full"}>
       {/* When design tab: full-screen panel below admin header (fixed, fills viewport) */}
       {isDesignTab ? (
-        <div className="fixed top-20 left-0 right-0 bottom-0 z-0 flex flex-col bg-white border-t border-[#E2E8F0] shadow-[0_-4px_20px_rgba(0,0,0,0.06)]">
-          {/* Slim bar: tabs + save */}
-          <div className="shrink-0 flex flex-wrap items-center justify-between gap-4 border-b border-[#E2E8F0] bg-white/95 backdrop-blur-sm px-4 py-2">
+        <div className="fixed inset-0 z-0 flex flex-col bg-white shadow-[0_-4px_20px_rgba(0,0,0,0.06)] md:top-20 md:border-t md:border-[#E2E8F0]">
+          {/* Slim bar: tabs + save (desktop only — mobile uses immersive editor) */}
+          <div className="hidden shrink-0 flex-wrap items-center justify-between gap-4 border-b border-[#E2E8F0] bg-white/95 px-4 py-2 backdrop-blur-sm md:flex">
             <AdminTabs
               tabs={sitePageTabs}
               activeKey={activeSiteTab}
@@ -217,62 +230,6 @@ export default function AdminSitePage() {
             </div>
           </div>
 
-          {/* Mobile: rotate to landscape hint modal */}
-          {showRotateHintModal && (
-            <>
-              <style
-                dangerouslySetInnerHTML={{
-                  __html: `
-                    @keyframes rotateHintPhone {
-                      0% { transform: rotate(0deg); }
-                      25% { transform: rotate(90deg); }
-                      50% { transform: rotate(90deg); }
-                      75% { transform: rotate(0deg); }
-                      100% { transform: rotate(0deg); }
-                    }
-                  `,
-                }}
-              />
-              <div
-                className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50"
-                data-admin-modal-overlay=""
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="rotate-hint-title"
-                aria-describedby="rotate-hint-desc"
-                onClick={() => setShowRotateHintModal(false)}
-                dir="rtl"
-              >
-                <div
-                  className="bg-white rounded-3xl shadow-xl border border-slate-200 p-6 max-w-sm w-full text-center"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="flex justify-center mb-4">
-                    <div
-                      className="w-14 h-28 rounded-[20px] border-4 border-slate-300 bg-slate-100 flex items-center justify-center shadow-inner"
-                      style={{ animation: "rotateHintPhone 2.5s ease-in-out infinite" }}
-                    >
-                      <div className="w-8 h-14 rounded-md bg-slate-200/80" />
-                    </div>
-                  </div>
-                  <h2 id="rotate-hint-title" className="text-lg font-bold text-slate-900 mb-2">
-                    לעריכה נוחה יותר
-                  </h2>
-                  <p id="rotate-hint-desc" className="text-sm text-slate-600 mb-6">
-                    עריכת האתר במצב אנכי עלולה להיות לא נוחה. מומלץ להפך את המכשיר למצב אופקי.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setShowRotateHintModal(false)}
-                    className="w-full rounded-xl bg-[#0F172A] px-4 py-3 text-sm font-semibold text-white hover:bg-[#1E293B] transition-colors"
-                  >
-                    הבנתי
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-
           {/* Editor fills remaining height */}
           <div className="flex-1 min-h-0 flex flex-col">
             <VisualSiteEditor
@@ -287,6 +244,7 @@ export default function AdminSitePage() {
               saveMessage={saveMessage ?? undefined}
               hideToolbarSaveAndBack
               onDirtyChange={setDesignDirty}
+              onRequestExit={handleRequestExitEditor}
               getToken={async () => (firebaseUser ? await firebaseUser.getIdToken() : null)}
             />
           </div>
@@ -356,13 +314,26 @@ export default function AdminSitePage() {
       {!isDesignTab ? (
         <div className="flex-1 min-w-0 overflow-y-auto">
           <AdminCard className="overflow-hidden">
-            <div className="shrink-0 flex flex-wrap items-center justify-between gap-4 px-6 py-3 border-b border-[#E2E8F0] bg-white/80">
+            <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-[#E2E8F0] bg-white/80 px-4 py-3 sm:gap-4 sm:px-6">
               <AdminTabs
                 tabs={sitePageTabs}
                 activeKey={activeSiteTab}
                 onChange={handleSiteTabChange}
-                className="flex-1 min-w-0"
+                className="min-w-0 flex-1"
               />
+              <div className="flex w-full shrink-0 flex-wrap items-center justify-end gap-3 sm:w-auto">
+                {saveMessage ? (
+                  <span className="text-xs text-emerald-600">{saveMessage}</span>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => void handleSaveAll()}
+                  disabled={isSaving || (!hasUnsavedChanges && !hoursUnsaved)}
+                  className="min-h-[44px] rounded-full bg-[#0F172A] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#1E293B] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSaving ? "שומר…" : "שמור שינויים"}
+                </button>
+              </div>
             </div>
             <div className="p-6">
               <div className="min-h-[320px]">

@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { X, Plus, Pencil, Trash2, MoreVertical } from "lucide-react";
+import { X, Plus, Pencil, Trash2, MoreVertical, Clock } from "lucide-react";
 import type { PricingItem } from "@/types/pricingItem";
 import type { SiteService } from "@/types/siteConfig";
 import {
@@ -47,6 +47,19 @@ const SERVICE_DEFAULT_COLOR_PALETTE = [
   "#EC4899",
   "#84CC16",
 ];
+
+/** Hex for tab styling; invalid/missing → default blue. */
+function serviceTabHex(color: string | undefined | null): string {
+  const raw = (color ?? "").trim();
+  if (/^#[0-9A-Fa-f]{6}$/i.test(raw)) return raw;
+  if (/^#[0-9A-Fa-f]{3}$/i.test(raw) && raw.length === 4) {
+    const r = raw[1]!;
+    const g = raw[2]!;
+    const b = raw[3]!;
+    return `#${r}${r}${g}${g}${b}${b}`;
+  }
+  return DEFAULT_SERVICE_COLOR;
+}
 
 export default function ServicesPage() {
   const params = useParams();
@@ -761,7 +774,7 @@ export default function ServicesPage() {
   };
   const saveCombo = async () => {
     if (!siteId || !comboForm.name.trim()) {
-      setError("שם הקומבו חובה");
+      setError("נא לתת שם לחבילה.");
       return;
     }
     const input: MultiBookingComboInput = {
@@ -773,7 +786,7 @@ export default function ServicesPage() {
     };
     const validation = validateMultiBookingComboInput(input);
     if (!validation.valid) {
-      setError(validation.error ?? "תצורת קומבו לא תקינה");
+      setError(validation.error ?? "הנתונים אינם תקינים. בדקו את השדות ונסו שוב.");
       return;
     }
     try {
@@ -786,16 +799,16 @@ export default function ServicesPage() {
       closeComboModal();
     } catch (err) {
       console.error("Failed to save combo", err);
-      setError("שגיאה בשמירת הקומבו");
+      setError("שגיאה בשמירת החבילה.");
     }
   };
   const deleteCombo = async (combo: MultiBookingCombo) => {
-    if (!siteId || !confirm(`למחוק את הקומבו "${combo.name}"?`)) return;
+    if (!siteId || !confirm(`למחוק את החבילה «${combo.name}»?`)) return;
     try {
       await deleteMultiBookingCombo(siteId, combo.id);
     } catch (err) {
       console.error("Failed to delete combo", err);
-      setError("שגיאה במחיקת הקומבו");
+      setError("שגיאה במחיקת החבילה.");
     }
   };
 
@@ -816,6 +829,109 @@ export default function ServicesPage() {
     if (firstUnused) return firstUnused;
     return SERVICE_DEFAULT_COLOR_PALETTE[services.length % SERVICE_DEFAULT_COLOR_PALETTE.length]!;
   }, [services]);
+
+  const formatDurationLabel = (item: PricingItem) =>
+    item.durationMinMinutes === item.durationMaxMinutes
+      ? `${item.durationMinMinutes} דקות`
+      : `${item.durationMinMinutes}–${item.durationMaxMinutes} דקות`;
+
+  const combosTouchingPricingItem = (itemId: string) =>
+    combos.filter(
+      (c) =>
+        c.isActive &&
+        (c.triggerServiceTypeIds.includes(itemId) || c.orderedServiceTypeIds.includes(itemId))
+    );
+
+  const comboChainLabel = (combo: MultiBookingCombo) =>
+    combo.orderedServiceTypeIds
+      .map((typeId) => {
+        const p = getPricingItemById(typeId);
+        return p ? (p.type?.trim() ? p.type.trim() : getServiceTypeLabel(p)) : typeId;
+      })
+      .join(" + ");
+
+  const renderPricingItemMobileCard = (item: PricingItem, opts?: { orphanServiceLabel?: string }) => {
+    const activeCombos = combosTouchingPricingItem(item.id);
+    return (
+      <div
+        key={item.id}
+        className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm"
+      >
+        <div className="flex items-start justify-between gap-3" dir="rtl">
+          <div className="min-w-0 flex-1 text-right">
+            <p className="text-base font-semibold text-slate-900">
+              {item.type?.trim() || "ללא סוג"}
+            </p>
+            {opts?.orphanServiceLabel ? (
+              <p className="mt-1 text-xs text-slate-500">{opts.orphanServiceLabel}</p>
+            ) : null}
+          </div>
+          <div
+            className="shrink-0 text-left text-lg font-bold leading-tight text-slate-900 tabular-nums"
+            dir="ltr"
+          >
+            {formatPriceDisplay(item, { combineFollowUp: true })}
+          </div>
+        </div>
+
+        <div
+          className="mt-4 flex items-center justify-end gap-2 text-sm text-slate-500"
+          dir="rtl"
+        >
+          <Clock className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+          <span>{formatDurationLabel(item)}</span>
+        </div>
+
+        {item.hasFollowUp && item.followUp ? (
+          <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/90 px-3 py-2.5 text-xs leading-relaxed text-slate-600">
+            <span className="font-medium text-slate-700">המשך טיפול: </span>
+            {item.followUp.name}
+            {item.followUp.text?.trim()
+              ? ` — ${item.followUp.text.trim()}`
+              : ""}{" "}
+            ({item.followUp.durationMinutes} דק׳)
+            {item.followUp.waitMinutes
+              ? ` · המתנה ${item.followUp.waitMinutes} דק׳`
+              : ""}
+          </div>
+        ) : null}
+
+        {activeCombos.map((combo) => (
+          <div
+            key={combo.id}
+            className="mt-3 rounded-xl border border-teal-100/90 bg-gradient-to-br from-teal-50/90 to-slate-50/40 px-3 py-2.5 text-sm text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]"
+          >
+            <span className="font-semibold text-[#1E6F7C]">חבילה · {combo.name}</span>
+            <p className="mt-1 text-xs leading-relaxed text-slate-600">{comboChainLabel(combo)}</p>
+          </div>
+        ))}
+
+        {item.notes?.trim() ? (
+          <p className="mt-3 text-xs leading-relaxed text-slate-500">{item.notes.trim()}</p>
+        ) : null}
+
+        <div
+          className="mt-5 flex items-center justify-center gap-8 border-t border-slate-100 pt-4"
+          dir="rtl"
+        >
+          <button
+            type="button"
+            onClick={() => handleEditItem(item)}
+            className="text-sm font-medium text-[#1E6F7C] transition-colors hover:text-[#155a65]"
+          >
+            ערוך
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleDeleteItem(item.id)}
+            className="text-sm font-medium text-red-600 transition-colors hover:text-red-700"
+          >
+            מחק
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   if (loading) {
     return (
@@ -842,14 +958,6 @@ export default function ServicesPage() {
         )}
 
         <AdminCard className="p-4 sm:p-6">
-          {/* Unified Services and Pricing View */}
-          <div className="mb-4 sm:mb-6">
-            <h2 className="text-base sm:text-lg font-bold text-[#0F172A]">שירותים ומחירים</h2>
-            <p className="text-xs sm:text-sm text-[#64748B] mt-1">
-              ניהול שירותים וסוגי המחירים שלהם
-            </p>
-          </div>
-
           {/* Service tabs + content */}
           {services.length === 0 && unassignedItems.length === 0 ? (
             <div className="text-center py-8 sm:py-12">
@@ -870,87 +978,114 @@ export default function ServicesPage() {
             </div>
           ) : (
             <>
-              {/* Tabs navbar: match Site page style; action button sits below on desktop */}
-              <div className="mb-4 sm:mb-6 -mx-1 sm:mx-0">
-                <div className="flex w-full min-w-0 gap-2 overflow-x-auto rounded-xl border border-[#E2E8F0]/60 bg-white/40 px-1.5 py-1.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden md:flex-wrap md:gap-1.5 md:rounded-full md:px-1 md:py-1">
-                  {services.map((s) => {
-                    const isSelected = activeTabId === s.id;
-                    return (
-                      <div
-                        key={s.id}
-                        className={`flex shrink-0 items-center flex-row-reverse rounded-full touch-manipulation ${
-                          isSelected
-                            ? "bg-[#1E6F7C] text-white shadow-sm"
-                            : ""
-                        }`}
-                      >
-                        <button
-                          ref={isSelected ? activeServiceTabBtnRef : null}
-                          type="button"
-                          onClick={() => setSelectedServiceId(s.id)}
-                          className={`min-h-[38px] whitespace-nowrap px-3 py-1.5 text-xs font-semibold transition-all touch-manipulation sm:text-sm md:min-h-[44px] md:px-4 md:py-2.5 md:font-medium md:md:px-5 ${
-                            isSelected
-                              ? "text-white"
-                              : "rounded-full bg-[#f3f4f6] text-[#4b5563] hover:bg-[#e5e7eb] md:bg-transparent md:text-[#64748B] md:hover:bg-white/60 md:hover:text-[#1E6F7C]"
-                          }`}
+              {/* Category chips: sticky + blur on mobile; full width on desktop */}
+              <div className="mb-4 sm:mb-6 -mx-4 sm:mx-0">
+                <div className="sticky top-0 z-10 border-b border-slate-100/90 bg-white/85 py-3 backdrop-blur-md sm:static sm:z-auto sm:border-0 sm:bg-transparent sm:py-0 sm:backdrop-blur-0">
+                  <div className="flex w-full min-w-0 gap-2 overflow-x-auto px-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:gap-2 sm:overflow-visible sm:px-0 md:rounded-2xl md:border md:border-slate-100 md:bg-slate-50/40 md:px-2 md:py-2">
+                    {services.map((s) => {
+                      const isSelected = activeTabId === s.id;
+                      const hex = serviceTabHex(s.color);
+                      return (
+                        <div
+                          key={s.id}
+                          className="flex shrink-0 items-center gap-0.5 rounded-full border-2 bg-white shadow-sm transition-[box-shadow,filter] touch-manipulation hover:bg-slate-50/80"
+                          style={{
+                            borderColor: hex,
+                            ...(isSelected
+                              ? {
+                                  backgroundColor: `color-mix(in srgb, ${hex} 24%, white)`,
+                                }
+                              : {}),
+                          }}
                         >
-                          {s.name}
-                        </button>
-                        {isSelected && (
-                          <div className="relative pl-1.5" ref={serviceMenuOpenId === s.id ? serviceMenuRef : undefined}>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setServiceMenuOpenId((prev) => (prev === s.id ? null : s.id));
-                              }}
-                              className="p-1.5 rounded-full transition-colors text-white/90 hover:bg-white/20"
-                              aria-label="תפריט שירות"
-                              aria-expanded={serviceMenuOpenId === s.id}
+                          <button
+                            ref={isSelected ? activeServiceTabBtnRef : null}
+                            type="button"
+                            onClick={() => setSelectedServiceId(s.id)}
+                            className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors text-slate-800 ${
+                              isSelected ? "font-semibold" : ""
+                            }`}
+                          >
+                            {s.name}
+                          </button>
+                          {isSelected && (
+                            <div
+                              className="relative pr-1"
+                              ref={serviceMenuOpenId === s.id ? serviceMenuRef : undefined}
                             >
-                              <MoreVertical className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {unassignedItems.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setServiceMenuOpenId((prev) => (prev === s.id ? null : s.id));
+                                }}
+                                className="rounded-full p-1.5 text-slate-600 transition-colors hover:bg-black/5"
+                                aria-label="תפריט שירות"
+                                aria-expanded={serviceMenuOpenId === s.id}
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {unassignedItems.length > 0 && (
+                      <button
+                        ref={activeTabId === "__UNASSIGNED__" ? activeServiceTabBtnRef : null}
+                        type="button"
+                        onClick={() => setSelectedServiceId("__UNASSIGNED__")}
+                        className={`shrink-0 whitespace-nowrap rounded-full border-2 bg-white px-4 py-2 text-sm font-medium text-slate-800 shadow-sm transition-colors touch-manipulation hover:bg-slate-50/80 ${
+                          activeTabId === "__UNASSIGNED__" ? "border-[#1E6F7C] font-semibold" : "border-slate-200"
+                        }`}
+                        style={
+                          activeTabId === "__UNASSIGNED__"
+                            ? {
+                                backgroundColor: "color-mix(in srgb, #1E6F7C 24%, white)",
+                              }
+                            : undefined
+                        }
+                      >
+                        לא משויך ({unassignedItems.length})
+                      </button>
+                    )}
                     <button
-                      ref={activeTabId === "__UNASSIGNED__" ? activeServiceTabBtnRef : null}
                       type="button"
-                      onClick={() => setSelectedServiceId("__UNASSIGNED__")}
-                      className={`min-h-[38px] shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-all touch-manipulation sm:text-sm md:min-h-[44px] md:px-4 md:py-2.5 md:font-medium md:md:px-5 ${
-                        activeTabId === "__UNASSIGNED__"
-                          ? "bg-[#1E6F7C] text-white shadow-sm"
-                          : "bg-[#f3f4f6] text-[#4b5563] hover:bg-[#e5e7eb] md:bg-transparent md:text-[#64748B] md:hover:bg-white/60 md:hover:text-[#1E6F7C]"
-                      }`}
+                      onClick={() =>
+                        setEditingService({ ...NEW_SERVICE_DRAFT, color: getNextDefaultServiceColor() })
+                      }
+                      className="inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-dashed border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm transition-colors hover:border-[#1E6F7C]/45 hover:bg-slate-50 hover:text-[#1E6F7C] touch-manipulation"
                     >
-                      לא משויך ({unassignedItems.length})
+                      <Plus className="h-4 w-4 shrink-0" />
+                      הוסף קטגוריה
                     </button>
-                  )}
-                </div>
-                <div className="mt-3 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setEditingService({ ...NEW_SERVICE_DRAFT, color: getNextDefaultServiceColor() })
-                    }
-                    className="shrink-0 min-h-[44px] px-4 py-2 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 touch-manipulation"
-                  >
-                    <Plus className="w-4 h-4" />
-                    הוסף קטגוריית שירות
-                  </button>
+                  </div>
                 </div>
               </div>
+
+              <h2 className="mb-4 text-right text-lg font-semibold tracking-tight text-slate-900 sm:text-xl">
+                {activeTabId === "__UNASSIGNED__"
+                  ? unassignedItems.length > 0
+                    ? `לא משויך (${unassignedItems.length})`
+                    : "לא משויך"
+                  : (services.find((s) => s.id === activeTabId)?.name ?? "קטגוריה")}
+              </h2>
 
               {/* Content for selected tab */}
               {activeTabId === "__UNASSIGNED__" ? (
                 <div className="space-y-4">
-                  <p className="text-xs sm:text-sm text-[#64748B]">
+                  <p className="text-xs sm:text-sm text-slate-500">
                     פריטי מחיר שלא משויכים לשירות. ערוך פריט ובחר שירות כדי לשייך.
                   </p>
-                  <div className="overflow-x-auto -mx-1 sm:mx-0 rounded-lg border border-slate-200/60">
+                  <div className="md:hidden space-y-4">
+                    {unassignedItems.map((item) =>
+                      renderPricingItemMobileCard(item, {
+                        orphanServiceLabel:
+                          (item.serviceId || item.service || "").trim() || undefined,
+                      })
+                    )}
+                  </div>
+                  <div className="hidden md:block overflow-x-auto -mx-1 sm:mx-0 rounded-2xl border border-slate-100 shadow-sm">
                     <table className="w-full text-xs sm:text-sm border-collapse min-w-[320px]">
                       <thead>
                         <tr className="bg-slate-50 border-b border-slate-200">
@@ -998,15 +1133,19 @@ export default function ServicesPage() {
                 const items = itemsByService[service.id] || itemsByService[service.name] || [];
                 return (
                   <div className="space-y-4">
-                    <span className="text-xs sm:text-sm text-[#64748B]">
+                    <span className="text-xs sm:text-sm text-slate-500">
                       {items.length === 0 ? "אין סוגי מחיר" : `${items.length} סוגי מחיר`}
                     </span>
                     {items.length === 0 ? (
-                      <p className="text-xs sm:text-sm text-[#64748B] text-center py-6 sm:py-8">
+                      <p className="text-xs sm:text-sm text-slate-500 text-center py-6 sm:py-8">
                         אין סוגי שירות בשירות זה. לחץ על "הוסף סוג שירות" כדי להוסיף.
                       </p>
                     ) : (
-                      <div className="overflow-x-auto -mx-1 sm:mx-0 rounded-lg border border-slate-200/60">
+                      <>
+                        <div className="md:hidden space-y-4">
+                          {items.map((item) => renderPricingItemMobileCard(item))}
+                        </div>
+                        <div className="hidden md:block overflow-x-auto -mx-1 sm:mx-0 rounded-2xl border border-slate-100 shadow-sm">
                         <table className="w-full text-xs sm:text-sm border-collapse min-w-[360px]">
                           <thead>
                             <tr className="bg-slate-50 border-b border-slate-200">
@@ -1061,7 +1200,8 @@ export default function ServicesPage() {
                             ))}
                           </tbody>
                         </table>
-                      </div>
+                        </div>
+                      </>
                     )}
                     <button
                       type="button"
@@ -1078,83 +1218,91 @@ export default function ServicesPage() {
           )}
         </AdminCard>
 
-        {/* Multi-Booking Combos */}
-        <div className="mt-4 sm:mt-6 bg-white rounded-lg shadow-sm border border-slate-200 p-4 sm:p-6">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
+        {/* חבילות ושילובים — כמו מקטע השירותים */}
+        <AdminCard className="mt-4 sm:mt-6 p-4 sm:p-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
             <div className="min-w-0">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900">כללי Multi-Booking (קומבו)</h2>
-              <p className="text-xs sm:text-sm text-[#64748B] mt-1">
-                אם הלקוח בוחר סוגי שירותים (מחירון) → מתזמן לפי הסדר + משך והמתנה כמו ב follow-up
+              <h2 className="text-right text-lg font-semibold tracking-tight text-slate-900 sm:text-xl">
+                חבילות ושילובים
+              </h2>
+              <p className="mt-1 text-right text-xs leading-relaxed text-slate-400 sm:text-sm">
+                כשלקוח מזמין כמה שירותים יחד — המערכת סוגרת זמנים לפי הסדר שתקבעו כאן, כולל המתנה ושלבי המשך טיפול אם הוגדרו במחירון.
               </p>
             </div>
             <button
               type="button"
               onClick={() => setOpenCombos((v) => !v)}
-              className="min-h-[44px] px-4 py-2.5 text-[#64748B] hover:bg-slate-100 rounded-lg text-sm font-medium touch-manipulation shrink-0"
+              className="shrink-0 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm transition-colors touch-manipulation hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
             >
               {openCombos ? "הסתר" : "הצג"}
             </button>
           </div>
           {openCombos && (
-            <>
-              <div className="flex justify-end mb-4">
+            <div className="mt-5 space-y-4 border-t border-slate-100 pt-5">
+              <div className="flex justify-center sm:justify-end">
                 <button
                   type="button"
                   onClick={openComboCreate}
-                  className="min-h-[44px] px-4 py-2.5 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium flex items-center gap-2 touch-manipulation"
+                  className="inline-flex min-h-[44px] items-center justify-center gap-2 whitespace-nowrap rounded-full border border-dashed border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-600 shadow-sm transition-colors hover:border-[#1E6F7C]/45 hover:bg-slate-50 hover:text-[#1E6F7C] touch-manipulation"
                 >
-                  <Plus className="w-4 h-4" />
-                  הוסף קומבו
+                  <Plus className="h-4 w-4 shrink-0" />
+                  הוסף חבילה
                 </button>
               </div>
               {combos.length === 0 ? (
-                <p className="text-xs sm:text-sm text-[#64748B] text-center py-6">אין קומבו. לחץ על &quot;הוסף קומבו&quot; כדי ליצור.</p>
+                <p className="py-6 text-center text-xs text-slate-400 sm:text-sm">
+                  עדיין אין חבילות. הוסיפו חבילה ראשונה כדי לקבוע אילו שילובי שירותים ייסגרו אוטומטית ביומן.
+                </p>
               ) : (
-                <div className="overflow-x-auto -mx-1 sm:mx-0 rounded-lg border border-slate-200/60">
-                  <table className="w-full text-xs sm:text-sm border-collapse min-w-[320px]">
+                <div className="overflow-x-auto -mx-1 sm:mx-0 rounded-2xl border border-slate-100 shadow-sm">
+                  <table className="w-full min-w-[320px] border-collapse text-xs sm:text-sm">
                     <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200">
-                        <th className="px-2 sm:px-3 py-2.5 text-right font-semibold text-slate-700">שם</th>
-                        <th className="px-2 sm:px-3 py-2.5 text-right font-semibold text-slate-700">אם בוחרים</th>
-                        <th className="px-2 sm:px-3 py-2.5 text-right font-semibold text-slate-700">מתזמן בסדר</th>
-                        <th className="px-2 sm:px-3 py-2.5 text-right font-semibold text-slate-700">פעיל</th>
-                        <th className="px-2 sm:px-3 py-2.5 text-right font-semibold text-slate-700">פעולות</th>
+                      <tr className="border-b border-slate-200 bg-slate-50">
+                        <th className="px-2 py-2.5 text-right text-sm font-semibold text-slate-700 sm:px-3">שם</th>
+                        <th className="px-2 py-2.5 text-right text-sm font-semibold text-slate-700 sm:px-3">אם בוחרים</th>
+                        <th className="px-2 py-2.5 text-right text-sm font-semibold text-slate-700 sm:px-3">מתזמן בסדר</th>
+                        <th className="px-2 py-2.5 text-right text-sm font-semibold text-slate-700 sm:px-3">פעיל</th>
+                        <th className="px-2 py-2.5 text-right text-sm font-semibold text-slate-700 sm:px-3">פעולות</th>
                       </tr>
                     </thead>
                     <tbody>
                       {combos.map((combo) => (
-                        <tr key={combo.id} className="border-b border-slate-100 hover:bg-slate-50">
-                          <td className="px-2 sm:px-3 py-2.5 font-medium text-slate-900">{combo.name}</td>
-                          <td className="px-2 sm:px-3 py-2.5 text-[#64748B]">
-                            {combo.triggerServiceTypeIds.map((typeId) => {
-                            const p = getPricingItemById(typeId);
-                            return p ? getServiceTypeLabel(p) : typeId;
-                          }).join(", ")}
+                        <tr key={combo.id} className="border-b border-slate-100 transition-colors last:border-b-0 hover:bg-slate-50/80">
+                          <td className="px-2 py-2.5 font-medium text-slate-900 sm:px-3">{combo.name}</td>
+                          <td className="px-2 py-2.5 text-slate-600 sm:px-3">
+                            {combo.triggerServiceTypeIds
+                              .map((typeId) => {
+                                const p = getPricingItemById(typeId);
+                                return p ? getServiceTypeLabel(p) : typeId;
+                              })
+                              .join(", ")}
                           </td>
-                          <td className="px-2 sm:px-3 py-2.5 text-[#64748B]">
-                            {combo.orderedServiceTypeIds.map((typeId) => {
-                              const p = getPricingItemById(typeId);
-                              return p ? getServiceTypeLabel(p) : typeId;
-                            }).join(" → ")}
+                          <td className="px-2 py-2.5 text-slate-600 sm:px-3">
+                            {combo.orderedServiceTypeIds
+                              .map((typeId) => {
+                                const p = getPricingItemById(typeId);
+                                return p ? getServiceTypeLabel(p) : typeId;
+                              })
+                              .join(" → ")}
                           </td>
-                          <td className="px-2 sm:px-3 py-2.5">{combo.isActive ? "כן" : "לא"}</td>
-                          <td className="px-2 sm:px-3 py-2.5">
-                            <div className="flex items-center gap-2 justify-end">
+                          <td className="px-2 py-2.5 text-slate-700 sm:px-3">{combo.isActive ? "כן" : "לא"}</td>
+                          <td className="px-2 py-2.5 sm:px-3">
+                            <div className="flex items-center justify-end gap-1">
                               <button
                                 type="button"
                                 onClick={() => openComboEdit(combo)}
-                                className="p-2 sm:p-1.5 hover:bg-[rgba(30,111,124,0.08)] rounded text-caleno-deep touch-manipulation"
+                                className="touch-manipulation rounded-lg p-2 text-[#1E6F7C] transition-colors hover:bg-[rgba(30,111,124,0.08)] sm:p-1.5"
                                 title="ערוך"
                               >
-                                <Pencil className="w-4 h-4" />
+                                <Pencil className="h-4 w-4" />
                               </button>
                               <button
                                 type="button"
                                 onClick={() => deleteCombo(combo)}
-                                className="p-2 sm:p-1.5 hover:bg-red-50 rounded text-red-600 touch-manipulation"
+                                className="touch-manipulation rounded-lg p-2 text-red-600 transition-colors hover:bg-red-50 sm:p-1.5"
                                 title="מחק"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="h-4 w-4" />
                               </button>
                             </div>
                           </td>
@@ -1164,169 +1312,282 @@ export default function ServicesPage() {
                   </table>
                 </div>
               )}
-            </>
+            </div>
           )}
-        </div>
+        </AdminCard>
 
-      {/* Combo Create/Edit Modal — rule builder: trigger set + ordered sequence */}
+      {/* חבילה — יצירה / עריכה (גיליון תחתון במובייל) */}
       {comboModal && (
         <div
-          className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50 overflow-y-auto"
+          className="fixed inset-0 z-50 flex max-h-[100dvh] items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4 sm:py-6"
           data-admin-modal-overlay=""
           dir="rtl"
         >
-          <div className="bg-white rounded-t-2xl sm:rounded-3xl shadow-xl border border-[#E2E8F0] w-full max-w-lg max-h-[90vh] flex flex-col mt-auto sm:mt-0">
-            <div className="sticky top-0 bg-white border-b border-slate-200 px-4 sm:px-6 py-4 flex justify-between items-center shrink-0">
-              <h3 className="text-base sm:text-lg font-bold text-slate-900">
-                {comboModal.type === "create" ? "הוסף כלל Multi-Booking" : "ערוך כלל"}
+          <div className="flex max-h-[min(92dvh,100%)] w-full max-w-lg flex-col overflow-hidden rounded-t-[1.35rem] border border-[#E2E8F0] bg-white shadow-xl sm:max-h-[90vh] sm:rounded-3xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
+              <h3 className="text-base font-bold text-slate-900 sm:text-lg">
+                {comboModal.type === "create" ? "חבילה חדשה" : "עריכת חבילה"}
               </h3>
-              <button type="button" onClick={closeComboModal} className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 -m-2 hover:bg-slate-100 rounded-lg touch-manipulation" aria-label="סגור">
-                <X className="w-5 h-5 text-[#64748B]" />
+              <button
+                type="button"
+                onClick={closeComboModal}
+                className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg p-2 -m-2 touch-manipulation hover:bg-slate-100"
+                aria-label="סגור"
+              >
+                <X className="h-5 w-5 text-slate-500" />
               </button>
             </div>
-            <div className="p-4 sm:p-6 space-y-5 overflow-y-auto">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">שם הכלל *</label>
-                <input
-                  type="text"
-                  value={comboForm.name}
-                  onChange={(e) => setComboForm((prev) => ({ ...prev, name: e.target.value }))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">אם הלקוח בוחר את סוגי השירותים האלה (הסדר לא משנה)</label>
-                <select
-                  value=""
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (v) addTriggerServiceType(v);
-                  }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep mb-2"
-                >
-                  <option value="">הוסף סוג שירות לתנאי...</option>
-                  {validPricingItemsForCombo.filter((p) => !comboForm.triggerServiceTypeIds.includes(p.id)).map((p) => (
-                    <option key={p.id} value={p.id}>{getServiceTypeLabel(p)}</option>
-                  ))}
-                </select>
-                <ul className="flex flex-wrap gap-2">
-                  {comboForm.triggerServiceTypeIds.map((typeId) => {
-                    const item = getPricingItemById(typeId);
-                    return (
-                      <li key={typeId}>
-                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-100 text-slate-700 text-sm">
-                          {item ? getServiceTypeLabel(item) : typeId}
-                          <button type="button" onClick={() => removeTriggerServiceType(typeId)} className="p-0.5 hover:bg-slate-200 rounded" aria-label="הסר">×</button>
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">תזמן בסדר הזה (משך + המתנה לפי סוג השירות)</label>
-                <select
-                  value=""
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (v) addOrderedServiceType(v);
-                  }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep mb-2"
-                >
-                  <option value="">הוסף סוג שירות לרצף...</option>
-                  {validPricingItemsForCombo.map((p) => (
-                    <option key={p.id} value={p.id} disabled={comboForm.orderedServiceTypeIds.includes(p.id)}>
-                      {getServiceTypeLabel(p)}
-                    </option>
-                  ))}
-                </select>
-                <ul className="space-y-1">
-                  {comboForm.orderedServiceTypeIds.map((typeId, i) => {
-                    const item = getPricingItemById(typeId);
-                    const isAutoAdded = !comboForm.triggerServiceTypeIds.includes(typeId);
-                    const durationMin = item?.durationMinMinutes ?? item?.durationMaxMinutes ?? 0;
-                    const waitMin = (item?.hasFollowUp && item?.followUp) ? Math.max(0, item.followUp.waitMinutes ?? 0) : 0;
-                    return (
-                      <li key={`${typeId}-${i}`} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-50">
-                        <span className="text-sm font-medium text-slate-800">
-                          {i + 1}. {item ? getServiceTypeLabel(item) : typeId}
-                          {isAutoAdded && (
-                            <span className="mr-2 text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">נוסף אוטומטית</span>
-                          )}
-                          <span className="mr-2 text-xs text-[#64748B]">({durationMin} דק׳ {waitMin > 0 ? `+ המתנה ${waitMin} דק׳` : ""})</span>
-                        </span>
-                        <div className="flex items-center gap-1">
-                          <button type="button" onClick={() => moveOrderedServiceType(i, "up")} disabled={i === 0} className="p-1 rounded text-[#64748B] disabled:opacity-40" aria-label="למעלה">↑</button>
-                          <button type="button" onClick={() => moveOrderedServiceType(i, "down")} disabled={i === comboForm.orderedServiceTypeIds.length - 1} className="p-1 rounded text-[#64748B] disabled:opacity-40" aria-label="למטה">↓</button>
-                          <button type="button" onClick={() => removeOrderedServiceTypeAt(i)} className="p-1 hover:bg-red-50 rounded text-red-600" aria-label="הסר"><Trash2 className="w-4 h-4" /></button>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">שלב אוטומטי בסוף (לפי שירות + משך ידני)</label>
-                <p className="text-xs text-[#64748B] mb-2">בחר שירות מהרשימה והזן משך בדקות (כמו follow-up ב single booking)</p>
-                <div className="flex gap-2 mb-2">
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      if (v) addAutoStep(v, 30);
-                    }}
-                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-caleno-deep"
-                  >
-                    <option value="">הוסף שירות אוטומטי...</option>
-                    {services.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:p-6">
+              <div className="space-y-6">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-800">
+                    שם החבילה *
+                  </label>
+                  <p className="mb-2 text-xs text-slate-400">לדוגמה: תספורת וצבע, פדיקר + מניקור</p>
+                  <input
+                    type="text"
+                    value={comboForm.name}
+                    onChange={(e) => setComboForm((prev) => ({ ...prev, name: e.target.value }))}
+                    placeholder="שם החבילה (לדוגמה: תספורת וצבע)"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-right focus:outline-none focus:ring-2 focus:ring-[#1E6F7C]"
+                  />
                 </div>
-                <ul className="space-y-1">
-                  {comboForm.autoSteps.map((step, i) => {
-                    const service = services.find((s) => s.id === step.serviceId);
-                    return (
-                      <li key={`auto-${step.serviceId}-${i}`} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-amber-50 border border-amber-100">
-                        <span className="text-sm font-medium text-slate-800 flex items-center gap-2 flex-wrap">
-                          <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-xs">נוסף אוטומטית</span>
-                          {service ? service.name : step.serviceId}
-                          <span className="text-[#64748B]">(override</span>
-                          <DurationMinutesStepper
-                            value={step.durationMinutesOverride}
-                            onChange={(n) => updateAutoStepDuration(i, n)}
-                            min={15}
-                            className="w-20 text-sm"
-                          />
-                          <span className="text-[#64748B]">דק׳)</span>
-                        </span>
-                        <button type="button" onClick={() => removeAutoStepAt(i)} className="p-1 hover:bg-red-50 rounded text-red-600" aria-label="הסר"><Trash2 className="w-4 h-4" /></button>
-                      </li>
-                    );
-                  })}
-                </ul>
+
+                <div className="flex gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1E6F7C] text-sm font-bold text-white shadow-sm">
+                    1
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <h4 className="text-sm font-semibold text-slate-900 sm:text-base">כשלקוח בוחר את השירותים הבאים:</h4>
+                    <p className="text-xs leading-relaxed text-slate-400">
+                      בוחרים אילו סוגי מחיר יחד מפעילים את החבילה. הסדר כאן לא משנה — רק השילוב.
+                    </p>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v) addTriggerServiceType(v);
+                      }}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-right text-sm focus:outline-none focus:ring-2 focus:ring-[#1E6F7C]"
+                    >
+                      <option value="">הוסיפו סוג שירות מהמחירון…</option>
+                      {validPricingItemsForCombo
+                        .filter((p) => !comboForm.triggerServiceTypeIds.includes(p.id))
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {getServiceTypeLabel(p)}
+                          </option>
+                        ))}
+                    </select>
+                    <ul className="flex flex-wrap gap-2 pt-1">
+                      {comboForm.triggerServiceTypeIds.map((typeId) => {
+                        const item = getPricingItemById(typeId);
+                        return (
+                          <li key={typeId}>
+                            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700">
+                              {item ? getServiceTypeLabel(item) : typeId}
+                              <button
+                                type="button"
+                                onClick={() => removeTriggerServiceType(typeId)}
+                                className="rounded p-0.5 hover:bg-slate-200"
+                                aria-label="הסר"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 border-t border-slate-100 pt-6">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1E6F7C] text-sm font-bold text-white shadow-sm">
+                    2
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <h4 className="text-sm font-semibold text-slate-900 sm:text-base">סדר הפעולות ביומן:</h4>
+                    <p className="text-xs leading-relaxed text-slate-400">
+                      כאן קובעים את הרצף בפועל ביומן. המשך טיפול והמתנה נלקחים מהגדרות המחירון לכל סוג.
+                    </p>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v) addOrderedServiceType(v);
+                       }}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-right text-sm focus:outline-none focus:ring-2 focus:ring-[#1E6F7C]"
+                    >
+                      <option value="">הוסיפו שלב לסדר היומן…</option>
+                      {validPricingItemsForCombo.map((p) => (
+                        <option key={p.id} value={p.id} disabled={comboForm.orderedServiceTypeIds.includes(p.id)}>
+                          {getServiceTypeLabel(p)}
+                        </option>
+                      ))}
+                    </select>
+                    <ul className="relative space-y-2 border-s-2 border-slate-100 ps-3 ms-1">
+                      {comboForm.orderedServiceTypeIds.map((typeId, i) => {
+                        const item = getPricingItemById(typeId);
+                        const isAutoAdded = !comboForm.triggerServiceTypeIds.includes(typeId);
+                        const durationMin = item?.durationMinMinutes ?? item?.durationMaxMinutes ?? 0;
+                        const waitMin =
+                          item?.hasFollowUp && item?.followUp
+                            ? Math.max(0, item.followUp.waitMinutes ?? 0)
+                            : 0;
+                        return (
+                          <li
+                            key={`${typeId}-${i}`}
+                            className="flex items-center justify-between gap-2 rounded-xl border border-slate-100 bg-white p-3 shadow-sm"
+                          >
+                            <div className="min-w-0 text-right">
+                              <span className="text-sm font-semibold text-slate-900">
+                                <span className="tabular-nums text-[#1E6F7C]">{i + 1}.</span>{" "}
+                                {item ? getServiceTypeLabel(item) : typeId}
+                              </span>
+                              {isAutoAdded && (
+                                <span className="me-2 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-900">
+                                  נקבע אוטומטית
+                                </span>
+                              )}
+                              <p className="mt-0.5 text-xs text-slate-400">
+                                {durationMin} דק׳ טיפול
+                                {waitMin > 0 ? ` · המתנה ${waitMin} דק׳ לפני שלב הבא` : ""}
+                                {item?.hasFollowUp && item.followUp
+                                  ? " · כולל שלב המשך טיפול מהמחירון"
+                                  : ""}
+                              </p>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-0.5">
+                              <button
+                                type="button"
+                                onClick={() => moveOrderedServiceType(i, "up")}
+                                disabled={i === 0}
+                                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 disabled:opacity-35"
+                                aria-label="למעלה"
+                              >
+                                ↑
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => moveOrderedServiceType(i, "down")}
+                                disabled={i === comboForm.orderedServiceTypeIds.length - 1}
+                                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 disabled:opacity-35"
+                                aria-label="למטה"
+                              >
+                                ↓
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removeOrderedServiceTypeAt(i)}
+                                className="rounded-lg p-1.5 text-red-600 hover:bg-red-50"
+                                aria-label="הסר"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 border-t border-slate-100 pt-6">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-dashed border-slate-200 bg-slate-50 text-sm font-bold text-slate-500">
+                    3
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <h4 className="text-sm font-semibold text-slate-900 sm:text-base">שלב נוסף בסוף (אופציונלי)</h4>
+                    <p className="text-xs leading-relaxed text-slate-400">
+                      איזה שירות להוסיף לחבילה וכמה זמן הוא יקח? מתאים לסיומים קבועים (למשל שטיפה) שלא מגיעים מהמחירון באותה צורה.
+                    </p>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v) addAutoStep(v, 30);
+                      }}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-right text-sm focus:outline-none focus:ring-2 focus:ring-[#1E6F7C]"
+                    >
+                      <option value="">בחרו קטגוריית שירות…</option>
+                      {services.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                    <ul className="space-y-2">
+                      {comboForm.autoSteps.map((step, i) => {
+                        const service = services.find((s) => s.id === step.serviceId);
+                        return (
+                          <li
+                            key={`auto-${step.serviceId}-${i}`}
+                            className="flex items-center justify-between gap-2 rounded-xl border border-amber-100/90 bg-gradient-to-br from-amber-50/90 to-white p-3"
+                          >
+                            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-slate-800">
+                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900">
+                                בסוף החבילה
+                              </span>
+                              {service ? service.name : step.serviceId}
+                              <span className="text-xs text-slate-400">זמן מותאם אישית:</span>
+                              <DurationMinutesStepper
+                                value={step.durationMinutesOverride}
+                                onChange={(n) => updateAutoStepDuration(i, n)}
+                                min={15}
+                                className="w-24 text-sm"
+                              />
+                              <span className="text-xs text-slate-400">דק׳</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeAutoStepAt(i)}
+                              className="shrink-0 rounded-lg p-1.5 text-red-600 hover:bg-red-50"
+                              aria-label="הסר"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-3">
+                  <input
+                    type="checkbox"
+                    id="combo-active"
+                    checked={comboForm.isActive}
+                    onChange={(e) => setComboForm((prev) => ({ ...prev, isActive: e.target.checked }))}
+                    className="rounded border-slate-300"
+                  />
+                  <label htmlFor="combo-active" className="text-sm text-slate-700">
+                    החבילה פעילה (לקוחות יכולים להזמין לפי הכלל הזה)
+                  </label>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="combo-active"
-                  checked={comboForm.isActive}
-                  onChange={(e) => setComboForm((prev) => ({ ...prev, isActive: e.target.checked }))}
-                  className="rounded border-slate-300"
-                />
-                <label htmlFor="combo-active" className="text-sm text-slate-700">כלל פעיל</label>
-              </div>
-              <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end pt-4">
-                <button type="button" onClick={closeComboModal} className="min-h-[44px] px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm font-medium touch-manipulation">ביטול</button>
-                <button
-                  type="button"
-                  onClick={saveCombo}
-                  disabled={!comboForm.name.trim() || comboForm.triggerServiceTypeIds.length === 0 || comboForm.orderedServiceTypeIds.length === 0}
-                  className="min-h-[44px] px-4 py-2.5 bg-caleno-ink hover:bg-[#1E293B] text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
-                >
-                  שמור
-                </button>
-              </div>
+            </div>
+            <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-100 bg-white px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:flex-row sm:justify-end sm:px-6">
+              <button
+                type="button"
+                onClick={closeComboModal}
+                className="min-h-[48px] touch-manipulation rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-200 sm:min-h-[44px]"
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                onClick={saveCombo}
+                disabled={
+                  !comboForm.name.trim() ||
+                  comboForm.triggerServiceTypeIds.length === 0 ||
+                  comboForm.orderedServiceTypeIds.length === 0
+                }
+                className="min-h-[48px] touch-manipulation rounded-xl bg-caleno-ink px-4 py-2.5 text-sm font-medium text-white hover:bg-[#1E293B] disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-[44px]"
+              >
+                שמירה
+              </button>
             </div>
           </div>
         </div>

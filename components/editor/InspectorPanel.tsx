@@ -384,10 +384,10 @@ export function InspectorPanel({
   if (!selected) {
     return (
       <div
-        className="w-full md:w-80 shrink-0 bg-white border-r border-slate-200 flex flex-col overflow-hidden"
+        className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden border-0 bg-white md:w-80 md:border-r md:border-slate-200"
         dir="rtl"
       >
-        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+        <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
           <p className="text-slate-500 text-sm leading-relaxed max-w-[220px]">
             לחץ על אלמנטים באתר כדי להתחיל לערוך
           </p>
@@ -398,7 +398,7 @@ export function InspectorPanel({
 
   return (
     <div
-      className="w-full md:w-80 shrink-0 bg-white border-r border-slate-200 flex flex-col overflow-hidden"
+      className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden border-0 bg-white md:w-80 md:border-r md:border-slate-200"
       dir="rtl"
     >
       <div className="p-3 border-b border-slate-200 flex items-center justify-between">
