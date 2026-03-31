@@ -22,6 +22,11 @@ const nextConfig: NextConfig = {
         hostname: "res.cloudinary.com",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "v0.dev",
+        pathname: "/**",
+      },
     ],
   },
   async headers() {
