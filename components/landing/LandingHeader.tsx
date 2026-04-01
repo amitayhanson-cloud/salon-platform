@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -14,7 +15,43 @@ const navLinkPill =
   "group shrink-0 rounded-full px-3 py-1.5 text-sm transition-[background-color,box-shadow] duration-300 ease-out hover:bg-caleno-100/80 hover:shadow-[0_2px_14px_-4px_rgba(9,137,155,0.14)] active:bg-caleno-100";
 
 export function LandingHeader() {
+  const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const logoOnly = pathname === "/waitlist";
+
+  if (logoOnly) {
+    return (
+      <header
+        dir="rtl"
+        className="sticky top-0 z-50 w-full bg-transparent py-1.5 md:py-2"
+        role="banner"
+      >
+        <div className="mx-auto flex w-full max-w-6xl justify-center px-4 lg:px-8">
+          <nav
+            aria-label="לוגו"
+            className="flex w-full max-w-full items-center justify-center rounded-full border border-white/30 bg-white/25 px-4 py-2 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.08),0_0_0_1px_rgba(255,255,255,0.4)_inset] backdrop-blur-xl md:px-6"
+          >
+            <Link
+              href="/"
+              className="relative flex shrink-0 items-center py-1 transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-caleno-deep focus-visible:ring-offset-2 rounded"
+              aria-label="Caleno – דף הבית"
+            >
+              <span className="relative block h-9 w-[140px] shrink-0 md:h-11 md:min-w-[180px] md:w-[205px]">
+                <Image
+                  src="/brand/caleno logo/caleno_logo_new.png"
+                  alt="Caleno"
+                  fill
+                  className="object-contain object-center"
+                  priority
+                  sizes="(max-width: 768px) 140px, 205px"
+                />
+              </span>
+            </Link>
+          </nav>
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header

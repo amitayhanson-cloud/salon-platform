@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { PartyPopper } from "lucide-react";
+import { ChevronRight, PartyPopper } from "lucide-react";
 import confetti from "canvas-confetti";
 import { getMarketingSocialUrls } from "@/lib/marketingSocialUrls";
 
@@ -103,6 +103,15 @@ export default function WaitlistPage() {
   return (
     <div className="relative pb-16 text-caleno-ink antialiased" dir="rtl">
       <div className="mx-auto w-full max-w-6xl px-4 pt-8 sm:px-6 lg:px-8">
+        <div className="mb-6 flex justify-start">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 rounded-full border border-caleno-200/85 bg-white/75 px-4 py-2.5 text-sm font-semibold text-caleno-deep shadow-sm backdrop-blur-sm transition hover:border-caleno-300 hover:bg-white hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caleno-deep/30 focus-visible:ring-offset-2"
+          >
+            <ChevronRight className="h-4 w-4 shrink-0 rotate-180" aria-hidden />
+            חזרה לדף הנחיתה
+          </Link>
+        </div>
         <div className={waitlistCardClassName}>
           {isSuccess ? (
             <div className="text-center">

@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+import Image from "next/image"
 import { useState } from "react"
 import { Menu, X, ArrowUpRight, ArrowRight } from "lucide-react"
 
@@ -43,21 +44,16 @@ export function Header() {
         }`}
       >
         <div className="flex items-center justify-between">
-          <a href="#" onClick={handleLogoClick} className="flex items-center gap-2 cursor-pointer">
-            <svg
-              className={`w-6 h-6 transition-colors duration-300 ${isScrolled ? "text-black" : "text-foreground"}`}
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-              <polyline points="9 22 9 12 15 12 15 22" />
-            </svg>
-            <span
-              className={`text-lg font-medium tracking-tight transition-colors duration-300 ${isScrolled ? "text-black" : "text-foreground"}`}
-            >
-              Homie
+          <a href="#" onClick={handleLogoClick} className="flex cursor-pointer items-center" aria-label="Caleno">
+            <span className="relative block h-8 w-[118px] shrink-0 md:h-9 md:w-[148px]">
+              <Image
+                src="/brand/caleno logo/caleno_logo_new.png"
+                alt="Caleno"
+                fill
+                className="object-contain object-left"
+                sizes="(max-width: 768px) 118px, 148px"
+                priority
+              />
             </span>
           </a>
 
