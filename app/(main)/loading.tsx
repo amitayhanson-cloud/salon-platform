@@ -1,14 +1,5 @@
-import CalenoLoading from "@/components/CalenoLoading";
+import { LiquidGlassLoading } from "@/components/landing-v2/liquid-glass-loading";
 
 export default function MainSegmentLoading() {
-  return (
-    <div
-      className="flex min-h-screen w-full items-center justify-center bg-white"
-      dir="ltr"
-      aria-busy="true"
-      aria-label="Loading"
-    >
-      <CalenoLoading />
-    </div>
-  );
+  return <LiquidGlassLoading />;
 }

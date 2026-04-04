@@ -25,6 +25,8 @@ import {
   liveStatsDeltaUndoCreatedOnly,
   liveStatsDeltaUndoFollowUpOnly,
 } from "@/lib/liveStatsBookingDeltas";
+import { bookingDocToFreedSlot } from "@/lib/bookingWaitlist/bookingDocToFreedSlot";
+import { notifyBookingWaitlistFromFreedSlot } from "@/lib/bookingWaitlist/notifySlotFreed";
 
 const ISRAEL_TZ = "Asia/Jerusalem";
 
@@ -337,6 +339,15 @@ export async function cancelBookingsCascade(
       deletedLegacyCount: allToDelete.size,
       writtenCount: archiveWrites.length,
     });
+    for (const row of toUpdate) {
+      const slot = bookingDocToFreedSlot(row.fullData as Record<string, unknown>);
+      if (!slot) continue;
+      try {
+        await notifyBookingWaitlistFromFreedSlot(siteId, slot);
+      } catch (waitlistErr) {
+        console.error("[booking-cascade] waitlist notify failed", waitlistErr);
+      }
+    }
     return { successCount: toUpdate.length, failCount: 0 };
   } catch (e) {
     console.error("[booking-cascade] batch commit failed", { siteId, bookingIds: bookingIds.slice(0, 5), reason, error: e });

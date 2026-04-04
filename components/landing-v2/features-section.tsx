@@ -1,8 +1,9 @@
 "use client"
 
 import { Check } from "lucide-react"
-import { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
+import { FEATURES_SECTION_BACKGROUND } from "./features-section-background"
+import { LiquidGlassPanel } from "./liquid-glass-panel"
 import { RealtimePropertyCard } from "./realtime-property-card"
 
 const features = [
@@ -14,65 +15,10 @@ const features = [
   "Secure payment",
 ]
 
-const allTransactions = [
-  { name: "Côte d'Azur Villa", amount: "+$2,400", category: "Rental received", color: "from-emerald-400 to-teal-500" },
-  { name: "Paris 11 Apartment", amount: "+$1,850", category: "Rental received", color: "from-blue-400 to-indigo-500" },
-  { name: "Bordeaux House", amount: "+$1,200", category: "Rental received", color: "from-amber-400 to-orange-500" },
-  { name: "Chamonix Chalet", amount: "+$3,500", category: "Rental received", color: "from-rose-400 to-pink-500" },
-  { name: "Lyon Studio", amount: "+$750", category: "Rental received", color: "from-violet-400 to-purple-500" },
-  { name: "Marseille Loft", amount: "+$1,100", category: "Rental received", color: "from-cyan-400 to-blue-500" },
-  { name: "Provence Farmhouse", amount: "+$2,800", category: "Rental received", color: "from-lime-400 to-green-500" },
-  { name: "Lille Duplex", amount: "+$950", category: "Rental received", color: "from-fuchsia-400 to-pink-500" },
-]
-
 export function FeaturesSection() {
-  const [balance, setBalance] = useState(12458.32)
-  const [monthlyGrowth] = useState(23.5)
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const animationRef = useRef<number | null>(null)
-  const scrollPosition = useRef(0)
-  const lastUpdateTime = useRef(0)
-
-  const tripleTransactions = [...allTransactions, ...allTransactions, ...allTransactions]
-
-  useEffect(() => {
-    const animate = (timestamp: number) => {
-      if (!scrollRef.current) {
-        animationRef.current = requestAnimationFrame(animate)
-        return
-      }
-
-      if (!lastUpdateTime.current) lastUpdateTime.current = timestamp
-      const deltaTime = timestamp - lastUpdateTime.current
-      lastUpdateTime.current = timestamp
-
-      scrollPosition.current += (deltaTime / 1000) * 35
-
-      const singleSetHeight = scrollRef.current.scrollHeight / 3
-
-      if (scrollPosition.current >= singleSetHeight) {
-        scrollPosition.current = 0
-
-        const randomTransaction = allTransactions[Math.floor(Math.random() * allTransactions.length)]
-        const amount = Number.parseFloat(randomTransaction.amount.replace(/[$,]/g, ""))
-        setBalance((prev) => prev + amount)
-      }
-
-      scrollRef.current.style.transform = `translateY(-${scrollPosition.current}px)`
-      animationRef.current = requestAnimationFrame(animate)
-    }
-
-    animationRef.current = requestAnimationFrame(animate)
-
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current)
-      }
-    }
-  }, [])
-
   return (
-    <section id="features" className="py-32 px-6 relative overflow-hidden">
+    <section id="features" className="relative overflow-hidden px-6 py-32">
+      <div className={FEATURES_SECTION_BACKGROUND} aria-hidden />
       <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 flex justify-center pointer-events-none z-0">
         <span className="font-bold text-center text-[20vw] sm:text-[18vw] md:text-[16vw] lg:text-[14vw] leading-none tracking-tighter text-zinc-100 whitespace-nowrap">
           MANAGE
@@ -101,7 +47,7 @@ export function FeaturesSection() {
               </p>
             </motion.div>
 
-            <div className="grid sm:grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               {features.map((feature, index) => (
                 <motion.div
                   key={index}
@@ -109,12 +55,15 @@ export function FeaturesSection() {
                   whileInView={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.4, delay: index * 0.1 }}
                   viewport={{ once: true }}
-                  className="flex items-center p-3 rounded-xl hover:bg-zinc-50 transition-colors duration-300 gap-2 py-1"
                 >
-                  <div className="w-6 h-6 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full flex items-center justify-center flex-shrink-0 shadow-md">
-                    <Check className="w-3.5 h-3.5 text-white" strokeWidth={2.5} />
-                  </div>
-                  <span className="text-sm text-foreground">{feature}</span>
+                  <LiquidGlassPanel tone="light" contentClassName="flex items-center gap-2 py-3 pe-3 ps-3">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 shadow-md">
+                      <Check className="h-3.5 w-3.5 text-white" strokeWidth={2.5} />
+                    </div>
+                    <span className="text-sm text-foreground [text-shadow:0_1px_0_rgba(255,255,255,0.88)]">
+                      {feature}
+                    </span>
+                  </LiquidGlassPanel>
                 </motion.div>
               ))}
             </div>

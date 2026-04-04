@@ -6,7 +6,6 @@ import { FeaturesSection } from "@/components/landing-v2/features-section";
 import { PricingSection } from "@/components/landing-v2/pricing-section";
 import { TestimonialsSection } from "@/components/landing-v2/testimonials-section";
 import { FAQSection } from "@/components/landing-v2/faq-section";
-import { CTASection } from "@/components/landing-v2/cta-section";
 import { Footer } from "@/components/landing-v2/footer";
 
 export default function LandingV2Page() {
@@ -16,9 +15,9 @@ export default function LandingV2Page() {
         <Header />
         <HeroSection />
         <StatsSection />
+        {/* SpikeBurst canvas (spike-burst.tsx) mounts inside ServicesSection behind “Caleno מציעה”. */}
         <ServicesSection />
         <FeaturesSection />
-        <CTASection />
         <PricingSection />
         <TestimonialsSection />
         <FAQSection />

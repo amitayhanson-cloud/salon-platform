@@ -1,0 +1,40 @@
+@property --gradient-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes caleno-border-gradient-rotate {
+  to {
+    --gradient-angle: 360deg;
+  }
+}
+
+.gradient-border-component.gradient-border-auto {
+  animation: caleno-border-gradient-rotate var(--animation-duration, 5s) linear infinite;
+}
+
+.gradient-border-component.gradient-border-hover {
+  --gradient-angle: 0deg;
+  animation: none;
+}
+
+.gradient-border-component.gradient-border-hover:hover {
+  animation: caleno-border-gradient-rotate var(--animation-duration, 5s) linear infinite;
+}
+
+.gradient-border-component.gradient-border-stop-hover {
+  animation: caleno-border-gradient-rotate var(--animation-duration, 5s) linear infinite;
+}
+
+.gradient-border-component.gradient-border-stop-hover:hover {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gradient-border-component.gradient-border-auto,
+  .gradient-border-component.gradient-border-hover:hover,
+  .gradient-border-component.gradient-border-stop-hover {
+    animation: none;
+  }
+}

@@ -109,6 +109,12 @@ export function multiBookingComboDoc(siteId: string, comboId: string) {
   return doc(db, "sites", siteId, "multiBookingCombos", comboId);
 }
 
+/** Customer waitlist for freed appointment slots (per tenant site). */
+export function bookingWaitlistEntriesCollection(siteId: string) {
+  if (!db) throw new Error("Firestore db not initialized");
+  return collection(db, "sites", siteId, "bookingWaitlistEntries");
+}
+
 /** platform/landing — main platform landing page content (CMS) */
 export function platformLandingDoc() {
   if (!db) throw new Error("Firestore db not initialized");

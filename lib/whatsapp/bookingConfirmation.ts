@@ -17,6 +17,9 @@ import { getServiceTypeKey } from "@/lib/archiveReplace";
 import type { DocumentReference, QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { normalizeE164 } from "./e164";
 import { getRelatedBookingIds } from "./relatedBookings";
+import { bookingDocToFreedSlot } from "@/lib/bookingWaitlist/bookingDocToFreedSlot";
+import { notifyBookingWaitlistFromFreedSlot } from "@/lib/bookingWaitlist/notifySlotFreed";
+import type { FreedBookingSlot } from "@/lib/bookingWaitlist/matchService";
 
 const serverTimestamp = () => admin.firestore.FieldValue.serverTimestamp();
 
@@ -272,12 +275,20 @@ export async function applyCancelledByWhatsAppToBooking(
     clientId,
     ...CANCELLED_BY_WHATSAPP_PAYLOAD,
   };
+  const slot = bookingDocToFreedSlot(d as Record<string, unknown>);
   await archiveBookingUniqueByServiceTypeAdmin(db, siteId, memberId, {
     clientId,
     customerPhone,
     serviceTypeId,
     minimal,
   });
+  if (slot) {
+    try {
+      await notifyBookingWaitlistFromFreedSlot(siteId, slot);
+    } catch (e) {
+      console.error("[applyCancelledByWhatsAppToBooking] waitlist notify", e);
+    }
+  }
 }
 
 /**
@@ -321,6 +332,7 @@ export async function cancelBookingGroupByWhatsApp(siteId: string, bookingId: st
     minimal: Record<string, unknown>;
     serviceTypeKey: string | null;
   }[] = [];
+  const freedSlotsForWaitlist: FreedBookingSlot[] = [];
   for (const id of bookingIds) {
     const ref = col.doc(id);
     const snap = await ref.get();
@@ -356,6 +368,8 @@ export async function cancelBookingGroupByWhatsApp(siteId: string, bookingId: st
     const serviceTypeKey =
       serviceTypeId != null && String(serviceTypeId).trim() !== "" ? String(serviceTypeId).trim() : null;
     archiveWrites.push({ clientKey, docId, minimal, serviceTypeKey });
+    const slot = bookingDocToFreedSlot(d as Record<string, unknown>);
+    if (slot) freedSlotsForWaitlist.push(slot);
   }
   const clientsRef = db.collection("sites").doc(siteId).collection("clients");
   const archiveByClient = new Map<string, QueryDocumentSnapshot[]>();
@@ -399,6 +413,14 @@ export async function cancelBookingGroupByWhatsApp(siteId: string, bookingId: st
     bookingIdsUpdated: bookingIds,
     groupKey: groupKey ?? undefined,
   });
+
+  for (const slot of freedSlotsForWaitlist) {
+    try {
+      await notifyBookingWaitlistFromFreedSlot(siteId, slot);
+    } catch (e) {
+      console.error("[cancelBookingGroupByWhatsApp] waitlist notify", e);
+    }
+  }
 }
 
 /**

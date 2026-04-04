@@ -1084,6 +1084,12 @@ export default function DaySchedulePage() {
                 הוסף תור
               </button>
               <Link
+                href={`${adminBasePath}/bookings/day/${dateKey}/waitlist`}
+                className="text-sm rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-700 hover:bg-slate-50"
+              >
+                רשימת המתנה
+              </Link>
+              <Link
                 href={`${adminBasePath}/bookings`}
                 className="text-sm text-caleno-700 hover:text-caleno-800"
               >

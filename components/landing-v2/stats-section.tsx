@@ -2,6 +2,29 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 
+function TrustStatCell({
+  fadeClassName,
+  value,
+  label,
+  statNumClass,
+  statLabelClass,
+}: {
+  fadeClassName: string
+  value: string
+  label: string
+  statNumClass: string
+  statLabelClass: string
+}) {
+  return (
+    <div className={fadeClassName}>
+      <div className="text-center px-0.5 py-0 md:px-4 md:py-2">
+        <p className={statNumClass}>{value}</p>
+        <p className={statLabelClass}>{label}</p>
+      </div>
+    </div>
+  )
+}
+
 function useCountUp(end: number, duration = 2000, suffix = "") {
   const [count, setCount] = useState(0)
   const [hasStarted, setHasStarted] = useState(false)
@@ -86,48 +109,39 @@ export function StatsSection() {
     return () => observer.disconnect()
   }, [triggerStats])
 
+  /** Mobile: one full-width row (RTL: שליטה+100% right, 15+ center, 10+ left). */
+  const fadeIn = (delayClass: string) =>
+    `min-w-0 transition-all duration-1000 ${delayClass} ${isVisible ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0 md:translate-y-8"}`
+  const statNum =
+    "mb-1 font-light tabular-nums leading-none text-foreground ltr md:mb-2 text-3xl sm:text-4xl md:text-6xl lg:text-7xl"
+  const statLabel =
+    "text-muted-foreground leading-tight text-[10px] sm:text-xs md:text-sm md:leading-snug lg:text-base"
+
   return (
-    <section
-      id="stats-section"
-      ref={sectionRef}
-      dir="rtl"
-      lang="he"
-      className="bg-background px-6 py-24"
-    >
-      <div className="mx-auto max-w-4xl">
-        <div className="grid grid-cols-1 gap-12 md:grid-cols-3 md:gap-12 lg:gap-16">
-          <div
-            className={`text-center transition-all delay-200 duration-1000 ${isVisible ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"}`}
-          >
-            <p className="mb-2 text-6xl font-light leading-none text-foreground tabular-nums md:text-7xl ltr">
-              {control.value}
-            </p>
-            <p className="text-sm leading-snug text-muted-foreground md:text-base">
-              שליטה בניהול העסק
-            </p>
-          </div>
-
-          <div
-            className={`text-center transition-all delay-300 duration-1000 ${isVisible ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"}`}
-          >
-            <p className="mb-2 text-6xl font-light leading-none text-foreground tabular-nums md:text-7xl ltr">
-              {businesses.value}
-            </p>
-            <p className="text-sm leading-snug text-muted-foreground md:text-base">
-              עסקים שכבר צומחים איתנו
-            </p>
-          </div>
-
-          <div
-            className={`text-center transition-all delay-400 duration-1000 ${isVisible ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"}`}
-          >
-            <p className="mb-2 text-6xl font-light leading-none text-foreground tabular-nums md:text-7xl ltr">
-              {tools.value}
-            </p>
-            <p className="text-sm leading-snug text-muted-foreground md:text-base">
-              כלים לניהול העסק
-            </p>
-          </div>
+    <section id="stats-section" ref={sectionRef} dir="rtl" lang="he" className="py-24 px-3 sm:px-6">
+      <div className="mx-auto w-full max-w-none md:max-w-4xl">
+        <div className="grid w-full grid-cols-3 gap-1 sm:gap-2 md:gap-8 lg:gap-10">
+          <TrustStatCell
+            fadeClassName={fadeIn("delay-200")}
+            value={control.value}
+            label="שליטה בניהול העסק"
+            statNumClass={statNum}
+            statLabelClass={statLabel}
+          />
+          <TrustStatCell
+            fadeClassName={fadeIn("delay-300")}
+            value={businesses.value}
+            label="עסקים שכבר צומחים איתנו"
+            statNumClass={statNum}
+            statLabelClass={statLabel}
+          />
+          <TrustStatCell
+            fadeClassName={fadeIn("delay-400")}
+            value={tools.value}
+            label="כלים לניהול העסק"
+            statNumClass={statNum}
+            statLabelClass={statLabel}
+          />
         </div>
       </div>
     </section>

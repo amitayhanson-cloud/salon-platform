@@ -653,6 +653,10 @@ export default function BookingPage() {
   /** Show required-field hint only after pressing "המשך" on step 1. */
   const [showStep1RequiredAfterContinue, setShowStep1RequiredAfterContinue] = useState(false);
   const [clientNote, setClientNote] = useState("");
+  const [waitlistModalOpen, setWaitlistModalOpen] = useState(false);
+  const [waitlistPreferredDateYmd, setWaitlistPreferredDateYmd] = useState("");
+  const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
+  const [waitlistFeedback, setWaitlistFeedback] = useState<string | null>(null);
   /** After פרטים: fetch last booking for repeat-service prompt */
   const [checkingLastBooking, setCheckingLastBooking] = useState(false);
   const [applyingRepeatBooking, setApplyingRepeatBooking] = useState(false);
@@ -2919,6 +2923,63 @@ export default function BookingPage() {
     };
   })() : null;
 
+  function openBookingWaitlistModal() {
+    setWaitlistFeedback(null);
+    if (selectedDate) {
+      setWaitlistPreferredDateYmd(ymdLocal(selectedDate));
+    } else {
+      setWaitlistPreferredDateYmd("");
+    }
+    setWaitlistModalOpen(true);
+  }
+
+  async function submitBookingWaitlist() {
+    if (!siteId || !selectedService) {
+      setWaitlistFeedback("בחרו שירות לפני הרשמה לרשימת המתנה.");
+      return;
+    }
+    if (!clientName.trim() || !clientPhone.trim() || !isBookingClientPhoneValid(clientPhone)) {
+      setWaitlistFeedback("מלאו שם וטלפון תקין בשלב פרטי הלקוח.");
+      return;
+    }
+    setWaitlistSubmitting(true);
+    setWaitlistFeedback(null);
+    try {
+      const res = await fetch("/api/booking-waitlist/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          siteId,
+          customerName: clientName.trim(),
+          customerPhone: clientPhone.trim(),
+          serviceName: selectedService.name,
+          serviceId: selectedService.id ?? null,
+          serviceTypeId: selectedPricingItem?.id ?? null,
+          preferredDateYmd: waitlistPreferredDateYmd.trim() || null,
+          preferredWorkerId: selectedWorker?.id ?? null,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setWaitlistFeedback(
+          data?.error === "invalid_phone"
+            ? "מספר טלפון לא תקין."
+            : data?.error === "rate_limited"
+              ? "ניסיון רב מדי. נסו שוב בעוד כשעה."
+              : "לא ניתן להירשם כרגע. נסו שוב."
+        );
+        return;
+      }
+      setWaitlistFeedback("נרשמתם לרשימת המתנה. נעדכן בוואטסאפ כשיתפנה תור מתאים.");
+      window.setTimeout(() => {
+        setWaitlistModalOpen(false);
+        setWaitlistFeedback(null);
+      }, 2600);
+    } finally {
+      setWaitlistSubmitting(false);
+    }
+  }
+
   return (
     <div 
       dir="rtl" 
@@ -3690,6 +3751,16 @@ export default function BookingPage() {
                   );
                 })}
               </div>
+              <div className="mt-6 pt-4 border-t text-center" style={{ borderColor: "var(--border)" }}>
+                <button
+                  type="button"
+                  onClick={openBookingWaitlistModal}
+                  className="text-sm font-medium underline-offset-2 hover:underline"
+                  style={{ color: "var(--primary)" }}
+                >
+                  אין תאריך מתאים? הצטרפו לרשימת המתנה
+                </button>
+              </div>
             </div>
           )}
 
@@ -3708,6 +3779,17 @@ export default function BookingPage() {
                   לא נבחר תאריך. לחצו &quot;חזור&quot; לבחירת יום.
                 </p>
               )}
+
+              <div className="mb-4 text-center">
+                <button
+                  type="button"
+                  onClick={openBookingWaitlistModal}
+                  className="text-sm font-medium underline-offset-2 hover:underline"
+                  style={{ color: "var(--primary)" }}
+                >
+                  אין שעה פנויה? הצטרפו לרשימת המתנה
+                </button>
+              </div>
               
               {/* Debug panel (dev only - requires NEXT_PUBLIC_DEBUG_BOOKING=true) */}
               {process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true" && debugInfo && (
@@ -4120,6 +4202,75 @@ export default function BookingPage() {
           </div>
         )}
       </div>
+
+      {waitlistModalOpen && (
+        <div
+          className="fixed inset-0 z-[300] flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(15,23,42,0.5)" }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="waitlist-modal-title"
+        >
+          <div
+            className="w-full max-w-md rounded-2xl p-6 shadow-xl text-right space-y-4"
+            style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+          >
+            <h2 id="waitlist-modal-title" className="text-lg font-bold" style={{ color: "var(--text)" }}>
+              רשימת המתנה
+            </h2>
+            <p className="text-sm" style={{ color: "var(--muted)" }}>
+              שירות: {selectedService?.name ?? "—"}
+              {isMultiBooking && selectedServices.length > 1 ? " (השירות הראשון בחבילה)" : null}
+            </p>
+            <div>
+              <label className="block text-sm font-medium mb-1" style={{ color: "var(--text)" }}>
+                תאריך מועדף (אופציונלי)
+              </label>
+              <input
+                type="date"
+                value={waitlistPreferredDateYmd}
+                onChange={(e) => setWaitlistPreferredDateYmd(e.target.value)}
+                className="w-full rounded-xl border px-3 py-2 text-right"
+                style={{ borderColor: "var(--border)", color: "var(--text)" }}
+              />
+            </div>
+            {waitlistFeedback && (
+              <p
+                className="text-sm rounded-lg px-3 py-2"
+                style={
+                  waitlistFeedback.startsWith("נרשמתם")
+                    ? { backgroundColor: "rgba(34,197,94,0.12)", color: "var(--text)" }
+                    : { backgroundColor: "rgba(220,38,38,0.1)", color: "#991b1b" }
+                }
+              >
+                {waitlistFeedback}
+              </p>
+            )}
+            <div className="flex gap-2 justify-end flex-wrap">
+              <button
+                type="button"
+                onClick={() => {
+                  setWaitlistModalOpen(false);
+                  setWaitlistFeedback(null);
+                }}
+                className="px-4 py-2 rounded-xl border text-sm font-medium"
+                style={{ borderColor: "var(--border)", color: "var(--text)" }}
+              >
+                סגור
+              </button>
+              <button
+                type="button"
+                disabled={waitlistSubmitting}
+                onClick={() => void submitBookingWaitlist()}
+                className="px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-50"
+                style={{ backgroundColor: "var(--primary)", color: "var(--primaryText)" }}
+              >
+                {waitlistSubmitting ? "שולחים…" : "הרשמה לרשימת המתנה"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Powered by Caleno watermark */}
       <footer className="mt-8 py-4 flex flex-col items-center justify-center gap-1.5 text-center" style={{ color: "var(--muted)" }}>

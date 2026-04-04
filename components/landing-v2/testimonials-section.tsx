@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 
+import { PremiumGlareFrame } from "./premium-glare";
+
 const AVATAR_URL = "https://v0.dev/placeholder-user.jpg";
 
 const testimonials = [
@@ -55,10 +57,6 @@ const testimonials2 = [
 
 const duplicatedTestimonials = [...testimonials, ...testimonials, ...testimonials];
 const duplicatedTestimonials2 = [...testimonials2, ...testimonials2, ...testimonials2];
-
-/** Matches v0 template card shell (`border-none` overrides `border` like the original). */
-const cardClassName =
-  "flex-shrink-0 w-full sm:w-[400px] bg-card border border-border rounded-2xl p-8 border-none py-4";
 
 export function TestimonialsSection() {
   const [isPaused, setIsPaused] = useState(false);
@@ -132,7 +130,7 @@ export function TestimonialsSection() {
   }, [isPaused, isInitialized]);
 
   return (
-    <section id="testimonials" className="px-6 py-32" dir="ltr">
+    <section id="testimonials" className="bg-white px-6 py-32" dir="ltr">
       <div className="mx-auto max-w-7xl">
         <div className="mb-16 text-center">
           <h2 className="font-serif text-4xl font-normal leading-tight md:text-5xl">
@@ -142,8 +140,8 @@ export function TestimonialsSection() {
 
         <div className="space-y-6">
           <div className="relative">
-            <div className="pointer-events-none absolute top-0 bottom-0 left-0 z-10 w-32 bg-gradient-to-r from-background to-transparent" />
-            <div className="pointer-events-none absolute top-0 right-0 bottom-0 z-10 w-32 bg-gradient-to-l from-background to-transparent" />
+            <div className="pointer-events-none absolute top-0 bottom-0 left-0 z-10 w-32 bg-gradient-to-r from-white to-transparent" />
+            <div className="pointer-events-none absolute top-0 right-0 bottom-0 z-10 w-32 bg-gradient-to-l from-white to-transparent" />
 
             <div
               ref={scrollRef}
@@ -155,7 +153,11 @@ export function TestimonialsSection() {
               style={{ scrollBehavior: "auto" }}
             >
               {duplicatedTestimonials.map((testimonial, index) => (
-                <div key={index} className={cardClassName}>
+                <PremiumGlareFrame
+                  key={index}
+                  className="w-full shrink-0 sm:w-[400px]"
+                  contentClassName="flex min-h-[200px] flex-col px-8 py-4"
+                >
                   <div className="mb-6 flex items-start gap-4">
                     <Image
                       src={testimonial.avatar || AVATAR_URL}
@@ -172,14 +174,14 @@ export function TestimonialsSection() {
                     <p className="text-sm font-bold text-foreground">{testimonial.name}</p>
                     <p className="text-muted-foreground text-xs">{testimonial.role}</p>
                   </div>
-                </div>
+                </PremiumGlareFrame>
               ))}
             </div>
           </div>
 
           <div className="relative">
-            <div className="pointer-events-none absolute top-0 bottom-0 left-0 z-10 w-32 bg-gradient-to-r from-background to-transparent" />
-            <div className="pointer-events-none absolute top-0 right-0 bottom-0 z-10 w-32 bg-gradient-to-l from-background to-transparent" />
+            <div className="pointer-events-none absolute top-0 bottom-0 left-0 z-10 w-32 bg-gradient-to-r from-white to-transparent" />
+            <div className="pointer-events-none absolute top-0 right-0 bottom-0 z-10 w-32 bg-gradient-to-l from-white to-transparent" />
 
             <div
               ref={scrollRef2}
@@ -191,7 +193,11 @@ export function TestimonialsSection() {
               style={{ scrollBehavior: "auto" }}
             >
               {duplicatedTestimonials2.map((testimonial, index) => (
-                <div key={index} className={cardClassName}>
+                <PremiumGlareFrame
+                  key={index}
+                  className="w-full shrink-0 sm:w-[400px]"
+                  contentClassName="flex min-h-[200px] flex-col px-8 py-4"
+                >
                   <div className="mb-6 flex items-start gap-4">
                     <Image
                       src={testimonial.avatar || AVATAR_URL}
@@ -208,7 +214,7 @@ export function TestimonialsSection() {
                     <p className="text-sm font-bold text-foreground">{testimonial.name}</p>
                     <p className="text-muted-foreground text-sm">{testimonial.role}</p>
                   </div>
-                </div>
+                </PremiumGlareFrame>
               ))}
             </div>
           </div>

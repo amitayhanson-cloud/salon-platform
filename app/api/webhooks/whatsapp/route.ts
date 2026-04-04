@@ -60,6 +60,11 @@ import {
 import { fetchWazeUrlForSite } from "@/lib/whatsapp/fetchWazeUrlForSite";
 import { getPublicBookingPageAbsoluteUrlForSite, withTrackingSource } from "@/lib/url";
 import { clearWaOptInPending } from "@/lib/whatsapp/waOptInPending";
+import {
+  findNotifiedWaitlistOfferForPhone,
+  fulfillWaitlistOfferFromInboundYes,
+  declineWaitlistOffer,
+} from "@/lib/bookingWaitlist/fulfillOfferFromYes";
 
 const WEBHOOK_PATH = "/api/webhooks/whatsapp";
 
@@ -531,6 +536,27 @@ export async function POST(request: NextRequest) {
       console.log("[WA_WEBHOOK] matches_count", { phoneE164: fromE164, count: matches.length });
 
       if (matches.length === 0) {
+        const waitlistMatch = await findNotifiedWaitlistOfferForPhone(fromE164);
+        if (waitlistMatch) {
+          if (intent === "yes") {
+            const result = await fulfillWaitlistOfferFromInboundYes(waitlistMatch.siteId, waitlistMatch.id);
+            if (result.ok) {
+              return recordAndReturnReply(result.confirmReply, "waitlist_booked", {
+                meterSiteId: waitlistMatch.siteId,
+              });
+            }
+            if (result.customerReply) {
+              return recordAndReturnReply(result.customerReply, "waitlist_offer_failed", {
+                meterSiteId: waitlistMatch.siteId,
+              });
+            }
+            return recordSilent("waitlist_offer_failed");
+          }
+          const { reply } = await declineWaitlistOffer(waitlistMatch.siteId, waitlistMatch.id);
+          return recordAndReturnReply(reply, "waitlist_declined", {
+            meterSiteId: waitlistMatch.siteId,
+          });
+        }
         return recordSilent("no_booking");
       }
 

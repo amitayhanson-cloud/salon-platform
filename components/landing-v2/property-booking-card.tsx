@@ -37,11 +37,10 @@ export function PropertyBookingCard({
 }: PropertyBookingCardProps) {
   return (
     <div
-      className={cn("w-full h-full flex flex-col overflow-hidden rounded-3xl bg-white shadow-card", className)}
-      style={{
-        boxShadow:
-          "rgba(14, 63, 126, 0.04) 0px 0px 0px 1px, rgba(42, 51, 69, 0.04) 0px 1px 1px -0.5px, rgba(42, 51, 70, 0.04) 0px 3px 3px -1.5px, rgba(42, 51, 70, 0.04) 0px 6px 6px -3px, rgba(14, 63, 126, 0.04) 0px 12px 12px -6px, rgba(14, 63, 126, 0.04) 0px 24px 24px -12px",
-      }}
+      className={cn(
+        "flex h-full w-full flex-col overflow-hidden rounded-3xl border border-white/30 bg-white/80 shadow-[0_8px_32px_0_rgba(31,38,135,0.08)] backdrop-blur-xl",
+        className,
+      )}
     >
       {/* Image */}
       <div className="relative aspect-[16/9] w-full overflow-hidden">

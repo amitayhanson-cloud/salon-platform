@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { LayoutGroup, motion } from "framer-motion";
 import { useAuth } from "@/components/auth/AuthProvider";
 import CalenoLoading from "@/components/CalenoLoading";
@@ -12,7 +12,6 @@ import { getAdminBasePathFromSiteId } from "@/lib/url";
 import {
   Users,
   Calendar,
-  LogOut,
   MessageSquare,
   UserPlus,
   Banknote,
@@ -199,7 +198,7 @@ const DASHBOARD_CHART_SECTION_TITLE: Record<AnalyticsMetricKind, string> = {
   cancellations: "ביטולים",
   utilization: "ניצולת זמן",
   traffic: "מקור הגעה",
-  whatsapp: "הודעות WhatsApp",
+  whatsapp: "הודעות החודש",
   popularService: "שירותים פופולריים",
 };
 
@@ -291,9 +290,8 @@ const DASHBOARD_SERVICE_FALLBACK_COLORS = [
 
 export default function AdminHomePage() {
   const params = useParams();
-  const router = useRouter();
   const siteId = (params?.siteId as string) || "";
-  const { user, firebaseUser, loading, logout } = useAuth();
+  const { user, firebaseUser, loading } = useAuth();
   const [whatsAppThisMonth, setWhatsAppThisMonth] = useState<{
     used: number;
     limit: number;
@@ -301,7 +299,6 @@ export default function AdminHomePage() {
   const [whatsAppLoading, setWhatsAppLoading] = useState(true);
   const [dashMetrics, setDashMetrics] = useState<DashboardMetrics | null>(null);
   const [dashLoading, setDashLoading] = useState(true);
-  const [loggingOut, setLoggingOut] = useState(false);
   /** `null` = grid of stat cards; key = single metric chart shown in place of the grid */
   const [selectedMetricKey, setSelectedMetricKey] = useState<string | null>(null);
   /** Lifted from chart panel so week/month/year survives remounts when `chartSlices` is rebuilt each render. */
@@ -674,7 +671,7 @@ export default function AdminHomePage() {
       {
         key: "whatsapp",
         metricKind: "whatsapp",
-        label: "הודעות WhatsApp החודש",
+        label: "הודעות החודש",
         value:
           whatsAppThisMonth != null
             ? `\u200E${whatsAppThisMonth.used}/${whatsAppThisMonth.limit}`
@@ -751,30 +748,10 @@ export default function AdminHomePage() {
     return "count";
   }
 
-  const handleLogout = async () => {
-    if (loggingOut) return;
-    setLoggingOut(true);
-    try {
-      await logout();
-      router.push("/login");
-    } finally {
-      setLoggingOut(false);
-    }
-  };
-
   return (
     <div dir="rtl" className="min-h-screen overflow-x-hidden">
       <div className="mx-auto max-w-6xl px-4 pb-16 lg:px-8">
         <AdminCard gradient className="relative overflow-x-hidden overflow-y-visible p-5 md:p-8 lg:p-10">
-          <button
-            type="button"
-            onClick={handleLogout}
-            disabled={loggingOut}
-            className="absolute right-5 top-5 z-20 flex items-center justify-center gap-2 rounded-lg bg-white/90 px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 md:right-8 md:top-8"
-          >
-            <LogOut className="h-4 w-4 shrink-0" aria-hidden />
-            {loggingOut ? "מתנתק..." : "התנתקות"}
-          </button>
           {/* Optional subtle grid overlay */}
           <div
             aria-hidden
@@ -793,12 +770,12 @@ export default function AdminHomePage() {
           ) : (
             <>
               <div className="relative z-10 flex flex-col items-center gap-4">
-                <div className="min-w-0 pt-12 text-center md:pt-2">
+                <div className="min-w-0 pt-2 text-center md:pt-0">
                   <h1 className="mb-2 text-pretty text-xl font-extrabold tracking-tight text-[#0F172A] md:text-2xl lg:text-3xl">
                     {welcomeMessage}
                   </h1>
                   <p className="mb-6 text-sm text-[#64748B] md:mb-8 md:text-base">
-                    מה תרצה לעשות היום?
+                    מה עושים היום?
                   </p>
                 </div>
               </div>
@@ -806,9 +783,15 @@ export default function AdminHomePage() {
               <div className="relative z-10">
                 <LayoutGroup id="dashboard-stat-morph">
                   <div className="mb-10">
-                    <h2 className="mb-4 text-lg font-semibold text-[#0F172A]">
-                      סטטיסטיקות העסק
-                    </h2>
+                    <div dir="rtl" className="mb-4 flex items-center gap-2.5">
+                      <h2 className="text-lg font-semibold text-[#0F172A]">
+                        פעילות יומית
+                      </h2>
+                      <span className="relative flex h-3 w-3 shrink-0" aria-hidden>
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" />
+                      </span>
+                    </div>
                     {statsLoading ? (
                       <DashboardStatsLoading />
                     ) : selectedStatRow ? (
@@ -939,10 +922,6 @@ export default function AdminHomePage() {
                     )}
                   </div>
                 </LayoutGroup>
-
-                <p className="relative z-10 mt-8 text-sm leading-relaxed text-[#64748B]">
-                  בחר מהתפריט למעלה כדי לנהל תורים, לקוחות, השירותים והאתר.
-                </p>
               </div>
             </>
           )}

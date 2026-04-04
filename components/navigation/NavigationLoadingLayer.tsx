@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
-import CalenoLoader from "@/components/ui/CalenoLoader";
+import { LiquidGlassLoading } from "@/components/landing-v2/liquid-glass-loading";
 
 type Props = {
   children: React.ReactNode;
@@ -95,18 +95,16 @@ export function NavigationLoadingLayer({
   }, [visible, maxWaitMs]);
 
   const overlay =
-    !mounted || !visible ? null : (
+    !mounted || !visible ? null : activeVariant === "caleno" ? (
+      <LiquidGlassLoading />
+    ) : (
       <div
         className="fixed inset-0 z-[200] flex flex-col items-center justify-center gap-6 bg-white/90 backdrop-blur-[3px]"
         role="progressbar"
         aria-busy="true"
         aria-label="טוען"
       >
-        {activeVariant === "caleno" ? (
-          <div className="scale-[0.82]">
-            <CalenoLoader />
-          </div>
-        ) : tenantLogoUrl ? (
+        {tenantLogoUrl ? (
           <div className="flex flex-col items-center gap-5 px-6">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img

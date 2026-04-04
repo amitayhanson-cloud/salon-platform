@@ -1,13 +1,40 @@
 "use client"
 
 import type React from "react"
-import Image from "next/image"
 import { useState } from "react"
 import { Menu, X, ArrowUpRight, ArrowRight } from "lucide-react"
+import { motion, useReducedMotion } from "framer-motion"
+
+const LOGO_SVG = "/images/newlandinglogo.svg"
+const LOGO_FALLBACK_SVG = "/images/new_landing_caleno_logo1.svg"
+
+const glassBar =
+  "relative overflow-hidden rounded-2xl border border-white/25 bg-white/60 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] backdrop-blur-xl transition-all duration-300"
+
+const glassBarSheen =
+  "pointer-events-none absolute inset-0 rounded-[inherit] bg-gradient-to-br from-white/22 via-transparent to-transparent opacity-0 transition-opacity duration-500 ease-out group-hover/header-bar:opacity-[0.35] motion-reduce:group-hover/header-bar:opacity-0"
+
+const glassBarHighlight =
+  "pointer-events-none absolute -top-px right-0 h-[52%] w-[40%] rounded-[inherit] bg-gradient-to-bl from-white/40 via-white/12 to-transparent opacity-85"
+
+const glassBarRing =
+  "pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-white/25"
+
+const glassPill =
+  "relative flex items-center gap-0 overflow-hidden rounded-full border border-white/25 bg-white/40 py-1 pl-5 pr-1 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] backdrop-blur-xl transition-shadow duration-300"
+
+const pillHighlight =
+  "pointer-events-none absolute -top-px right-0 h-[72%] w-[42%] rounded-full bg-gradient-to-bl from-white/35 via-white/10 to-transparent opacity-70"
+
+const pillRing = "pointer-events-none absolute inset-0 rounded-full ring-1 ring-inset ring-white/25"
+
+const navLinkClass =
+  "cursor-pointer text-sm text-foreground/85 transition-colors hover:text-foreground [text-shadow:0_1px_0_rgba(255,255,255,0.88)]"
 
 export function Header() {
   const [isOpen, setIsOpen] = useState(false)
-  const isScrolled = true
+  const [logoSrc, setLogoSrc] = useState(LOGO_SVG)
+  const reduceMotion = useReducedMotion()
 
   const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
     e.preventDefault()
@@ -34,205 +61,116 @@ export function Header() {
     })
   }
 
+  const ctaMotionProps = {
+    whileHover: reduceMotion ? undefined : { scale: 1.03, boxShadow: "0 12px 40px 0 rgba(31, 38, 135, 0.12)" },
+    whileTap: reduceMotion ? undefined : { scale: 0.98 },
+    transition: { type: "spring" as const, stiffness: 400, damping: 24 },
+  }
+
   return (
-    <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled ? "px-4 pt-4" : ""}`}>
-      <div
-        className={`max-w-7xl mx-auto transition-all duration-300 rounded-2xl ${
-          isScrolled
-            ? "bg-white/70 backdrop-blur-xl border border-zinc-200 px-6 py-3"
-            : "bg-background/90 backdrop-blur-md px-6 py-5"
-        }`}
-      >
-        <div className="flex items-center justify-between">
-          <a href="#" onClick={handleLogoClick} className="flex cursor-pointer items-center" aria-label="Caleno">
-            <span className="relative block h-8 w-[118px] shrink-0 md:h-9 md:w-[148px]">
-              <Image
-                src="/brand/caleno logo/caleno_logo_new.png"
-                alt="Caleno"
-                fill
-                className="object-contain object-left"
-                sizes="(max-width: 768px) 118px, 148px"
-                priority
-              />
-            </span>
+    <header className="fixed left-0 right-0 top-0 z-50 px-4 pt-4 transition-all duration-300">
+      <div className={`group/header-bar mx-auto max-w-7xl ${glassBar} px-6 py-3`}>
+        <span aria-hidden className={glassBarHighlight} />
+        <span aria-hidden className={glassBarRing} />
+        <span aria-hidden className={glassBarSheen} />
+
+        <div dir="ltr" className="relative z-10 flex w-full items-center gap-3 md:gap-6">
+          <a
+            href="#"
+            onClick={handleLogoClick}
+            className="flex shrink-0 cursor-pointer items-center"
+            aria-label="Caleno"
+          >
+            <img
+              src={logoSrc}
+              alt="Caleno"
+              className="h-10 w-auto max-w-[min(220px,50vw)] shrink-0 origin-left scale-[1.38] object-contain object-left drop-shadow-[0_1px_2px_rgba(15,23,42,0.08)] will-change-transform md:h-11 md:max-w-[min(240px,52vw)] md:scale-[1.32] lg:h-12 lg:max-w-[min(260px,54vw)] lg:scale-[1.26]"
+              width={240}
+              height={52}
+              decoding="async"
+              fetchPriority="high"
+              onError={() => setLogoSrc((s) => (s === LOGO_FALLBACK_SVG ? s : LOGO_FALLBACK_SVG))}
+              loading="eager"
+            />
           </a>
 
-          <nav className="hidden md:flex items-center gap-8">
-            <a
-              href="#how-it-works"
-              onClick={(e) => handleSmoothScroll(e, "how-it-works")}
-              className={`text-sm transition-colors cursor-pointer ${
-                isScrolled ? "text-zinc-600 hover:text-black" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Mission
+          <nav className="hidden min-w-0 flex-1 justify-center gap-6 lg:gap-8 md:flex">
+            <a href="#how-it-works" onClick={(e) => handleSmoothScroll(e, "how-it-works")} className={navLinkClass}>
+              כלי ניהול
             </a>
-            <a
-              href="#features"
-              onClick={(e) => handleSmoothScroll(e, "features")}
-              className={`text-sm transition-colors cursor-pointer ${
-                isScrolled ? "text-zinc-600 hover:text-black" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Features
+            <a href="#features" onClick={(e) => handleSmoothScroll(e, "features")} className={navLinkClass}>
+              למי מתאים
             </a>
-            <a
-              href="#pricing"
-              onClick={(e) => handleSmoothScroll(e, "pricing")}
-              className={`text-sm transition-colors cursor-pointer ${
-                isScrolled ? "text-zinc-600 hover:text-black" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Properties
+            <a href="#pricing" onClick={(e) => handleSmoothScroll(e, "pricing")} className={navLinkClass}>
+              עסקים
             </a>
-            <a
-              href="#testimonials"
-              onClick={(e) => handleSmoothScroll(e, "testimonials")}
-              className={`text-sm transition-colors cursor-pointer ${
-                isScrolled ? "text-zinc-600 hover:text-black" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Reviews
+            <a href="#testimonials" onClick={(e) => handleSmoothScroll(e, "testimonials")} className={navLinkClass}>
+              תגובות
             </a>
-            <a
-              href="#faq"
-              onClick={(e) => handleSmoothScroll(e, "faq")}
-              className={`text-sm transition-colors cursor-pointer ${
-                isScrolled ? "text-zinc-600 hover:text-black" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
+            <a href="#faq" onClick={(e) => handleSmoothScroll(e, "faq")} className={navLinkClass}>
               FAQ
             </a>
           </nav>
 
-          <div className="hidden md:flex items-center gap-1">
+          <div className="ms-auto flex shrink-0 items-center gap-2">
+            <motion.button type="button" className={`${glassPill} group hidden md:inline-flex`} {...ctaMotionProps}>
+              <span aria-hidden className={pillHighlight} />
+              <span aria-hidden className={pillRing} />
+              <span className="absolute inset-0 origin-right scale-x-0 rounded-full bg-foreground transition-transform duration-300 group-hover:scale-x-100" />
+              <span className="relative z-10 pr-3 text-sm font-medium text-foreground transition-colors duration-300 group-hover:text-background [text-shadow:0_1px_0_rgba(255,255,255,0.88)]">
+                צור עסק
+              </span>
+              <span className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full">
+                <ArrowRight className="absolute h-4 w-4 text-foreground transition-opacity duration-300 group-hover:opacity-0" />
+                <ArrowUpRight className="h-4 w-4 text-foreground opacity-0 transition-all duration-300 group-hover:opacity-100 group-hover:text-background" />
+              </span>
+            </motion.button>
+
             <button
-              className={`relative flex items-center gap-0 border rounded-full pl-5 pr-1 py-1 transition-all duration-300 group overflow-hidden ${
-                isScrolled ? "border-zinc-300" : "border-border"
-              }`}
+              type="button"
+              className="text-foreground transition-colors duration-300 [text-shadow:0_1px_0_rgba(255,255,255,0.85)] md:hidden"
+              onClick={() => setIsOpen(!isOpen)}
+              aria-expanded={isOpen}
+              aria-label={isOpen ? "סגור תפריט" : "פתח תפריט"}
             >
-              <span
-                className={`absolute inset-0 rounded-full scale-x-0 origin-right group-hover:scale-x-100 transition-transform duration-300 ${
-                  isScrolled ? "bg-black" : "bg-foreground"
-                }`}
-              />
-              <span
-                className={`text-sm pr-3 relative z-10 transition-colors duration-300 ${
-                  isScrolled ? "text-black group-hover:text-white" : "text-foreground group-hover:text-background"
-                }`}
-              >
-                List a property
-              </span>
-              <span className="w-8 h-8 rounded-full flex items-center justify-center relative z-10">
-                <ArrowRight
-                  className={`w-4 h-4 group-hover:opacity-0 absolute transition-opacity duration-300 ${
-                    isScrolled ? "text-black" : "text-foreground"
-                  }`}
-                />
-                <ArrowUpRight
-                  className={`w-4 h-4 opacity-0 group-hover:opacity-100 transition-all duration-300 ${
-                    isScrolled ? "text-black group-hover:text-white" : "text-foreground group-hover:text-background"
-                  }`}
-                />
-              </span>
+              {isOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
           </div>
-
-          <button
-            className={`md:hidden transition-colors duration-300 ${isScrolled ? "text-black" : "text-foreground"}`}
-            onClick={() => setIsOpen(!isOpen)}
-          >
-            {isOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
         </div>
 
         {isOpen && (
-          <nav
-            className={`md:hidden mt-6 pb-6 flex flex-col gap-4 border-t pt-6 ${
-              isScrolled ? "border-zinc-200" : "border-border"
-            }`}
-          >
-            <a
-              href="#how-it-works"
-              onClick={(e) => handleSmoothScroll(e, "how-it-works")}
-              className={`transition-colors cursor-pointer ${
-                isScrolled ? "text-zinc-600 hover:text-black" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Mission
+          <nav className="relative z-10 mt-6 flex flex-col gap-4 border-t border-white/20 pb-6 pt-6 md:hidden">
+            <a href="#how-it-works" onClick={(e) => handleSmoothScroll(e, "how-it-works")} className={navLinkClass}>
+              כלי ניהול
             </a>
-            <a
-              href="#features"
-              onClick={(e) => handleSmoothScroll(e, "features")}
-              className={`transition-colors cursor-pointer ${
-                isScrolled ? "text-zinc-600 hover:text-black" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Features
+            <a href="#features" onClick={(e) => handleSmoothScroll(e, "features")} className={navLinkClass}>
+              למי מתאים
             </a>
-            <a
-              href="#pricing"
-              onClick={(e) => handleSmoothScroll(e, "pricing")}
-              className={`transition-colors cursor-pointer ${
-                isScrolled ? "text-zinc-600 hover:text-black" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Properties
+            <a href="#pricing" onClick={(e) => handleSmoothScroll(e, "pricing")} className={navLinkClass}>
+              עסקים
             </a>
-            <a
-              href="#testimonials"
-              onClick={(e) => handleSmoothScroll(e, "testimonials")}
-              className={`transition-colors cursor-pointer ${
-                isScrolled ? "text-zinc-600 hover:text-black" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Reviews
+            <a href="#testimonials" onClick={(e) => handleSmoothScroll(e, "testimonials")} className={navLinkClass}>
+              תגובות
             </a>
-            <a
-              href="#faq"
-              onClick={(e) => handleSmoothScroll(e, "faq")}
-              className={`transition-colors cursor-pointer ${
-                isScrolled ? "text-zinc-600 hover:text-black" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
+            <a href="#faq" onClick={(e) => handleSmoothScroll(e, "faq")} className={navLinkClass}>
               FAQ
             </a>
-            <div
-              className={`flex flex-col gap-3 mt-4 pt-4 border-t ${isScrolled ? "border-zinc-200" : "border-border"}`}
-            >
-              <a href="#" className={isScrolled ? "text-black" : "text-foreground"}>
+            <div className="mt-4 flex flex-col gap-3 border-t border-white/20 pt-4">
+              <a href="#" className={navLinkClass}>
                 Login
               </a>
-              <button
-                className={`relative flex items-center gap-0 border rounded-full pl-5 pr-1 py-1 w-fit transition-all duration-300 group overflow-hidden ${
-                  isScrolled ? "border-zinc-300" : "border-border"
-                }`}
-              >
-                <span
-                  className={`absolute inset-0 rounded-full scale-x-0 origin-right group-hover:scale-x-100 transition-transform duration-300 ${
-                    isScrolled ? "bg-black" : "bg-foreground"
-                  }`}
-                />
-                <span
-                  className={`text-sm pr-3 relative z-10 transition-colors duration-300 ${
-                    isScrolled ? "text-black group-hover:text-white" : "text-foreground group-hover:text-background"
-                  }`}
-                >
-                  List a property
+              <motion.button type="button" className={`${glassPill} group w-fit`} {...ctaMotionProps}>
+                <span aria-hidden className={pillHighlight} />
+                <span aria-hidden className={pillRing} />
+                <span className="absolute inset-0 origin-right scale-x-0 rounded-full bg-foreground transition-transform duration-300 group-hover:scale-x-100" />
+                <span className="relative z-10 pr-3 text-sm font-medium text-foreground transition-colors duration-300 group-hover:text-background [text-shadow:0_1px_0_rgba(255,255,255,0.88)]">
+                  צור עסק
                 </span>
-                <span className="w-8 h-8 rounded-full flex items-center justify-center relative z-10">
-                  <ArrowRight
-                    className={`w-4 h-4 group-hover:opacity-0 absolute transition-opacity duration-300 ${
-                      isScrolled ? "text-black" : "text-foreground"
-                    }`}
-                  />
-                  <ArrowUpRight
-                    className={`w-4 h-4 opacity-0 group-hover:opacity-100 transition-all duration-300 ${
-                      isScrolled ? "text-black group-hover:text-white" : "text-foreground group-hover:text-background"
-                    }`}
-                  />
+                <span className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full">
+                  <ArrowRight className="absolute h-4 w-4 text-foreground transition-opacity duration-300 group-hover:opacity-0" />
+                  <ArrowUpRight className="h-4 w-4 text-foreground opacity-0 transition-all duration-300 group-hover:opacity-100 group-hover:text-background" />
                 </span>
-              </button>
+              </motion.button>
             </div>
           </nav>
         )}

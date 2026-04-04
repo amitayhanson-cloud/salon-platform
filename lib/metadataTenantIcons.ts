@@ -26,7 +26,10 @@ function inferFaviconMimeType(absoluteUrl: string): string | undefined {
 
 export function calenoDefaultIcons(): NonNullable<Metadata["icons"]> {
   return {
-    icon: "/favicon.ico",
+    icon: [
+      { url: "/favicon.ico", sizes: "32x32" },
+      { url: "/favicon.png", type: "image/png", sizes: "512x512" },
+    ],
     shortcut: "/favicon.ico",
     apple: "/apple-touch-icon.png",
   };

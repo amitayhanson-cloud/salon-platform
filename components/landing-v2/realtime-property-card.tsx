@@ -1,9 +1,12 @@
 "use client"
 
 import { BarChart, Bar, XAxis, ResponsiveContainer, Tooltip, Cell } from "recharts"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion"
 import { useState, useEffect } from "react"
-import { Home, Eye } from "lucide-react"
+import { Calendar, Wallet } from "lucide-react"
+
+import { LiquidGlassPanel } from "./liquid-glass-panel"
+import { RentalsCardShaderBackground } from "./rentals-card-shader-background"
 
 const defaultHourlyData = [
   { hour: "12am", visitors: 120 },
@@ -20,32 +23,50 @@ const defaultHourlyData = [
   { hour: "10pm", visitors: 220 },
 ]
 
-const defaultTopProperties = [
-  { page: "Paris Apartment", visitors: 245 },
-  { page: "Côte d'Azur Villa", visitors: 189 },
-  { page: "Lyon Studio", visitors: 156 },
-  { page: "Bordeaux House", visitors: 98 },
+const APPOINTMENTS_TODAY = [9, 15, 21, 28]
+const REVENUE_TODAY = [1100, 1700, 2200, 2900]
+
+type PanelRow =
+  | { label: string; values: readonly [number, number, number] }
+  | { label: string; values: readonly [number, number, number]; suffix: string }
+
+const PANEL_ROWS: PanelRow[] = [
+  { label: "לקוחות חדשים", values: [29, 36, 41] },
+  { label: "ביטולים", values: [1, 3, 4] },
+  { label: "ניצולת זמן", values: [88, 91, 93], suffix: "%" },
+  { label: "לקוחות", values: [368, 423, 517] },
 ]
 
+/** Bar chart: active sweep and supporting fills (teal family). */
+const BAR_FILL_ACTIVE = "#7ac7d4"
+const BAR_FILL_PEAK = "#b0dde4"
+const BAR_FILL_MUTED = "#e2eef0"
+
+function useCyclingIndex(length: number, intervalMs: number) {
+  const [i, setI] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setI((v) => (v + 1) % length), intervalMs)
+    return () => clearInterval(id)
+  }, [length, intervalMs])
+  return i
+}
+
 export function RealtimePropertyCard() {
-  const [currentVisitors, setCurrentVisitors] = useState(847)
-  const [pageViews, setPageViews] = useState(3420)
+  const reduceMotion = useReducedMotion()
+  const appointmentsIdx = useCyclingIndex(APPOINTMENTS_TODAY.length, 2100)
+  const revenueIdx = useCyclingIndex(REVENUE_TODAY.length, 2780)
+  const newClientsIdx = useCyclingIndex(3, 2320)
+  const cancellationsIdx = useCyclingIndex(3, 3050)
+  const utilizationIdx = useCyclingIndex(3, 2640)
+  const clientsIdx = useCyclingIndex(3, 2890)
+
+  const panelIndices = [newClientsIdx, cancellationsIdx, utilizationIdx, clientsIdx]
+
   const [hourlyData, setHourlyData] = useState(defaultHourlyData)
-  const [topProperties, setTopProperties] = useState(defaultTopProperties)
   const [highlightedBar, setHighlightedBar] = useState(8)
 
   const maxVisitors = Math.max(...hourlyData.map((d) => d.visitors))
 
-  // Animate visitor count
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentVisitors((prev) => prev + Math.floor(Math.random() * 10) - 3)
-      setPageViews((prev) => prev + Math.floor(Math.random() * 5))
-    }, 2000)
-    return () => clearInterval(interval)
-  }, [])
-
-  // Animate bar highlight
   useEffect(() => {
     const interval = setInterval(() => {
       setHighlightedBar((prev) => (prev + 1) % hourlyData.length)
@@ -53,7 +74,6 @@ export function RealtimePropertyCard() {
     return () => clearInterval(interval)
   }, [hourlyData.length])
 
-  // Update hourly data periodically
   useEffect(() => {
     const interval = setInterval(() => {
       setHourlyData((prev) =>
@@ -66,147 +86,159 @@ export function RealtimePropertyCard() {
     return () => clearInterval(interval)
   }, [])
 
-  // Update top properties periodically
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTopProperties((prev) =>
-        prev.map((item) => ({
-          ...item,
-          visitors: Math.max(50, item.visitors + Math.floor(Math.random() * 20) - 10),
-        })),
-      )
-    }, 2500)
-    return () => clearInterval(interval)
-  }, [])
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 40 }}
       whileInView={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.8, ease: "easeOut" }}
       viewport={{ once: true }}
-      className="w-full rounded-2xl bg-white p-6"
-      style={{
-        boxShadow:
-          "rgba(14, 63, 126, 0.04) 0px 0px 0px 1px, rgba(42, 51, 69, 0.04) 0px 1px 1px -0.5px, rgba(42, 51, 70, 0.04) 0px 3px 3px -1.5px, rgba(42, 51, 70, 0.04) 0px 6px 6px -3px, rgba(14, 63, 126, 0.04) 0px 12px 12px -6px, rgba(14, 63, 126, 0.04) 0px 24px 24px -12px",
-      }}
+      className="w-full"
     >
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h3 className="text-lg font-semibold text-slate-900">Property Activity</h3>
+      <LiquidGlassPanel
+        tone="light"
+        contentClassName="p-6"
+        withGlareDecorations={false}
+        behindContent={reduceMotion ? undefined : <RentalsCardShaderBackground />}
+      >
+        <div dir="rtl" lang="he" className="mb-6 flex items-center gap-3">
+          <h3 className="text-lg font-semibold text-zinc-100 drop-shadow-[0_1px_6px_rgba(0,0,0,0.55)]">
+            פעילות יומית
+          </h3>
           <span className="relative flex h-3 w-3">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
             <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" />
           </span>
         </div>
-        <span className="text-sm text-slate-500">Live</span>
-      </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-4">
-        <motion.div
-          className="rounded-xl bg-gradient-to-br from-blue-100 to-blue-200 p-4 text-black"
-          whileHover={{ scale: 1.02 }}
-          transition={{ type: "spring", stiffness: 300 }}
-        >
-          <div className="flex items-center gap-2 mb-1">
-            <Eye className="w-4 h-4 opacity-60" />
-            <p className="text-sm opacity-80">Viewing Now</p>
-          </div>
-          <AnimatePresence mode="wait">
-            <motion.p
-              key={currentVisitors}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="text-3xl font-bold"
-            >
-              {currentVisitors.toLocaleString()}
-            </motion.p>
-          </AnimatePresence>
-        </motion.div>
-        <motion.div
-          className="rounded-xl bg-gradient-to-br from-violet-100 to-purple-200 p-4 text-black"
-          whileHover={{ scale: 1.02 }}
-          transition={{ type: "spring", stiffness: 300 }}
-        >
-          <div className="flex items-center gap-2 mb-1">
-            <Home className="w-4 h-4 opacity-60" />
-            <p className="text-sm opacity-80">Property Views</p>
-          </div>
-          <AnimatePresence mode="wait">
-            <motion.p
-              key={pageViews}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="text-3xl font-bold"
-            >
-              {pageViews.toLocaleString()}
-            </motion.p>
-          </AnimatePresence>
-        </motion.div>
-      </div>
+        <div dir="rtl" lang="he" className="mb-6 grid grid-cols-2 gap-4">
+          <motion.div
+            className="rounded-xl p-4"
+            style={{ backgroundColor: "#3c7a8d" }}
+            whileHover={{ scale: 1.02 }}
+            transition={{ type: "spring", stiffness: 300 }}
+          >
+            <div className="mb-1 flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-white/90" />
+              <p className="text-sm font-medium text-white/95">תורים היום</p>
+            </div>
+            <AnimatePresence mode="wait">
+              <motion.p
+                key={appointmentsIdx}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="text-3xl font-bold text-white"
+              >
+                {APPOINTMENTS_TODAY[appointmentsIdx]}
+              </motion.p>
+            </AnimatePresence>
+          </motion.div>
 
-      <div className="mb-6">
-        <p className="mb-3 text-sm font-medium text-slate-700">Views Today</p>
-        <div className="h-32">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={hourlyData}>
-              <XAxis
-                dataKey="hour"
-                tick={{ fontSize: 10, fill: "#64748b" }}
-                axisLine={false}
-                tickLine={false}
-                interval={1}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "white",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: "8px",
-                }}
-              />
-              <Bar dataKey="visitors" radius={[4, 4, 0, 0]}>
-                {hourlyData.map((entry, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={index === highlightedBar ? "#3b82f6" : entry.visitors === maxVisitors ? "#60a5fa" : "#e2e8f0"}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <motion.div
+            className="rounded-xl p-4"
+            style={{ backgroundColor: "#417374" }}
+            whileHover={{ scale: 1.02 }}
+            transition={{ type: "spring", stiffness: 300 }}
+          >
+            <div className="mb-1 flex items-center gap-2">
+              <Wallet className="h-4 w-4 text-white/90" />
+              <p className="text-sm font-medium text-white/95">הכנסות היום</p>
+            </div>
+            <AnimatePresence mode="wait">
+              <motion.p
+                key={revenueIdx}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="text-3xl font-bold tracking-tight text-white"
+              >
+                {REVENUE_TODAY[revenueIdx].toLocaleString("he-IL")}₪
+              </motion.p>
+            </AnimatePresence>
+          </motion.div>
         </div>
-      </div>
 
-      <div>
-        <p className="mb-3 text-sm font-medium text-slate-700">Trending Properties</p>
-        <div className="space-y-2">
-          {topProperties.map((property, index) => (
-            <motion.div
-              key={index}
-              className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2"
-              initial={{ opacity: 0, x: -20 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.1 }}
-              viewport={{ once: true }}
-              whileHover={{ backgroundColor: "#f1f5f9", x: 4 }}
-            >
-              <span className="text-sm text-slate-600">{property.page}</span>
-              <AnimatePresence mode="wait">
-                <motion.span
-                  key={property.visitors}
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="text-sm font-medium text-slate-900"
+        <div className="mb-6">
+          <p
+            dir="rtl"
+            lang="he"
+            className="mb-3 text-sm font-medium text-zinc-200 drop-shadow-[0_1px_5px_rgba(0,0,0,0.5)]"
+          >
+            צפיות היום
+          </p>
+          <div className="h-32 bg-transparent">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={hourlyData} style={{ background: "transparent" }}>
+                <XAxis
+                  dataKey="hour"
+                  tick={{ fontSize: 10, fill: "#cbd5e1" }}
+                  axisLine={false}
+                  tickLine={false}
+                  interval={1}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "white",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "8px",
+                  }}
+                />
+                <Bar dataKey="visitors" radius={[4, 4, 0, 0]}>
+                  {hourlyData.map((row, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={
+                        index === highlightedBar
+                          ? BAR_FILL_ACTIVE
+                          : row.visitors === maxVisitors
+                            ? BAR_FILL_PEAK
+                            : BAR_FILL_MUTED
+                      }
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div dir="rtl" lang="he">
+          <p className="mb-3 text-sm font-medium text-zinc-200 drop-shadow-[0_1px_5px_rgba(0,0,0,0.5)]">
+            פאנל ניהול
+          </p>
+          <div className="space-y-2">
+            {PANEL_ROWS.map((row, index) => {
+              const idx = panelIndices[index] ?? 0
+              const v = row.values[idx % row.values.length]
+              const display = "suffix" in row && row.suffix ? `${v}${row.suffix}` : String(v)
+              return (
+                <motion.div
+                  key={row.label}
+                  className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2"
+                  initial={{ opacity: 0, x: 20 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                  viewport={{ once: true }}
+                  whileHover={{ backgroundColor: "#f1f5f9", x: -4 }}
                 >
-                  {property.visitors}
-                </motion.span>
-              </AnimatePresence>
-            </motion.div>
-          ))}
+                  <span className="text-sm text-slate-600">{row.label}</span>
+                  <AnimatePresence mode="wait">
+                    <motion.span
+                      key={display}
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      className="text-sm font-medium text-slate-900 tabular-nums"
+                    >
+                      {display}
+                    </motion.span>
+                  </AnimatePresence>
+                </motion.div>
+              )
+            })}
+          </div>
         </div>
-      </div>
+      </LiquidGlassPanel>
     </motion.div>
   )
 }

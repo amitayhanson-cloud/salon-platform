@@ -160,7 +160,7 @@ export function PricingSection() {
   }, [isHovered])
 
   return (
-    <section id="pricing" className="overflow-hidden py-32" dir="ltr">
+    <section id="pricing" className="overflow-hidden bg-white py-32" dir="ltr">
       <div className="mx-auto mb-20 max-w-7xl px-6 text-center">
         <h2 className="mb-6 font-serif text-4xl font-normal text-balance md:text-5xl">
           Featured properties

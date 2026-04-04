@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./liquid-glass-loader.css";
 
 /* Caleno brand blue – admin primary actions (replaces sky in admin) */
 @theme {
@@ -462,4 +463,162 @@ body:has([data-admin-modal-overlay]) .admin-layout-header-root {
   text-transform: uppercase;
   color: rgba(0, 200, 195, 0.75);
   animation: caleno-water-labelBreath 2.6s ease-in-out infinite;
+}
+
+/* ========== Auth pages – liquid glass (v0) ========== */
+/* Shadcn tokens (HSL components) for Button/Input/Card on auth screens */
+.v0-liquid-auth {
+  --radius: 1rem;
+  --background: 48 100% 98%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --primary: 222 47% 11%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 222 47% 11%;
+  --muted: 48 30% 96%;
+  --muted-foreground: 215 16% 47%;
+  --accent: 43 96% 56%;
+  --accent-foreground: 222 47% 11%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214 32% 91%;
+  --input: 214 32% 91%;
+  --ring: 217 91% 60%;
+}
+
+@keyframes auth-glass-orb-pulse {
+  0%,
+  100% {
+    opacity: 0.42;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.06);
+  }
+}
+
+.auth-glass-orb {
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  box-shadow:
+    0 8px 32px rgba(255, 255, 255, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  animation: auth-glass-orb-pulse 4.5s ease-in-out infinite;
+}
+
+.auth-glass-orb-lg {
+  width: 8rem;
+  height: 8rem;
+}
+
+.auth-glass-orb-md {
+  width: 6rem;
+  height: 6rem;
+}
+
+.auth-glass-orb-sm {
+  width: 4rem;
+  height: 4rem;
+}
+
+.auth-glass-orb-delay-1 {
+  animation-delay: 1s;
+}
+
+.auth-glass-orb-delay-2 {
+  animation-delay: 2s;
+}
+
+.auth-glass-card {
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(40px) saturate(250%);
+  -webkit-backdrop-filter: blur(40px) saturate(250%);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow:
+    0 32px 80px rgba(0, 0, 0, 0.28),
+    0 16px 64px rgba(255, 255, 255, 0.18),
+    inset 0 3px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.auth-glass-input {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.1);
+  color: #0f172a;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.auth-glass-input::placeholder {
+  color: rgba(15, 23, 42, 0.45);
+}
+
+.auth-glass-input:hover {
+  border-color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.auth-glass-input:focus {
+  outline: none;
+  border-color: rgba(30, 111, 124, 0.65);
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 0 0 3px rgba(30, 111, 124, 0.22);
+}
+
+.glass-effect {
+  backdrop-filter: blur(25px) saturate(180%);
+  -webkit-backdrop-filter: blur(25px) saturate(180%);
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.hover-lift {
+  transition:
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 40px 90px rgba(0, 0, 0, 0.32),
+    0 20px 70px rgba(255, 255, 255, 0.2),
+    inset 0 3px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.ripple-effect {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple-effect::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.28);
+  transform: translate(-50%, -50%);
+  transition:
+    width 0.55s ease,
+    height 0.55s ease;
+}
+
+.ripple-effect:active::before {
+  width: 300px;
+  height: 300px;
 }

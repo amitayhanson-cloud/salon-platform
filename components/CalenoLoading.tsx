@@ -1,16 +1,11 @@
 "use client";
 
-import CalenoLoader from "@/components/ui/CalenoLoader";
+import { LiquidGlassLoading } from "@/components/landing-v2/liquid-glass-loading";
 
 /**
- * Full-page Caleno logo loading animation.
- * Uses the water loader (orbital arcs, logo, ripples, wave bar) everywhere.
- * Used site-wide for route loading and auth/data loading states.
+ * Caleno loading art + spin for panels and data states.
+ * Full-route loading uses the same asset via `LiquidGlassLoading` fullscreen.
  */
 export default function CalenoLoading() {
-  return (
-    <div className="flex min-h-[50vh] items-center justify-center">
-      <CalenoLoader />
-    </div>
-  );
+  return <LiquidGlassLoading variant="inline" />;
 }

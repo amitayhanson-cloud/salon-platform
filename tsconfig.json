@@ -35,6 +35,7 @@
     "functions",
     "twilio-whatsapp",
     "_LEGACY_twilio-whatsapp",
-    "new landing"
+    "new landing",
+    "new login:signup"
   ]
 }

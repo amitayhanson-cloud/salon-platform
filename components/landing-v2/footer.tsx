@@ -38,7 +38,7 @@ export function Footer() {
 
       <div className="absolute -top-[15vw] left-0 right-0 flex items-end justify-center overflow-visible pointer-events-none z-10">
         <h2 className="font-bold text-center text-[28vw] sm:text-[25vw] md:text-[22vw] lg:text-[20vw] leading-[0.85] tracking-tighter text-white whitespace-nowrap">
-          HOMIE
+          CALENO
         </h2>
       </div>
 
@@ -57,7 +57,7 @@ export function Footer() {
                   <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
                   <polyline points="9 22 9 12 15 12 15 22" />
                 </svg>
-                <span className="text-base font-medium text-foreground">Homie</span>
+                <span className="text-base font-medium text-foreground">Caleno</span>
               </Link>
               <p className="text-sm text-muted-foreground mb-6">Peer-to-peer rentals, simplified.</p>
               <div className="flex gap-4">
@@ -154,8 +154,8 @@ export function Footer() {
           </div>
 
           <div className="pt-8 border-t border-border flex flex-col md:flex-row justify-between items-center gap-4">
-            <p className="text-xs text-muted-foreground">© 2026 Homie. All rights reserved.</p>
-            <p className="text-xs text-muted-foreground">Homie Inc. - Registered real estate agent</p>
+            <p className="text-xs text-muted-foreground">© 2026 Caleno. All rights reserved.</p>
+            <p className="text-xs text-muted-foreground">Caleno Inc. - Registered real estate agent</p>
           </div>
         </div>
       </footer>

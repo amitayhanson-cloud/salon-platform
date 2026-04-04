@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
 import { AnimatedText } from "./animated-text"
+import { HeroFloatingPathsBackground } from "./hero-floating-paths"
 
 export function HeroSection() {
   const [isVisible, setIsVisible] = useState(false)
@@ -55,14 +56,14 @@ export function HeroSection() {
     <section className="pt-32 pb-12 px-6 min-h-screen flex items-center relative overflow-hidden">
       <div className="absolute inset-0 top-0">
         <div
-          className="w-full will-change-transform overflow-hidden"
+          className="relative box-border w-full overflow-hidden border-x-[6px] border-b-[6px] border-black will-change-transform sm:border-x-8 sm:border-b-8"
           style={{
             transform: `scale(${scale})`,
             borderRadius: `${borderRadius}px`,
             height: `${heightVh}vh`,
           }}
         >
-          <video autoPlay loop muted playsInline className="w-full h-full object-cover" src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/af7687fd-f2ad-4f2a-96f0-b56fa7d3769c-08wERpo5U1sktxs1vcRsJW9ueslNZv.mp4" />
+          <HeroFloatingPathsBackground />
         </div>
       </div>
 
@@ -83,18 +84,24 @@ export function HeroSection() {
       </div>
 
       <div className="max-w-7xl mx-auto w-full relative z-10">
-        <div className="text-center mb-12">
+        <div className="relative mb-12 text-center">
+          <div
+            className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[min(36vh,16rem)] w-[min(100%,36rem)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/18 blur-2xl sm:h-[min(32vh,18rem)] sm:w-[min(100%,40rem)]"
+            aria-hidden
+          />
           <div
             className={`transition-all duration-1000 delay-[800ms] ${isVisible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4"}`}
           >
             <h1
               dir="rtl"
               lang="he"
-              className="font-hero text-[3.375rem] sm:text-[4.375rem] md:text-[5.375rem] lg:text-[6.375rem] xl:text-[7.375rem] 2xl:text-[8.25rem] font-normal leading-[1.26] sm:leading-[1.28] md:leading-[1.29] lg:leading-[1.3] xl:leading-[1.32] mb-6 w-full px-4 max-w-6xl mx-auto"
+              className="font-hero mx-auto mb-6 w-full max-w-6xl px-4 text-[3.375rem] font-normal leading-[1.26] text-zinc-950 sm:text-[4.375rem] sm:leading-[1.28] md:text-[5.375rem] md:leading-[1.29] lg:text-[6.375rem] lg:leading-[1.3] xl:text-[7.375rem] xl:leading-[1.32] 2xl:text-[8.25rem]"
             >
               <AnimatedText
-                text={"הבית החדש לעסק שלך,\nהכל במקום אחד"}
+                text={"קאלנו מציעה מעבר\nלמה שאתם מכירים"}
                 delay={0.3}
+                lineClassNames={["text-zinc-900 font-normal", "text-zinc-900 font-normal"]}
+                firstWordClassName="text-[#4e979f]"
               />
             </h1>
           </div>
@@ -108,8 +115,8 @@ export function HeroSection() {
               }`}
             >
               <img
-                src="/images/iphone_image.png"
-                alt="Application Homie"
+                src="/images/newphone.png"
+                alt="אפליקציית Caleno במובייל"
                 className="relative z-10 h-auto w-full"
               />
             </div>

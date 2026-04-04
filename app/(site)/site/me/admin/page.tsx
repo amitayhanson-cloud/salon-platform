@@ -24,10 +24,7 @@ export default function AdminHomePage() {
               {welcomeMessage}
             </h1>
             <p className="text-lg text-[#64748B]">
-              מה תרצה לעשות היום?
-            </p>
-            <p className="mt-2 text-sm text-[#64748B]">
-              בחר מהתפריט למעלה כדי להתחיל לנהל את האתר שלך
+              מה עושים היום?
             </p>
           </>
         )}

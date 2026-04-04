@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useLayoutEffect, useMemo, useId } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { usePathname, useParams } from "next/navigation";
+import { usePathname, useParams, useRouter } from "next/navigation";
 import {
   ChevronDown,
   Menu,
@@ -15,6 +15,7 @@ import {
   Users,
   UsersRound,
   Settings2,
+  LogOut,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -149,8 +150,10 @@ type AdminHeaderProps = {
 export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
   const pathname = usePathname();
   const params = useParams();
+  const router = useRouter();
   const siteId = params?.siteId as string | null;
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, logout } = useAuth();
+  const [loggingOut, setLoggingOut] = useState(false);
   const { data: tenantInfo } = useTenantInfo();
   const adminBasePath =
     !siteId || siteId === "me"
@@ -222,6 +225,17 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
   };
 
   const canViewSite = !authLoading && !!user;
+
+  const handleLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await logout();
+      router.push("/login");
+    } finally {
+      setLoggingOut(false);
+    }
+  };
 
   useEffect(() => setPortalMounted(true), []);
 
@@ -355,6 +369,18 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
           <div className="flex shrink-0 items-center gap-4 md:gap-6">
             {/* Navbar */}
             <nav dir="rtl" className="hidden md:flex items-center gap-2 whitespace-nowrap rounded-full bg-[#FBFEFF] px-2 py-1">
+              {canViewSite && (
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  disabled={loggingOut}
+                  className="shrink-0 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100/50 hover:text-slate-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1E6F7C] disabled:pointer-events-none disabled:opacity-40"
+                  aria-label={loggingOut ? "מתנתק..." : "התנתקות"}
+                  title="התנתקות"
+                >
+                  <LogOut className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+                </button>
+              )}
               {desktopNavItems.map((item) => (
                 <div key={item.label} className="relative">
                       {item.href ? (
@@ -611,6 +637,24 @@ export default function AdminHeader({ onOpenHelp }: AdminHeaderProps) {
                     <span className="rounded-lg bg-slate-100/80 p-2">
                       <AiSparklesGradientIcon className="h-4 w-4" />
                     </span>
+                  </span>
+                </button>
+              </div>
+            )}
+            {canViewSite && (
+              <div className="mt-1 border-t border-slate-100/90 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await handleLogout();
+                    setMobileMenuOpen(false);
+                  }}
+                  disabled={loggingOut}
+                  className="mx-3 flex h-11 w-[calc(100%-1.5rem)] items-center justify-center rounded-lg px-3 text-sm text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600 active:bg-slate-50 disabled:opacity-50 border-0 bg-transparent shadow-none"
+                >
+                  <span className="flex flex-row-reverse items-center gap-2">
+                    <span>{loggingOut ? "מתנתק..." : "התנתקות"}</span>
+                    <LogOut className="h-4 w-4 shrink-0 opacity-70" strokeWidth={1.75} aria-hidden />
                   </span>
                 </button>
               </div>

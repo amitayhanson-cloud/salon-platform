@@ -445,6 +445,12 @@ export default function BookingsAdminPage() {
               </div>
               <div className="flex items-center gap-2 order-3 justify-center md:justify-end">
                 <Link
+                  href={`${getAdminBasePathFromSiteId(siteId)}/bookings/waitlist`}
+                  className="rounded-full border border-[#E2E8F0] bg-white/80 px-4 py-2 text-sm font-medium text-[#0F172A] backdrop-blur transition-colors hover:bg-white"
+                >
+                  רשימת המתנה
+                </Link>
+                <Link
                   href={`${getAdminBasePathFromSiteId(siteId)}/bookings/cancelled`}
                   className="rounded-full border border-[#E2E8F0] bg-white/80 px-4 py-2 text-sm font-medium text-[#0F172A] backdrop-blur transition-colors hover:bg-white"
                 >
