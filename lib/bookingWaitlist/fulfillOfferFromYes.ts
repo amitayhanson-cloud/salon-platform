@@ -70,7 +70,12 @@ export async function fulfillWaitlistOfferFromInboundYes(
 
   const workerId = offer.workerId;
   if (!workerId) {
-    return { ok: false, reason: "missing_worker" };
+    return {
+      ok: false,
+      reason: "missing_worker",
+      customerReply:
+        "לא ניתן להשלים את ההזמנה אוטומטית לשעה הזו. צרו קשר עם הסלון כדי לתאם את התור.",
+    };
   }
 
   const startAt = parseStartAt(offer.dateYmd, offer.timeHHmm);

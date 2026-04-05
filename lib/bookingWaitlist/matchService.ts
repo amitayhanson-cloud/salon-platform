@@ -48,11 +48,7 @@ export function waitlistEntryFitsFreedStructure(
   >,
   slot: Pick<
     FreedBookingSlot,
-    | "primaryDurationMin"
-    | "waitMinutes"
-    | "followUpDurationMin"
-    | "workerId"
-    | "followUpWorkerId"
+    "primaryDurationMin" | "waitMinutes" | "followUpDurationMin" | "followUpWorkerId"
   >
 ): boolean {
   const ep = Math.max(
@@ -73,9 +69,6 @@ export function waitlistEntryFitsFreedStructure(
     if (ew > sw) return false;
     if (ef > sf) return false;
   }
-
-  const prefW = entry.preferredWorkerId?.trim();
-  if (prefW && slot.workerId && prefW !== slot.workerId) return false;
 
   return true;
 }
@@ -99,7 +92,9 @@ export function waitlistEntryMatchesFreedSlot(
   if (!prefDate || prefDate !== slot.dateYmd) return false;
 
   const prefW = entry.preferredWorkerId?.trim();
-  if (prefW && slot.workerId && prefW !== slot.workerId) return false;
+  const slotW = slot.workerId?.trim() || null;
+  if (prefW && !slotW) return false;
+  if (prefW && slotW && prefW !== slotW) return false;
 
   const et = entry.serviceTypeId?.trim() || null;
   const st = slot.serviceTypeId?.trim() || null;

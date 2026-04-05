@@ -349,9 +349,26 @@ export async function cancelBookingsCascade(
         row.fullData as Record<string, unknown>,
         phase2ByParent.get(row.ref.id)
       );
-      if (!slot) continue;
+      if (!slot) {
+        console.warn("[bookingWaitlist] could_not_build_freed_slot_from_booking", {
+          siteId,
+          bookingId: row.ref.id,
+          dateISO: (row.fullData as { dateISO?: string }).dateISO,
+          time: (row.fullData as { timeHHmm?: string; time?: string }).timeHHmm ?? (row.fullData as { time?: string }).time,
+          workerId: (row.fullData as { workerId?: string }).workerId,
+        });
+        continue;
+      }
       try {
-        await notifyBookingWaitlistFromFreedSlot(siteId, slot);
+        const wr = await notifyBookingWaitlistFromFreedSlot(siteId, slot);
+        console.log("[bookingWaitlist] after_booking_cancel", {
+          siteId,
+          bookingId: row.ref.id,
+          dateYmd: slot.dateYmd,
+          timeHHmm: slot.timeHHmm,
+          notified: wr.notified,
+          waitlistEntryId: wr.entryId ?? null,
+        });
       } catch (waitlistErr) {
         console.error("[booking-cascade] waitlist notify failed", waitlistErr);
       }

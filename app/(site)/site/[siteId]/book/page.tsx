@@ -654,7 +654,6 @@ export default function BookingPage() {
   const [showStep1RequiredAfterContinue, setShowStep1RequiredAfterContinue] = useState(false);
   const [clientNote, setClientNote] = useState("");
   const [waitlistModalOpen, setWaitlistModalOpen] = useState(false);
-  const [waitlistPreferredDateYmd, setWaitlistPreferredDateYmd] = useState("");
   const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
   const [waitlistFeedback, setWaitlistFeedback] = useState<string | null>(null);
   /** After פרטים: fetch last booking for repeat-service prompt */
@@ -2925,11 +2924,6 @@ export default function BookingPage() {
 
   function openBookingWaitlistModal() {
     setWaitlistFeedback(null);
-    if (selectedDate) {
-      setWaitlistPreferredDateYmd(ymdLocal(selectedDate));
-    } else {
-      setWaitlistPreferredDateYmd("");
-    }
     setWaitlistModalOpen(true);
   }
 
@@ -2940,6 +2934,11 @@ export default function BookingPage() {
     }
     if (!clientName.trim() || !clientPhone.trim() || !isBookingClientPhoneValid(clientPhone)) {
       setWaitlistFeedback("מלאו שם וטלפון תקין בשלב פרטי הלקוח.");
+      return;
+    }
+    const preferredDateYmd = selectedDate ? ymdLocal(selectedDate) : null;
+    if (!preferredDateYmd) {
+      setWaitlistFeedback("בחרו תאריך לפני הרשמה לרשימת המתנה.");
       return;
     }
     setWaitlistSubmitting(true);
@@ -2969,7 +2968,7 @@ export default function BookingPage() {
           serviceName: selectedService.name,
           serviceId: selectedService.id ?? null,
           serviceTypeId: pi?.id ?? null,
-          preferredDateYmd: waitlistPreferredDateYmd.trim() || null,
+          preferredDateYmd,
           preferredWorkerId: selectedWorker?.id ?? null,
           primaryDurationMin,
           waitMinutes,
@@ -2990,7 +2989,7 @@ export default function BookingPage() {
         );
         return;
       }
-      setWaitlistFeedback("נרשמתם לרשימת המתנה. נעדכן בוואטסאפ כשיתפנה תור מתאים.");
+      setWaitlistFeedback("נרשמתם לרשימת המתנה. כשיתפנה תור נשלח לכם בוואטסאפ לאישור ההזמנה.");
       window.setTimeout(() => {
         setWaitlistModalOpen(false);
         setWaitlistFeedback(null);
@@ -3790,19 +3789,6 @@ export default function BookingPage() {
                 </p>
               )}
 
-              {selectedDate && availableTimeSlots.length === 0 ? (
-                <div className="mb-4 text-center">
-                  <button
-                    type="button"
-                    onClick={openBookingWaitlistModal}
-                    className="text-sm font-medium underline-offset-2 hover:underline"
-                    style={{ color: "var(--primary)" }}
-                  >
-                    אין שעה פנויה ליום הזה? הצטרפו לרשימת המתנה
-                  </button>
-                </div>
-              ) : null}
-              
               {/* Debug panel (dev only - requires NEXT_PUBLIC_DEBUG_BOOKING=true) */}
               {process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true" && debugInfo && (
                 <div className="mb-4 p-4 rounded-lg border text-right text-xs font-mono" style={{ backgroundColor: "var(--bg)", borderColor: "var(--border)" }}>
@@ -3839,19 +3825,52 @@ export default function BookingPage() {
                 </p>
               )}
               {availableTimeSlots.length === 0 ? (
-                <p className="text-sm text-right" style={{ color: "var(--muted)" }}>
-                  {selectedDate
-                    ? (() => {
-                        const tz = config?.archiveRetention?.timezone;
-                        const todayStr = tz ? getTodayInTimeZone(tz) : ymdLocal(new Date());
-                        return ymdLocal(selectedDate) === todayStr
-                          ? "אין שעות פנויות להיום"
-                          : selectedWorker != null
-                            ? "אין שעות זמינות לעובד שנבחר"
-                            : "אין שעות זמינות לתאריך זה";
-                      })()
-                    : (selectedWorker != null ? "אין שעות זמינות לעובד שנבחר" : "אין שעות זמינות לתאריך זה")}
-                </p>
+                <div className="space-y-4">
+                  <p className="text-sm text-right" style={{ color: "var(--muted)" }}>
+                    {selectedDate
+                      ? (() => {
+                          const tz = config?.archiveRetention?.timezone;
+                          const todayStr = tz ? getTodayInTimeZone(tz) : ymdLocal(new Date());
+                          return ymdLocal(selectedDate) === todayStr
+                            ? "אין שעות פנויות להיום"
+                            : selectedWorker != null
+                              ? "אין שעות זמינות לעובד שנבחר"
+                              : "אין שעות זמינות לתאריך זה";
+                        })()
+                      : selectedWorker != null
+                        ? "אין שעות זמינות לעובד שנבחר"
+                        : "אין שעות זמינות לתאריך זה"}
+                  </p>
+                  {selectedDate ? (
+                    <div
+                      className="rounded-2xl border-2 p-4 sm:p-5 text-right shadow-lg transition-shadow hover:shadow-xl"
+                      style={{
+                        borderColor: "var(--primary)",
+                        backgroundColor: "var(--surface)",
+                        boxShadow: "0 8px 30px color-mix(in srgb, var(--primary) 12%, transparent)",
+                      }}
+                    >
+                      <p className="text-base sm:text-lg font-bold mb-1" style={{ color: "var(--text)" }}>
+                        רוצים שיודיעו לכם כשיתפנה תור?
+                      </p>
+                      <p className="text-sm mb-4 leading-relaxed" style={{ color: "var(--muted)" }}>
+                        הצטרפו לרשימת המתנה ליום שבחרתם — נשלח עדכון בוואטסאפ כשיש מקום מתאים לשירות שנבחר.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={openBookingWaitlistModal}
+                        className="w-full sm:w-auto min-w-[min(100%,14rem)] px-5 py-3.5 rounded-xl text-sm sm:text-base font-bold transition-all hover:opacity-95 active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                        style={{
+                          backgroundColor: "var(--primary)",
+                          color: "var(--primaryText)",
+                          boxShadow: "0 4px 14px color-mix(in srgb, var(--primary) 35%, transparent)",
+                        }}
+                      >
+                        הצטרפות לרשימת המתנה
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               ) : (
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                   {availableTimeSlots.map((time) => {
@@ -4234,18 +4253,14 @@ export default function BookingPage() {
               שירות: {selectedService?.name ?? "—"}
               {isMultiBooking && selectedServices.length > 1 ? " (השירות הראשון בחבילה)" : null}
             </p>
-            <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: "var(--text)" }}>
-                תאריך מועדף (אופציונלי)
-              </label>
-              <input
-                type="date"
-                value={waitlistPreferredDateYmd}
-                onChange={(e) => setWaitlistPreferredDateYmd(e.target.value)}
-                className="w-full rounded-xl border px-3 py-2 text-right"
-                style={{ borderColor: "var(--border)", color: "var(--text)" }}
-              />
-            </div>
+            {selectedDate ? (
+              <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
+                תאריך: {formatDateForDisplay(selectedDate)}
+              </p>
+            ) : null}
+            <p className="text-sm leading-relaxed rounded-xl px-3 py-3" style={{ color: "var(--text)", backgroundColor: "var(--bg)" }}>
+              לחיצה על &quot;הרשמה לרשימת המתנה&quot; מצרפת אתכם לרשימה ליום שבחרתם. כשיתפנה תור מתאים נשלח לכם בוואטסאפ הודעה כדי לאשר את ההזמנה. תודה על הסבלנות.
+            </p>
             {waitlistFeedback && (
               <p
                 className="text-sm rounded-lg px-3 py-2"

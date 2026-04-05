@@ -26,6 +26,13 @@ function formatHeDate(ymd: string): string {
   return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
 }
 
+function firestoreTsMs(ts: unknown): number {
+  if (ts != null && typeof (ts as { toMillis?: () => number }).toMillis === "function") {
+    return (ts as { toMillis: () => number }).toMillis();
+  }
+  return Number.MAX_SAFE_INTEGER;
+}
+
 async function expireStaleNotifiedForPhone(
   db: Firestore,
   siteId: string,
@@ -61,15 +68,35 @@ export async function notifyBookingWaitlistFromFreedSlot(
   const salonName = String(cfg?.salonName ?? cfg?.whatsappBrandName ?? "העסק").trim() || "העסק";
 
   const col = db.collection("sites").doc(siteId).collection("bookingWaitlistEntries");
-  const activeSnap = await col
-    .where("status", "==", "active")
-    .where("preferredDateYmd", "==", slot.dateYmd)
-    .orderBy("createdAt", "asc")
-    .limit(80)
-    .get();
+
+  let activeSnap;
+  try {
+    /** No orderBy: avoids composite-index issues and includes docs missing `createdAt` (sorted in memory). */
+    activeSnap = await col
+      .where("status", "==", "active")
+      .where("preferredDateYmd", "==", slot.dateYmd)
+      .limit(120)
+      .get();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[bookingWaitlist] waitlist_query_failed", { siteId, dateYmd: slot.dateYmd, error: msg });
+    throw e;
+  }
+
+  const sortedDocs = [...activeSnap.docs].sort((a, b) => {
+    const ta = firestoreTsMs(a.data().createdAt);
+    const tb = firestoreTsMs(b.data().createdAt);
+    if (ta !== tb) return ta - tb;
+    const da = a.data() as BookingWaitlistEntry;
+    const dbEntry = b.data() as BookingWaitlistEntry;
+    const qa = typeof da.queuePositionForDay === "number" ? da.queuePositionForDay : 1e9;
+    const qb = typeof dbEntry.queuePositionForDay === "number" ? dbEntry.queuePositionForDay : 1e9;
+    if (qa !== qb) return qa - qb;
+    return a.id.localeCompare(b.id);
+  });
 
   let chosen: { id: string; data: BookingWaitlistEntry } | null = null;
-  for (const doc of activeSnap.docs) {
+  for (const doc of sortedDocs) {
     if (skip.has(doc.id)) continue;
     const data = doc.data() as BookingWaitlistEntry;
     if (waitlistEntryMatchesFreedSlot(data, slot)) {
@@ -79,6 +106,14 @@ export async function notifyBookingWaitlistFromFreedSlot(
   }
 
   if (!chosen) {
+    console.log("[bookingWaitlist] no_matching_waitlist_entry", {
+      siteId,
+      dateYmd: slot.dateYmd,
+      timeHHmm: slot.timeHHmm,
+      activeForDay: sortedDocs.length,
+      freedService: slot.serviceName,
+      freedServiceTypeId: slot.serviceTypeId,
+    });
     return { notified: false };
   }
 
@@ -121,7 +156,11 @@ export async function notifyBookingWaitlistFromFreedSlot(
           "4": timeDisp,
         },
       },
-      meta: { automation: "booking_waitlist_slot_offer", waitlistEntryId: chosen.id, templateName: "booking_waitlist_slot_offer" },
+      meta: {
+        automation: "booking_waitlist_slot_offer",
+        waitlistEntryId: chosen.id,
+        templateName: "booking_waitlist_slot_offer",
+      },
       usageCategory: "service",
     });
   } catch (e) {
@@ -135,6 +174,13 @@ export async function notifyBookingWaitlistFromFreedSlot(
     });
     return { notified: false };
   }
+
+  console.log("[bookingWaitlist] slot_offer_sent", {
+    siteId,
+    waitlistEntryId: chosen.id,
+    dateYmd: slot.dateYmd,
+    timeHHmm: slot.timeHHmm,
+  });
 
   return { notified: true, entryId: chosen.id };
 }

@@ -1,18 +1,30 @@
 import type { FreedBookingSlot } from "./matchService";
 
+/** Normalize stored time to HH:mm (accepts 9:5, 09:05:00, etc.). */
+export function normalizeBookingTimeHHmm(raw: unknown): string | null {
+  const s = String(raw ?? "").trim();
+  if (!s) return null;
+  const m = /^(\d{1,2})\s*:\s*(\d{1,2})(?:\s*:\s*\d{1,2})?/.exec(s);
+  if (!m) return null;
+  let hh = parseInt(m[1], 10);
+  let mm = parseInt(m[2], 10);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+  hh = Math.min(23, Math.max(0, hh));
+  mm = Math.min(59, Math.max(0, mm));
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+}
+
 /** Build primary-only fields from a live phase-1 booking doc before it is archived. */
 export function bookingDocToFreedSlot(data: Record<string, unknown>): FreedBookingSlot | null {
   const phase = data.phase;
   if (phase === 2) return null;
 
   const dateYmd = String(data.dateISO ?? data.date ?? "").trim().slice(0, 10);
-  const timeRaw = String(data.timeHHmm ?? data.time ?? "").trim();
-  const timeHHmm = timeRaw.length >= 5 ? timeRaw.slice(0, 5) : timeRaw;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateYmd) || !/^\d{1,2}:\d{2}$/.test(timeHHmm)) return null;
+  const timeHHmm = normalizeBookingTimeHHmm(data.timeHHmm ?? data.time);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateYmd) || !timeHHmm) return null;
 
-  const workerId =
+  const workerIdRaw =
     data.workerId != null && String(data.workerId).trim() !== "" ? String(data.workerId).trim() : null;
-  if (!workerId) return null;
 
   const durationRaw = data.durationMin;
   const durationMin =
@@ -40,7 +52,7 @@ export function bookingDocToFreedSlot(data: Record<string, unknown>): FreedBooki
   return {
     dateYmd,
     timeHHmm,
-    workerId,
+    workerId: workerIdRaw,
     workerName: data.workerName != null ? String(data.workerName) : null,
     serviceTypeId,
     serviceId,
