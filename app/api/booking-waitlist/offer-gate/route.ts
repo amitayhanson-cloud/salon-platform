@@ -59,7 +59,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       state: "invalid",
-      salonName: contact.salonName,
       ...contact,
     });
   }
@@ -70,7 +69,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       state: "invalid",
-      salonName: contact.salonName,
       ...contact,
     });
   }
@@ -79,7 +77,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       state: "used",
-      salonName: contact.salonName,
       ...contact,
     });
   }
@@ -88,7 +85,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       state: "expired",
-      salonName: contact.salonName,
       ...contact,
     });
   }
@@ -97,7 +93,6 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     ok: true,
     state: "active",
-    salonName: contact.salonName,
     ...contact,
     offerSummary: {
       dateYmd: offer.dateYmd,
