@@ -252,6 +252,14 @@
         { "fieldPath": "preferredDateYmd", "order": "ASCENDING" },
         { "fieldPath": "__name__", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "bookingWaitlistEntries",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "offerSentAt", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

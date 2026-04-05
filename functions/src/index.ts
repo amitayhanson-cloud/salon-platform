@@ -7,6 +7,7 @@
  * - liveStatsOnBookingWrite / liveStatsOnClientCreate: increment dashboardCurrent (FieldValue.increment)
  * - auditWhatsAppUsage: onCreate whatsapp_logs → increment dashboardCurrent whatsappCount (billing truth)
  * - waitlistPastDatesCleanup: daily delete bookingWaitlistEntries with preferredDateYmd before today (site TZ)
+ * - cleanupExpiredWaitlistOffers: every 15m expire pending_offer older than 2h, clear slot lock, rematch via app API
  */
 
 import * as functions from "firebase-functions/v1";
@@ -364,6 +365,196 @@ export const waitlistPastDatesCleanup = functions.pubsub
       } catch (e) {
         console.error("[waitlistPastDatesCleanup]", { siteId, error: e });
       }
+    }
+    return null;
+  });
+
+/** Same TTL as app {@link WAITLIST_OFFER_TTL_MS} (2h). */
+const WAITLIST_OFFER_TTL_MS = 2 * 60 * 60 * 1000;
+const WAITLIST_SLOT_LOCKS = "waitlistSlotLocks";
+
+function waitlistSlotLockDocIdForFn(dateYmd: string, timeHHmm: string, workerId: string | null): string {
+  const t = String(timeHHmm).replace(/:/g, "");
+  const w = workerId && String(workerId).trim() ? String(workerId).trim().replace(/\//g, "_") : "_open";
+  return `${dateYmd}_${t}_${w}`.slice(0, 700);
+}
+
+async function clearWaitlistSlotTimeLockForFn(siteId: string, lockId: string): Promise<void> {
+  const ref = db.collection("sites").doc(siteId).collection(WAITLIST_SLOT_LOCKS).doc(lockId);
+  await ref.set(
+    {
+      lockedUntil: admin.firestore.Timestamp.fromMillis(0),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+function offerPayloadToFreedSlot(offer: Record<string, unknown>): Record<string, unknown> | null {
+  const dateYmd = typeof offer.dateYmd === "string" ? offer.dateYmd.trim() : "";
+  const timeHHmm = typeof offer.timeHHmm === "string" ? offer.timeHHmm.trim() : "";
+  const serviceName = typeof offer.serviceName === "string" ? offer.serviceName : "";
+  if (!dateYmd || !timeHHmm || !serviceName) return null;
+  const primaryDurationMin = Math.max(1, Math.round(Number(offer.primaryDurationMin ?? offer.durationMin ?? 60)));
+  const w = offer.workerId;
+  const workerId = w != null && String(w).trim() !== "" ? String(w).trim() : null;
+  const fw = offer.followUpWorkerId;
+  const followUpWorkerId =
+    fw != null && String(fw).trim() !== "" ? String(fw).trim() : null;
+  return {
+    dateYmd,
+    timeHHmm,
+    workerId,
+    workerName: typeof offer.workerName === "string" ? offer.workerName : null,
+    serviceTypeId: null,
+    serviceId: null,
+    serviceName,
+    durationMin: primaryDurationMin,
+    primaryDurationMin,
+    waitMinutes: Math.max(0, Math.round(Number(offer.waitMinutes ?? 0))),
+    followUpDurationMin: Math.max(0, Math.round(Number(offer.followUpDurationMin ?? 0))),
+    followUpWorkerId,
+    followUpWorkerName: typeof offer.followUpWorkerName === "string" ? offer.followUpWorkerName : null,
+    followUpServiceName:
+      offer.followUpServiceName != null && String(offer.followUpServiceName).trim() !== ""
+        ? String(offer.followUpServiceName).trim()
+        : null,
+  };
+}
+
+async function expirePendingOfferDocAndRematch(
+  siteId: string,
+  docId: string,
+  data: admin.firestore.DocumentData
+): Promise<void> {
+  const offer = data.offer as Record<string, unknown> | undefined;
+  const ref = db.collection("sites").doc(siteId).collection("bookingWaitlistEntries").doc(docId);
+
+  await ref.update({
+    status: "expired_offer",
+    offer: admin.firestore.FieldValue.delete(),
+    offerSentAt: admin.firestore.FieldValue.delete(),
+    offerExpiresAt: admin.firestore.FieldValue.delete(),
+    offerWebConfirmToken: admin.firestore.FieldValue.delete(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  if (!offer || typeof offer !== "object") return;
+
+  const lockId = waitlistSlotLockDocIdForFn(
+    String(offer.dateYmd ?? ""),
+    String(offer.timeHHmm ?? ""),
+    offer.workerId != null && String(offer.workerId).trim() ? String(offer.workerId).trim() : null
+  );
+  try {
+    await clearWaitlistSlotTimeLockForFn(siteId, lockId);
+  } catch (e) {
+    console.error("[cleanupExpiredWaitlistOffers] clear_lock_failed", { siteId, docId, error: e });
+  }
+
+  const slot = offerPayloadToFreedSlot(offer);
+  if (!slot) {
+    console.warn("[cleanupExpiredWaitlistOffers] no_slot_from_offer", { siteId, docId });
+    return;
+  }
+
+  const baseUrl = process.env.CALENO_APP_BASE_URL?.trim();
+  const secret = process.env.CALENO_WAITLIST_INTERNAL_SECRET?.trim();
+  if (!baseUrl || !secret) {
+    console.error(
+      "[cleanupExpiredWaitlistOffers] missing CALENO_APP_BASE_URL or CALENO_WAITLIST_INTERNAL_SECRET; rematch skipped",
+      { siteId, docId }
+    );
+    return;
+  }
+
+  const url = `${baseUrl.replace(/\/$/, "")}/api/internal/waitlist/trigger-match-for-freed-slot`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-caleno-waitlist-secret": secret,
+      },
+      body: JSON.stringify({ siteId, slot, skipEntryIds: [docId] }),
+    });
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      console.error("[cleanupExpiredWaitlistOffers] rematch_http_error", {
+        siteId,
+        docId,
+        status: res.status,
+        body: t.slice(0, 500),
+      });
+    }
+  } catch (e) {
+    console.error("[cleanupExpiredWaitlistOffers] rematch_fetch_failed", { siteId, docId, error: e });
+  }
+}
+
+/**
+ * Expire stale `pending_offer` rows (offerSentAt &gt; 2h ago), clear slot lock, call app to run waitlist match for that slot.
+ * Requires deployed composite index on bookingWaitlistEntries: status + offerSentAt.
+ * Rematch runs on Vercel (same secret as waitlistOnBookingDeleted).
+ */
+export const cleanupExpiredWaitlistOffers = functions
+  .runWith({ timeoutSeconds: 300, memory: "512MB" })
+  .pubsub.schedule("every 15 minutes")
+  .timeZone(TZ)
+  .onRun(async () => {
+    const cutoff = admin.firestore.Timestamp.fromMillis(Date.now() - WAITLIST_OFFER_TTL_MS);
+    let totalExpired = 0;
+    let fallbackSites = 0;
+
+    const sitesSnap = await db.collection("sites").get();
+    for (const siteDoc of sitesSnap.docs) {
+      const siteId = siteDoc.id;
+      const col = db.collection("sites").doc(siteId).collection("bookingWaitlistEntries");
+      let lastDoc: FirebaseFirestore.QueryDocumentSnapshot | null = null;
+
+      try {
+        for (;;) {
+          let q: FirebaseFirestore.Query = col
+            .where("status", "==", "pending_offer")
+            .where("offerSentAt", "<", cutoff)
+            .orderBy("offerSentAt", "asc")
+            .limit(30);
+          if (lastDoc) q = q.startAfter(lastDoc);
+          const snap = await q.get();
+          if (snap.empty) break;
+          for (const doc of snap.docs) {
+            await expirePendingOfferDocAndRematch(siteId, doc.id, doc.data());
+            totalExpired++;
+          }
+          if (snap.size < 30) break;
+          lastDoc = snap.docs[snap.docs.length - 1];
+        }
+      } catch (e) {
+        fallbackSites++;
+        console.warn("[cleanupExpiredWaitlistOffers] compound_query_failed_using_fallback_scan", {
+          siteId,
+          error: e instanceof Error ? e.message : String(e),
+        });
+        try {
+          const snap = await col.where("status", "==", "pending_offer").limit(250).get();
+          const cutoffMs = cutoff.toMillis();
+          const stale = snap.docs.filter((d) => {
+            const ts = d.data().offerSentAt as admin.firestore.Timestamp | undefined;
+            const ms = ts && typeof ts.toMillis === "function" ? ts.toMillis() : null;
+            return ms != null && ms < cutoffMs;
+          });
+          for (const doc of stale) {
+            await expirePendingOfferDocAndRematch(siteId, doc.id, doc.data());
+            totalExpired++;
+          }
+        } catch (inner) {
+          console.error("[cleanupExpiredWaitlistOffers] site_failed", { siteId, error: inner });
+        }
+      }
+    }
+
+    if (totalExpired > 0 || fallbackSites > 0) {
+      console.log("[cleanupExpiredWaitlistOffers] done", { totalExpired, fallbackSites });
     }
     return null;
   });
