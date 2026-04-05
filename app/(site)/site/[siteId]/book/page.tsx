@@ -3010,10 +3010,12 @@ export default function BookingPage() {
         return;
       }
       setWaitlistFeedback("נרשמתם לרשימת המתנה. כשיתפנה תור נשלח לכם בוואטסאפ לאישור ההזמנה.");
+      const homeUrl = getSiteUrl(config?.slug ?? null, siteId, "");
       window.setTimeout(() => {
         setWaitlistModalOpen(false);
         setWaitlistFeedback(null);
-      }, 2600);
+        router.replace(homeUrl);
+      }, 2200);
     } finally {
       setWaitlistSubmitting(false);
     }

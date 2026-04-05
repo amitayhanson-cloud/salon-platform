@@ -32,6 +32,7 @@ import {
   type FreedBookingSlot,
   type FreedSlotMatchProbe,
   type BusyIntervalMs,
+  type WaitlistSlotMatchOptions,
 } from "./matchService";
 import { normalizeBookingTimeHHmm } from "./bookingDocToFreedSlot";
 import { WAITLIST_PENDING_OFFER_STATUSES, WAITLIST_WAITING_STATUSES } from "./waitlistStatus";
@@ -44,6 +45,12 @@ import {
 import { WAITLIST_OFFER_TTL_MS, WAITLIST_SLOT_LOCK_MS } from "./waitlistOfferConstants";
 
 export { WAITLIST_OFFER_TTL_MS, WAITLIST_SLOT_LOCK_MS } from "./waitlistOfferConstants";
+
+/**
+ * TEMP: verbose Firestore + filter tracing for `no_matching_waitlist_entry`.
+ * Flip to false (or remove block) after debugging.
+ */
+const TEMP_DEBUG_WAITLIST_MATCH = true;
 
 /** Segments shorter than this (after packing) are not offered again in this run. */
 const MIN_PACK_SEGMENT_MIN = 15;
@@ -89,6 +96,65 @@ function firestoreTsMs(ts: unknown): number {
     return (ts as { toMillis: () => number }).toMillis();
   }
   return Number.MAX_SAFE_INTEGER;
+}
+
+/** TEMP: one line per person when match filter or acquire fails (see TEMP_DEBUG_WAITLIST_MATCH). */
+function logDebugWaitlistPerPersonReject(args: {
+  customerName: string;
+  docId: string;
+  entryStatus: string;
+  kind: "filter" | "acquire";
+  entry: BookingWaitlistEntry;
+  slice: FreedBookingSlot;
+  matchOpts?: WaitlistSlotMatchOptions;
+  slotBucket: ReturnType<typeof getTimePreferenceBucketForSlot>;
+  acquireReason?: string;
+}): void {
+  if (!TEMP_DEBUG_WAITLIST_MATCH) return;
+  const displayName = args.customerName.trim() || args.docId;
+  if (args.kind === "acquire") {
+    console.log(
+      `[bookingWaitlist] DEBUG manual_filter User [${displayName}] rejected because: offer acquire failed [${args.acquireReason ?? "unknown"}]`
+    );
+    return;
+  }
+  const waitingList = [...WAITLIST_WAITING_STATUSES].join(", ");
+  const parts: string[] = [];
+  if (!(WAITLIST_WAITING_STATUSES as readonly string[]).includes(args.entryStatus)) {
+    parts.push(`Status is [${args.entryStatus}], expected [${waitingList}]`);
+  }
+  const expl = explainWaitlistEntryMismatch(args.entry, args.slice, args.matchOpts);
+  if (expl.startsWith("time_bucket")) {
+    parts.push(
+      `Bucket Mismatch (UserBucket ${JSON.stringify(args.entry.timePreference ?? null)} vs SlotBucket [${String(args.slotBucket)}])`
+    );
+  }
+  if (expl.startsWith("horizon_buckets")) {
+    const hb = args.matchOpts?.horizonBuckets;
+    parts.push(
+      `Horizon bucket mismatch (user ${JSON.stringify(args.entry.timePreference ?? null)} vs allowed [${hb ? [...hb].sort().join(", ") : ""}])`
+    );
+  }
+  if (expl.startsWith("date_mismatch")) {
+    parts.push(
+      `Date mismatch (entry preferredDateYmd [${args.entry.preferredDateYmd ?? ""}] vs slot [${args.slice.dateYmd}])`
+    );
+  }
+  if (expl.startsWith("service_mismatch")) {
+    parts.push(`Service mismatch: ${expl.slice("service_mismatch ".length)}`);
+  }
+  if (expl.startsWith("duration_or_phases")) {
+    parts.push(`Duration / phases: ${expl.slice("duration_or_phases ".length)}`);
+  }
+  if (parts.length === 0 && expl !== "ok") {
+    parts.push(expl);
+  }
+  if (parts.length === 0) {
+    parts.push("no explain reason (unexpected: match false but explain ok)");
+  }
+  console.log(
+    `[bookingWaitlist] DEBUG manual_filter User [${displayName}] rejected because: ${parts.join("; ")}`
+  );
 }
 
 function revertWaitingStatusFromEntry(entry: BookingWaitlistEntry): "waiting" | "active" {
@@ -286,11 +352,35 @@ async function findFirstMatchFromProbes(
   const sliceAttempts: SliceAttemptLog[] = [];
   const probesTried = probes.map((p) => p.label);
   let anySlotLocked = false;
+  const rawCountByYmd = new Map<string, number>();
 
   probeLoop: for (const probe of probes) {
     const slice = probe.slot;
     const bucket = getTimePreferenceBucketForSlot(slice.dateYmd, slice.timeHHmm, siteTz);
     const lockId = waitlistSlotLockDocId(slice.dateYmd, slice.timeHHmm, slice.workerId);
+    const statusIn = [...WAITLIST_WAITING_STATUSES].join(", ");
+
+    if (TEMP_DEBUG_WAITLIST_MATCH) {
+      console.log(
+        `[bookingWaitlist] DEBUG pre_query Searching for: Site [${siteId}], Date [${slice.dateYmd}], Status [${statusIn}], Worker [${slice.workerId ?? "(null)"}] (worker is match context; Firestore query is by status+preferredDateYmd only)`
+      );
+    }
+
+    let rawForDate = rawCountByYmd.get(slice.dateYmd);
+    if (rawForDate === undefined) {
+      const rawSnap = await col.where("preferredDateYmd", "==", slice.dateYmd).limit(500).get();
+      rawForDate = rawSnap.size;
+      rawCountByYmd.set(slice.dateYmd, rawForDate);
+      if (TEMP_DEBUG_WAITLIST_MATCH) {
+        console.log(
+          `[bookingWaitlist] DEBUG raw_count Found [${rawForDate}] total documents in the waitlist for this site/date regardless of other filters (path sites/${siteId}/bookingWaitlistEntries; docs have no siteId/tenantId field).`
+        );
+      }
+    } else if (TEMP_DEBUG_WAITLIST_MATCH) {
+      console.log(
+        `[bookingWaitlist] DEBUG raw_count Found [${rawForDate}] total documents (cached for date ${slice.dateYmd}) for this site/date regardless of other filters.`
+      );
+    }
 
     let activeSnap;
     try {
@@ -303,6 +393,12 @@ async function findFirstMatchFromProbes(
       const msg = e instanceof Error ? e.message : String(e);
       console.error("[bookingWaitlist] waitlist_query_failed", { siteId, dateYmd: slice.dateYmd, error: msg });
       throw e;
+    }
+
+    if (TEMP_DEBUG_WAITLIST_MATCH) {
+      console.log(
+        `[bookingWaitlist] DEBUG status_query Found [${activeSnap.size}] documents with status in [${statusIn}] for Date [${slice.dateYmd}]`
+      );
     }
 
     const sortedDocs = [...activeSnap.docs].sort((a, b) => {
@@ -338,6 +434,18 @@ async function findFirstMatchFromProbes(
         if (firstFilterRejectExplain === null) {
           firstFilterRejectExplain = explainWaitlistEntryMismatch(data, slice, matchOpts);
         }
+        if (TEMP_DEBUG_WAITLIST_MATCH) {
+          logDebugWaitlistPerPersonReject({
+            customerName: data.customerName,
+            docId: doc.id,
+            entryStatus: data.status,
+            kind: "filter",
+            entry: data,
+            slice,
+            matchOpts,
+            slotBucket: bucket,
+          });
+        }
         continue;
       }
       const acq = await tryAcquireWaitlistSlotOffer(db, siteId, lockId, {
@@ -347,6 +455,19 @@ async function findFirstMatchFromProbes(
         bypassLock,
       });
       if (!acq.ok) {
+        if (TEMP_DEBUG_WAITLIST_MATCH) {
+          logDebugWaitlistPerPersonReject({
+            customerName: data.customerName,
+            docId: doc.id,
+            entryStatus: data.status,
+            kind: "acquire",
+            entry: data,
+            slice,
+            matchOpts,
+            slotBucket: bucket,
+            acquireReason: acq.reason,
+          });
+        }
         if (acq.reason === "locked") {
           anySlotLocked = true;
           sliceAttempts.push({
@@ -655,6 +776,7 @@ export async function triggerWaitlistMatchForFreedSlot(
 /**
  * Spec-style entry point: `date` and `startTime` must match `slot.dateYmd` / `slot.timeHHmm`.
  */
+/** `tenantId` here is the Firestore `sites` document id (same as booking/join `siteId`). */
 export async function triggerWaitlistMatch(
   tenantId: string,
   date: string,
