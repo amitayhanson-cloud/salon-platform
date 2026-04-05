@@ -7,7 +7,7 @@
  * Variable shapes (must match send-time validation in send.ts):
  * - appointment_reminder_v1: body {{1}}–{{4}} only
  * - booking_confirmed: body {{1}}–{{4}} only
- * - booking_waitlist_slot_offer: body {{1}}–{{4}} only (quick-reply buttons, no URL vars)
+ * - booking_waitlist_slot_offer → Twilio `copy_waitlist_opening_alert_v3`: body {{1}}–{{4}} + static 2nd line (quick replies)
  * - broadcast_message_v1: body {{1}}–{{3}} + dynamic URL button (e.g. button_1["1"])
  */
 
@@ -74,8 +74,8 @@ export const BOOKING_CONFIRMED_SID = "HX6fc2713d6b7e1ce895e442686413dfd8";
 
 export const BROADCAST_SID = "HXe1d69e6b126c9bd073e3065fc648f762";
 
-/** Default Meta-approved waitlist slot offer (body {{1}}–{{4}} + quick replies). */
-export const BOOKING_WAITLIST_SLOT_OFFER_SID = "HX751a42be86f239f45bfba3c0d88a626a";
+/** Default: `copy_waitlist_opening_alert_v3` (body {{1}}–{{4}} + static expiry line; same quick replies). */
+export const BOOKING_WAITLIST_SLOT_OFFER_SID = "HX2c095947cb04ba31f11c20eeebeea2ae";
 
 /** @deprecated Use APPOINTMENT_REMINDER_SID — kept for string search parity with older docs. */
 export const APPOINTMENT_REMINDER_CONTENT_SID = APPOINTMENT_REMINDER_SID;

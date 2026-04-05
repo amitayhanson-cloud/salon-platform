@@ -42,6 +42,8 @@ export type BookingWaitlistEntry = {
   preferredWorkerId?: string | null;
   status: BookingWaitlistStatus;
   offer?: BookingWaitlistOfferSlot;
+  /** Opaque token for web confirmation link (`/waitlist-offer/...?t=`). */
+  offerWebConfirmToken?: string | null;
   offerSentAt?: unknown;
   offerExpiresAt?: unknown;
   bookedBookingId?: string | null;

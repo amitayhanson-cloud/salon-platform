@@ -69,7 +69,10 @@ export async function POST(request: Request) {
       followUpServiceName: null,
     };
 
-    const r = await triggerWaitlistMatchForFreedSlot(siteId, slot, { matchAnyService: true });
+    const r = await triggerWaitlistMatchForFreedSlot(siteId, slot, {
+      matchAnyService: true,
+      skipHorizonScan: true,
+    });
     return NextResponse.json({
       ok: true,
       notified: r.notified,

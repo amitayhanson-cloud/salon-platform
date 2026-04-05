@@ -1,3 +1,4 @@
+import { addMinutes } from "date-fns";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 
 import {
@@ -35,6 +36,28 @@ export function getTimePreferenceBucketForSlot(
     /* fall through */
   }
   return "morning";
+}
+
+/** Add minutes to a wall time in `timeZone` (correct around DST in that zone). */
+export function addWallMinutesInTimezone(
+  dateYmd: string,
+  timeHHmm: string,
+  deltaMinutes: number,
+  timeZone: string
+): { dateYmd: string; timeHHmm: string } | null {
+  const t = timeHHmm.trim();
+  const hm = t.length >= 5 ? t.slice(0, 5) : t;
+  const wall = `${dateYmd}T${hm}:00`;
+  try {
+    const utc = fromZonedTime(wall, timeZone);
+    const next = addMinutes(utc, deltaMinutes);
+    return {
+      dateYmd: formatInTimeZone(next, timeZone, "yyyy-MM-dd"),
+      timeHHmm: formatInTimeZone(next, timeZone, "HH:mm"),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function normalizeTimePreferenceArray(raw: unknown): TimePreferenceValue[] {

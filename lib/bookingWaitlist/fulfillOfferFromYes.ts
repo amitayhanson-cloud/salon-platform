@@ -15,11 +15,8 @@ import { offerSlotToFreedSlot } from "./matchService";
 import { isWaitlistPendingOfferStatus } from "./waitlistStatus";
 import { clearWaitlistSlotTimeLock, waitlistSlotLockDocId } from "./slotLock";
 import { triggerWaitlistMatchForFreedSlot } from "./triggerWaitlistMatch";
-
-function offerExpired(expires: unknown): boolean {
-  if (!expires || typeof (expires as { toMillis?: () => number }).toMillis !== "function") return true;
-  return (expires as { toMillis: () => number }).toMillis() < Date.now();
-}
+import { expireWaitlistOfferAndRematch, isWaitlistEntryOfferExpired } from "./waitlistOfferExpiry";
+import { WAITLIST_EXPIRED_CUSTOMER_HE } from "./waitlistOfferMessages";
 
 function parseStartAt(dateYmd: string, timeHHmm: string): Date | null {
   const [y, m, d] = dateYmd.split("-").map(Number);
@@ -43,6 +40,27 @@ export async function getWaitlistEntry(
   return { id: snap.id, entry: snap.data() as BookingWaitlistEntry };
 }
 
+/** Web link: requires matching {@link BookingWaitlistEntry.offerWebConfirmToken}. */
+export async function fulfillWaitlistOfferFromWebYes(
+  siteId: string,
+  waitlistDocId: string,
+  token: string
+): Promise<FulfillWaitlistYesResult> {
+  const trimmed = token.trim();
+  if (!trimmed) {
+    return { ok: false, reason: "bad_token" };
+  }
+  const loaded = await getWaitlistEntry(siteId, waitlistDocId);
+  if (!loaded) {
+    return { ok: false, reason: "missing_entry" };
+  }
+  const expected = loaded.entry.offerWebConfirmToken?.trim();
+  if (!expected || expected !== trimmed) {
+    return { ok: false, reason: "bad_token" };
+  }
+  return fulfillWaitlistOfferFromInboundYes(siteId, waitlistDocId);
+}
+
 export async function fulfillWaitlistOfferFromInboundYes(
   siteId: string,
   waitlistDocId: string
@@ -58,15 +76,12 @@ export async function fulfillWaitlistOfferFromInboundYes(
   if (!offer || !isWaitlistPendingOfferStatus(entry.status)) {
     return { ok: false, reason: "no_active_offer" };
   }
-  if (offerExpired(entry.offerExpiresAt)) {
-    await ref.update({
-      status: "expired_offer",
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+  if (isWaitlistEntryOfferExpired(entry)) {
+    await expireWaitlistOfferAndRematch(siteId, waitlistDocId, entry);
     return {
       ok: false,
       reason: "offer_expired",
-      customerReply: "פג תוקף ההצעה. אפשר להירשם שוב לרשימת המתנה מעמוד ההזמנה.",
+      customerReply: WAITLIST_EXPIRED_CUSTOMER_HE,
     };
   }
 
@@ -115,6 +130,7 @@ export async function fulfillWaitlistOfferFromInboundYes(
       offer: admin.firestore.FieldValue.delete(),
       offerSentAt: admin.firestore.FieldValue.delete(),
       offerExpiresAt: admin.firestore.FieldValue.delete(),
+      offerWebConfirmToken: admin.firestore.FieldValue.delete(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     try {
@@ -152,6 +168,7 @@ export async function fulfillWaitlistOfferFromInboundYes(
         offer: admin.firestore.FieldValue.delete(),
         offerSentAt: admin.firestore.FieldValue.delete(),
         offerExpiresAt: admin.firestore.FieldValue.delete(),
+        offerWebConfirmToken: admin.firestore.FieldValue.delete(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
       try {
@@ -277,8 +294,19 @@ export async function fulfillWaitlistOfferFromInboundYes(
   await ref.update({
     status: "booked",
     bookedBookingId: bookingId,
+    offer: admin.firestore.FieldValue.delete(),
+    offerSentAt: admin.firestore.FieldValue.delete(),
+    offerExpiresAt: admin.firestore.FieldValue.delete(),
+    offerWebConfirmToken: admin.firestore.FieldValue.delete(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
+
+  const bookedLockId = waitlistSlotLockDocId(offer.dateYmd, offer.timeHHmm, offer.workerId ?? null);
+  try {
+    await clearWaitlistSlotTimeLock(db, siteId, bookedLockId);
+  } catch (e) {
+    console.error("[bookingWaitlist] clear slot lock after book failed", e);
+  }
 
   try {
     await onBookingCreated(siteId, bookingId);
@@ -352,6 +380,7 @@ export async function declineWaitlistOffer(
     offer: admin.firestore.FieldValue.delete(),
     offerSentAt: admin.firestore.FieldValue.delete(),
     offerExpiresAt: admin.firestore.FieldValue.delete(),
+    offerWebConfirmToken: admin.firestore.FieldValue.delete(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
