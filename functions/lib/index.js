@@ -7,6 +7,7 @@
  * - scheduledArchiveCleanup: weekly scheduled deletion per site archiveRetention
  * - liveStatsOnBookingWrite / liveStatsOnClientCreate: increment dashboardCurrent (FieldValue.increment)
  * - auditWhatsAppUsage: onCreate whatsapp_logs → increment dashboardCurrent whatsappCount (billing truth)
+ * - waitlistPastDatesCleanup: daily delete bookingWaitlistEntries with preferredDateYmd before today (site TZ)
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -42,7 +43,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.waitlistOnBookingDeleted = exports.auditWhatsAppUsage = exports.liveStatsOnClientCreate = exports.liveStatsOnBookingWrite = exports.scheduledArchiveCleanup = exports.deleteArchivedBookings = exports.runExpiredCleanupForSite = exports.expiredBookingsCleanup = void 0;
+exports.waitlistOnBookingDeleted = exports.auditWhatsAppUsage = exports.liveStatsOnClientCreate = exports.liveStatsOnBookingWrite = exports.scheduledArchiveCleanup = exports.deleteArchivedBookings = exports.runExpiredCleanupForSite = exports.waitlistPastDatesCleanup = exports.expiredBookingsCleanup = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const liveStatsScorekeeper_1 = require("./liveStatsScorekeeper");
@@ -270,6 +271,68 @@ exports.expiredBookingsCleanup = functions.pubsub
                 todayYMD,
                 ...result,
             });
+        }
+    }
+    return null;
+});
+/**
+ * Delete waitlist rows whose preferred calendar day is strictly before "today" in the site timezone.
+ */
+async function deleteExpiredWaitlistEntriesForSite(siteId, siteTz) {
+    const todayYmd = getTodayYMDInTimezone(siteTz);
+    const col = db.collection("sites").doc(siteId).collection("bookingWaitlistEntries");
+    let total = 0;
+    let q = col
+        .where("preferredDateYmd", "<", todayYmd)
+        .orderBy("preferredDateYmd", "asc")
+        .orderBy(admin.firestore.FieldPath.documentId())
+        .limit(FIRESTORE_BATCH_LIMIT);
+    let snapshot = await q.get();
+    while (!snapshot.empty) {
+        const batch = db.batch();
+        for (const doc of snapshot.docs) {
+            batch.delete(doc.ref);
+        }
+        await batch.commit();
+        total += snapshot.docs.length;
+        if (snapshot.docs.length < FIRESTORE_BATCH_LIMIT)
+            break;
+        const last = snapshot.docs[snapshot.docs.length - 1];
+        q = col
+            .where("preferredDateYmd", "<", todayYmd)
+            .orderBy("preferredDateYmd", "asc")
+            .orderBy(admin.firestore.FieldPath.documentId())
+            .startAfter(last)
+            .limit(FIRESTORE_BATCH_LIMIT);
+        snapshot = await q.get();
+    }
+    return total;
+}
+/** Daily after booking expiry cleanup: drop stale waitlist signups for past dates. */
+exports.waitlistPastDatesCleanup = functions.pubsub
+    .schedule("20 2 * * *")
+    .timeZone(TZ)
+    .onRun(async () => {
+    const sitesSnap = await db.collection("sites").get();
+    for (const siteDoc of sitesSnap.docs) {
+        const siteId = siteDoc.id;
+        const siteData = siteDoc.data();
+        const siteTz = siteData.config?.archiveRetention?.timezone ||
+            siteData.config?.timezone ||
+            TZ;
+        try {
+            const deleted = await deleteExpiredWaitlistEntriesForSite(siteId, siteTz);
+            if (deleted > 0) {
+                console.log("[waitlistPastDatesCleanup]", {
+                    siteId,
+                    deleted,
+                    todayYmd: getTodayYMDInTimezone(siteTz),
+                    siteTz,
+                });
+            }
+        }
+        catch (e) {
+            console.error("[waitlistPastDatesCleanup]", { siteId, error: e });
         }
     }
     return null;

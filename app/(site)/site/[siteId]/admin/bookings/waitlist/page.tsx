@@ -11,6 +11,7 @@ import { AdminPageHero } from "@/components/admin/AdminPageHero";
 import { AdminCard } from "@/components/admin/AdminCard";
 import CalenoLoading from "@/components/CalenoLoading";
 import { formatTimePreferenceLabelsHe } from "@/lib/bookingWaitlist/timeBuckets";
+import { WaitlistEntryDeleteButton } from "@/components/admin/WaitlistEntryDeleteButton";
 
 type Row = {
   id: string;
@@ -114,7 +115,7 @@ export default function BookingWaitlistAdminPage() {
     <div className="max-w-5xl mx-auto px-4 py-8" dir="rtl">
       <AdminPageHero
         title="רשימת המתנה"
-        subtitle="לקוחות שנרשמו מדף ההזמנה. כשיתבטל תור מתאים, נשלחת הודעת וואטסאפ עם אפשרות לאשר."
+        subtitle="לקוחות שנרשמו מדף ההזמנה. כשיתבטל תור מתאים, נשלחת הודעת וואטסאפ עם אפשרות לאשר. רשומות עם תאריך שעבר נמחקות אוטומטית בלילה (לפי אזור הזמן של העסק). אפשר גם להסיר ידנית בשורה."
       />
       <div className="mb-4 flex flex-wrap gap-2">
         <Link
@@ -138,7 +139,7 @@ export default function BookingWaitlistAdminPage() {
                 <span className="font-normal text-slate-500 mr-2">({list.length})</span>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm text-right min-w-[720px]">
+                <table className="w-full text-sm text-right min-w-[760px]">
                   <thead>
                     <tr className="border-b border-slate-200 text-slate-600">
                       <th className="px-4 py-2 w-14">#</th>
@@ -147,6 +148,7 @@ export default function BookingWaitlistAdminPage() {
                       <th className="px-4 py-2">שירות</th>
                       <th className="px-4 py-2 whitespace-nowrap">העדפת שעה</th>
                       <th className="px-4 py-2">תאריך שביקש</th>
+                      <th className="px-2 py-2 w-12 text-center"> </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -163,6 +165,9 @@ export default function BookingWaitlistAdminPage() {
                         <td className="px-4 py-2 text-slate-700">{r.timePreferenceLabel}</td>
                         <td className="px-4 py-2 tabular-nums text-slate-700">
                           {formatRequestedDate(r.preferredDateYmd)}
+                        </td>
+                        <td className="px-2 py-2 text-center align-middle">
+                          <WaitlistEntryDeleteButton siteId={siteId} entryId={r.id} />
                         </td>
                       </tr>
                     ))}
