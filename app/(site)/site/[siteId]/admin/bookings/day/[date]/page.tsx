@@ -609,6 +609,68 @@ export default function DaySchedulePage() {
     return `${DAY_LABELS[dayIndex]} ${date.getDate()}/${date.getMonth() + 1}/${date.getFullYear()}`;
   };
 
+  const handleWaitlistFillSlot = async (payload: {
+    workerId: string;
+    workerName?: string;
+    timeHHmm: string;
+  }) => {
+    if (!siteId || !firebaseUser) {
+      setToastMessage("יש להתחבר מחדש");
+      setToastError(true);
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
+    setToastMessage(null);
+    setToastError(false);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch("/api/bookings/trigger-waitlist-match", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          siteId,
+          dateYmd: dateKey,
+          timeHHmm: payload.timeHHmm,
+          workerId: payload.workerId,
+          workerName: payload.workerName ?? null,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        notified?: boolean;
+        reason?: string;
+        error?: string;
+      };
+      if (!res.ok) {
+        const msg =
+          data.error === "forbidden"
+            ? "אין הרשאה"
+            : typeof data.error === "string"
+              ? data.error
+              : "שגיאה";
+        setToastMessage(msg);
+        setToastError(true);
+        setTimeout(() => setToastMessage(null), 4000);
+        return;
+      }
+      if (data.notified) {
+        setToastMessage("נשלחה הצעה ללקוח הבא ברשימת ההמתנה");
+        setToastError(false);
+      } else if (data.reason === "slot_locked") {
+        setToastMessage("השעה נעולה להצעה פעילה — נסו שוב בעוד כמה דקות");
+        setToastError(true);
+      } else {
+        setToastMessage("אין התאמה ברשימת ההמתנה לשירות ומשך התור בשעה זו");
+        setToastError(false);
+      }
+      setTimeout(() => setToastMessage(null), 4500);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setToastMessage(msg);
+      setToastError(true);
+      setTimeout(() => setToastMessage(null), 4000);
+    }
+  };
+
   const handleArchiveCancelBooking = async () => {
     if (!selectedBooking || !siteId || !firebaseUser) return;
     setDeleting(true);
@@ -1131,6 +1193,7 @@ export default function DaySchedulePage() {
               breaks={dayBreaks}
               workerBreaksByWorkerId={workerBreaksByWorkerId}
               onBookingClick={handleBookingClick}
+              onWaitlistFillSlot={handleWaitlistFillSlot}
             />
           </AdminCard>
         ) : (

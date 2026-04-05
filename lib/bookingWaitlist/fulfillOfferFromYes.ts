@@ -11,8 +11,10 @@ import { checkWorkerConflictsAdmin } from "./workerConflictsAdmin";
 import { getOrCreateClientAdmin } from "./clientAdmin";
 import { formatIsraelDateTime } from "@/lib/datetime/formatIsraelTime";
 import { computePhases } from "@/lib/bookingPhasesTiming";
-import { notifyBookingWaitlistFromFreedSlot } from "./notifySlotFreed";
 import { offerSlotToFreedSlot } from "./matchService";
+import { isWaitlistPendingOfferStatus } from "./waitlistStatus";
+import { clearWaitlistSlotTimeLock, waitlistSlotLockDocId } from "./slotLock";
+import { triggerWaitlistMatchForFreedSlot } from "./triggerWaitlistMatch";
 
 function offerExpired(expires: unknown): boolean {
   if (!expires || typeof (expires as { toMillis?: () => number }).toMillis !== "function") return true;
@@ -53,7 +55,7 @@ export async function fulfillWaitlistOfferFromInboundYes(
   const db = getAdminDb();
   const ref = db.collection("sites").doc(siteId).collection("bookingWaitlistEntries").doc(waitlistDocId);
   const offer = entry.offer;
-  if (!offer || entry.status !== "notified") {
+  if (!offer || !isWaitlistPendingOfferStatus(entry.status)) {
     return { ok: false, reason: "no_active_offer" };
   }
   if (offerExpired(entry.offerExpiresAt)) {
@@ -107,15 +109,16 @@ export async function fulfillWaitlistOfferFromInboundYes(
     []
   );
   if (c1.hasConflict) {
+    const backWaiting = entry.status === "notified" ? "active" : "waiting";
     await ref.update({
-      status: "active",
+      status: backWaiting,
       offer: admin.firestore.FieldValue.delete(),
       offerSentAt: admin.firestore.FieldValue.delete(),
       offerExpiresAt: admin.firestore.FieldValue.delete(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     try {
-      await notifyBookingWaitlistFromFreedSlot(siteId, offerSlotToFreedSlot(offer), {
+      await triggerWaitlistMatchForFreedSlot(siteId, offerSlotToFreedSlot(offer), {
         skipEntryIds: [waitlistDocId],
       });
     } catch (e) {
@@ -143,15 +146,16 @@ export async function fulfillWaitlistOfferFromInboundYes(
       []
     );
     if (c2.hasConflict) {
+      const backWaiting = entry.status === "notified" ? "active" : "waiting";
       await ref.update({
-        status: "active",
+        status: backWaiting,
         offer: admin.firestore.FieldValue.delete(),
         offerSentAt: admin.firestore.FieldValue.delete(),
         offerExpiresAt: admin.firestore.FieldValue.delete(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
       try {
-        await notifyBookingWaitlistFromFreedSlot(siteId, offerSlotToFreedSlot(offer), {
+        await triggerWaitlistMatchForFreedSlot(siteId, offerSlotToFreedSlot(offer), {
           skipEntryIds: [waitlistDocId],
         });
       } catch (e) {
@@ -292,22 +296,45 @@ export async function fulfillWaitlistOfferFromInboundYes(
 /**
  * Find a notified waitlist offer for this phone (most recent). Returns siteId + doc id + entry.
  */
+function offerSentAtMs(entry: BookingWaitlistEntry): number {
+  const ts = entry.offerSentAt;
+  if (ts != null && typeof (ts as { toMillis?: () => number }).toMillis === "function") {
+    return (ts as { toMillis: () => number }).toMillis();
+  }
+  return 0;
+}
+
 export async function findNotifiedWaitlistOfferForPhone(
   phoneE164: string
 ): Promise<{ siteId: string; id: string; entry: BookingWaitlistEntry } | null> {
   const db = getAdminDb();
-  const snap = await db
-    .collectionGroup("bookingWaitlistEntries")
-    .where("customerPhoneE164", "==", phoneE164)
-    .where("status", "==", "notified")
-    .orderBy("offerSentAt", "desc")
-    .limit(1)
-    .get();
-  if (snap.empty) return null;
-  const doc = snap.docs[0]!;
-  const siteId = doc.ref.parent.parent?.id;
-  if (!siteId) return null;
-  return { siteId, id: doc.id, entry: doc.data() as BookingWaitlistEntry };
+  const [n1, n2] = await Promise.all([
+    db
+      .collectionGroup("bookingWaitlistEntries")
+      .where("customerPhoneE164", "==", phoneE164)
+      .where("status", "==", "notified")
+      .orderBy("offerSentAt", "desc")
+      .limit(1)
+      .get(),
+    db
+      .collectionGroup("bookingWaitlistEntries")
+      .where("customerPhoneE164", "==", phoneE164)
+      .where("status", "==", "pending_offer")
+      .orderBy("offerSentAt", "desc")
+      .limit(1)
+      .get(),
+  ]);
+  const cands: Array<{ siteId: string; id: string; entry: BookingWaitlistEntry }> = [];
+  for (const snap of [n1, n2]) {
+    if (snap.empty) continue;
+    const doc = snap.docs[0]!;
+    const siteId = doc.ref.parent.parent?.id;
+    if (!siteId) continue;
+    cands.push({ siteId, id: doc.id, entry: doc.data() as BookingWaitlistEntry });
+  }
+  if (cands.length === 0) return null;
+  cands.sort((a, b) => offerSentAtMs(b.entry) - offerSentAtMs(a.entry));
+  return cands[0]!;
 }
 
 export async function declineWaitlistOffer(
@@ -321,7 +348,7 @@ export async function declineWaitlistOffer(
   const offer = prev?.offer;
 
   await ref.update({
-    status: "active",
+    status: "declined",
     offer: admin.firestore.FieldValue.delete(),
     offerSentAt: admin.firestore.FieldValue.delete(),
     offerExpiresAt: admin.firestore.FieldValue.delete(),
@@ -329,9 +356,15 @@ export async function declineWaitlistOffer(
   });
 
   if (offer) {
+    const lockId = waitlistSlotLockDocId(offer.dateYmd, offer.timeHHmm, offer.workerId ?? null);
+    try {
+      await clearWaitlistSlotTimeLock(db, siteId, lockId);
+    } catch (e) {
+      console.error("[declineWaitlistOffer] clear slot lock failed", e);
+    }
     try {
       const slot = offerSlotToFreedSlot(offer);
-      await notifyBookingWaitlistFromFreedSlot(siteId, slot, { skipEntryIds: [docId] });
+      await triggerWaitlistMatchForFreedSlot(siteId, slot, { skipEntryIds: [docId] });
     } catch (e) {
       console.error("[declineWaitlistOffer] cascade notify failed", e);
     }

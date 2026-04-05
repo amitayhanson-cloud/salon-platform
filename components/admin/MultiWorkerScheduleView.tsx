@@ -183,6 +183,7 @@ interface MultiWorkerScheduleViewProps {
   /** Per-worker break ranges for the current day (All Workers view: overlay per column). */
   workerBreaksByWorkerId?: Record<string, BreakRange[]>;
   onBookingClick?: (booking: Booking) => void; // Callback when booking block is clicked
+  onWaitlistFillSlot?: (payload: { workerId: string; workerName?: string; timeHHmm: string }) => void;
 }
 
 /**
@@ -199,6 +200,7 @@ export default function MultiWorkerScheduleView({
   breaks,
   workerBreaksByWorkerId,
   onBookingClick,
+  onWaitlistFillSlot,
 }: MultiWorkerScheduleViewProps) {
   const confirmedBookings = useMemo(() => bookings.filter((b) => !isBookingCancelled(b)), [bookings]);
   const workersToRender = useMemo(() => {
@@ -259,6 +261,7 @@ export default function MultiWorkerScheduleView({
                   }
                 : undefined
             }
+            onWaitlistFillSlot={onWaitlistFillSlot}
           />
         )}
       </div>

@@ -62,6 +62,23 @@ import { normalizeE164, isValidE164 } from "@/lib/whatsapp/e164";
 
 const BOOKING_TRAFFIC_SOURCE_SESSION_KEY = "caleno_booking_traffic_source";
 
+const WAITLIST_TIME_PREF_OPTIONS: { value: string; label: string }[] = [
+  { value: "morning", label: "בוקר" },
+  { value: "afternoon", label: "צהריים" },
+  { value: "evening", label: "ערב" },
+  { value: "anytime", label: "גמישים" },
+];
+
+function toggleWaitlistTimePreference(current: string[], value: string): string[] {
+  if (value === "anytime") return ["anytime"];
+  const noAny = current.filter((x) => x !== "anytime");
+  if (noAny.includes(value)) {
+    const next = noAny.filter((x) => x !== value);
+    return next.length === 0 ? ["anytime"] : next;
+  }
+  return [...noAny, value];
+}
+
 /** Israeli / E.164 mobile — same rules as WhatsApp reminders */
 function isBookingClientPhoneValid(raw: string): boolean {
   const t = raw.trim();
@@ -656,6 +673,7 @@ export default function BookingPage() {
   const [waitlistModalOpen, setWaitlistModalOpen] = useState(false);
   const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
   const [waitlistFeedback, setWaitlistFeedback] = useState<string | null>(null);
+  const [waitlistTimePreference, setWaitlistTimePreference] = useState<string[]>(["anytime"]);
   /** After פרטים: fetch last booking for repeat-service prompt */
   const [checkingLastBooking, setCheckingLastBooking] = useState(false);
   const [applyingRepeatBooking, setApplyingRepeatBooking] = useState(false);
@@ -2924,6 +2942,7 @@ export default function BookingPage() {
 
   function openBookingWaitlistModal() {
     setWaitlistFeedback(null);
+    setWaitlistTimePreference(["anytime"]);
     setWaitlistModalOpen(true);
   }
 
@@ -2973,6 +2992,7 @@ export default function BookingPage() {
           primaryDurationMin,
           waitMinutes,
           followUpDurationMin,
+          timePreference: waitlistTimePreference,
           ...(followUpServiceName ? { followUpServiceName } : {}),
         }),
       });
@@ -3851,10 +3871,10 @@ export default function BookingPage() {
                       }}
                     >
                       <p className="text-base sm:text-lg font-bold mb-1" style={{ color: "var(--text)" }}>
-                        רוצים שיודיעו לכם כשיתפנה תור?
+                        לא מצאתם שעה מתאימה לכם?
                       </p>
                       <p className="text-sm mb-4 leading-relaxed" style={{ color: "var(--muted)" }}>
-                        הצטרפו לרשימת המתנה ליום שבחרתם — נשלח עדכון בוואטסאפ כשיש מקום מתאים לשירות שנבחר.
+                        הצטרפו לרשימת המתנה ליום שבחרתם — נשלח עדכון בוואטסאפ כשיתפנה מקום מתאים לשירות שנבחר.
                       </p>
                       <button
                         type="button"
@@ -3866,7 +3886,7 @@ export default function BookingPage() {
                           boxShadow: "0 4px 14px color-mix(in srgb, var(--primary) 35%, transparent)",
                         }}
                       >
-                        הצטרפות לרשימת המתנה
+                        להצטרף לרשימת המתנה
                       </button>
                     </div>
                   ) : null}
@@ -3900,6 +3920,32 @@ export default function BookingPage() {
                   })}
                 </div>
               )}
+
+              {selectedDate && availableTimeSlots.length > 0 ? (
+                <div
+                  className="mt-6 pt-5 border-t text-right space-y-3"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
+                    לא מצאתם שעה מתאימה לכם?
+                  </p>
+                  <p className="text-xs sm:text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
+                    אפשר להצטרף לרשימת המתנה לאותו יום — נעדכן בוואטסאפ כשיתפנה תור מתאים.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={openBookingWaitlistModal}
+                    className="w-full sm:w-auto px-4 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                    style={{
+                      borderColor: "var(--primary)",
+                      backgroundColor: "transparent",
+                      color: "var(--primary)",
+                    }}
+                  >
+                    להצטרף לרשימת המתנה
+                  </button>
+                </div>
+              ) : null}
             </div>
           )}
 
@@ -4258,6 +4304,30 @@ export default function BookingPage() {
                 תאריך: {formatDateForDisplay(selectedDate)}
               </p>
             ) : null}
+            <div className="space-y-2 rounded-xl px-3 py-3" style={{ backgroundColor: "var(--bg)" }} dir="rtl">
+              <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
+                מתי נוח לכם?
+              </p>
+              <div className="flex flex-col gap-2">
+                {WAITLIST_TIME_PREF_OPTIONS.map(({ value, label }) => (
+                  <label
+                    key={value}
+                    className="flex items-center gap-2 cursor-pointer text-sm"
+                    style={{ color: "var(--text)" }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={waitlistTimePreference.includes(value)}
+                      onChange={() =>
+                        setWaitlistTimePreference((p) => toggleWaitlistTimePreference(p, value))
+                      }
+                      className="rounded border-slate-300"
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
             <p className="text-sm leading-relaxed rounded-xl px-3 py-3" style={{ color: "var(--text)", backgroundColor: "var(--bg)" }}>
               לחיצה על &quot;הרשמה לרשימת המתנה&quot; מצרפת אתכם לרשימה ליום שבחרתם. כשיתפנה תור מתאים נשלח לכם בוואטסאפ הודעה כדי לאשר את ההזמנה. תודה על הסבלנות.
             </p>

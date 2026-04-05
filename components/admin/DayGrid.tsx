@@ -14,6 +14,10 @@ import {
   toLocalDate,
   getMinutesSinceStartOfDay,
 } from "@/lib/calendarUtils";
+import { ListPlus } from "lucide-react";
+
+/** Must match {@link UNASSIGNED_WORKER_ID} in MultiWorkerScheduleView. */
+const UNASSIGNED_WORKER_SENTINEL = "__unassigned__";
 import { getBookingDisplayInfo } from "@/lib/bookingDisplay";
 import { isBookingCancelled } from "@/lib/normalizeBooking";
 import { getServiceCalendarColors } from "@/lib/colorUtils";
@@ -91,6 +95,25 @@ export interface DayGridProps {
   /** Per-worker break ranges for the current day (rendered in that worker's column only). */
   workerBreaksByWorkerId?: Record<string, Array<{ start: string; end: string }>>;
   onBookingClick?: (booking: unknown) => void;
+  /** Empty slot: offer next waitlist customer for this worker + start time (admin). */
+  onWaitlistFillSlot?: (payload: { workerId: string; workerName?: string; timeHHmm: string }) => void;
+}
+
+function rowOverlapsBreakRange(
+  rowIndex: number,
+  breaks: Array<{ start: string; end: string }> | undefined,
+  dayStartMinutes: number,
+  slotMinutes: number
+): boolean {
+  if (!breaks?.length) return false;
+  const m0 = dayStartMinutes + rowIndex * slotMinutes;
+  const m1 = m0 + slotMinutes;
+  for (const br of breaks) {
+    const a = getMinutesSinceStartOfDay(br.start);
+    const b = getMinutesSinceStartOfDay(br.end);
+    if (m1 > a && m0 < b) return true;
+  }
+  return false;
 }
 
 export default function DayGrid({
@@ -102,6 +125,7 @@ export default function DayGrid({
   breaks,
   workerBreaksByWorkerId,
   onBookingClick,
+  onWaitlistFillSlot,
 }: DayGridProps) {
   const DAY_START_MINUTES = startHour * 60;
   const DAY_END_MINUTES = endHour * 60;
@@ -159,6 +183,17 @@ export default function DayGrid({
     }
     return result;
   }, [allBlocks, dateISO, DAY_START_MINUTES, DAY_END_MINUTES, workerIds, unassignedColIndex]);
+
+  const occupiedSlotKeys = useMemo(() => {
+    const s = new Set<string>();
+    for (const b of blocksWithGrid) {
+      const end = b.gridRowStart + b.gridRowSpan - 1;
+      for (let r = b.gridRowStart; r <= end; r++) {
+        s.add(`${r}:${b.workerColumnIndex}`);
+      }
+    }
+    return s;
+  }, [blocksWithGrid]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const row11_30Ref = useRef<HTMLDivElement>(null);
@@ -238,20 +273,61 @@ export default function DayGrid({
         {workers.map((worker, colIndex) => (
           <div
             key={worker.id}
-            className="relative border-l border-slate-200 flex flex-col"
+            className="relative border-l border-slate-200 flex flex-col group/col"
             style={{
               gridRow: `1 / span ${totalRows}`,
               gridColumn: colIndex + 2,
               minHeight: totalRows * SLOT_HEIGHT_PX,
             }}
           >
-            {Array.from({ length: totalRows }, (_, i) => (
-              <div
-                key={`slot-${worker.id}-${i}`}
-                className={i === 0 ? "border-t-2 border-slate-300 shrink-0" : "border-t border-slate-200 shrink-0"}
-                style={{ height: SLOT_HEIGHT_PX, minHeight: SLOT_HEIGHT_PX }}
-              />
-            ))}
+            {Array.from({ length: totalRows }, (_, i) => {
+              const row1 = i + 1;
+              const occupied = occupiedSlotKeys.has(`${row1}:${colIndex}`);
+              const inGlobalBreak = rowOverlapsBreakRange(i, breaks, DAY_START_MINUTES, SLOT_MINUTES);
+              const inWorkerBreak = rowOverlapsBreakRange(
+                i,
+                workerBreaksByWorkerId?.[worker.id],
+                DAY_START_MINUTES,
+                SLOT_MINUTES
+              );
+              const timeHHmm = minutesToHHmm(DAY_START_MINUTES + i * SLOT_MINUTES);
+              const showWaitlist =
+                onWaitlistFillSlot &&
+                worker.id !== UNASSIGNED_WORKER_SENTINEL &&
+                !occupied &&
+                !inGlobalBreak &&
+                !inWorkerBreak;
+              return (
+                <div
+                  key={`slot-${worker.id}-${i}`}
+                  className={
+                    i === 0
+                      ? "border-t-2 border-slate-300 shrink-0 relative"
+                      : "border-t border-slate-200 shrink-0 relative"
+                  }
+                  style={{ height: SLOT_HEIGHT_PX, minHeight: SLOT_HEIGHT_PX }}
+                >
+                  {showWaitlist ? (
+                    <button
+                      type="button"
+                      title="מילוי מרשימת המתנה"
+                      aria-label="מילוי מרשימת המתנה"
+                      className="absolute left-0.5 top-0.5 z-[8] rounded p-0.5 text-slate-400 opacity-0 transition-opacity hover:text-caleno-700 group-hover/col:opacity-100 hover:!opacity-100 focus:opacity-100 focus:outline-none focus:ring-1 focus:ring-caleno-500"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onWaitlistFillSlot({
+                          workerId: worker.id,
+                          workerName: worker.name,
+                          timeHHmm,
+                        });
+                      }}
+                    >
+                      <ListPlus className="w-3.5 h-3.5" strokeWidth={2} />
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         ))}
 

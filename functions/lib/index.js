@@ -42,7 +42,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.auditWhatsAppUsage = exports.liveStatsOnClientCreate = exports.liveStatsOnBookingWrite = exports.scheduledArchiveCleanup = exports.deleteArchivedBookings = exports.runExpiredCleanupForSite = exports.expiredBookingsCleanup = void 0;
+exports.waitlistOnBookingDeleted = exports.auditWhatsAppUsage = exports.liveStatsOnClientCreate = exports.liveStatsOnBookingWrite = exports.scheduledArchiveCleanup = exports.deleteArchivedBookings = exports.runExpiredCleanupForSite = exports.expiredBookingsCleanup = void 0;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const liveStatsScorekeeper_1 = require("./liveStatsScorekeeper");
@@ -553,5 +553,44 @@ exports.auditWhatsAppUsage = functions.firestore
     }
     catch (e) {
         console.error("[auditWhatsAppUsage]", { siteId, error: e });
+    }
+});
+/**
+ * Backup waitlist match when a booking doc is deleted (e.g. console delete). In-app cascade already notifies;
+ * slot lock prevents duplicate offers when both run. Requires CALENO_APP_BASE_URL + CALENO_WAITLIST_INTERNAL_SECRET.
+ */
+exports.waitlistOnBookingDeleted = functions.firestore
+    .document("sites/{siteId}/bookings/{bookingId}")
+    .onDelete(async (snap, context) => {
+    const baseUrl = process.env.CALENO_APP_BASE_URL?.trim();
+    const secret = process.env.CALENO_WAITLIST_INTERNAL_SECRET?.trim();
+    if (!baseUrl || !secret)
+        return;
+    const data = snap.data();
+    if (!data)
+        return;
+    if (data.phase === 2)
+        return;
+    const pid = data.parentBookingId;
+    if (pid != null && String(pid).trim() !== "")
+        return;
+    const siteId = context.params.siteId;
+    const url = `${baseUrl.replace(/\/$/, "")}/api/internal/waitlist/trigger-from-release`;
+    try {
+        const res = await fetch(url, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "x-caleno-waitlist-secret": secret,
+            },
+            body: JSON.stringify({ siteId, bookingData: data }),
+        });
+        if (!res.ok) {
+            const t = await res.text().catch(() => "");
+            console.error("[waitlistOnBookingDeleted] upstream_error", { status: res.status, body: t.slice(0, 500) });
+        }
+    }
+    catch (e) {
+        console.error("[waitlistOnBookingDeleted]", { siteId, error: e });
     }
 });

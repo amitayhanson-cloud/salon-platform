@@ -1,9 +1,14 @@
+import type { TimePreferenceValue } from "./timePreference";
+
 export type BookingWaitlistStatus =
+  | "waiting"
+  | "pending_offer"
   | "active"
   | "notified"
   | "booked"
   | "cancelled"
-  | "expired_offer";
+  | "expired_offer"
+  | "declined";
 
 /** Snapshot of the freed calendar window (primary + optional follow-up segment). */
 export type BookingWaitlistOfferSlot = {
@@ -48,4 +53,9 @@ export type BookingWaitlistEntry = {
   followUpDurationMin?: number | null;
   /** Follow-up service label when followUpDurationMin > 0 */
   followUpServiceName?: string | null;
+  /**
+   * Preferred time-of-day buckets (site-local wall clock).
+   * Omit or empty → treated as ["anytime"].
+   */
+  timePreference?: TimePreferenceValue[] | null;
 };

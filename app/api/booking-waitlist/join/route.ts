@@ -8,6 +8,7 @@ import admin from "firebase-admin";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { normalizeE164, isValidE164 } from "@/lib/whatsapp/e164";
 import { checkRateLimit, getClientIp } from "@/lib/server/rateLimit";
+import { normalizeTimePreferenceArray } from "@/lib/bookingWaitlist/timeBuckets";
 
 const WINDOW_MS = 60 * 60 * 1000;
 const LIMIT_PER_IP = 25;
@@ -51,6 +52,8 @@ export async function POST(request: NextRequest) {
       typeof body?.followUpServiceName === "string" && body.followUpServiceName.trim()
         ? body.followUpServiceName.trim().slice(0, 200)
         : null;
+
+    const timePreference = normalizeTimePreferenceArray(body?.timePreference);
 
     if (!siteId || !customerName || !phoneRaw || !serviceName) {
       return NextResponse.json({ ok: false, error: "missing_fields" }, { status: 400 });
@@ -98,11 +101,12 @@ export async function POST(request: NextRequest) {
         serviceTypeId,
         preferredDateYmd,
         preferredWorkerId,
-        status: "active",
+        status: "waiting",
         queuePositionForDay,
         primaryDurationMin,
         waitMinutes,
         followUpDurationMin,
+        timePreference,
         ...(followUpServiceName ? { followUpServiceName } : {}),
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),

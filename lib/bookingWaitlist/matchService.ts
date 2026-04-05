@@ -1,4 +1,6 @@
 import type { BookingWaitlistEntry, BookingWaitlistOfferSlot } from "@/types/bookingWaitlist";
+import type { TimePreferenceValue } from "@/types/timePreference";
+import { entryAcceptsTimeBucket } from "./timeBuckets";
 
 export type FreedBookingSlot = {
   dateYmd: string;
@@ -73,6 +75,13 @@ export function waitlistEntryFitsFreedStructure(
   return true;
 }
 
+export type WaitlistSlotMatchOptions = {
+  /** When true (e.g. admin "fill empty slot"), skip service type/id/name equality checks. */
+  matchAnyService?: boolean;
+  /** When set, entry must accept this time-of-day bucket (or "anytime"). */
+  timeBucket?: Exclude<TimePreferenceValue, "anytime">;
+};
+
 /** Whether a waitlist entry wants this freed slot (service + date/worker prefs + duration/follow-up fit). */
 export function waitlistEntryMatchesFreedSlot(
   entry: Pick<
@@ -85,8 +94,10 @@ export function waitlistEntryMatchesFreedSlot(
     | "primaryDurationMin"
     | "waitMinutes"
     | "followUpDurationMin"
+    | "timePreference"
   >,
-  slot: FreedBookingSlot
+  slot: FreedBookingSlot,
+  options?: WaitlistSlotMatchOptions
 ): boolean {
   const prefDate = entry.preferredDateYmd?.trim();
   if (!prefDate || prefDate !== slot.dateYmd) return false;
@@ -96,21 +107,27 @@ export function waitlistEntryMatchesFreedSlot(
   if (prefW && !slotW) return false;
   if (prefW && slotW && prefW !== slotW) return false;
 
-  const et = entry.serviceTypeId?.trim() || null;
-  const st = slot.serviceTypeId?.trim() || null;
-  let serviceOk = false;
-  if (et && st && et === st) serviceOk = true;
-  if (!serviceOk) {
-    const eid = entry.serviceId?.trim() || null;
-    const sid = slot.serviceId?.trim() || null;
-    if (eid && sid && eid === sid) serviceOk = true;
+  if (options?.timeBucket != null) {
+    if (!entryAcceptsTimeBucket(entry.timePreference, options.timeBucket)) return false;
   }
-  if (!serviceOk) {
-    const en = norm(entry.serviceName || "");
-    const sn = norm(slot.serviceName || "");
-    if (en && sn && (en === sn || sn.includes(en) || en.includes(sn))) serviceOk = true;
+
+  if (!options?.matchAnyService) {
+    const et = entry.serviceTypeId?.trim() || null;
+    const st = slot.serviceTypeId?.trim() || null;
+    let serviceOk = false;
+    if (et && st && et === st) serviceOk = true;
+    if (!serviceOk) {
+      const eid = entry.serviceId?.trim() || null;
+      const sid = slot.serviceId?.trim() || null;
+      if (eid && sid && eid === sid) serviceOk = true;
+    }
+    if (!serviceOk) {
+      const en = norm(entry.serviceName || "");
+      const sn = norm(slot.serviceName || "");
+      if (en && sn && (en === sn || sn.includes(en) || en.includes(sn))) serviceOk = true;
+    }
+    if (!serviceOk) return false;
   }
-  if (!serviceOk) return false;
 
   return waitlistEntryFitsFreedStructure(entry, slot);
 }

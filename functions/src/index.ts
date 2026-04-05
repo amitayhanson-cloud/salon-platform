@@ -598,3 +598,40 @@ export const auditWhatsAppUsage = functions.firestore
       console.error("[auditWhatsAppUsage]", { siteId, error: e });
     }
   });
+
+/**
+ * Backup waitlist match when a booking doc is deleted (e.g. console delete). In-app cascade already notifies;
+ * slot lock prevents duplicate offers when both run. Requires CALENO_APP_BASE_URL + CALENO_WAITLIST_INTERNAL_SECRET.
+ */
+export const waitlistOnBookingDeleted = functions.firestore
+  .document("sites/{siteId}/bookings/{bookingId}")
+  .onDelete(async (snap, context) => {
+    const baseUrl = process.env.CALENO_APP_BASE_URL?.trim();
+    const secret = process.env.CALENO_WAITLIST_INTERNAL_SECRET?.trim();
+    if (!baseUrl || !secret) return;
+
+    const data = snap.data() as Record<string, unknown> | undefined;
+    if (!data) return;
+    if (data.phase === 2) return;
+    const pid = data.parentBookingId;
+    if (pid != null && String(pid).trim() !== "") return;
+
+    const siteId = context.params.siteId as string;
+    const url = `${baseUrl.replace(/\/$/, "")}/api/internal/waitlist/trigger-from-release`;
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-caleno-waitlist-secret": secret,
+        },
+        body: JSON.stringify({ siteId, bookingData: data }),
+      });
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        console.error("[waitlistOnBookingDeleted] upstream_error", { status: res.status, body: t.slice(0, 500) });
+      }
+    } catch (e) {
+      console.error("[waitlistOnBookingDeleted]", { siteId, error: e });
+    }
+  });
