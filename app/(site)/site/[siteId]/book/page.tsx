@@ -673,6 +673,7 @@ export default function BookingPage() {
   const [waitlistModalOpen, setWaitlistModalOpen] = useState(false);
   const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
   const [waitlistFeedback, setWaitlistFeedback] = useState<string | null>(null);
+  const [waitlistJoinSucceeded, setWaitlistJoinSucceeded] = useState(false);
   const [waitlistTimePreference, setWaitlistTimePreference] = useState<string[]>(["anytime"]);
   /** After פרטים: fetch last booking for repeat-service prompt */
   const [checkingLastBooking, setCheckingLastBooking] = useState(false);
@@ -2942,8 +2943,21 @@ export default function BookingPage() {
 
   function openBookingWaitlistModal() {
     setWaitlistFeedback(null);
+    setWaitlistJoinSucceeded(false);
     setWaitlistTimePreference(["anytime"]);
     setWaitlistModalOpen(true);
+  }
+
+  function closeWaitlistModal() {
+    setWaitlistModalOpen(false);
+    setWaitlistFeedback(null);
+    setWaitlistJoinSucceeded(false);
+  }
+
+  function goToSiteFromWaitlistSuccess() {
+    const homeUrl = getSiteUrl(config?.slug ?? null, siteId, "");
+    closeWaitlistModal();
+    router.replace(homeUrl);
   }
 
   async function submitBookingWaitlist() {
@@ -3009,13 +3023,8 @@ export default function BookingPage() {
         );
         return;
       }
+      setWaitlistJoinSucceeded(true);
       setWaitlistFeedback("נרשמתם לרשימת המתנה. כשיתפנה תור נשלח לכם בוואטסאפ לאישור ההזמנה.");
-      const homeUrl = getSiteUrl(config?.slug ?? null, siteId, "");
-      window.setTimeout(() => {
-        setWaitlistModalOpen(false);
-        setWaitlistFeedback(null);
-        router.replace(homeUrl);
-      }, 2200);
     } finally {
       setWaitlistSubmitting(false);
     }
@@ -4306,33 +4315,37 @@ export default function BookingPage() {
                 תאריך: {formatDateForDisplay(selectedDate)}
               </p>
             ) : null}
-            <div className="space-y-2 rounded-xl px-3 py-3" style={{ backgroundColor: "var(--bg)" }} dir="rtl">
-              <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
-                מתי נוח לכם?
-              </p>
-              <div className="flex flex-col gap-2">
-                {WAITLIST_TIME_PREF_OPTIONS.map(({ value, label }) => (
-                  <label
-                    key={value}
-                    className="flex items-center gap-2 cursor-pointer text-sm"
-                    style={{ color: "var(--text)" }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={waitlistTimePreference.includes(value)}
-                      onChange={() =>
-                        setWaitlistTimePreference((p) => toggleWaitlistTimePreference(p, value))
-                      }
-                      className="rounded border-slate-300"
-                    />
-                    <span>{label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-            <p className="text-sm leading-relaxed rounded-xl px-3 py-3" style={{ color: "var(--text)", backgroundColor: "var(--bg)" }}>
-              לחיצה על &quot;הרשמה לרשימת המתנה&quot; מצרפת אתכם לרשימה ליום שבחרתם. כשיתפנה תור מתאים נשלח לכם בוואטסאפ הודעה כדי לאשר את ההזמנה. תודה על הסבלנות.
-            </p>
+            {!waitlistJoinSucceeded ? (
+              <>
+                <div className="space-y-2 rounded-xl px-3 py-3" style={{ backgroundColor: "var(--bg)" }} dir="rtl">
+                  <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
+                    מתי נוח לכם?
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    {WAITLIST_TIME_PREF_OPTIONS.map(({ value, label }) => (
+                      <label
+                        key={value}
+                        className="flex items-center gap-2 cursor-pointer text-sm"
+                        style={{ color: "var(--text)" }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={waitlistTimePreference.includes(value)}
+                          onChange={() =>
+                            setWaitlistTimePreference((p) => toggleWaitlistTimePreference(p, value))
+                          }
+                          className="rounded border-slate-300"
+                        />
+                        <span>{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-sm leading-relaxed rounded-xl px-3 py-3" style={{ color: "var(--text)", backgroundColor: "var(--bg)" }}>
+                  לחיצה על &quot;הרשמה לרשימת המתנה&quot; מצרפת אתכם לרשימה ליום שבחרתם. כשיתפנה תור מתאים נשלח לכם בוואטסאפ הודעה כדי לאשר את ההזמנה. תודה על הסבלנות.
+                </p>
+              </>
+            ) : null}
             {waitlistFeedback && (
               <p
                 className="text-sm rounded-lg px-3 py-2"
@@ -4348,24 +4361,32 @@ export default function BookingPage() {
             <div className="flex gap-2 justify-end flex-wrap">
               <button
                 type="button"
-                onClick={() => {
-                  setWaitlistModalOpen(false);
-                  setWaitlistFeedback(null);
-                }}
+                onClick={closeWaitlistModal}
                 className="px-4 py-2 rounded-xl border text-sm font-medium"
                 style={{ borderColor: "var(--border)", color: "var(--text)" }}
               >
-                סגור
+                {waitlistJoinSucceeded ? "המשך בזימון" : "סגור"}
               </button>
-              <button
-                type="button"
-                disabled={waitlistSubmitting}
-                onClick={() => void submitBookingWaitlist()}
-                className="px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-50"
-                style={{ backgroundColor: "var(--primary)", color: "var(--primaryText)" }}
-              >
-                {waitlistSubmitting ? "שולחים…" : "הרשמה לרשימת המתנה"}
-              </button>
+              {waitlistJoinSucceeded ? (
+                <button
+                  type="button"
+                  onClick={goToSiteFromWaitlistSuccess}
+                  className="px-4 py-2 rounded-xl text-sm font-medium"
+                  style={{ backgroundColor: "var(--primary)", color: "var(--primaryText)" }}
+                >
+                  חזרה לאתר
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={waitlistSubmitting}
+                  onClick={() => void submitBookingWaitlist()}
+                  className="px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-50"
+                  style={{ backgroundColor: "var(--primary)", color: "var(--primaryText)" }}
+                >
+                  {waitlistSubmitting ? "שולחים…" : "הרשמה לרשימת המתנה"}
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -164,7 +164,19 @@ function primaryServiceLabelForMatch(s: string): string {
   return (parts[0] ?? t).trim();
 }
 
-/** Whether the customer's footprint fits inside the freed visit structure (same start time). */
+/**
+ * Whether the customer's footprint fits inside the freed visit structure (same start time).
+ *
+ * **Phase folding:** If the slot is one contiguous primary column (`waitMinutes` and `followUpDurationMin`
+ * both 0), a multi-phase entry (primary + wait + follow-up) fits when `primary >= entryPrimary` and
+ * `primary >= entryPrimary + entryWait + entryFollowUp` (virtual carve). Cross-worker follow-up on the
+ * slot (`followUpWorkerId` ≠ `workerId`) disables folding — the gap must expose a real follow-up segment.
+ *
+ * **Parallel processing:** Wait minutes do not consume worker “hands” vs the slot shape. When the slot has an
+ * explicit follow-up segment (`followUpDurationMin` > 0), we still require `ef <= sf` and `ep <= sp`, but we
+ * do **not** require `entryWait <= slotWait` — the client may wait (overlap other bookings) longer than the
+ * cancellation’s inter-phase gap.
+ */
 export function waitlistEntryFitsFreedStructure(
   entry: Pick<
     BookingWaitlistEntry,
@@ -172,7 +184,11 @@ export function waitlistEntryFitsFreedStructure(
   >,
   slot: Pick<
     FreedBookingSlot,
-    "primaryDurationMin" | "waitMinutes" | "followUpDurationMin" | "followUpWorkerId"
+    | "primaryDurationMin"
+    | "waitMinutes"
+    | "followUpDurationMin"
+    | "followUpWorkerId"
+    | "workerId"
   >
 ): boolean {
   const ep = Math.max(
@@ -188,9 +204,25 @@ export function waitlistEntryFitsFreedStructure(
 
   if (ep > sp) return false;
 
+  const entryTotalMin = ep + ew + ef;
+  const slotIsSingleContiguousColumn = sw === 0 && sf === 0;
+
+  if (slotIsSingleContiguousColumn && entryTotalMin <= sp) {
+    if (ef > 0) {
+      const wMain = slot.workerId?.trim() || null;
+      const wFuRaw =
+        slot.followUpWorkerId != null && String(slot.followUpWorkerId).trim() !== ""
+          ? String(slot.followUpWorkerId).trim()
+          : null;
+      if (wFuRaw && wMain && wFuRaw !== wMain) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   if (ef > 0) {
     if (sf <= 0) return false;
-    if (ew > sw) return false;
     if (ef > sf) return false;
   }
 
@@ -251,6 +283,220 @@ export function mergeBusyIntervalsMs(intervals: BusyIntervalMs[]): BusyIntervalM
     }
   }
   return out;
+}
+
+/**
+ * Removes wall time from busy intervals (splits intervals). Used so horizon gaps can span a cancellation’s
+ * inter-phase wait tunnel where the primary worker may be booked with other clients.
+ */
+export function subtractOpenIntervalFromBusyIntervals(
+  intervals: BusyIntervalMs[],
+  removeStartMs: number,
+  removeEndExclusiveMs: number
+): BusyIntervalMs[] {
+  if (removeEndExclusiveMs <= removeStartMs) return mergeBusyIntervalsMs(intervals);
+  const out: BusyIntervalMs[] = [];
+  for (const iv of intervals) {
+    const a = iv.startMs;
+    const b = iv.endMsExclusive;
+    if (b <= removeStartMs || a >= removeEndExclusiveMs) {
+      out.push(iv);
+      continue;
+    }
+    if (a < removeStartMs) {
+      out.push({ startMs: a, endMsExclusive: Math.min(b, removeStartMs) });
+    }
+    if (b > removeEndExclusiveMs) {
+      out.push({ startMs: Math.max(a, removeEndExclusiveMs), endMsExclusive: b });
+    }
+  }
+  return mergeBusyIntervalsMs(out);
+}
+
+/** True if any merged busy interval overlaps [a0, a1) (half-open). */
+export function mergedBusyOverlapsOpenInterval(
+  busy: BusyIntervalMs[],
+  startMs: number,
+  endExclusiveMs: number
+): boolean {
+  if (endExclusiveMs <= startMs) return false;
+  for (const b of busy) {
+    if (endExclusiveMs > b.startMs && startMs < b.endMsExclusive) return true;
+  }
+  return false;
+}
+
+/**
+ * Wall interval for the cancelled booking’s follow-up hands segment (same geometry as offers).
+ */
+export function cancellationFollowUpHandsWindowUtcMs(
+  slot: FreedBookingSlot,
+  siteTz: string
+): { startMs: number; endExclusiveMs: number } | null {
+  const sp = Math.max(1, Math.round(Number(slot.primaryDurationMin ?? 60)));
+  const sw = Math.max(0, Math.round(Number(slot.waitMinutes ?? 0)));
+  const sf = Math.max(0, Math.round(Number(slot.followUpDurationMin ?? 0)));
+  if (sf <= 0) return null;
+  const hm0 = normalizeHHmm(slot.timeHHmm);
+  const fStartWall = addWallMinutesInTimezone(slot.dateYmd, hm0, sp + sw, siteTz);
+  if (!fStartWall) return null;
+  const fEndWall = addWallMinutesInTimezone(
+    fStartWall.dateYmd,
+    normalizeHHmm(fStartWall.timeHHmm),
+    sf,
+    siteTz
+  );
+  if (!fEndWall) return null;
+  try {
+    const s = fromZonedTime(
+      `${fStartWall.dateYmd}T${normalizeHHmm(fStartWall.timeHHmm)}:00`,
+      siteTz
+    ).getTime();
+    const e = fromZonedTime(
+      `${fEndWall.dateYmd}T${normalizeHHmm(fEndWall.timeHHmm)}:00`,
+      siteTz
+    ).getTime();
+    return { startMs: s, endExclusiveMs: e };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Calendar window between cancelled primary end and follow-up start (inter-phase wait on primary column).
+ * Other bookings here do not break horizon “contiguous gap” for expansion.
+ */
+export function cancellationInterPhaseWaitTunnelUtcMs(
+  slot: FreedBookingSlot,
+  siteTz: string
+): { startMs: number; endExclusiveMs: number } | null {
+  const sp = Math.max(1, Math.round(Number(slot.primaryDurationMin ?? 60)));
+  const sw = Math.max(0, Math.round(Number(slot.waitMinutes ?? 0)));
+  const sf = Math.max(0, Math.round(Number(slot.followUpDurationMin ?? 0)));
+  if (sw <= 0 || sf <= 0) return null;
+  const hm0 = normalizeHHmm(slot.timeHHmm);
+  const peWall = addWallMinutesInTimezone(slot.dateYmd, hm0, sp, siteTz);
+  const fuStartWall = addWallMinutesInTimezone(slot.dateYmd, hm0, sp + sw, siteTz);
+  if (!peWall || !fuStartWall) return null;
+  try {
+    const peMs = fromZonedTime(
+      `${peWall.dateYmd}T${normalizeHHmm(peWall.timeHHmm)}:00`,
+      siteTz
+    ).getTime();
+    const fuMs = fromZonedTime(
+      `${fuStartWall.dateYmd}T${normalizeHHmm(fuStartWall.timeHHmm)}:00`,
+      siteTz
+    ).getTime();
+    if (fuMs <= peMs) return null;
+    return { startMs: peMs, endExclusiveMs: fuMs };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Worker “hands” check: primary and follow-up segments must not overlap merged busy; wait may overlap freely.
+ * Returns whether any booking overlapped the wait window (for logging “Accepted: Wait phase overlapping…”).
+ */
+export function waitlistEntryHandsPhasesVsBusy(
+  entry: Pick<BookingWaitlistEntry, "primaryDurationMin" | "waitMinutes" | "followUpDurationMin">,
+  capacity: FreedBookingSlot,
+  siteTz: string,
+  primaryWorkerMergedBusy: BusyIntervalMs[],
+  followUpWorkerMergedBusy: BusyIntervalMs[] | null
+): { ok: true; waitOverlapBooking?: boolean } | { ok: false; reason: string } {
+  const ep = Math.max(1, Math.round(Number(entry.primaryDurationMin ?? 60)));
+  const ew = Math.max(0, Math.round(Number(entry.waitMinutes ?? 0)));
+  const ef = Math.max(0, Math.round(Number(entry.followUpDurationMin ?? 0)));
+
+  const hm0 = normalizeHHmm(capacity.timeHHmm);
+  let t0: number;
+  try {
+    t0 = fromZonedTime(`${capacity.dateYmd}T${hm0}:00`, siteTz).getTime();
+  } catch {
+    return { ok: false, reason: "Rejected: Primary/FU overlap (invalid start)" };
+  }
+
+  const pEndWall = addWallMinutesInTimezone(capacity.dateYmd, hm0, ep, siteTz);
+  if (!pEndWall) return { ok: false, reason: "Rejected: Primary/FU overlap (primary end)" };
+  let peMs: number;
+  try {
+    peMs = fromZonedTime(
+      `${pEndWall.dateYmd}T${normalizeHHmm(pEndWall.timeHHmm)}:00`,
+      siteTz
+    ).getTime();
+  } catch {
+    return { ok: false, reason: "Rejected: Primary/FU overlap (primary end)" };
+  }
+
+  if (mergedBusyOverlapsOpenInterval(primaryWorkerMergedBusy, t0, peMs)) {
+    return { ok: false, reason: "Rejected: Primary/FU overlap (primary)" };
+  }
+
+  let waitOverlapBooking = false;
+  if (ew > 0) {
+    const wEndWall = addWallMinutesInTimezone(capacity.dateYmd, hm0, ep + ew, siteTz);
+    if (!wEndWall) return { ok: false, reason: "Rejected: Primary/FU overlap (wait end)" };
+    let waitEndMs: number;
+    try {
+      waitEndMs = fromZonedTime(
+        `${wEndWall.dateYmd}T${normalizeHHmm(wEndWall.timeHHmm)}:00`,
+        siteTz
+      ).getTime();
+    } catch {
+      return { ok: false, reason: "Rejected: Primary/FU overlap (wait end)" };
+    }
+    if (mergedBusyOverlapsOpenInterval(primaryWorkerMergedBusy, peMs, waitEndMs)) {
+      waitOverlapBooking = true;
+    }
+  }
+
+  if (ef > 0) {
+    const fStartWall = addWallMinutesInTimezone(capacity.dateYmd, hm0, ep + ew, siteTz);
+    if (!fStartWall) return { ok: false, reason: "Rejected: Primary/FU overlap (fu start)" };
+    let fuStartMs: number;
+    try {
+      fuStartMs = fromZonedTime(
+        `${fStartWall.dateYmd}T${normalizeHHmm(fStartWall.timeHHmm)}:00`,
+        siteTz
+      ).getTime();
+    } catch {
+      return { ok: false, reason: "Rejected: Primary/FU overlap (fu start)" };
+    }
+    const fEndWall = addWallMinutesInTimezone(
+      fStartWall.dateYmd,
+      normalizeHHmm(fStartWall.timeHHmm),
+      ef,
+      siteTz
+    );
+    if (!fEndWall) return { ok: false, reason: "Rejected: Primary/FU overlap (fu end)" };
+    let fuEndMs: number;
+    try {
+      fuEndMs = fromZonedTime(
+        `${fEndWall.dateYmd}T${normalizeHHmm(fEndWall.timeHHmm)}:00`,
+        siteTz
+      ).getTime();
+    } catch {
+      return { ok: false, reason: "Rejected: Primary/FU overlap (fu end)" };
+    }
+
+    const primaryWid = capacity.workerId?.trim() || "";
+    const fuWid =
+      capacity.followUpWorkerId != null && String(capacity.followUpWorkerId).trim() !== ""
+        ? String(capacity.followUpWorkerId).trim()
+        : primaryWid;
+
+    const busyForFu =
+      fuWid === primaryWid ? primaryWorkerMergedBusy : followUpWorkerMergedBusy;
+    if (fuWid !== primaryWid && busyForFu == null) {
+      return { ok: false, reason: "Rejected: Primary/FU overlap (follow-up worker busy data missing)" };
+    }
+    if (mergedBusyOverlapsOpenInterval(busyForFu ?? primaryWorkerMergedBusy, fuStartMs, fuEndMs)) {
+      return { ok: false, reason: "Rejected: Primary/FU overlap (follow-up)" };
+    }
+  }
+
+  return { ok: true, waitOverlapBooking };
 }
 
 /**
@@ -436,7 +682,25 @@ export function explainWaitlistEntryMismatch(
     const sw = Math.max(0, Math.round(Number(slot.waitMinutes ?? 0)));
     const ef = Math.max(0, Math.round(Number(entry.followUpDurationMin ?? 0)));
     const sf = Math.max(0, Math.round(Number(slot.followUpDurationMin ?? 0)));
-    return `duration_or_phases entry primary=${ep}m wait=${ew} fu=${ef}m vs slot primary=${sp}m wait=${sw} fu=${sf}m`;
+    const entryTotal = ep + ew + ef;
+    const singleBlock = sw === 0 && sf === 0;
+    let hint = "";
+    if (singleBlock && entryTotal <= sp && ep <= sp && ef > 0) {
+      const wMain = slot.workerId?.trim() || "";
+      const wFu =
+        slot.followUpWorkerId != null && String(slot.followUpWorkerId).trim() !== ""
+          ? String(slot.followUpWorkerId).trim()
+          : "";
+      if (wFu && wMain && wFu !== wMain) {
+        hint =
+          "; phase_folding_blocked=cross_worker_followup (slot has different followUpWorkerId; need explicit fu segment in cancellation)";
+      }
+    } else if (singleBlock && entryTotal > sp) {
+      hint = `; need_contiguous_single_column >= ${entryTotal}m (entry total) but slot primary=${sp}m`;
+    } else if (ep > sp) {
+      hint = `; entry_primary ${ep}m exceeds slot_primary ${sp}m`;
+    }
+    return `duration_or_phases entry primary=${ep}m wait=${ew} fu=${ef}m (total ${entryTotal}m) vs slot primary=${sp}m wait=${sw} fu=${sf}m${hint}`;
   }
   return "ok";
 }
@@ -544,8 +808,11 @@ function cloneAtomicSegment(
 }
 
 /**
- * Non-overlapping atomic column segments (wait=0, fu=0) covering a merged cancellation.
- * Gaps between primary and follow-up are included as bookable only if gap minutes are > minGapMin.
+ * Non-overlapping atomic column segments for worker “hands” (wait=0, fu=0 per segment).
+ * Inter-phase **wait** is not emitted: it costs zero capacity and may overlap other bookings.
+ *
+ * When there is **no follow-up** on the cancellation, an intra-visit wait shorter than `minGapMin` is
+ * folded into the first segment’s duration (same-column contiguous wall time).
  */
 export function buildAtomicWallSegments(
   slot: FreedBookingSlot,
@@ -558,16 +825,15 @@ export function buildAtomicWallSegments(
 
   const out: FreedBookingSlot[] = [];
 
+  const firstPrimaryColumnMin =
+    sf === 0 && sw > 0 && sw <= minGapMin ? sp + sw : sp;
+
   out.push(
-    cloneAtomicSegment(slot, slot.dateYmd, normalizeHHmm(slot.timeHHmm), sp)
+    cloneAtomicSegment(slot, slot.dateYmd, normalizeHHmm(slot.timeHHmm), firstPrimaryColumnMin)
   );
 
-  if (sw > minGapMin) {
-    const g = addWallMinutesInTimezone(slot.dateYmd, normalizeHHmm(slot.timeHHmm), sp, siteTz);
-    if (g) {
-      out.push(cloneAtomicSegment(slot, g.dateYmd, g.timeHHmm, sw));
-    }
-  }
+  // Inter-phase wait does not consume worker hands for greedy packing — do not emit a separate atomic
+  // “wait” segment (other bookings may occupy that wall time).
 
   if (sf > 0) {
     const fStart = addWallMinutesInTimezone(slot.dateYmd, normalizeHHmm(slot.timeHHmm), sp + sw, siteTz);

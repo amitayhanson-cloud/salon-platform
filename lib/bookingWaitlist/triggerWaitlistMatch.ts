@@ -24,6 +24,11 @@ import {
   sortFreedSlotsByWallTime,
   segmentDurationMin,
   mergeBusyIntervalsMs,
+  subtractOpenIntervalFromBusyIntervals,
+  mergedBusyOverlapsOpenInterval,
+  cancellationInterPhaseWaitTunnelUtcMs,
+  cancellationFollowUpHandsWindowUtcMs,
+  waitlistEntryHandsPhasesVsBusy,
   findContiguousGapContainingWindow,
   siteDayWallBoundsUtcMs,
   cancellationFootprintWindowUtcMs,
@@ -274,9 +279,42 @@ async function resolveHorizonRootSlot(
     if (!dayBounds || !window) {
       return { rootSlot: slot, horizonBuckets: null };
     }
+
+    const sfSlot = Math.max(0, Math.round(Number(slot.followUpDurationMin ?? 0)));
+    if (sfSlot > 0) {
+      const pWid = slot.workerId?.trim() || "";
+      const fuWid =
+        slot.followUpWorkerId != null && String(slot.followUpWorkerId).trim() !== ""
+          ? String(slot.followUpWorkerId).trim()
+          : pWid;
+      if (fuWid && fuWid !== pWid) {
+        const fuBusyRaw = await fetchWorkerDayBusyIntervalsAdmin(
+          db,
+          siteId,
+          fuWid,
+          slot.dateYmd,
+          siteTz
+        );
+        const fuBusy = mergeBusyIntervalsMs(fuBusyRaw);
+        const fuWin = cancellationFollowUpHandsWindowUtcMs(slot, siteTz);
+        if (fuWin && mergedBusyOverlapsOpenInterval(fuBusy, fuWin.startMs, fuWin.endExclusiveMs)) {
+          return { rootSlot: slot, horizonBuckets: null };
+        }
+      }
+    }
+
     const merged = mergeBusyIntervalsMs(busyRaw);
+    const waitTunnel = cancellationInterPhaseWaitTunnelUtcMs(slot, siteTz);
+    const busyForGap = waitTunnel
+      ? subtractOpenIntervalFromBusyIntervals(
+          merged,
+          waitTunnel.startMs,
+          waitTunnel.endExclusiveMs
+        )
+      : merged;
+
     const gap = findContiguousGapContainingWindow(
-      merged,
+      busyForGap,
       window,
       dayBounds.dayStartMs,
       dayBounds.dayEndExclusiveMs
@@ -353,6 +391,22 @@ async function findFirstMatchFromProbes(
   const probesTried = probes.map((p) => p.label);
   let anySlotLocked = false;
   const rawCountByYmd = new Map<string, number>();
+  const mergedBusyCache = new Map<string, BusyIntervalMs[]>();
+
+  async function getMergedBusyForWorkerDay(
+    dateYmd: string,
+    workerId: string | null | undefined
+  ): Promise<BusyIntervalMs[]> {
+    const w = workerId?.trim() ?? "";
+    if (!w) return [];
+    const key = `${dateYmd}|${w}`;
+    const hit = mergedBusyCache.get(key);
+    if (hit) return hit;
+    const raw = await fetchWorkerDayBusyIntervalsAdmin(db, siteId, w, dateYmd, siteTz);
+    const merged = mergeBusyIntervalsMs(raw);
+    mergedBusyCache.set(key, merged);
+    return merged;
+  }
 
   probeLoop: for (const probe of probes) {
     const slice = probe.slot;
@@ -448,6 +502,47 @@ async function findFirstMatchFromProbes(
         }
         continue;
       }
+
+      const efEntry = Math.max(0, Math.round(Number(data.followUpDurationMin ?? 0)));
+      const mergedPrimaryBusy = await getMergedBusyForWorkerDay(slice.dateYmd, slice.workerId);
+      const primaryWid = slice.workerId?.trim() || "";
+      const fuWidResolved =
+        efEntry > 0
+          ? slice.followUpWorkerId != null && String(slice.followUpWorkerId).trim() !== ""
+            ? String(slice.followUpWorkerId).trim()
+            : primaryWid
+          : "";
+      const mergedFuBusy: BusyIntervalMs[] | null =
+        efEntry > 0 && fuWidResolved && fuWidResolved !== primaryWid
+          ? await getMergedBusyForWorkerDay(slice.dateYmd, fuWidResolved)
+          : null;
+
+      const hands = waitlistEntryHandsPhasesVsBusy(
+        data,
+        slice,
+        siteTz,
+        mergedPrimaryBusy,
+        mergedFuBusy
+      );
+      if (!hands.ok) {
+        if (firstFilterRejectExplain === null) {
+          firstFilterRejectExplain = hands.reason;
+        }
+        if (TEMP_DEBUG_WAITLIST_MATCH) {
+          const displayName = data.customerName.trim() || doc.id;
+          console.log(
+            `[bookingWaitlist] DEBUG manual_filter User [${displayName}] rejected because: ${hands.reason}`
+          );
+        }
+        continue;
+      }
+      if (TEMP_DEBUG_WAITLIST_MATCH && hands.waitOverlapBooking) {
+        const displayName = data.customerName.trim() || doc.id;
+        console.log(
+          `[bookingWaitlist] DEBUG parallel_wait User [${displayName}] Accepted: Wait phase overlapping existing booking`
+        );
+      }
+
       const acq = await tryAcquireWaitlistSlotOffer(db, siteId, lockId, {
         lockDurationMs: WAITLIST_SLOT_LOCK_MS,
         customerPhoneE164: data.customerPhoneE164,
