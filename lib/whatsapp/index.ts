@@ -9,6 +9,7 @@ export {
 export {
   APPOINTMENT_REMINDER_SID,
   BOOKING_CONFIRMED_SID,
+  BOOKING_WAITLIST_SLOT_OFFER_SID,
   BROADCAST_SID,
   getTwilioTemplateContentSidFromEnv,
   resolveTwilioTemplateContentSid,

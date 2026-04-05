@@ -17,6 +17,7 @@ type Row = {
   customerPhoneE164: string;
   serviceName: string;
   preferredDateYmd?: string | null;
+  queuePositionForDay?: number | null;
 };
 
 function formatRequestedDate(ymd: string | null | undefined): string {
@@ -53,6 +54,10 @@ export default function BookingWaitlistAdminPage() {
               customerPhoneE164: String(x.customerPhoneE164 ?? ""),
               serviceName: String(x.serviceName ?? ""),
               preferredDateYmd: (x.preferredDateYmd as string) || null,
+              queuePositionForDay:
+                typeof x.queuePositionForDay === "number" && Number.isFinite(x.queuePositionForDay)
+                  ? x.queuePositionForDay
+                  : null,
             };
           })
         );
@@ -75,11 +80,21 @@ export default function BookingWaitlistAdminPage() {
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(r);
     }
-    return Array.from(map.entries()).sort(([a], [b]) => {
-      if (a === "_no_pref") return 1;
-      if (b === "_no_pref") return -1;
-      return b.localeCompare(a);
-    });
+    return Array.from(map.entries())
+      .sort(([a], [b]) => {
+        if (a === "_no_pref") return 1;
+        if (b === "_no_pref") return -1;
+        return b.localeCompare(a);
+      })
+      .map(([k, list]) => {
+        const sorted = [...list].sort((a, b) => {
+          const qa = a.queuePositionForDay ?? 1e9;
+          const qb = b.queuePositionForDay ?? 1e9;
+          if (qa !== qb) return qa - qb;
+          return a.id.localeCompare(b.id);
+        });
+        return [k, sorted] as [string, Row[]];
+      });
   }, [rows]);
 
   if (!siteId) return null;
@@ -123,6 +138,7 @@ export default function BookingWaitlistAdminPage() {
                 <table className="w-full text-sm text-right min-w-[640px]">
                   <thead>
                     <tr className="border-b border-slate-200 text-slate-600">
+                      <th className="px-4 py-2 w-14">#</th>
                       <th className="px-4 py-2">שם</th>
                       <th className="px-4 py-2">טלפון</th>
                       <th className="px-4 py-2">שירות</th>
@@ -132,6 +148,9 @@ export default function BookingWaitlistAdminPage() {
                   <tbody>
                     {list.map((r) => (
                       <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50/80">
+                        <td className="px-4 py-2 tabular-nums text-slate-500">
+                          {r.queuePositionForDay != null ? r.queuePositionForDay : "—"}
+                        </td>
                         <td className="px-4 py-2 font-medium text-slate-900">{r.customerName || "—"}</td>
                         <td className="px-4 py-2 font-mono text-xs" dir="ltr">
                           {r.customerPhoneE164 || "—"}

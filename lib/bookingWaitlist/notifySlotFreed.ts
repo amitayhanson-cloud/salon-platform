@@ -1,9 +1,5 @@
 /**
- * When an appointment is cancelled/archived, offer the slot to the next matching waitlist customer (WhatsApp).
- *
- * Uses {@link sendWhatsApp} with a plain body (session-style). For customers who never messaged the business
- * number first, Meta/Twilio may require an approved *template* outside the 24h window — if sends fail in
- * production, add a dedicated template and extend the send path (same pattern as booking confirmation).
+ * When an appointment is cancelled/archived, offer the slot to the next matching waitlist customer (WhatsApp template).
  */
 
 import admin from "firebase-admin";
@@ -11,9 +7,18 @@ import type { Firestore } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { sendWhatsApp } from "@/lib/whatsapp/send";
 import type { BookingWaitlistEntry } from "@/types/bookingWaitlist";
-import { waitlistEntryMatchesFreedSlot, type FreedBookingSlot } from "./matchService";
+import {
+  waitlistEntryMatchesFreedSlot,
+  type FreedBookingSlot,
+  freedSlotToOfferSlot,
+} from "./matchService";
 
 export const WAITLIST_OFFER_TTL_MS = 30 * 60 * 1000;
+
+export type NotifyWaitlistOptions = {
+  /** Do not offer these entries in this pass (e.g. customer just declined). */
+  skipEntryIds?: string[];
+};
 
 function formatHeDate(ymd: string): string {
   const [y, m, d] = ymd.split("-").map(Number);
@@ -45,19 +50,27 @@ async function expireStaleNotifiedForPhone(
 
 export async function notifyBookingWaitlistFromFreedSlot(
   siteId: string,
-  slot: FreedBookingSlot
+  slot: FreedBookingSlot,
+  options?: NotifyWaitlistOptions
 ): Promise<{ notified: boolean; entryId?: string }> {
   const db = getAdminDb();
+  const skip = new Set((options?.skipEntryIds ?? []).filter(Boolean));
 
   const siteSnap = await db.collection("sites").doc(siteId).get();
   const cfg = siteSnap.data()?.config as { salonName?: string; whatsappBrandName?: string } | undefined;
   const salonName = String(cfg?.salonName ?? cfg?.whatsappBrandName ?? "העסק").trim() || "העסק";
 
   const col = db.collection("sites").doc(siteId).collection("bookingWaitlistEntries");
-  const activeSnap = await col.where("status", "==", "active").orderBy("createdAt", "asc").limit(40).get();
+  const activeSnap = await col
+    .where("status", "==", "active")
+    .where("preferredDateYmd", "==", slot.dateYmd)
+    .orderBy("createdAt", "asc")
+    .limit(80)
+    .get();
 
   let chosen: { id: string; data: BookingWaitlistEntry } | null = null;
   for (const doc of activeSnap.docs) {
+    if (skip.has(doc.id)) continue;
     const data = doc.data() as BookingWaitlistEntry;
     if (waitlistEntryMatchesFreedSlot(data, slot)) {
       chosen = { id: doc.id, data };
@@ -71,14 +84,7 @@ export async function notifyBookingWaitlistFromFreedSlot(
 
   const now = admin.firestore.Timestamp.now();
   const expires = admin.firestore.Timestamp.fromMillis(Date.now() + WAITLIST_OFFER_TTL_MS);
-  const offer: NonNullable<BookingWaitlistEntry["offer"]> = {
-    dateYmd: slot.dateYmd,
-    timeHHmm: slot.timeHHmm,
-    workerId: slot.workerId,
-    workerName: slot.workerName ?? null,
-    durationMin: slot.durationMin,
-    serviceName: slot.serviceName,
-  };
+  const offer = freedSlotToOfferSlot(slot);
 
   await col.doc(chosen.id).update({
     status: "notified",
@@ -92,21 +98,30 @@ export async function notifyBookingWaitlistFromFreedSlot(
 
   const dateLabel = formatHeDate(slot.dateYmd);
   const firstName = chosen.data.customerName.trim().split(/\s+/)[0] || "שלום";
-  const body =
-    `שלום ${firstName},\n\n` +
-    `נפתחה הרשמה ב-${salonName}:\n` +
-    `שירות: ${slot.serviceName}\n` +
-    `תאריך: ${dateLabel}\n` +
-    `שעה: ${slot.timeHHmm}\n\n` +
-    `להזמנת התור בשעה הזו השיבו *כן*.\n` +
-    `אם לא מתאים — השיבו לא.`;
+  const timeDisp = (() => {
+    const t = slot.timeHHmm.trim();
+    return t.length >= 5 ? t.slice(0, 5) : t;
+  })();
+
+  const logBody =
+    `שלום ${firstName}! התפנה תור ל${salonName} בתאריך ${dateLabel} בשעה ${timeDisp}. האם תרצו לשריין אותו?`;
 
   try {
     await sendWhatsApp({
       toE164: chosen.data.customerPhoneE164,
-      body,
+      body: logBody,
       siteId,
-      meta: { automation: "booking_waitlist_slot_offer", waitlistEntryId: chosen.id },
+      template: {
+        name: "booking_waitlist_slot_offer",
+        language: "he",
+        variables: {
+          "1": firstName,
+          "2": salonName,
+          "3": dateLabel,
+          "4": timeDisp,
+        },
+      },
+      meta: { automation: "booking_waitlist_slot_offer", waitlistEntryId: chosen.id, templateName: "booking_waitlist_slot_offer" },
       usageCategory: "service",
     });
   } catch (e) {

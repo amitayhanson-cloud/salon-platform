@@ -19,6 +19,7 @@ type Row = {
   customerPhoneE164: string;
   serviceName: string;
   preferredDateYmd?: string | null;
+  queuePositionForDay?: number | null;
 };
 
 function formatRequestedDate(ymd: string | null | undefined): string {
@@ -47,7 +48,7 @@ export default function DayBookingWaitlistPage() {
     const q = query(
       bookingWaitlistEntriesCollection(siteId),
       where("preferredDateYmd", "==", dateKey),
-      orderBy("createdAt", "desc"),
+      orderBy("createdAt", "asc"),
       limit(100)
     );
     const unsub = onSnapshot(
@@ -62,6 +63,10 @@ export default function DayBookingWaitlistPage() {
               customerPhoneE164: String(x.customerPhoneE164 ?? ""),
               serviceName: String(x.serviceName ?? ""),
               preferredDateYmd: (x.preferredDateYmd as string) || null,
+              queuePositionForDay:
+                typeof x.queuePositionForDay === "number" && Number.isFinite(x.queuePositionForDay)
+                  ? x.queuePositionForDay
+                  : null,
             };
           })
         );
@@ -114,6 +119,7 @@ export default function DayBookingWaitlistPage() {
             <table className="w-full text-sm text-right min-w-[560px]">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-slate-600">
+                  <th className="px-4 py-2 w-14">#</th>
                   <th className="px-4 py-2">שם</th>
                   <th className="px-4 py-2">טלפון</th>
                   <th className="px-4 py-2">שירות</th>
@@ -123,6 +129,9 @@ export default function DayBookingWaitlistPage() {
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id} className="border-b border-slate-100">
+                    <td className="px-4 py-2 tabular-nums text-slate-500">
+                      {r.queuePositionForDay != null ? r.queuePositionForDay : "—"}
+                    </td>
                     <td className="px-4 py-2 font-medium">{r.customerName || "—"}</td>
                     <td className="px-4 py-2 font-mono text-xs" dir="ltr">
                       {r.customerPhoneE164 || "—"}

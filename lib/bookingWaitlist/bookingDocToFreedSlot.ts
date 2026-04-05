@@ -1,6 +1,6 @@
 import type { FreedBookingSlot } from "./matchService";
 
-/** Build slot descriptor from a live booking doc before it is archived. */
+/** Build primary-only fields from a live phase-1 booking doc before it is archived. */
 export function bookingDocToFreedSlot(data: Record<string, unknown>): FreedBookingSlot | null {
   const phase = data.phase;
   if (phase === 2) return null;
@@ -33,6 +33,10 @@ export function bookingDocToFreedSlot(data: Record<string, unknown>): FreedBooki
       ? String(data.serviceName).trim()
       : "שירות";
 
+  const waitRaw = data.waitMinutes;
+  const waitMinutes =
+    typeof waitRaw === "number" && Number.isFinite(waitRaw) ? Math.max(0, Math.round(waitRaw)) : 0;
+
   return {
     dateYmd,
     timeHHmm,
@@ -42,5 +46,51 @@ export function bookingDocToFreedSlot(data: Record<string, unknown>): FreedBooki
     serviceId,
     serviceName,
     durationMin,
+    primaryDurationMin: durationMin,
+    waitMinutes,
+    followUpDurationMin: 0,
+    followUpWorkerId: null,
+    followUpWorkerName: null,
+    followUpServiceName: null,
+  };
+}
+
+/**
+ * Enrich a phase-1 freed slot with optional phase-2 doc (same cancelled visit).
+ */
+export function mergeFreedSlotWithPhase2(
+  phase1: Record<string, unknown>,
+  phase2: Record<string, unknown> | null | undefined
+): FreedBookingSlot | null {
+  const base = bookingDocToFreedSlot(phase1);
+  if (!base) return null;
+  if (!phase2) return base;
+
+  const durRaw = phase2.durationMin;
+  const followUpDurationMin =
+    typeof durRaw === "number" && Number.isFinite(durRaw) ? Math.max(0, Math.round(durRaw)) : 0;
+  if (followUpDurationMin <= 0) return base;
+
+  const fuWid =
+    phase2.workerId != null && String(phase2.workerId).trim() !== ""
+      ? String(phase2.workerId).trim()
+      : null;
+
+  const fuName =
+    phase2.workerName != null && String(phase2.workerName).trim() !== ""
+      ? String(phase2.workerName).trim()
+      : null;
+
+  const fuSvc =
+    phase2.serviceName != null && String(phase2.serviceName).trim() !== ""
+      ? String(phase2.serviceName).trim()
+      : null;
+
+  return {
+    ...base,
+    followUpDurationMin,
+    followUpWorkerId: fuWid,
+    followUpWorkerName: fuName,
+    followUpServiceName: fuSvc,
   };
 }

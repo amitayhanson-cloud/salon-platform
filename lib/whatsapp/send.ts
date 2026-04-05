@@ -47,7 +47,11 @@ function getTwilioEnv(): {
   return { accountSid, authToken, messagingServiceSid, senderLabelForLogs };
 }
 
-type WhatsAppTemplateName = "booking_confirmed" | "appointment_reminder_v1" | "broadcast_message_v1";
+type WhatsAppTemplateName =
+  | "booking_confirmed"
+  | "appointment_reminder_v1"
+  | "broadcast_message_v1"
+  | "booking_waitlist_slot_offer";
 
 function resolveTemplateContentSid(templateName: WhatsAppTemplateName): string {
   return resolveTwilioTemplateContentSid(templateName);
@@ -77,6 +81,17 @@ function assertContentVariablesForTemplate(
     if (!ok) {
       throw new Error(
         `booking_confirmed expects body variables "1".."4" only; got [${body.join(", ")}]`
+      );
+    }
+    return;
+  }
+  if (templateName === "booking_waitlist_slot_offer") {
+    const body = keys.filter((k) => !k.startsWith("button_")).sort();
+    const expected = ["1", "2", "3", "4"];
+    const ok = body.length === 4 && expected.every((k, i) => body[i] === k);
+    if (!ok) {
+      throw new Error(
+        `booking_waitlist_slot_offer expects body variables "1".."4" only; got [${body.join(", ")}]`
       );
     }
     return;
@@ -135,6 +150,7 @@ export type SendWhatsAppParams = {
    * Omit for freeform session messages (webhook-style replies in-window); Twilio payload uses `body` only.
    */
   template?: {
+    /** Built-in template name, or pass contentSid explicitly for one-off Content SIDs. */
     name: WhatsAppTemplateName;
     /** Optional explicit override; otherwise resolved from env by template name. */
     contentSid?: string;

@@ -2945,6 +2945,20 @@ export default function BookingPage() {
     setWaitlistSubmitting(true);
     setWaitlistFeedback(null);
     try {
+      const pi = selectedPricingItem;
+      const primaryDurationMin = Math.max(
+        1,
+        Math.round(pi?.durationMinMinutes ?? pi?.durationMinutes ?? 60)
+      );
+      const fu =
+        pi?.hasFollowUp === true && pi?.followUp && String(pi.followUp.name ?? "").trim()
+          ? pi.followUp
+          : null;
+      const waitMinutes = fu ? Math.max(0, Math.round(Number(fu.waitMinutes ?? 0))) : 0;
+      const followUpDurationMin = fu ? Math.max(0, Math.round(Number(fu.durationMinutes ?? 0))) : 0;
+      const followUpServiceName =
+        fu && String(fu.name ?? "").trim() ? String(fu.name).trim().slice(0, 200) : null;
+
       const res = await fetch("/api/booking-waitlist/join", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2954,9 +2968,13 @@ export default function BookingPage() {
           customerPhone: clientPhone.trim(),
           serviceName: selectedService.name,
           serviceId: selectedService.id ?? null,
-          serviceTypeId: selectedPricingItem?.id ?? null,
+          serviceTypeId: pi?.id ?? null,
           preferredDateYmd: waitlistPreferredDateYmd.trim() || null,
           preferredWorkerId: selectedWorker?.id ?? null,
+          primaryDurationMin,
+          waitMinutes,
+          followUpDurationMin,
+          ...(followUpServiceName ? { followUpServiceName } : {}),
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -2964,6 +2982,8 @@ export default function BookingPage() {
         setWaitlistFeedback(
           data?.error === "invalid_phone"
             ? "מספר טלפון לא תקין."
+            : data?.error === "preferred_date_required"
+              ? "בחרו תאריך לפני הרשמה לרשימת המתנה."
             : data?.error === "rate_limited"
               ? "ניסיון רב מדי. נסו שוב בעוד כשעה."
               : "לא ניתן להירשם כרגע. נסו שוב."
@@ -3751,16 +3771,6 @@ export default function BookingPage() {
                   );
                 })}
               </div>
-              <div className="mt-6 pt-4 border-t text-center" style={{ borderColor: "var(--border)" }}>
-                <button
-                  type="button"
-                  onClick={openBookingWaitlistModal}
-                  className="text-sm font-medium underline-offset-2 hover:underline"
-                  style={{ color: "var(--primary)" }}
-                >
-                  אין תאריך מתאים? הצטרפו לרשימת המתנה
-                </button>
-              </div>
             </div>
           )}
 
@@ -3780,16 +3790,18 @@ export default function BookingPage() {
                 </p>
               )}
 
-              <div className="mb-4 text-center">
-                <button
-                  type="button"
-                  onClick={openBookingWaitlistModal}
-                  className="text-sm font-medium underline-offset-2 hover:underline"
-                  style={{ color: "var(--primary)" }}
-                >
-                  אין שעה פנויה? הצטרפו לרשימת המתנה
-                </button>
-              </div>
+              {selectedDate && availableTimeSlots.length === 0 ? (
+                <div className="mb-4 text-center">
+                  <button
+                    type="button"
+                    onClick={openBookingWaitlistModal}
+                    className="text-sm font-medium underline-offset-2 hover:underline"
+                    style={{ color: "var(--primary)" }}
+                  >
+                    אין שעה פנויה ליום הזה? הצטרפו לרשימת המתנה
+                  </button>
+                </div>
+              ) : null}
               
               {/* Debug panel (dev only - requires NEXT_PUBLIC_DEBUG_BOOKING=true) */}
               {process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEBUG_BOOKING === "true" && debugInfo && (

@@ -17,7 +17,7 @@ import { getServiceTypeKey } from "@/lib/archiveReplace";
 import type { DocumentReference, QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { normalizeE164 } from "./e164";
 import { getRelatedBookingIds } from "./relatedBookings";
-import { bookingDocToFreedSlot } from "@/lib/bookingWaitlist/bookingDocToFreedSlot";
+import { mergeFreedSlotWithPhase2 } from "@/lib/bookingWaitlist/bookingDocToFreedSlot";
 import { notifyBookingWaitlistFromFreedSlot } from "@/lib/bookingWaitlist/notifySlotFreed";
 import type { FreedBookingSlot } from "@/lib/bookingWaitlist/matchService";
 
@@ -275,7 +275,25 @@ export async function applyCancelledByWhatsAppToBooking(
     clientId,
     ...CANCELLED_BY_WHATSAPP_PAYLOAD,
   };
-  const slot = bookingDocToFreedSlot(d as Record<string, unknown>);
+  let phase2Snap: QueryDocumentSnapshot | null = null;
+  try {
+    const fu = await db
+      .collection("sites")
+      .doc(siteId)
+      .collection("bookings")
+      .where("parentBookingId", "==", memberId)
+      .limit(3)
+      .get();
+    if (!fu.empty) {
+      phase2Snap = fu.docs[0]!;
+    }
+  } catch {
+    /* ignore */
+  }
+  const slot = mergeFreedSlotWithPhase2(
+    d as Record<string, unknown>,
+    phase2Snap?.data() as Record<string, unknown> | undefined
+  );
   await archiveBookingUniqueByServiceTypeAdmin(db, siteId, memberId, {
     clientId,
     customerPhone,
@@ -332,12 +350,23 @@ export async function cancelBookingGroupByWhatsApp(siteId: string, bookingId: st
     minimal: Record<string, unknown>;
     serviceTypeKey: string | null;
   }[] = [];
+  const docDataById = new Map<string, Record<string, unknown>>();
+  for (const id of bookingIds) {
+    const snap = await col.doc(id).get();
+    if (snap.exists) docDataById.set(id, snap.data() as Record<string, unknown>);
+  }
+  const phase2ByParent = new Map<string, Record<string, unknown>>();
+  for (const data of docDataById.values()) {
+    if (!isFollowUpBooking(data)) continue;
+    const pid = String(data.parentBookingId ?? "").trim();
+    if (pid) phase2ByParent.set(pid, data);
+  }
+
   const freedSlotsForWaitlist: FreedBookingSlot[] = [];
   for (const id of bookingIds) {
-    const ref = col.doc(id);
-    const snap = await ref.get();
-    if (!snap.exists) continue;
-    const d = snap.data() as DocData;
+    const full = docDataById.get(id);
+    if (!full) continue;
+    const d = full as DocData;
     if (isFollowUpBooking(d as Record<string, unknown>)) {
       if (process.env.NODE_ENV === "development") {
         console.log("[cancelBookingGroupByWhatsApp] Skipping archive for follow-up booking", id);
@@ -368,7 +397,7 @@ export async function cancelBookingGroupByWhatsApp(siteId: string, bookingId: st
     const serviceTypeKey =
       serviceTypeId != null && String(serviceTypeId).trim() !== "" ? String(serviceTypeId).trim() : null;
     archiveWrites.push({ clientKey, docId, minimal, serviceTypeKey });
-    const slot = bookingDocToFreedSlot(d as Record<string, unknown>);
+    const slot = mergeFreedSlotWithPhase2(full, phase2ByParent.get(id));
     if (slot) freedSlotsForWaitlist.push(slot);
   }
   const clientsRef = db.collection("sites").doc(siteId).collection("clients");

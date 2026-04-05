@@ -119,6 +119,12 @@ export function normalizeInbound(
 } {
   const rawPayload = (buttonPayload ?? "").trim();
   if (rawPayload) {
+    if (rawPayload === "confirm_waitlist_booking") {
+      return { normalized: "confirm_waitlist_booking", intent: "yes", selection: null };
+    }
+    if (rawPayload === "decline_waitlist_booking") {
+      return { normalized: "decline_waitlist_booking", intent: "no", selection: null };
+    }
     const payloadNorm = normalizeForMatch(rawPayload.toLowerCase());
     if (payloadNorm === "yes" || payloadNorm === "confirm") {
       return { normalized: payloadNorm || "yes", intent: "yes", selection: null };

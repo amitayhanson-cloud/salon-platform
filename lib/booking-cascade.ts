@@ -25,7 +25,7 @@ import {
   liveStatsDeltaUndoCreatedOnly,
   liveStatsDeltaUndoFollowUpOnly,
 } from "@/lib/liveStatsBookingDeltas";
-import { bookingDocToFreedSlot } from "@/lib/bookingWaitlist/bookingDocToFreedSlot";
+import { mergeFreedSlotWithPhase2 } from "@/lib/bookingWaitlist/bookingDocToFreedSlot";
 import { notifyBookingWaitlistFromFreedSlot } from "@/lib/bookingWaitlist/notifySlotFreed";
 
 const ISRAEL_TZ = "Asia/Jerusalem";
@@ -339,8 +339,16 @@ export async function cancelBookingsCascade(
       deletedLegacyCount: allToDelete.size,
       writtenCount: archiveWrites.length,
     });
+    const phase2ByParent = new Map<string, Record<string, unknown>>();
+    for (const { data } of followUpsToDelete) {
+      const pid = String(data.parentBookingId ?? "").trim();
+      if (pid) phase2ByParent.set(pid, data as Record<string, unknown>);
+    }
     for (const row of toUpdate) {
-      const slot = bookingDocToFreedSlot(row.fullData as Record<string, unknown>);
+      const slot = mergeFreedSlotWithPhase2(
+        row.fullData as Record<string, unknown>,
+        phase2ByParent.get(row.ref.id)
+      );
       if (!slot) continue;
       try {
         await notifyBookingWaitlistFromFreedSlot(siteId, slot);
