@@ -60,3 +60,16 @@ export function entryAcceptsTimeBucket(
   if (list.includes("anytime")) return true;
   return list.includes(bucket);
 }
+
+const TIME_PREFERENCE_LABELS_HE: Record<TimePreferenceValue, string> = {
+  morning: "בוקר",
+  afternoon: "צהריים",
+  evening: "ערב",
+  anytime: "גמישים",
+};
+
+/** Hebrew labels for admin UI; missing/invalid data is treated like `anytime`. */
+export function formatTimePreferenceLabelsHe(raw: unknown): string {
+  const prefs = normalizeTimePreferenceArray(raw);
+  return prefs.map((p) => TIME_PREFERENCE_LABELS_HE[p]).join(" · ");
+}

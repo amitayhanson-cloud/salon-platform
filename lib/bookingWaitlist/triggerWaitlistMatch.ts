@@ -10,6 +10,8 @@ import { sendWhatsApp } from "@/lib/whatsapp/send";
 import type { BookingWaitlistEntry } from "@/types/bookingWaitlist";
 import {
   waitlistEntryMatchesFreedSlot,
+  explainWaitlistEntryMismatch,
+  waitlistWorkerPreferenceRank,
   type FreedBookingSlot,
   freedSlotToOfferSlot,
 } from "./matchService";
@@ -123,27 +125,32 @@ export async function triggerWaitlistMatchForFreedSlot(
   }
 
   const sortedDocs = [...activeSnap.docs].sort((a, b) => {
+    const da = a.data() as BookingWaitlistEntry;
+    const dbEntry = b.data() as BookingWaitlistEntry;
+    const wa = waitlistWorkerPreferenceRank(da, slot);
+    const wb = waitlistWorkerPreferenceRank(dbEntry, slot);
+    if (wa !== wb) return wa - wb;
     const ta = firestoreTsMs(a.data().createdAt);
     const tb = firestoreTsMs(b.data().createdAt);
     if (ta !== tb) return ta - tb;
-    const da = a.data() as BookingWaitlistEntry;
-    const dbEntry = b.data() as BookingWaitlistEntry;
     const qa = typeof da.queuePositionForDay === "number" ? da.queuePositionForDay : 1e9;
     const qb = typeof dbEntry.queuePositionForDay === "number" ? dbEntry.queuePositionForDay : 1e9;
     if (qa !== qb) return qa - qb;
     return a.id.localeCompare(b.id);
   });
 
+  const matchOpts = { matchAnyService, timeBucket: bucket };
   let chosen: { id: string; data: BookingWaitlistEntry } | null = null;
+  const acquireSkips: Array<{ entryId: string; reason: string }> = [];
+  let firstFilterRejectExplain: string | null = null;
+
   for (const doc of sortedDocs) {
     if (skip.has(doc.id)) continue;
     const data = doc.data() as BookingWaitlistEntry;
-    if (
-      !waitlistEntryMatchesFreedSlot(data, slot, {
-        matchAnyService,
-        timeBucket: bucket,
-      })
-    ) {
+    if (!waitlistEntryMatchesFreedSlot(data, slot, matchOpts)) {
+      if (firstFilterRejectExplain === null) {
+        firstFilterRejectExplain = explainWaitlistEntryMismatch(data, slot, matchOpts);
+      }
       continue;
     }
     const acq = await tryAcquireWaitlistSlotOffer(db, siteId, lockId, {
@@ -156,6 +163,7 @@ export async function triggerWaitlistMatchForFreedSlot(
       if (acq.reason === "locked") {
         return { notified: false, reason: "slot_locked" };
       }
+      acquireSkips.push({ entryId: doc.id, reason: acq.reason });
       continue;
     }
     chosen = { id: doc.id, data };
@@ -163,14 +171,23 @@ export async function triggerWaitlistMatchForFreedSlot(
   }
 
   if (!chosen) {
+    const first = sortedDocs[0];
     console.log("[bookingWaitlist] no_matching_waitlist_entry", {
       siteId,
       dateYmd: slot.dateYmd,
       timeHHmm: slot.timeHHmm,
+      workerId: slot.workerId,
       activeForDay: sortedDocs.length,
       freedService: slot.serviceName,
       bucket,
+      siteTz,
       matchAnyService,
+      firstQueueEntryId: first?.id ?? null,
+      firstFilterReject: firstFilterRejectExplain ?? undefined,
+      slotPrimaryMin: slot.primaryDurationMin,
+      slotWaitMin: slot.waitMinutes,
+      slotFollowUpMin: slot.followUpDurationMin,
+      acquireSkips: acquireSkips.length ? acquireSkips : undefined,
     });
     return { notified: false, reason: "no_match" };
   }

@@ -10,6 +10,7 @@ import { getAdminBasePathFromSiteId } from "@/lib/url";
 import { AdminPageHero } from "@/components/admin/AdminPageHero";
 import { AdminCard } from "@/components/admin/AdminCard";
 import CalenoLoading from "@/components/CalenoLoading";
+import { formatTimePreferenceLabelsHe } from "@/lib/bookingWaitlist/timeBuckets";
 
 type Row = {
   id: string;
@@ -18,6 +19,7 @@ type Row = {
   serviceName: string;
   preferredDateYmd?: string | null;
   queuePositionForDay?: number | null;
+  timePreferenceLabel: string;
 };
 
 function formatRequestedDate(ymd: string | null | undefined): string {
@@ -58,6 +60,7 @@ export default function BookingWaitlistAdminPage() {
                 typeof x.queuePositionForDay === "number" && Number.isFinite(x.queuePositionForDay)
                   ? x.queuePositionForDay
                   : null,
+              timePreferenceLabel: formatTimePreferenceLabelsHe(x.timePreference),
             };
           })
         );
@@ -135,13 +138,14 @@ export default function BookingWaitlistAdminPage() {
                 <span className="font-normal text-slate-500 mr-2">({list.length})</span>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm text-right min-w-[640px]">
+                <table className="w-full text-sm text-right min-w-[720px]">
                   <thead>
                     <tr className="border-b border-slate-200 text-slate-600">
                       <th className="px-4 py-2 w-14">#</th>
                       <th className="px-4 py-2">שם</th>
                       <th className="px-4 py-2">טלפון</th>
                       <th className="px-4 py-2">שירות</th>
+                      <th className="px-4 py-2 whitespace-nowrap">העדפת שעה</th>
                       <th className="px-4 py-2">תאריך שביקש</th>
                     </tr>
                   </thead>
@@ -156,6 +160,7 @@ export default function BookingWaitlistAdminPage() {
                           {r.customerPhoneE164 || "—"}
                         </td>
                         <td className="px-4 py-2">{r.serviceName || "—"}</td>
+                        <td className="px-4 py-2 text-slate-700">{r.timePreferenceLabel}</td>
                         <td className="px-4 py-2 tabular-nums text-slate-700">
                           {formatRequestedDate(r.preferredDateYmd)}
                         </td>
