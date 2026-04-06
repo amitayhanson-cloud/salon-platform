@@ -16,7 +16,7 @@ import {
 import { NavigationLoadingLayer } from "@/components/navigation/NavigationLoadingLayer";
 import { adminNavigationPredicate } from "@/components/navigation/navigationLoadingPredicates";
 import { useAuth } from "@/components/auth/AuthProvider";
-import CalenoLoading from "@/components/CalenoLoading";
+import { TenantInlineLoading } from "@/components/navigation/TenantInlineLoading";
 
 export default function AdminLayout({
   children,
@@ -312,7 +312,7 @@ export default function AdminLayout({
   if (authLoading || checking || initializing) {
     return (
       <div className="min-h-screen flex w-full items-center justify-center bg-[#F8FAFC]">
-        <CalenoLoading />
+        <TenantInlineLoading />
       </div>
     );
   }
@@ -389,7 +389,8 @@ export default function AdminLayout({
 
   return (
     <NavigationLoadingLayer
-      variant="caleno"
+      variant="tenant"
+      tenantLogoUrl={null}
       shouldShowForNavigation={adminNavigationPredicate}
     >
       <div className="relative min-h-screen w-full overflow-x-clip">

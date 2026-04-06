@@ -30,6 +30,7 @@ import {
   cancellationFollowUpHandsWindowUtcMs,
   waitlistEntryHandsPhasesVsBusy,
   findContiguousGapContainingWindow,
+  intersectUtcGapWithSalonDayHours,
   siteDayWallBoundsUtcMs,
   cancellationFootprintWindowUtcMs,
   buildMaxFreedSlotFromHorizonGap,
@@ -39,6 +40,9 @@ import {
   type BusyIntervalMs,
   type WaitlistSlotMatchOptions,
 } from "./matchService";
+import { fetchBookingSettingsAdmin } from "./bookingSettingsAdmin";
+import { getJsDow, getDayConfig } from "@/lib/scheduleDayMapping";
+import type { DayHours } from "@/types/bookingSettings";
 import { normalizeBookingTimeHHmm } from "./bookingDocToFreedSlot";
 import { WAITLIST_PENDING_OFFER_STATUSES, WAITLIST_WAITING_STATUSES } from "./waitlistStatus";
 import { getTimePreferenceBucketForSlot } from "./timeBuckets";
@@ -139,6 +143,9 @@ function logDebugWaitlistPerPersonReject(args: {
     parts.push(
       `Horizon bucket mismatch (user ${JSON.stringify(args.entry.timePreference ?? null)} vs allowed [${hb ? [...hb].sort().join(", ") : ""}])`
     );
+  }
+  if (expl.startsWith("strict_offer_time")) {
+    parts.push(`Offer time / hours: ${expl.slice("strict_offer_time ".length)}`);
   }
   if (expl.startsWith("date_mismatch")) {
     parts.push(
@@ -258,7 +265,8 @@ async function resolveHorizonRootSlot(
   siteId: string,
   slot: FreedBookingSlot,
   siteTz: string,
-  skipHorizon: boolean
+  skipHorizon: boolean,
+  salonDayForClip: Pick<DayHours, "enabled" | "start" | "end"> | null
 ): Promise<{
   rootSlot: FreedBookingSlot;
   horizonBuckets: ReadonlySet<Exclude<TimePreferenceValue, "anytime">> | null;
@@ -313,7 +321,7 @@ async function resolveHorizonRootSlot(
         )
       : merged;
 
-    const gap = findContiguousGapContainingWindow(
+    let gap = findContiguousGapContainingWindow(
       busyForGap,
       window,
       dayBounds.dayStartMs,
@@ -321,6 +329,24 @@ async function resolveHorizonRootSlot(
     );
     if (!gap) {
       return { rootSlot: slot, horizonBuckets: null };
+    }
+    if (salonDayForClip) {
+      const clipped = intersectUtcGapWithSalonDayHours(
+        gap.gapStartMs,
+        gap.gapEndExclusiveMs,
+        slot.dateYmd,
+        siteTz,
+        salonDayForClip
+      );
+      if (!clipped) {
+        return { rootSlot: slot, horizonBuckets: null };
+      }
+      const c0 = window.startMs;
+      const c1 = window.endMsExclusive;
+      if (c0 < clipped.gapStartMs || c1 > clipped.gapEndExclusiveMs) {
+        return { rootSlot: slot, horizonBuckets: null };
+      }
+      gap = clipped;
     }
     const startYmd = formatInTimeZone(gap.gapStartMs, siteTz, "yyyy-MM-dd");
     const endYmd = formatInTimeZone(gap.gapEndExclusiveMs - 1, siteTz, "yyyy-MM-dd");
@@ -382,10 +408,12 @@ async function findFirstMatchFromProbes(
   col: CollectionReference,
   siteTz: string,
   skipLocal: Set<string>,
+  skipPhones: Set<string>,
   matchAnyService: boolean,
   bypassLock: boolean,
   probes: FreedSlotMatchProbe[],
-  horizonBucketsEffective: ReadonlySet<Exclude<TimePreferenceValue, "anytime">> | null
+  horizonBucketsEffective: ReadonlySet<Exclude<TimePreferenceValue, "anytime">> | null,
+  strictOfferWall: NonNullable<WaitlistSlotMatchOptions["strictOfferWall"]>
 ): Promise<FindMatchFromProbesResult> {
   const sliceAttempts: SliceAttemptLog[] = [];
   const probesTried = probes.map((p) => p.label);
@@ -470,10 +498,15 @@ async function findFirstMatchFromProbes(
       return a.id.localeCompare(b.id);
     });
 
-    const matchOpts =
+    const matchOpts: WaitlistSlotMatchOptions =
       horizonBucketsEffective != null && horizonBucketsEffective.size > 0
-        ? { matchAnyService, horizonBuckets: horizonBucketsEffective, timeBucket: bucket }
-        : { matchAnyService, timeBucket: bucket };
+        ? {
+            matchAnyService,
+            horizonBuckets: horizonBucketsEffective,
+            timeBucket: bucket,
+            strictOfferWall,
+          }
+        : { matchAnyService, timeBucket: bucket, strictOfferWall };
     const horizonLog =
       horizonBucketsEffective != null && horizonBucketsEffective.size > 0
         ? [...horizonBucketsEffective].sort()
@@ -484,6 +517,8 @@ async function findFirstMatchFromProbes(
     for (const doc of sortedDocs) {
       if (skipLocal.has(doc.id)) continue;
       const data = doc.data() as BookingWaitlistEntry;
+      const phone = String(data.customerPhoneE164 ?? "").trim();
+      if (phone && skipPhones.has(phone)) continue;
       if (!waitlistEntryMatchesFreedSlot(data, slice, matchOpts)) {
         if (firstFilterRejectExplain === null) {
           firstFilterRejectExplain = explainWaitlistEntryMismatch(data, slice, matchOpts);
@@ -634,18 +669,26 @@ export async function triggerWaitlistMatchForFreedSlot(
 
   const col = db.collection("sites").doc(siteId).collection("bookingWaitlistEntries");
 
+  const bookingSettings = await fetchBookingSettingsAdmin(db, siteId);
+  const refNoon = fromZonedTime(`${slot.dateYmd}T12:00:00`, siteTz);
+  const jsDow = getJsDow(refNoon, siteTz);
+  const salonDayForSlot =
+    getDayConfig(bookingSettings, jsDow) ?? { enabled: true, start: "09:00", end: "18:00" };
+
   const { rootSlot, horizonBuckets } = await resolveHorizonRootSlot(
     db,
     siteId,
     slot,
     siteTz,
-    options?.skipHorizonScan === true
+    options?.skipHorizonScan === true,
+    salonDayForSlot
   );
   const horizonBucketsEffective =
     horizonBuckets != null && horizonBuckets.size > 0 ? horizonBuckets : null;
 
   let segments = buildAtomicWallSegments(rootSlot, siteTz, MIN_PACK_SEGMENT_MIN);
   const skipLocal = new Set(skip);
+  const skipPhonesThisGap = new Set<string>();
   const entryIdsNotified: string[] = [];
   let structuralAttempted = false;
   let lastNoMatchLog: {
@@ -657,6 +700,11 @@ export async function triggerWaitlistMatchForFreedSlot(
 
   for (let packRound = 0; packRound < MAX_PACK_OFFERS_PER_RUN; packRound++) {
     let found: FindMatchFromProbesResult | null = null;
+    const strictOfferWall = {
+      siteTz,
+      salonDay: salonDayForSlot,
+      nowMs: Date.now(),
+    };
 
     if (!structuralAttempted) {
       structuralAttempted = true;
@@ -667,10 +715,12 @@ export async function triggerWaitlistMatchForFreedSlot(
         col,
         siteTz,
         skipLocal,
+        skipPhonesThisGap,
         matchAnyService,
         bypassLock,
         probes,
-        horizonBucketsEffective
+        horizonBucketsEffective,
+        strictOfferWall
       );
       if (!found.ok) {
         lastNoMatchLog = {
@@ -694,10 +744,12 @@ export async function triggerWaitlistMatchForFreedSlot(
           col,
           siteTz,
           skipLocal,
+          skipPhonesThisGap,
           matchAnyService,
           bypassLock,
           expandFreedSlotToMatchSlices(seg, siteTz),
-          horizonBucketsEffective
+          horizonBucketsEffective,
+          strictOfferWall
         );
         if (segTry.ok) {
           found = segTry;
@@ -812,6 +864,8 @@ export async function triggerWaitlistMatchForFreedSlot(
 
     entryIdsNotified.push(found.docId);
     skipLocal.add(found.docId);
+    const offeredPhone = String(found.data.customerPhoneE164 ?? "").trim();
+    if (offeredPhone) skipPhonesThisGap.add(offeredPhone);
 
     const occ = wallOccupanciesFromEntryAndCapacity(found.data, found.capacitySlice, siteTz);
     segments = applyWallOccupanciesToAtomicSegments(segments, occ, siteTz, MIN_PACK_SEGMENT_MIN);

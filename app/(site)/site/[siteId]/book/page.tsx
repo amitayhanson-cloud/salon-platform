@@ -59,10 +59,12 @@ import {
   jsDayToWeekdayKey,
 } from "@/lib/scheduleDayMapping";
 import { normalizeE164, isValidE164 } from "@/lib/whatsapp/e164";
+import { WAITLIST_BUCKET_RANGE_LABELS_HE } from "@/lib/bookingWaitlist/timeBuckets";
+import type { TimePreferenceValue } from "@/types/timePreference";
 
 const BOOKING_TRAFFIC_SOURCE_SESSION_KEY = "caleno_booking_traffic_source";
 
-const WAITLIST_TIME_PREF_OPTIONS: { value: string; label: string }[] = [
+const WAITLIST_TIME_PREF_OPTIONS: { value: TimePreferenceValue; label: string }[] = [
   { value: "morning", label: "בוקר" },
   { value: "afternoon", label: "צהריים" },
   { value: "evening", label: "ערב" },
@@ -4325,7 +4327,7 @@ export default function BookingPage() {
                     {WAITLIST_TIME_PREF_OPTIONS.map(({ value, label }) => (
                       <label
                         key={value}
-                        className="flex items-center gap-2 cursor-pointer text-sm"
+                        className="flex items-start gap-2 cursor-pointer text-sm"
                         style={{ color: "var(--text)" }}
                       >
                         <input
@@ -4334,9 +4336,17 @@ export default function BookingPage() {
                           onChange={() =>
                             setWaitlistTimePreference((p) => toggleWaitlistTimePreference(p, value))
                           }
-                          className="rounded border-slate-300"
+                          className="rounded border-slate-300 mt-0.5 shrink-0"
                         />
-                        <span>{label}</span>
+                        <span>
+                          <span className="font-medium">{label}</span>
+                          <span
+                            className="block text-xs mt-0.5"
+                            style={{ color: "var(--muted)" }}
+                          >
+                            {WAITLIST_BUCKET_RANGE_LABELS_HE[value]}
+                          </span>
+                        </span>
                       </label>
                     ))}
                   </div>
@@ -4359,14 +4369,16 @@ export default function BookingPage() {
               </p>
             )}
             <div className="flex gap-2 justify-end flex-wrap">
-              <button
-                type="button"
-                onClick={closeWaitlistModal}
-                className="px-4 py-2 rounded-xl border text-sm font-medium"
-                style={{ borderColor: "var(--border)", color: "var(--text)" }}
-              >
-                {waitlistJoinSucceeded ? "המשך בזימון" : "סגור"}
-              </button>
+              {!waitlistJoinSucceeded ? (
+                <button
+                  type="button"
+                  onClick={closeWaitlistModal}
+                  className="px-4 py-2 rounded-xl border text-sm font-medium"
+                  style={{ borderColor: "var(--border)", color: "var(--text)" }}
+                >
+                  סגור
+                </button>
+              ) : null}
               {waitlistJoinSucceeded ? (
                 <button
                   type="button"

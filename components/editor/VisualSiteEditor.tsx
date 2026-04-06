@@ -12,11 +12,13 @@ import {
 } from "react";
 import { motion, useMotionValue, useDragControls, animate } from "framer-motion";
 import { GripHorizontal, Pencil, Eye, Check, LogOut } from "lucide-react";
-import type { SiteConfig, SiteService } from "@/types/siteConfig";
-import { defaultThemeColors } from "@/types/siteConfig";
+import type { SiteConfig, SiteService, ThemePalette } from "@/types/siteConfig";
+import { defaultThemeColors, defaultThemePalette } from "@/types/siteConfig";
+import { resolveThemePalette } from "@/lib/themePalette";
 import WebsiteRenderer from "@/components/site/WebsiteRenderer";
 import { SelectionOverlay, type SelectedTarget } from "@/components/editor/SelectionOverlay";
 import { InspectorPanel } from "@/components/editor/InspectorPanel";
+import { ThemePalettePanel } from "@/components/editor/ThemePalettePanel";
 import { getEditableTarget } from "@/lib/editor/getEditorSchema";
 import { setByPath } from "@/lib/editor/configPath";
 import { subscribeSiteServices, migrateServicesFromSubcollection, updateSiteService } from "@/lib/firestoreSiteServices";
@@ -60,6 +62,10 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
   const [draft, setDraft] = useState<SiteConfig>(() => ({
     ...baselineConfig,
     themeColors: baselineConfig.themeColors ?? defaultThemeColors,
+    themePalette: {
+      ...defaultThemePalette,
+      ...baselineConfig.themePalette,
+    },
   }));
   const [selected, setSelected] = useState<SelectedTarget | null>(null);
   const [services, setServices] = useState<SiteService[]>([]);
@@ -97,6 +103,17 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
     setDraft((prev) => (prev ? { ...prev, ...updates } : prev));
   }, []);
 
+  const handlePaletteColorChange = useCallback((key: keyof ThemePalette, hex: string) => {
+    setDraftDirty(true);
+    setDraft((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        themePalette: { ...resolveThemePalette(prev), [key]: hex },
+      };
+    });
+  }, []);
+
   const handleServiceImageUpload = useCallback(
     async (serviceId: string, url: string) => {
       await updateSiteService(siteId, serviceId, { imageUrl: url });
@@ -110,6 +127,10 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
     setDraft({
       ...baselineConfig,
       themeColors: baselineConfig.themeColors ?? defaultThemeColors,
+      themePalette: {
+        ...defaultThemePalette,
+        ...baselineConfig.themePalette,
+      },
     });
     setSelected(null);
   }, [baselineConfig]);
@@ -119,6 +140,10 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
     const base = {
       ...baselineConfig,
       themeColors: baselineConfig.themeColors ?? defaultThemeColors,
+      themePalette: {
+        ...defaultThemePalette,
+        ...baselineConfig.themePalette,
+      },
     };
     return JSON.stringify(draft) !== JSON.stringify(base);
   }, [draftDirty, draft, baselineConfig]);
@@ -414,6 +439,10 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
 
   const showDesktopEditorBar = !isMobile || !hideToolbarSaveAndBack;
 
+  const themePanel = (
+    <ThemePalettePanel draftConfig={draft} onPaletteChange={handlePaletteColorChange} />
+  );
+
   const inspectorPanel = (
     <InspectorPanel
       selected={selected}
@@ -479,6 +508,7 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
       <div className="flex min-h-0 flex-1 flex-col md:flex-row md:min-h-[50vh]">
         <div
           ref={previewContainerRef}
+          data-visual-site-editor-preview=""
           className="relative min-h-0 w-full min-w-0 flex-1 cursor-pointer overflow-auto bg-slate-100 md:min-h-[45vh]"
           onMouseMove={handlePreviewMouseMove}
           onMouseLeave={handlePreviewMouseLeave}
@@ -502,7 +532,12 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
           />
         </div>
 
-        {!isMobile ? <div className="flex w-80 shrink-0 flex-col">{inspectorPanel}</div> : null}
+        {!isMobile ? (
+          <div className="flex w-80 shrink-0 flex-col border-l border-slate-200 bg-white">
+            {themePanel}
+            <div className="min-h-0 flex-1 flex flex-col overflow-hidden">{inspectorPanel}</div>
+          </div>
+        ) : null}
       </div>
 
       {/* Mobile: draggable inspector sheet (תצוגה = locked at peek; עריכה = full drag range) */}
@@ -572,7 +607,10 @@ export const VisualSiteEditor = forwardRef<VisualSiteEditorHandle, VisualSiteEdi
               </div>
             </div>
           </div>
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white/50">{inspectorPanel}</div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white/50">
+            {themePanel}
+            <div className="min-h-0 flex-1 overflow-y-auto">{inspectorPanel}</div>
+          </div>
         </motion.div>
       ) : null}
 

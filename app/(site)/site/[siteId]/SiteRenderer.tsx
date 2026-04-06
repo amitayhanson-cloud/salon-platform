@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { SiteConfig, SiteService } from "@/types/siteConfig";
-import { defaultThemeColors } from "@/types/siteConfig";
+import { defaultSiteConfig, defaultThemeColors, defaultThemePalette } from "@/types/siteConfig";
+import { themePaletteRootStyle } from "@/lib/themePalette";
+import { BarberTemplate } from "@/components/templates/gentlemans-barber/BarberTemplate";
 import { subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
 import { subscribeSiteServices, migrateServicesFromSubcollection } from "@/lib/firestoreSiteServices";
 import {
@@ -11,6 +13,18 @@ import {
 import HairLuxurySite from "./HairLuxurySite";
 import type { Product } from "@/types/product";
 import { subscribeSiteProducts } from "@/lib/firestoreProducts";
+import { VogueNailsShell } from "@/components/templates/vogue-nails/VogueNailsShell";
+import type { PublicSiteTemplateId } from "@/types/siteConfig";
+
+function resolvePublicTemplateId(
+  config: SiteConfig | null
+): PublicSiteTemplateId {
+  const id = config?.publicSiteTemplateId;
+  if (id === "gentlemans-barber" || id === "vogue-nails" || id === "hair-luxury") {
+    return id;
+  }
+  return "hair-luxury";
+}
 
 export default function SiteRenderer({ siteId }: { siteId: string }) {
   const [config, setConfig] = useState<SiteConfig | null>(null);
@@ -37,6 +51,7 @@ export default function SiteRenderer({ siteId }: { siteId: string }) {
           const configWithTheme: SiteConfig = {
             ...cfg,
             themeColors: cfg.themeColors || defaultThemeColors,
+            themePalette: { ...defaultThemePalette, ...cfg.themePalette },
           };
           if (process.env.NODE_ENV !== "production") {
             console.log("[SiteRenderer] config from Firestore", {
@@ -57,6 +72,7 @@ export default function SiteRenderer({ siteId }: { siteId: string }) {
                 const configWithTheme: SiteConfig = {
                   ...parsed,
                   themeColors: parsed.themeColors || defaultThemeColors,
+                  themePalette: { ...defaultThemePalette, ...parsed.themePalette },
                 };
                 if (process.env.NODE_ENV !== "production") {
                   console.log("[SiteRenderer] config from localStorage (no Firestore doc)");
@@ -85,6 +101,7 @@ export default function SiteRenderer({ siteId }: { siteId: string }) {
               const configWithTheme: SiteConfig = {
                 ...parsed,
                 themeColors: parsed.themeColors || defaultThemeColors,
+                themePalette: { ...defaultThemePalette, ...parsed.themePalette },
               };
               if (process.env.NODE_ENV !== "production") {
                 console.log("[SiteRenderer] config from localStorage (error fallback)");
@@ -179,10 +196,29 @@ export default function SiteRenderer({ siteId }: { siteId: string }) {
     );
   }
 
-  // Get template and render
+  const publicTemplateId = resolvePublicTemplateId(config);
+
+  const withPaletteVars = (inner: ReactNode) => (
+    <div className="min-h-screen" style={themePaletteRootStyle(config)}>
+      {inner}
+    </div>
+  );
+
+  if (publicTemplateId === "gentlemans-barber") {
+    return withPaletteVars(
+      <BarberTemplate siteId={siteId} config={config} services={services} />
+    );
+  }
+
+  if (publicTemplateId === "vogue-nails") {
+    return withPaletteVars(
+      <VogueNailsShell siteId={siteId} config={config} services={services} />
+    );
+  }
+
   const template = getTemplateForConfig(config);
 
-  return (
+  return withPaletteVars(
     <HairLuxurySite
       config={config}
       template={template}

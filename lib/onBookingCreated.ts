@@ -8,6 +8,10 @@
  *   import { onBookingCreated } from "@/lib/onBookingCreated";
  *   await onBookingCreated(siteId, bookingId);
  *
+ * Suppress post-booking WhatsApp (confirmation + last-minute reminder): set
+ * `skipCustomerConfirmation: true` or `bookingSource: "waitlist"` on the booking doc
+ * (waitlist accept flow uses both).
+ *
  * Caleno stores bookings at: sites/{siteId}/bookings/{bookingId}
  * (siteId = salon/site id)
  */
@@ -107,6 +111,23 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
     throw new Error(phoneResult.error);
   }
   const customerPhoneE164 = phoneResult.e164;
+
+  const skipCustomerConfirmation =
+    data.skipCustomerConfirmation === true || data.bookingSource === "waitlist";
+  if (skipCustomerConfirmation) {
+    await bookingRef.update({
+      customerPhoneE164,
+      whatsappStatus: "booked",
+      updatedAt: Timestamp.now(),
+    });
+    console.log("[onBookingCreated] skip_customer_confirmation", {
+      siteId,
+      bookingId,
+      bookingSource: data.bookingSource ?? null,
+    });
+    return;
+  }
+
   const { salonName, slug } = await getSiteSalonNameAndWazeUrl(db, siteId);
   const waSettings = await getSiteWhatsAppSettings(siteId);
   const bookingPublicUrl = withTrackingSource(

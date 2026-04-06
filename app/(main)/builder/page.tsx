@@ -20,10 +20,11 @@ import { convertSalonBookingStateToBookingSettings } from "@/lib/firestoreBookin
 import { isSalonBookingHoursValidForWizard } from "@/lib/openingHoursValidation";
 import { BuilderBotCoach } from "@/components/builder/BuilderBotCoach";
 import { BuilderCheckoutStep } from "@/components/builder/BuilderCheckoutStep";
+import { BuilderTemplateSelector } from "@/components/builder/BuilderTemplateSelector";
 
 /*
  * Manual test steps (signup wizard + subdomain):
- * 1. Sign up through wizard; at step "בחר תת-דומיין" enter slug "testamitay", check availability, continue and complete.
+ * 1. Sign up through wizard; pick template; at subdomain step enter slug "testamitay", check availability, continue and complete.
  * 2. Firestore: tenants/testamitay exists with correct siteId; sites/<siteId> has slug "testamitay"; users/<uid>.siteId set.
  * 3. Slug availability: GET /api/tenants/check-slug?slug=… returns 200 { available: true|false }.
  * 4. Open https://testamitay.caleno.co/admin (or localhost /admin?tenant=testamitay); should load and prompt login if needed.
@@ -39,7 +40,7 @@ function EditableLaterHint() {
 }
 
 /**
- * Domain hint arrow for Step 2 (subdomain/domain input).
+ * Domain hint arrow for subdomain step (subdomain/domain input).
  * Desktop: anchored top-left near the input.
  * Mobile: anchored bottom-middle near the input.
  */
@@ -230,7 +231,7 @@ export default function BuilderPage() {
   const [checkoutMessage, setCheckoutMessage] = useState<string | null>(null);
   const checkoutReturnHandledRef = useRef(false);
 
-  const totalSteps = 7;
+  const totalSteps = 8;
 
   useEffect(() => {
     const prev = prevBuilderStepRef.current;
@@ -373,17 +374,19 @@ export default function BuilderPage() {
     switch (step) {
       case 1:
         return config.salonName.trim() !== "";
-      case 2: {
+      case 2:
+        return true; // template has default hair-luxury
+      case 3: {
         const trimmed = wizardSlug.trim().toLowerCase();
         if (!trimmed) return false;
         if (!validateTenantSlug(trimmed).ok) return false;
         return slugAvailable === true;
       }
-      case 3:
-        return !!(config.address && config.address.trim() !== "");
       case 4:
+        return !!(config.address && config.address.trim() !== "");
+      case 5:
         return config.mainGoals.length > 0;
-      case 5: {
+      case 6: {
         const hasPhone = Boolean(config.phoneNumber?.trim());
         const hasWhatsapp = Boolean(config.whatsappNumber?.trim());
         const hasInstagram = Boolean(config.instagramHandle?.trim());
@@ -393,9 +396,9 @@ export default function BuilderPage() {
           hasPhone || hasWhatsapp || hasInstagram || hasFacebook || hasEmail;
         return hasContact;
       }
-      case 6:
-        return isSalonBookingHoursValidForWizard(bookingState);
       case 7:
+        return isSalonBookingHoursValidForWizard(bookingState);
+      case 8:
         return true;
       default:
         return false;
@@ -429,14 +432,14 @@ export default function BuilderPage() {
 
   /** From opening-hours step → payment step (does not create site yet). */
   const tryGoToPaymentStep = () => {
-    if (step !== 6) return;
+    if (step !== 7) return;
     if (!isStepValid()) {
       setShowStepValidationHint(true);
       return;
     }
     setShowStepValidationHint(false);
     setCheckoutMessage(null);
-    setStep(7);
+    setStep(8);
   };
 
   const handleNext = () => {
@@ -445,7 +448,7 @@ export default function BuilderPage() {
     const advance = () => setStep((s) => s + 1);
 
     // Persist main goals to users/{uid} when leaving the goals step (before site exists).
-    if (step === 4 && user?.id && config.mainGoals.length > 0) {
+    if (step === 5 && user?.id && config.mainGoals.length > 0) {
       void (async () => {
         try {
           const { updateUserProfile } = await import("@/lib/firestoreUsers");
@@ -462,7 +465,7 @@ export default function BuilderPage() {
     }
 
     // Persist public-site display phone to users/{uid} when leaving the contact step.
-    if (step === 5 && user?.id) {
+    if (step === 6 && user?.id) {
       void (async () => {
         try {
           const { updateUserProfile, getUserDocument } = await import("@/lib/firestoreUsers");
@@ -489,7 +492,7 @@ export default function BuilderPage() {
 
   const handleBack = () => {
     if (step > 1) {
-      if (step === 7) setCheckoutMessage(null);
+      if (step === 8) setCheckoutMessage(null);
       setStep(step - 1);
     }
   };
@@ -599,7 +602,7 @@ export default function BuilderPage() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("checkout") !== "cancel") return;
     setCheckoutMessage("התשלום בוטל. אפשר לנסות שוב למטה.");
-    setStep(7);
+    setStep(8);
     window.history.replaceState({}, "", "/builder");
   }, []);
 
@@ -661,7 +664,7 @@ export default function BuilderPage() {
           setSaveError(data.error || "לא ניתן להשלים את ההרשמה לאחר התשלום");
           setIsSaving(false);
           checkoutReturnHandledRef.current = false;
-          setStep(7);
+          setStep(8);
           return;
         }
         window.history.replaceState({}, "", "/builder");
@@ -671,7 +674,7 @@ export default function BuilderPage() {
         setSaveError(e instanceof Error ? e.message : "שגיאה");
         setIsSaving(false);
         checkoutReturnHandledRef.current = false;
-        setStep(7);
+        setStep(8);
       }
     })();
 
@@ -745,7 +748,7 @@ export default function BuilderPage() {
       <BuilderCalenoBackground />
       <div className="relative z-10 py-8">
         <div
-          className={`container mx-auto px-4 ${step === 7 ? "max-w-4xl" : "max-w-2xl"}`}
+          className={`container mx-auto px-4 ${step === 8 ? "max-w-4xl" : "max-w-2xl"}`}
         >
           {/* Caleno branding */}
           <div className="flex flex-col items-center pt-4 pb-6">
@@ -766,11 +769,11 @@ export default function BuilderPage() {
               </span>
             </Link>
             <p className="mt-2 text-sm font-medium text-caleno-deep">
-              {step === 7 ? "תשלום והשקת האתר" : "בונה את העסק שלך"}
+              {step === 8 ? "תשלום והשקת האתר" : "בונה את העסק שלך"}
             </p>
           </div>
 
-        {step === 7 ? (
+        {step === 8 ? (
           <div className="mb-20 space-y-8">
             <div className="text-right">
               <span className="text-sm font-medium text-caleno-deep/90">
@@ -920,8 +923,16 @@ export default function BuilderPage() {
             </div>
           )}
 
-          {/* Step 2 - Choose your link (subdomain) */}
+          {/* Step 2 - Public site template */}
           {step === 2 && (
+            <BuilderTemplateSelector
+              selectedId={config.publicSiteTemplateId ?? "hair-luxury"}
+              onSelect={(id) => updateConfig({ publicSiteTemplateId: id })}
+            />
+          )}
+
+          {/* Step 3 - Choose your link (subdomain) */}
+          {step === 3 && (
             <div className="space-y-6">
               <div>
                 <label
@@ -1014,8 +1025,8 @@ export default function BuilderPage() {
             </div>
           )}
 
-          {/* Step 3 - Google Maps place name (shows business + reviews on embed) */}
-          {step === 3 && (
+          {/* Step 4 - Google Maps place name (shows business + reviews on embed) */}
+          {step === 4 && (
             <div className="space-y-6">
               <EditableLaterHint />
               <div>
@@ -1041,8 +1052,8 @@ export default function BuilderPage() {
             </div>
           )}
 
-          {/* Step 4 - Main goal */}
-          {step === 4 && (
+          {/* Step 5 - Main goal */}
+          {step === 5 && (
             <div className="space-y-6">
               <div className="space-y-3">
                 {(Object.keys(mainGoalLabels) as MainGoal[]).map((goal) => (
@@ -1063,8 +1074,8 @@ export default function BuilderPage() {
             </div>
           )}
 
-          {/* Step 5 - Contact & booking */}
-          {step === 5 && (
+          {/* Step 6 - Contact & booking */}
+          {step === 6 && (
             <div className="space-y-6">
               <EditableLaterHint />
               
@@ -1159,8 +1170,8 @@ export default function BuilderPage() {
             </div>
           )}
 
-          {/* Step 6 - Opening hours (same as admin שעות פעילות) */}
-          {step === 6 && (
+          {/* Step 7 - Opening hours (same as admin שעות פעילות) */}
+          {step === 7 && (
             <div className="space-y-4">
               <EditableLaterHint />
               <div className="rounded-lg border border-caleno-border bg-slate-50/50 p-3 sm:p-4">
@@ -1203,7 +1214,7 @@ export default function BuilderPage() {
               חזור
             </button>
             <div className={builderFormFadeClass} aria-hidden={!builderFormVisible}>
-              {step < 6 ? (
+              {step < 7 ? (
                 <button
                   type="button"
                   onClick={tryAdvanceStep}

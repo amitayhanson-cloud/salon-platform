@@ -2,12 +2,14 @@ import { addMinutes } from "date-fns";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 
 import type { BookingWaitlistEntry, BookingWaitlistOfferSlot } from "@/types/bookingWaitlist";
+import type { DayHours } from "@/types/bookingSettings";
 import type { TimePreferenceValue } from "@/types/timePreference";
 import {
   addWallMinutesInTimezone,
   entryAcceptsTimeBucket,
   getTimePreferenceBucketForSlot,
   normalizeTimePreferenceArray,
+  waitlistOfferStartRespectsPrefsAndSalon,
 } from "./timeBuckets";
 
 export type FreedBookingSlot = {
@@ -232,13 +234,22 @@ export function waitlistEntryFitsFreedStructure(
 export type WaitlistSlotMatchOptions = {
   /** When true (e.g. admin "fill empty slot"), skip service type/id/name equality checks. */
   matchAnyService?: boolean;
-  /** When set, entry must accept this time-of-day bucket (or "anytime"). */
+  /** When set (and no {@link strictOfferWall}), entry must accept this time-of-day bucket (or "anytime"). */
   timeBucket?: Exclude<TimePreferenceValue, "anytime">;
   /**
    * When non-empty, the freed window touches these day buckets (horizon scan). Entry must prefer
    * at least one of them, and still pass {@link timeBucket} for the concrete offer start.
    */
   horizonBuckets?: ReadonlySet<Exclude<TimePreferenceValue, "anytime">> | null;
+  /**
+   * When set, offer start must be in the future (site wall clock), inside salon hours, and inside
+   * nominal preference buckets unless `anytime`.
+   */
+  strictOfferWall?: {
+    siteTz: string;
+    salonDay: Pick<DayHours, "enabled" | "start" | "end">;
+    nowMs: number;
+  };
 };
 
 /** Busy interval on a worker timeline (Firestore `startAt` / `endAt` semantics, end exclusive). */
@@ -499,6 +510,30 @@ export function waitlistEntryHandsPhasesVsBusy(
   return { ok: true, waitOverlapBooking };
 }
 
+/** Intersect a UTC gap with salon open/close on `dateYmd` in `siteTz` (half-open wall times). */
+export function intersectUtcGapWithSalonDayHours(
+  gapStartMs: number,
+  gapEndExclusiveMs: number,
+  dateYmd: string,
+  siteTz: string,
+  day: Pick<DayHours, "enabled" | "start" | "end">
+): { gapStartMs: number; gapEndExclusiveMs: number } | null {
+  if (!day.enabled) return null;
+  const openHm = normalizeHHmm(day.start);
+  const closeHm = normalizeHHmm(day.end);
+  try {
+    const openMs = fromZonedTime(`${dateYmd}T${openHm}:00`, siteTz).getTime();
+    const closeMs = fromZonedTime(`${dateYmd}T${closeHm}:00`, siteTz).getTime();
+    if (!(closeMs > openMs)) return null;
+    const s = Math.max(gapStartMs, openMs);
+    const e = Math.min(gapEndExclusiveMs, closeMs);
+    if (e <= s) return null;
+    return { gapStartMs: s, gapEndExclusiveMs: e };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Largest wall-time gap inside [dayStart, dayEnd) that fully contains the cancellation window.
  */
@@ -669,7 +704,19 @@ export function explainWaitlistEntryMismatch(
   if (hb != null && hb.size > 0 && !entryAcceptsAnyHorizonBucket(entry.timePreference, hb)) {
     return `horizon_buckets entry=${JSON.stringify(entry.timePreference ?? null)} allowed=${[...hb].sort().join(",")}`;
   }
-  if (options?.timeBucket != null && !entryAcceptsTimeBucket(entry.timePreference, options.timeBucket)) {
+  if (options?.strictOfferWall) {
+    const r = waitlistOfferStartRespectsPrefsAndSalon(
+      entry.timePreference,
+      slot.dateYmd,
+      slot.timeHHmm,
+      options.strictOfferWall.siteTz,
+      options.strictOfferWall.salonDay,
+      options.strictOfferWall.nowMs
+    );
+    if (!r.ok) {
+      return `strict_offer_time ${r.reason}`;
+    }
+  } else if (options?.timeBucket != null && !entryAcceptsTimeBucket(entry.timePreference, options.timeBucket)) {
     return `time_bucket entry=${JSON.stringify(entry.timePreference ?? null)} slotBucket=${options.timeBucket}`;
   }
   if (!options?.matchAnyService && !waitlistEntryServiceMatchesFreedSlot(entry, slot)) {
@@ -744,8 +791,18 @@ export function waitlistEntryMatchesFreedSlot(
   if (hb != null && hb.size > 0 && !entryAcceptsAnyHorizonBucket(entry.timePreference, hb)) {
     return false;
   }
-  if (options?.timeBucket != null && !entryAcceptsTimeBucket(entry.timePreference, options.timeBucket)) {
-    return false;
+  if (options?.strictOfferWall) {
+    const r = waitlistOfferStartRespectsPrefsAndSalon(
+      entry.timePreference,
+      slot.dateYmd,
+      slot.timeHHmm,
+      options.strictOfferWall.siteTz,
+      options.strictOfferWall.salonDay,
+      options.strictOfferWall.nowMs
+    );
+    if (!r.ok) return false;
+  } else if (options?.timeBucket != null && !entryAcceptsTimeBucket(entry.timePreference, options.timeBucket)) {
+  return false;
   }
 
   if (!options?.matchAnyService) {

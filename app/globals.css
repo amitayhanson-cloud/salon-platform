@@ -622,3 +622,15 @@ body:has([data-admin-modal-overlay]) .admin-layout-header-root {
   width: 300px;
   height: 300px;
 }
+
+/* Visual site editor: strip platform chrome that can leak into the preview (loaders, marketing home link) */
+[data-visual-site-editor-preview] .landing-v2-liquid-loader-root,
+[data-visual-site-editor-preview] .landing-v2-liquid-loader-inline,
+[data-visual-site-editor-preview] .caleno-water-scene {
+  display: none !important;
+}
+
+/* Marketing root link (href="/") must never appear inside tenant site preview */
+[data-visual-site-editor-preview] a[href="/"] {
+  display: none !important;
+}

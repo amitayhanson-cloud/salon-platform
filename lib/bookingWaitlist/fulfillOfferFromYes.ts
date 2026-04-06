@@ -3,6 +3,7 @@
  */
 
 import admin from "firebase-admin";
+import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { onBookingCreated } from "@/lib/onBookingCreated";
 import { deriveBookingStatusForWrite } from "@/lib/bookingStatusForWrite";
@@ -18,11 +19,30 @@ import { triggerWaitlistMatchForFreedSlot } from "./triggerWaitlistMatch";
 import { expireWaitlistOfferAndRematch, isWaitlistEntryOfferExpired } from "./waitlistOfferExpiry";
 import { WAITLIST_EXPIRED_CUSTOMER_HE } from "./waitlistOfferMessages";
 
-function parseStartAt(dateYmd: string, timeHHmm: string): Date | null {
-  const [y, m, d] = dateYmd.split("-").map(Number);
-  const [hh, mm] = timeHHmm.split(":").map(Number);
-  if (!y || !m || !d || Number.isNaN(hh) || Number.isNaN(mm)) return null;
-  return new Date(y, m - 1, d, hh, mm, 0, 0);
+function siteIanaTzFromSiteDoc(siteData: Record<string, unknown> | undefined): string {
+  const cfg = siteData?.config as
+    | { archiveRetention?: { timezone?: string }; timezone?: string }
+    | undefined;
+  const z =
+    (cfg?.archiveRetention?.timezone && String(cfg.archiveRetention.timezone).trim()) ||
+    (cfg?.timezone && String(cfg.timezone).trim()) ||
+    "";
+  return z || "Asia/Jerusalem";
+}
+
+/** Offer wall time → UTC instant (same interpretation as waitlist matching / salon hours). */
+function offerWallStartToDate(dateYmd: string, timeHHmm: string, siteTz: string): Date | null {
+  const raw = String(timeHHmm ?? "").trim();
+  const hm = raw.length >= 5 ? raw.slice(0, 5) : raw;
+  if (!/^\d{1,2}:\d{2}$/.test(hm)) return null;
+  const [hStr, mStr] = hm.split(":");
+  const pad = `${String(Number(hStr)).padStart(2, "0")}:${String(Number(mStr)).padStart(2, "0")}`;
+  try {
+    const d = fromZonedTime(`${dateYmd}T${pad}:00`, siteTz);
+    return Number.isFinite(d.getTime()) ? d : null;
+  } catch {
+    return null;
+  }
 }
 
 export type FulfillWaitlistYesResult =
@@ -95,7 +115,10 @@ export async function fulfillWaitlistOfferFromInboundYes(
     };
   }
 
-  const startAt = parseStartAt(offer.dateYmd, offer.timeHHmm);
+  const siteSnap = await db.collection("sites").doc(siteId).get();
+  const siteTz = siteIanaTzFromSiteDoc(siteSnap.data() as Record<string, unknown> | undefined);
+
+  const startAt = offerWallStartToDate(offer.dateYmd, offer.timeHHmm, siteTz);
   if (!startAt) {
     return { ok: false, reason: "bad_slot" };
   }
@@ -227,6 +250,9 @@ export async function fulfillWaitlistOfferFromInboundYes(
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     waitlistEntryId: waitlistDocId,
+    /** No duplicate post-booking WhatsApp; customer already got the slot offer + web/YES flow. */
+    bookingSource: "waitlist",
+    skipCustomerConfirmation: true,
     ...(fuDur > 0 && waitMin > 0 ? { waitMinutes: waitMin } : {}),
   };
 
@@ -250,15 +276,8 @@ export async function fulfillWaitlistOfferFromInboundYes(
         ? String(offer.followUpServiceName).trim()
         : "המשך טיפול");
 
-    const p2s = phases.phase2StartAt;
-    const phase2DateStr =
-      p2s.getFullYear() +
-      "-" +
-      String(p2s.getMonth() + 1).padStart(2, "0") +
-      "-" +
-      String(p2s.getDate()).padStart(2, "0");
-    const phase2TimeStr =
-      String(p2s.getHours()).padStart(2, "0") + ":" + String(p2s.getMinutes()).padStart(2, "0");
+    const phase2DateStr = formatInTimeZone(phases.phase2StartAt, siteTz, "yyyy-MM-dd");
+    const phase2TimeStr = formatInTimeZone(phases.phase2StartAt, siteTz, "HH:mm");
 
     await col.add({
       siteId,
@@ -288,6 +307,8 @@ export async function fulfillWaitlistOfferFromInboundYes(
       priceSource: null,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      bookingSource: "waitlist",
+      skipCustomerConfirmation: true,
     });
   }
 
@@ -314,7 +335,7 @@ export async function fulfillWaitlistOfferFromInboundYes(
     console.error("[bookingWaitlist] onBookingCreated failed (booking still saved)", e);
   }
 
-  const { dateStr, timeStr } = formatIsraelDateTime(phases.phase1StartAt);
+  const { dateStr, timeStr } = formatIsraelDateTime(startAt);
   const confirmReply =
     `מעולה — התור נקבע ל-${dateStr} בשעה ${timeStr} ל${entry.serviceName || offer.serviceName}. מצפים לראות אתכם!`;
 

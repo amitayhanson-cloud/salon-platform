@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import type { SiteConfig } from "@/types/siteConfig";
-import { defaultThemeColors } from "@/types/siteConfig";
+import type { SiteConfig, ThemePalette } from "@/types/siteConfig";
+import { defaultThemePalette } from "@/types/siteConfig";
+import { resolveThemePalette, resolveVisualTheme } from "@/lib/themePalette";
 import { useSiteConfig } from "@/hooks/useSiteConfig";
 import { AdminPageHero } from "@/components/admin/AdminPageHero";
 import { AdminCard } from "@/components/admin/AdminCard";
@@ -59,6 +60,21 @@ const salonTypeLabels: Record<SiteConfig["salonType"], string> = {
 
 
 
+const PALETTE_GROUPS: { title: string; keys: (keyof ThemePalette)[] }[] = [
+  { title: "מותג ודגשים", keys: ["primary", "secondary"] },
+  { title: "רקעים", keys: ["background", "headerFooter"] },
+  { title: "פעולות ואייקונים", keys: ["cta", "icons"] },
+];
+
+const PALETTE_LABELS: Record<keyof ThemePalette, { label: string; description: string }> = {
+  primary: { label: "דגש ראשי / מותג", description: "כותרות משנה, מסגרות דגושות" },
+  secondary: { label: "משני ומסגרות", description: "גבולות ורקעים עדינים" },
+  background: { label: "רקע העמוד", description: "הרקע הכללי של האתר" },
+  headerFooter: { label: "כותרת ופוטר", description: "פס עליון ותחתון" },
+  cta: { label: "כפתורי פעולה", description: "למשל קביעת תור" },
+  icons: { label: "אייקונים", description: "אייקונים בגלישה" },
+};
+
 export function AdminColorsTab({
   siteConfig,
   onChange,
@@ -70,69 +86,46 @@ export function AdminColorsTab({
   onSave: () => void;
   isSaving: boolean;
 }) {
-  const currentTheme = siteConfig.themeColors || defaultThemeColors;
-  const [themeColors, setThemeColors] = useState(currentTheme);
+  const [palette, setPalette] = useState<ThemePalette>(() => resolveThemePalette(siteConfig));
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Sync with siteConfig changes
   useEffect(() => {
-    setThemeColors(siteConfig.themeColors || defaultThemeColors);
-  }, [siteConfig.themeColors]);
+    setPalette(resolveThemePalette(siteConfig));
+  }, [siteConfig]);
 
-  // Validate hex color format
-  const isValidHex = (color: string): boolean => {
-    return /^#[0-9A-Fa-f]{6}$/.test(color);
-  };
+  const isValidHex = (color: string): boolean => /^#[0-9A-Fa-f]{6}$/.test(color);
 
-  const updateColor = (key: keyof typeof themeColors, value: string) => {
-    const newColors = { ...themeColors, [key]: value };
-    setThemeColors(newColors);
-    
-    // Validate
+  const updateColor = (key: keyof ThemePalette, value: string) => {
+    const next = { ...palette, [key]: value };
+    setPalette(next);
     if (!isValidHex(value)) {
       setErrors((prev) => ({ ...prev, [key]: "צבע לא תקין. השתמש בפורמט #RRGGBB" }));
     } else {
       setErrors((prev) => {
-        const next = { ...prev };
-        delete next[key];
-        return next;
+        const n = { ...prev };
+        delete n[key];
+        return n;
       });
     }
-    
-    // Update config immediately
-    onChange({ themeColors: newColors });
+    onChange({ themePalette: next });
   };
 
   const restoreDefaults = () => {
-    setThemeColors(defaultThemeColors);
+    setPalette(defaultThemePalette);
     setErrors({});
-    onChange({ themeColors: defaultThemeColors });
+    onChange({ themePalette: defaultThemePalette });
   };
 
   const hasErrors = Object.keys(errors).length > 0;
-
-  const colorFields: Array<{
-    key: keyof typeof themeColors;
-    label: string;
-    description: string;
-  }> = [
-    { key: "background", label: "רקע כללי", description: "רקע העמוד הראשי" },
-    { key: "surface", label: "רקע כרטיסים", description: "רקע של כרטיסים ותיבות" },
-    { key: "text", label: "טקסט ראשי", description: "צבע הטקסט העיקרי" },
-    { key: "mutedText", label: "טקסט משני", description: "צבע טקסט משני/מובלע" },
-    { key: "primary", label: "צבע ראשי", description: "כפתורים והדגשות" },
-    { key: "primaryText", label: "טקסט על ראשי", description: "טקסט על רקע ראשי" },
-    { key: "accent", label: "צבע דגש", description: "דגשים קטנים, גבולות" },
-    { key: "border", label: "צבע גבול", description: "גבולות של תיבות" },
-  ];
+  const preview = resolveVisualTheme({ ...siteConfig, themePalette: palette });
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-6 text-right space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">צבעי האתר</h2>
+          <h2 className="text-xl font-bold text-slate-900">ערכת צבעים</h2>
           <p className="text-xs text-slate-500 mt-1">
-            התאם את צבעי האתר לפי העדפותיך. השינויים יופיעו מיד לאחר השמירה.
+            צבעים מרכזיים לאתר. לעריכת תוכן ותמונות השתמשו ב&quot;עיצוב האתר&quot; (עורך חזותי).
           </p>
         </div>
         <div className="flex gap-3">
@@ -165,92 +158,94 @@ export function AdminColorsTab({
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {colorFields.map((field) => {
-          const value = themeColors[field.key];
-          const hasError = !!errors[field.key];
-          return (
-            <div key={field.key} className="space-y-2">
-              <label className="block text-sm font-medium text-slate-700">
-                {field.label}
-              </label>
-              <p className="text-xs text-slate-500">{field.description}</p>
-              <div className="flex items-center gap-3">
-                <input
-                  type="color"
-                  value={value}
-                  onChange={(e) => updateColor(field.key, e.target.value)}
-                  className="w-16 h-10 rounded-lg border border-slate-300 cursor-pointer"
-                />
-                <input
-                  type="text"
-                  value={value}
-                  onChange={(e) => updateColor(field.key, e.target.value)}
-                  className={`flex-1 rounded-lg border px-3 py-2 text-right text-sm font-mono focus:outline-none focus:ring-2 ${
-                    hasError
-                      ? "border-red-300 focus:ring-red-500 focus:border-red-500"
-                      : "border-slate-300 focus:ring-caleno-deep focus:border-caleno-deep"
-                  }`}
-                  placeholder="#RRGGBB"
-                />
-              </div>
-              {hasError && (
-                <p className="text-xs text-red-600">{errors[field.key]}</p>
-              )}
+      <div className="space-y-8">
+        {PALETTE_GROUPS.map((g) => (
+          <div key={g.title}>
+            <h3 className="text-sm font-semibold text-slate-800 mb-3">{g.title}</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {g.keys.map((key) => {
+                const value = palette[key];
+                const meta = PALETTE_LABELS[key];
+                const hasError = !!errors[key];
+                return (
+                  <div key={key} className="space-y-2">
+                    <label className="block text-sm font-medium text-slate-700">{meta.label}</label>
+                    <p className="text-xs text-slate-500">{meta.description}</p>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="color"
+                        value={value}
+                        onChange={(e) => updateColor(key, e.target.value)}
+                        className="w-16 h-10 rounded-lg border border-slate-300 cursor-pointer"
+                      />
+                      <input
+                        type="text"
+                        value={value}
+                        onChange={(e) => updateColor(key, e.target.value)}
+                        className={`flex-1 rounded-lg border px-3 py-2 text-right text-sm font-mono focus:outline-none focus:ring-2 ${
+                          hasError
+                            ? "border-red-300 focus:ring-red-500 focus:border-red-500"
+                            : "border-slate-300 focus:ring-caleno-deep focus:border-caleno-deep"
+                        }`}
+                        placeholder="#RRGGBB"
+                      />
+                    </div>
+                    {hasError && <p className="text-xs text-red-600">{errors[key]}</p>}
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
 
-      {/* Preview section */}
       <div className="mt-6 pt-6 border-t border-slate-200">
         <h3 className="text-sm font-semibold text-slate-900 mb-4">תצוגה מקדימה</h3>
         <div
           className="rounded-2xl p-6 border-2"
           style={{
-            backgroundColor: themeColors.background,
-            borderColor: themeColors.border,
+            backgroundColor: preview.background,
+            borderColor: preview.secondary,
           }}
         >
           <div
             className="rounded-xl p-4 mb-4"
             style={{
-              backgroundColor: themeColors.surface,
-              borderColor: themeColors.border,
+              backgroundColor: preview.surface,
+              borderColor: preview.secondary,
               borderWidth: "1px",
             }}
           >
-            <h4
-              className="text-lg font-semibold mb-2"
-              style={{ color: themeColors.text }}
-            >
+            <h4 className="text-lg font-semibold mb-2" style={{ color: preview.foreground }}>
               כותרת דוגמה
             </h4>
-            <p
-              className="text-sm mb-3"
-              style={{ color: themeColors.mutedText }}
-            >
+            <p className="text-sm mb-3" style={{ color: preview.mutedForeground }}>
               זהו טקסט משני לדוגמה
             </p>
             <button
               type="button"
               className="px-4 py-2 rounded-lg font-medium"
               style={{
-                backgroundColor: themeColors.primary,
-                color: themeColors.primaryText,
+                backgroundColor: preview.cta,
+                color: preview.ctaText,
               }}
             >
-              כפתור דוגמה
+              קביעת תור
             </button>
           </div>
           <div
-            className="inline-block px-3 py-1 rounded-full text-xs font-medium"
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium"
             style={{
-              backgroundColor: themeColors.accent,
-              color: themeColors.primaryText,
+              backgroundColor: preview.headerFooter,
+              color: preview.foreground,
+              borderWidth: 1,
+              borderColor: preview.secondary,
             }}
           >
-            תג דגש
+            <span style={{ color: preview.icons }} aria-hidden>
+              ●
+            </span>
+            פס כותרת / פוטר
           </div>
         </div>
       </div>

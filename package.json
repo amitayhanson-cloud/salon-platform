@@ -24,7 +24,8 @@
     "deep-clean-site:execute": "tsx scripts/deepCleanSingleSite.ts --execute",
     "create-hair1-template": "tsx scripts/createHair1TemplateFromSite.ts",
     "migrate-sites-to-hair1": "tsx scripts/migrateSitesToHair1.ts",
-    "verify-template-refactor": "tsx scripts/verifyTemplateRefactor.ts"
+    "verify-template-refactor": "tsx scripts/verifyTemplateRefactor.ts",
+    "seed-template-test-sites": "NODE_ENV=development tsx scripts/seedTemplateTestSites.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

@@ -1,6 +1,12 @@
 import type { SiteConfig } from "@/types/siteConfig";
 import { BaseSalonTemplate } from "./BaseSalonTemplate";
 
+export {
+  BUILDER_PUBLIC_TEMPLATES,
+  isPublicSiteTemplateId,
+} from "./builderPublicTemplates";
+export type { PublicSiteTemplateId } from "@/types/siteConfig";
+
 export type SalonTemplateId = "base-salon-1";
 
 export type SalonTemplateComponent = React.ComponentType<{

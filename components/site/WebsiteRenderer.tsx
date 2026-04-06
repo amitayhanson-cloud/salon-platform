@@ -3,6 +3,7 @@
 import type { SiteConfig, SiteService } from "@/types/siteConfig";
 import { getTemplateByKey } from "@/lib/templateLibrary";
 import HairLuxurySite from "@/app/(site)/site/[siteId]/HairLuxurySite";
+import { themePaletteRootStyle } from "@/lib/themePalette";
 
 export type WebsiteRendererMode = "public" | "preview" | "editor";
 
@@ -32,25 +33,29 @@ export default function WebsiteRenderer({
   switch (templateKey) {
     case "hair1":
       return (
-        <HairLuxurySite
-          config={siteConfig}
-          template={template}
-          siteId={siteId}
-          services={services}
-          editorMode={editorMode}
-        />
+        <div className="min-h-full w-full" style={themePaletteRootStyle(siteConfig)}>
+          <HairLuxurySite
+            config={siteConfig}
+            template={template}
+            siteId={siteId}
+            services={services}
+            editorMode={editorMode}
+          />
+        </div>
       );
     // Future: case "hair2": return <Hair2Site ... />;
     // Future: case "barber1": return <Barber1Site ... />;
     default:
       return (
-        <HairLuxurySite
-          config={siteConfig}
-          template={template}
-          siteId={siteId}
-          services={services}
-          editorMode={editorMode}
-        />
+        <div className="min-h-full w-full" style={themePaletteRootStyle(siteConfig)}>
+          <HairLuxurySite
+            config={siteConfig}
+            template={template}
+            siteId={siteId}
+            services={services}
+            editorMode={editorMode}
+          />
+        </div>
       );
   }
 }

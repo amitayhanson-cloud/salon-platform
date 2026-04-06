@@ -16,40 +16,34 @@ const NAV_IDS = [
 const LOGO_HEIGHT = 44;
 
 const EDITOR_ATTRS = {
-  headerBg: {
-    "data-edit-id": "headerBg",
-    "data-edit-kind": "color",
-    "data-edit-paths": '["sectionStyles.header.bg"]',
-    "data-edit-label": "רקע כותרת",
-  },
   headerText: {
     "data-edit-id": "headerText",
     "data-edit-kind": "text",
-    "data-edit-paths": '["content.header.brandName","sectionStyles.header.text"]',
+    "data-edit-paths": '["content.header.brandName"]',
     "data-edit-label": "שם הסלון בכותרת",
   },
   headerNavAbout: {
     "data-edit-id": "headerNavLink",
     "data-edit-kind": "text",
-    "data-edit-paths": '["content.header.navAbout","sectionStyles.header.link"]',
+    "data-edit-paths": '["content.header.navAbout"]',
     "data-edit-label": "קישור אודות",
   },
   headerNavServices: {
     "data-edit-id": "headerNavLink",
     "data-edit-kind": "text",
-    "data-edit-paths": '["content.header.navServices","sectionStyles.header.link"]',
+    "data-edit-paths": '["content.header.navServices"]',
     "data-edit-label": "קישור שירותים",
   },
   headerNavGallery: {
     "data-edit-id": "headerNavLink",
     "data-edit-kind": "text",
-    "data-edit-paths": '["content.header.navGallery","sectionStyles.header.link"]',
+    "data-edit-paths": '["content.header.navGallery"]',
     "data-edit-label": "קישור גלריה",
   },
   headerCtaButton: {
     "data-edit-id": "headerCtaButton",
     "data-edit-kind": "button",
-    "data-edit-paths": '["content.header.navCtaBook","content.header.navCtaContact","sectionStyles.header.primaryBtnBg","sectionStyles.header.primaryBtnText"]',
+    "data-edit-paths": '["content.header.navCtaBook","content.header.navCtaContact"]',
     "data-edit-label": "כפתור קביעת תור בכותרת",
   },
 } as const;
@@ -151,7 +145,6 @@ export default function SalonHeader({
         dir="rtl"
         className="relative z-20 w-full max-w-6xl text-right transition-[background,backdrop-filter] rounded-full border border-white/25 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.12),0_0_0_1px_rgba(255,255,255,0.35)_inset] backdrop-blur-xl"
         style={headerStyle}
-        {...edit("headerBg")}
       >
         {/* Mobile: hamburger fixed left edge of pill; logo/name fixed right (same as desktop col3) */}
         <div className="relative h-16 max-w-6xl mx-auto md:hidden px-4 lg:px-8">
@@ -178,21 +171,38 @@ export default function SalonHeader({
             {...(showLogoImage ? {} : edit("headerText"))}
           >
             {showLogoImage ? (
-              <Link
-                href={getSiteUrl(slug, siteId, "")}
-                className="flex shrink-0 items-center rounded-full focus:outline-none focus-visible:bg-white/10 active:outline-none"
-                style={{ height: LOGO_HEIGHT }}
-                aria-label={logoAltResolved || "דף הבית"}
-              >
-                <img
-                  src={logoUrl!}
-                  alt=""
-                  role="presentation"
-                  onError={() => setLogoLoadFailed(true)}
-                  className="h-full w-auto object-contain"
-                  style={{ height: LOGO_HEIGHT, maxHeight: LOGO_HEIGHT }}
-                />
-              </Link>
+              editorMode ? (
+                <span
+                  className="flex shrink-0 items-center rounded-full"
+                  style={{ height: LOGO_HEIGHT }}
+                  aria-hidden
+                >
+                  <img
+                    src={logoUrl!}
+                    alt=""
+                    role="presentation"
+                    onError={() => setLogoLoadFailed(true)}
+                    className="h-full w-auto object-contain"
+                    style={{ height: LOGO_HEIGHT, maxHeight: LOGO_HEIGHT }}
+                  />
+                </span>
+              ) : (
+                <Link
+                  href={getSiteUrl(slug, siteId, "")}
+                  className="flex shrink-0 items-center rounded-full focus:outline-none focus-visible:bg-white/10 active:outline-none"
+                  style={{ height: LOGO_HEIGHT }}
+                  aria-label={logoAltResolved || "דף הבית"}
+                >
+                  <img
+                    src={logoUrl!}
+                    alt=""
+                    role="presentation"
+                    onError={() => setLogoLoadFailed(true)}
+                    className="h-full w-auto object-contain"
+                    style={{ height: LOGO_HEIGHT, maxHeight: LOGO_HEIGHT }}
+                  />
+                </Link>
+              )
             ) : (
               <span
                 dir="rtl"
@@ -269,21 +279,38 @@ export default function SalonHeader({
 
           <div className="flex min-w-0 items-center justify-end">
             {showLogoImage ? (
-              <Link
-                href={getSiteUrl(slug, siteId, "")}
-                className="flex shrink-0 items-center rounded-full focus:outline-none focus-visible:bg-white/10 active:outline-none"
-                style={{ height: LOGO_HEIGHT }}
-                aria-label={logoAltResolved || "דף הבית"}
-              >
-                <img
-                  src={logoUrl!}
-                  alt=""
-                  role="presentation"
-                  onError={() => setLogoLoadFailed(true)}
-                  className="h-full w-auto object-contain"
-                  style={{ height: LOGO_HEIGHT, maxHeight: LOGO_HEIGHT }}
-                />
-              </Link>
+              editorMode ? (
+                <span
+                  className="flex shrink-0 items-center rounded-full"
+                  style={{ height: LOGO_HEIGHT }}
+                  aria-hidden
+                >
+                  <img
+                    src={logoUrl!}
+                    alt=""
+                    role="presentation"
+                    onError={() => setLogoLoadFailed(true)}
+                    className="h-full w-auto object-contain"
+                    style={{ height: LOGO_HEIGHT, maxHeight: LOGO_HEIGHT }}
+                  />
+                </span>
+              ) : (
+                <Link
+                  href={getSiteUrl(slug, siteId, "")}
+                  className="flex shrink-0 items-center rounded-full focus:outline-none focus-visible:bg-white/10 active:outline-none"
+                  style={{ height: LOGO_HEIGHT }}
+                  aria-label={logoAltResolved || "דף הבית"}
+                >
+                  <img
+                    src={logoUrl!}
+                    alt=""
+                    role="presentation"
+                    onError={() => setLogoLoadFailed(true)}
+                    className="h-full w-auto object-contain"
+                    style={{ height: LOGO_HEIGHT, maxHeight: LOGO_HEIGHT }}
+                  />
+                </Link>
+              )
             ) : (
               <span className="w-0" aria-hidden />
             )}
@@ -308,22 +335,39 @@ export default function SalonHeader({
             }}
           >
           {showLogoImage ? (
-            <Link
-              href={getSiteUrl(slug, siteId, "")}
-              onClick={() => setMobileMenuOpen(false)}
-              className="flex justify-start rounded-full py-3 focus:outline-none focus-visible:bg-white/10 active:outline-none"
-              style={{ height: LOGO_HEIGHT }}
-              aria-label={logoAltResolved || "דף הבית"}
-            >
-              <img
-                src={logoUrl!}
-                alt=""
-                role="presentation"
-                onError={() => setLogoLoadFailed(true)}
-                className="h-full w-auto object-contain object-left max-w-full"
-                style={{ height: LOGO_HEIGHT, maxHeight: LOGO_HEIGHT }}
-              />
-            </Link>
+            editorMode ? (
+              <span
+                className="flex justify-start rounded-full py-3"
+                style={{ height: LOGO_HEIGHT }}
+                aria-hidden
+              >
+                <img
+                  src={logoUrl!}
+                  alt=""
+                  role="presentation"
+                  onError={() => setLogoLoadFailed(true)}
+                  className="h-full w-auto object-contain object-left max-w-full"
+                  style={{ height: LOGO_HEIGHT, maxHeight: LOGO_HEIGHT }}
+                />
+              </span>
+            ) : (
+              <Link
+                href={getSiteUrl(slug, siteId, "")}
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex justify-start rounded-full py-3 focus:outline-none focus-visible:bg-white/10 active:outline-none"
+                style={{ height: LOGO_HEIGHT }}
+                aria-label={logoAltResolved || "דף הבית"}
+              >
+                <img
+                  src={logoUrl!}
+                  alt=""
+                  role="presentation"
+                  onError={() => setLogoLoadFailed(true)}
+                  className="h-full w-auto object-contain object-left max-w-full"
+                  style={{ height: LOGO_HEIGHT, maxHeight: LOGO_HEIGHT }}
+                />
+              </Link>
+            )
           ) : (
             <p className="py-3 text-right text-lg font-semibold" style={{ color: textColor }}>
               {salonName}

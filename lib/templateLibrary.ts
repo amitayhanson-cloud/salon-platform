@@ -67,9 +67,50 @@ export function getTemplateForConfig(
 /** Template key used in sites and preview (e.g. "hair1", "barber1"). */
 export type TemplateKey = "hair1" | "hair2" | "barber1" | "nails1";
 
+const barberLuxuryTemplate: TemplateDefinition = {
+  id: "barber_luxury_v1",
+  category: "barber",
+  style: "luxury",
+  assets: {
+    colors: {
+      background: "#1a1a1a",
+      surface: "#1f1f1f",
+      primary: "#d4a853",
+      secondary: "#8b4513",
+      textOnDark: "#f5f5f0",
+      textOnLight: "#1a1a1a",
+    },
+    images: {
+      hero: [],
+      gallery: [],
+    },
+  },
+};
+
+const vogueNailsTemplate: TemplateDefinition = {
+  id: "vogue_nails_v1",
+  category: "nails",
+  style: "luxury",
+  assets: {
+    colors: {
+      background: "#faf8f3",
+      surface: "#f0ebe5",
+      primary: "#c4788c",
+      secondary: "#9cb4c8",
+      textOnDark: "#faf8f3",
+      textOnLight: "#2d1f26",
+    },
+    images: {
+      hero: [],
+      gallery: [],
+    },
+  },
+};
+
 const TEMPLATE_MAP: Record<string, TemplateDefinition> = {
   hair1: hairLuxuryTemplate,
-  // Future: hair2, barber1, nails1, etc.
+  barber1: barberLuxuryTemplate,
+  nails1: vogueNailsTemplate,
 };
 
 /**

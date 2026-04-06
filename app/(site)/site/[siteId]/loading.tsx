@@ -1,9 +1,9 @@
-import { LiquidGlassLoading } from "@/components/landing-v2/liquid-glass-loading";
+import { TenantInlineLoading } from "@/components/navigation/TenantInlineLoading";
 
 /**
- * Fallback while a new segment under /site/[siteId]/… loads (e.g. / → /book).
- * Logo-specific feedback is handled by NavigationLoadingLayer on link clicks.
+ * Fallback while a new segment under /site/[siteId]/… loads.
+ * Neutral spinner only — avoids Caleno branding inside tenant admin / editor preview.
  */
 export default function SiteIdSegmentLoading() {
-  return <LiquidGlassLoading variant="inline" />;
+  return <TenantInlineLoading />;
 }

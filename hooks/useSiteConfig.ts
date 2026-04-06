@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState, useRef, useMemo } from "react";
-import type { SiteConfig } from "@/types/siteConfig";
-import { defaultSiteConfig } from "@/types/siteConfig";
+import type { SiteConfig, ThemePalette } from "@/types/siteConfig";
+import { defaultSiteConfig, defaultThemePalette } from "@/types/siteConfig";
 import { normalizeServices } from "@/lib/normalizeServices";
 import { defaultThemeColors } from "@/types/siteConfig";
 import { saveSiteConfig, subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
@@ -10,6 +10,12 @@ import { saveSiteConfig, subscribeSiteConfig } from "@/lib/firestoreSiteConfig";
 function mergeWithDefaults(loaded: Record<string, unknown>): SiteConfig {
   const merged = { ...defaultSiteConfig, ...loaded };
   if (!merged.themeColors) merged.themeColors = defaultThemeColors;
+  merged.themePalette = {
+    ...defaultThemePalette,
+    ...(typeof merged.themePalette === "object" && merged.themePalette
+      ? (merged.themePalette as ThemePalette)
+      : {}),
+  };
   return merged as SiteConfig;
 }
 
@@ -58,7 +64,11 @@ export function useSiteConfig(siteId: string) {
       siteId,
       (cfg) => {
         if (cfg) {
-          const withTheme = { ...cfg, themeColors: cfg.themeColors || defaultThemeColors };
+          const withTheme: SiteConfig = {
+            ...cfg,
+            themeColors: cfg.themeColors || defaultThemeColors,
+            themePalette: { ...defaultThemePalette, ...cfg.themePalette },
+          };
           setSiteConfig(withTheme);
           lastSavedRef.current = JSON.stringify(withTheme);
           userHasEditedRef.current = false;

@@ -4,6 +4,12 @@ export type MainGoal =
   | "show_photos"
   | "info_only";
 
+/** Public marketing site skin (builder picker + live site). */
+export type PublicSiteTemplateId =
+  | "hair-luxury"
+  | "gentlemans-barber"
+  | "vogue-nails";
+
 export type ReviewItem = {
   id: string;
   name: string;
@@ -200,9 +206,27 @@ export type SiteService = {
   finishGapMinutes?: number;
 };
 
+/** Centralized marketing-site colors (single palette drives templates). */
+export type ThemePalette = {
+  /** Main accents and branding */
+  primary: string;
+  /** Subtle accents and borders */
+  secondary: string;
+  /** Main page background */
+  background: string;
+  /** Header and footer chrome */
+  headerFooter: string;
+  /** High-conversion CTAs (e.g. Book Now) */
+  cta: string;
+  /** Icon strokes (Lucide, etc.) */
+  icons: string;
+};
+
 export type SiteConfig = {
   /** Tenant subdomain slug (e.g. "alice" → alice.caleno.co). Set when tenant is created. */
   slug?: string | null;
+  /** Which public landing template to render. Defaults to hair-luxury when missing (legacy sites). */
+  publicSiteTemplateId?: PublicSiteTemplateId;
   salonName: string;
   /** Name shown in the admin dashboard greeting ("ברוך שובך – ..."). */
   adminDisplayName?: string;
@@ -247,6 +271,8 @@ export type SiteConfig = {
     accent: string; // small accents (borders, chips)
     border: string; // border color
   };
+  /** Central palette; when missing, derived from themeColors for legacy sites. */
+  themePalette?: ThemePalette;
   /** Per-section color overrides. Missing keys fall back to themeColors. */
   sectionStyles?: SectionStyles;
   /** Editable text content per section. Single source of truth for preview. */
@@ -293,9 +319,19 @@ export const defaultThemeColors = {
   border: "#e2e8f0",
 };
 
+export const defaultThemePalette: ThemePalette = {
+  primary: defaultThemeColors.primary,
+  secondary: defaultThemeColors.border,
+  background: defaultThemeColors.background,
+  headerFooter: defaultThemeColors.surface,
+  cta: defaultThemeColors.primary,
+  icons: defaultThemeColors.accent,
+};
+
 export const defaultSiteConfig: SiteConfig = {
   salonName: "",
   adminDisplayName: "",
+  publicSiteTemplateId: "hair-luxury",
   salonType: "hair",
   city: "", // Deprecated - kept for backward compatibility
   neighborhood: "", // Deprecated - kept for backward compatibility
@@ -318,6 +354,7 @@ export const defaultSiteConfig: SiteConfig = {
   faqs: [],
   servicePricing: {},
   themeColors: defaultThemeColors,
+  themePalette: defaultThemePalette,
   dividerStyle: "wave",
   dividerHeight: 48,
   showProductsSection: false,
