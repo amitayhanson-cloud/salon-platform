@@ -975,6 +975,59 @@ export function segmentDurationMin(seg: FreedBookingSlot): number {
   return Math.max(1, Math.round(Number(seg.primaryDurationMin ?? seg.durationMin ?? 60)));
 }
 
+/** Minutes of primary-column gap remaining from `pointerMs` until the end of `rootSlot`'s primary span. */
+export function remainingPrimaryGapMinutesFromPointer(
+  rootSlot: FreedBookingSlot,
+  pointerMs: number,
+  siteTz: string
+): number {
+  const gapStartMs = wallInstantMs(rootSlot.dateYmd, rootSlot.timeHHmm, siteTz);
+  if (gapStartMs == null) return 0;
+  const sp = Math.max(1, Math.round(Number(rootSlot.primaryDurationMin ?? rootSlot.durationMin ?? 60)));
+  const gapEndMs = gapStartMs + sp * 60_000;
+  return Math.max(0, Math.floor((gapEndMs - pointerMs) / 60_000));
+}
+
+/**
+ * Next UTC instant on the primary worker column after this visit (primary end, or follow-up end if phase 2 uses the same worker).
+ */
+export function nextPointerMsAfterPackedVisit(
+  entry: Pick<BookingWaitlistEntry, "primaryDurationMin" | "waitMinutes" | "followUpDurationMin">,
+  capacity: FreedBookingSlot,
+  siteTz: string
+): number | null {
+  const startMs = wallInstantMs(capacity.dateYmd, capacity.timeHHmm, siteTz);
+  if (startMs == null) return null;
+  const ep = Math.max(1, Math.round(Number(entry.primaryDurationMin ?? 60)));
+  const ew = Math.max(0, Math.round(Number(entry.waitMinutes ?? 0)));
+  const ef = Math.max(0, Math.round(Number(entry.followUpDurationMin ?? 0)));
+  const primaryWid = capacity.workerId?.trim() || "";
+  const fuWid =
+    ef > 0
+      ? capacity.followUpWorkerId != null && String(capacity.followUpWorkerId).trim() !== ""
+        ? String(capacity.followUpWorkerId).trim()
+        : primaryWid
+      : "";
+
+  const endPrimaryMs = startMs + ep * 60_000;
+  if (ef <= 0 || fuWid !== primaryWid) {
+    return endPrimaryMs;
+  }
+
+  const p2 = addWallMinutesInTimezone(
+    capacity.dateYmd,
+    normalizeHHmm(capacity.timeHHmm),
+    ep + ew,
+    siteTz
+  );
+  if (!p2) {
+    return endPrimaryMs + ew * 60_000 + ef * 60_000;
+  }
+  const p2StartMs = wallInstantMs(p2.dateYmd, p2.timeHHmm, siteTz);
+  if (p2StartMs == null) return null;
+  return p2StartMs + ef * 60_000;
+}
+
 export function sortFreedSlotsByWallTime(segments: FreedBookingSlot[], timeZone: string): FreedBookingSlot[] {
   return [...segments].sort((a, b) => {
     const ma = wallInstantMs(a.dateYmd, a.timeHHmm, timeZone);

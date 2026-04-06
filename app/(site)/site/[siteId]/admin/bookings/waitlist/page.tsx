@@ -12,6 +12,7 @@ import { AdminCard } from "@/components/admin/AdminCard";
 import CalenoLoading from "@/components/CalenoLoading";
 import { formatTimePreferenceLabelsHe } from "@/lib/bookingWaitlist/timeBuckets";
 import { WaitlistEntryDeleteButton } from "@/components/admin/WaitlistEntryDeleteButton";
+import { isWaitlistAdminVisibleStatus } from "@/lib/bookingWaitlist/waitlistStatus";
 
 type Row = {
   id: string;
@@ -49,21 +50,23 @@ export default function BookingWaitlistAdminPage() {
       q,
       (snap) => {
         setRows(
-          snap.docs.map((d) => {
-            const x = d.data();
-            return {
-              id: d.id,
-              customerName: String(x.customerName ?? ""),
-              customerPhoneE164: String(x.customerPhoneE164 ?? ""),
-              serviceName: String(x.serviceName ?? ""),
-              preferredDateYmd: (x.preferredDateYmd as string) || null,
-              queuePositionForDay:
-                typeof x.queuePositionForDay === "number" && Number.isFinite(x.queuePositionForDay)
-                  ? x.queuePositionForDay
-                  : null,
-              timePreferenceLabel: formatTimePreferenceLabelsHe(x.timePreference),
-            };
-          })
+          snap.docs
+            .filter((d) => isWaitlistAdminVisibleStatus(String((d.data() as { status?: string }).status ?? "")))
+            .map((d) => {
+              const x = d.data();
+              return {
+                id: d.id,
+                customerName: String(x.customerName ?? ""),
+                customerPhoneE164: String(x.customerPhoneE164 ?? ""),
+                serviceName: String(x.serviceName ?? ""),
+                preferredDateYmd: (x.preferredDateYmd as string) || null,
+                queuePositionForDay:
+                  typeof x.queuePositionForDay === "number" && Number.isFinite(x.queuePositionForDay)
+                    ? x.queuePositionForDay
+                    : null,
+                timePreferenceLabel: formatTimePreferenceLabelsHe(x.timePreference),
+              };
+            })
         );
         setError(null);
         setLoading(false);

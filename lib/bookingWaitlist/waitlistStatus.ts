@@ -8,6 +8,13 @@ export type WaitlistWaitingStatus = (typeof WAITLIST_WAITING_STATUSES)[number];
 export const WAITLIST_PENDING_OFFER_STATUSES = ["pending_offer", "notified"] as const;
 export type WaitlistPendingOfferStatus = (typeof WAITLIST_PENDING_OFFER_STATUSES)[number];
 
+/** Admin waitlist lists: hide completed / withdrawn rows (docs may remain until nightly cleanup). */
+export const WAITLIST_ADMIN_VISIBLE_STATUSES = ["waiting", "active", "notified", "pending_offer"] as const;
+
+export function isWaitlistAdminVisibleStatus(s: string | undefined | null): boolean {
+  return s != null && (WAITLIST_ADMIN_VISIBLE_STATUSES as readonly string[]).includes(s);
+}
+
 export function isWaitlistWaitingStatus(s: string | undefined | null): boolean {
   return s != null && (WAITLIST_WAITING_STATUSES as readonly string[]).includes(s);
 }

@@ -32,6 +32,7 @@ import { skipPostBookingConfirmationBecauseReminderCovers } from "@/lib/whatsapp
 import { getPublicBookingPageAbsoluteUrlForSite, withTrackingSource } from "@/lib/url";
 import { getDateYMDInTimezone } from "@/lib/expiredCleanupUtils";
 import { refreshClientAutomatedStatusFromBooking } from "@/lib/server/clientAutomatedStatus";
+import { markWaitlistEntriesBookedForNewBooking } from "@/lib/bookingWaitlist/resolveWaitlistAfterBooking";
 import { buildWazeUrlFromAddress } from "@/lib/whatsapp/businessWaze";
 import { buildAppointmentReminderTemplateVariables } from "@/lib/whatsapp/appointmentReminderTemplateVariables";
 import { formatInTimeZone, getTimezoneOffset } from "date-fns-tz";
@@ -104,6 +105,12 @@ export async function onBookingCreated(siteId: string, bookingId: string): Promi
     await refreshClientAutomatedStatusFromBooking(db, resolvedSiteIdForStatus, data as Record<string, unknown>);
   } catch (e) {
     console.warn("[onBookingCreated] refreshClientAutomatedStatusFromBooking", e);
+  }
+
+  try {
+    await markWaitlistEntriesBookedForNewBooking(db, siteId, bookingId, data as Record<string, unknown>);
+  } catch (e) {
+    console.warn("[onBookingCreated] markWaitlistEntriesBookedForNewBooking", e);
   }
 
   const phoneResult = getBookingPhoneE164(data as Record<string, unknown>, "IL");

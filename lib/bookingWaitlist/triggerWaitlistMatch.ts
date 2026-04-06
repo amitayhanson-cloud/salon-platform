@@ -1,7 +1,8 @@
 /**
  * Time-aware waitlist matching: site TZ buckets, slot lock, WhatsApp template (Content v2 env),
  * status `pending_offer` (legacy reads still accept `notified`).
- * Greedy multi-offer: packs several waitlist customers into one cancellation when wall time allows.
+ * Greedy multi-offer: horizon pointer-pack (non-overlapping sub-slots on the primary column), then
+ * probe/segment fallback, until wall time is exhausted or {@link MAX_PACK_OFFERS_PER_RUN}.
  */
 
 import { randomBytes } from "node:crypto";
@@ -40,6 +41,9 @@ import {
   type BusyIntervalMs,
   type WaitlistSlotMatchOptions,
   trySlideWaitlistCapacitySliceForStrictTime,
+  waitlistEntryFitsFreedStructure,
+  remainingPrimaryGapMinutesFromPointer,
+  nextPointerMsAfterPackedVisit,
 } from "./matchService";
 import { fetchBookingSettingsAdmin } from "./bookingSettingsAdmin";
 import { getJsDow, getDayConfig } from "@/lib/scheduleDayMapping";
@@ -103,6 +107,59 @@ function formatHeDate(ymd: string): string {
   const [y, m, d] = ymd.split("-").map(Number);
   if (!y || !m || !d) return ymd;
   return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
+}
+
+function wallClockMs(dateYmd: string, timeHHmm: string, siteTz: string): number | null {
+  const hm = String(timeHHmm ?? "").trim();
+  const h5 = hm.length >= 5 ? hm.slice(0, 5) : hm;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateYmd) || !/^\d{2}:\d{2}$/.test(h5)) return null;
+  try {
+    return fromZonedTime(`${dateYmd}T${h5}:00`, siteTz).getTime();
+  } catch {
+    return null;
+  }
+}
+
+/** Capacity slice for one waitlist entry anchored at the virtual pointer (same shape as cancellation template). */
+function buildEntryAnchoredCapacityAtPointer(
+  rootSlot: FreedBookingSlot,
+  ptrYmd: string,
+  ptrHHmm: string,
+  entry: BookingWaitlistEntry
+): FreedBookingSlot {
+  const ep = Math.max(1, Math.round(Number(entry.primaryDurationMin ?? 60)));
+  const ew = Math.max(0, Math.round(Number(entry.waitMinutes ?? 0)));
+  const ef = Math.max(0, Math.round(Number(entry.followUpDurationMin ?? 0)));
+  const hm = String(ptrHHmm).trim().length >= 5 ? String(ptrHHmm).trim().slice(0, 5) : String(ptrHHmm).trim();
+  const fuWid =
+    ef > 0
+      ? rootSlot.followUpWorkerId != null && String(rootSlot.followUpWorkerId).trim() !== ""
+        ? String(rootSlot.followUpWorkerId).trim()
+        : rootSlot.workerId
+      : null;
+  const fuName =
+    ef > 0 ? rootSlot.followUpWorkerName ?? rootSlot.workerName ?? null : null;
+  const fuSvc =
+    ef > 0
+      ? (entry.followUpServiceName != null && String(entry.followUpServiceName).trim()
+          ? String(entry.followUpServiceName).trim()
+          : rootSlot.followUpServiceName) ?? null
+      : null;
+  return {
+    ...rootSlot,
+    dateYmd: ptrYmd,
+    timeHHmm: hm,
+    durationMin: ep,
+    primaryDurationMin: ep,
+    waitMinutes: ew,
+    followUpDurationMin: ef,
+    followUpWorkerId: fuWid,
+    followUpWorkerName: fuName,
+    followUpServiceName: fuSvc,
+    serviceName: entry.serviceName?.trim() || rootSlot.serviceName,
+    serviceTypeId: entry.serviceTypeId ?? rootSlot.serviceTypeId,
+    serviceId: entry.serviceId ?? rootSlot.serviceId,
+  };
 }
 
 function firestoreTsMs(ts: unknown): number {
@@ -649,6 +706,387 @@ async function findFirstMatchFromProbes(
   return { ok: false, sliceAttempts, probesTried, anySlotLocked };
 }
 
+type DeliverPackOfferParams = {
+  db: Firestore;
+  siteId: string;
+  col: CollectionReference;
+  salonName: string;
+  packRound: number;
+  matchProbe: string;
+  docId: string;
+  data: BookingWaitlistEntry;
+  capacitySlice: FreedBookingSlot;
+  lockId: string;
+  entryIdsNotified: string[];
+  skipLocal: Set<string>;
+  skipPhonesThisGap: Set<string>;
+  segments: FreedBookingSlot[];
+  siteTz: string;
+};
+
+/** Persist offer, WhatsApp, wall-segment carve (shared by probe match + pointer pack). */
+async function deliverWaitlistPackOffer(p: DeliverPackOfferParams): Promise<"ok" | "send_failed"> {
+  const offer = waitlistOfferFromEntryAgainstCapacity(p.data, p.capacitySlice);
+  const now = admin.firestore.Timestamp.now();
+  const expires = admin.firestore.Timestamp.fromMillis(Date.now() + WAITLIST_OFFER_TTL_MS);
+  const offerWebConfirmToken = randomBytes(18).toString("hex");
+
+  await p.col.doc(p.docId).update({
+    status: "pending_offer",
+    offer,
+    offerSentAt: now,
+    offerExpiresAt: expires,
+    offerWebConfirmToken,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  await expireStalePendingOffersForPhone(p.db, p.siteId, p.data.customerPhoneE164, p.docId);
+
+  const dateLabel = formatHeDate(offer.dateYmd);
+  const firstName = p.data.customerName.trim().split(/\s+/)[0] || "שלום";
+  const timeDisp = (() => {
+    const t = offer.timeHHmm.trim();
+    return t.length >= 5 ? t.slice(0, 5) : t;
+  })();
+
+  const logBody =
+    `שלום ${firstName}! התפנה תור ל${p.salonName} בתאריך ${dateLabel} בשעה ${timeDisp}. האם תרצו לשריין אותו?\n(הודעה זו בתוקף לשעתיים בלבד)`;
+
+  try {
+    await sendWhatsApp({
+      toE164: p.data.customerPhoneE164,
+      body: logBody,
+      siteId: p.siteId,
+      template: {
+        name: "booking_waitlist_slot_offer",
+        language: "he",
+        variables: {
+          "1": firstName,
+          "2": p.salonName,
+          "3": dateLabel,
+          "4": timeDisp,
+        },
+      },
+      meta: {
+        automation: "booking_waitlist_slot_offer",
+        waitlistEntryId: p.docId,
+        templateName: "booking_waitlist_slot_offer",
+      },
+      usageCategory: "service",
+    });
+  } catch (e) {
+    console.error("[bookingWaitlist] send failed, reverting entry", e);
+    await rollbackWaitlistOfferAcquire(
+      p.db,
+      p.siteId,
+      p.lockId,
+      p.data.customerPhoneE164,
+      p.docId
+    );
+    const back = revertWaitingStatusFromEntry(p.data);
+    await p.col.doc(p.docId).update({
+      status: back,
+      offer: admin.firestore.FieldValue.delete(),
+      offerSentAt: admin.firestore.FieldValue.delete(),
+      offerExpiresAt: admin.firestore.FieldValue.delete(),
+      offerWebConfirmToken: admin.firestore.FieldValue.delete(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return "send_failed";
+  }
+
+  const appBase = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "");
+  if (appBase) {
+    console.log("[bookingWaitlist] offer_web_url", {
+      siteId: p.siteId,
+      waitlistEntryId: p.docId,
+      url: `${appBase}/site/${encodeURIComponent(p.siteId)}/waitlist-offer/${encodeURIComponent(p.docId)}?t=${encodeURIComponent(offerWebConfirmToken)}`,
+    });
+  }
+
+  console.log("[bookingWaitlist] slot_offer_sent", {
+    siteId: p.siteId,
+    waitlistEntryId: p.docId,
+    packRound: p.packRound,
+    matchProbe: p.matchProbe,
+    dateYmd: offer.dateYmd,
+    timeHHmm: offer.timeHHmm,
+  });
+
+  p.entryIdsNotified.push(p.docId);
+  p.skipLocal.add(p.docId);
+  const offeredPhone = String(p.data.customerPhoneE164 ?? "").trim();
+  if (offeredPhone) p.skipPhonesThisGap.add(offeredPhone);
+
+  const occ = wallOccupanciesFromEntryAndCapacity(p.data, p.capacitySlice, p.siteTz);
+  const nextSegs = applyWallOccupanciesToAtomicSegments(p.segments, occ, p.siteTz, MIN_PACK_SEGMENT_MIN);
+  p.segments.splice(0, p.segments.length, ...nextSegs);
+
+  return "ok";
+}
+
+type HorizonPointerPackParams = {
+  db: Firestore;
+  siteId: string;
+  col: CollectionReference;
+  rootSlot: FreedBookingSlot;
+  siteTz: string;
+  salonName: string;
+  skipLocal: Set<string>;
+  skipPhonesThisGap: Set<string>;
+  matchAnyService: boolean;
+  bypassLock: boolean;
+  horizonBucketsEffective: ReadonlySet<Exclude<TimePreferenceValue, "anytime">> | null;
+  strictOfferWall: NonNullable<WaitlistSlotMatchOptions["strictOfferWall"]>;
+  bookingSettings: BookingSettings;
+  dayDocsCache: Map<string, Array<{ id: string; data: Record<string, unknown> }>>;
+  segments: FreedBookingSlot[];
+  entryIdsNotified: string[];
+  packRound: number;
+};
+
+/**
+ * Non-overlapping packing along the primary column of `rootSlot`: virtual pointer walks the gap;
+ * each queue pass picks the first eligible entry that fits at the pointer (duration + bucket + hands).
+ * One WhatsApp per phone per wave (dedupe). Does not acquire/send until fit is proven.
+ */
+async function runHorizonPointerPackWave(
+  p: HorizonPointerPackParams
+): Promise<{ notifiedCount: number; sendFailed: boolean }> {
+  const mergedBusyCache = new Map<string, BusyIntervalMs[]>();
+  const dayHoursByYmd = new Map<string, DayHours>();
+
+  function salonDayForBookingDate(dateYmd: string): DayHours {
+    const cached = dayHoursByYmd.get(dateYmd);
+    if (cached) return cached;
+    const ref = fromZonedTime(`${dateYmd}T12:00:00`, p.siteTz);
+    const jsD = getJsDow(ref, p.siteTz);
+    const base = getDayConfig(p.bookingSettings, jsD) ?? { enabled: true, start: "09:00", end: "18:00" };
+    const key = String(jsD) as keyof BookingSettings["days"];
+    const raw = p.bookingSettings.days?.[key];
+    const next: DayHours = { ...base, breaks: raw?.breaks };
+    dayHoursByYmd.set(dateYmd, next);
+    return next;
+  }
+
+  async function getMergedBusyForWorkerDay(
+    dateYmd: string,
+    workerId: string | null | undefined
+  ): Promise<BusyIntervalMs[]> {
+    const w = workerId?.trim() ?? "";
+    if (!w) return [];
+    const key = `${dateYmd}|${w}`;
+    const hit = mergedBusyCache.get(key);
+    if (hit) return hit;
+    let docs = p.dayDocsCache.get(dateYmd);
+    if (!docs) {
+      docs = await fetchSiteDayBookingDocsAdmin(p.db, p.siteId, dateYmd);
+      p.dayDocsCache.set(dateYmd, docs);
+    }
+    const phaseBusy = workerPhaseBusyIntervalsUtcMsForDay(docs, w, dateYmd, p.siteTz);
+    const merged = mergeBusyWithSalonBreaks(phaseBusy, dateYmd, p.siteTz, salonDayForBookingDate(dateYmd));
+    mergedBusyCache.set(key, merged);
+    return merged;
+  }
+
+  const gapStartMs = wallClockMs(p.rootSlot.dateYmd, p.rootSlot.timeHHmm, p.siteTz);
+  if (gapStartMs == null) {
+    return { notifiedCount: 0, sendFailed: false };
+  }
+  const horizonRootPrimaryMin = Math.max(
+    1,
+    Math.round(Number(p.rootSlot.primaryDurationMin ?? p.rootSlot.durationMin ?? 60))
+  );
+  const gapEndMs = gapStartMs + horizonRootPrimaryMin * 60_000;
+
+  let pointerMs = gapStartMs;
+  const phonesPackedThisWave = new Set<string>(p.skipPhonesThisGap);
+  const packingPlan: string[] = [];
+  let notifiedCount = 0;
+
+  let activeSnap;
+  try {
+    activeSnap = await p.col
+      .where("status", "in", [...WAITLIST_WAITING_STATUSES])
+      .where("preferredDateYmd", "==", p.rootSlot.dateYmd)
+      .limit(120)
+      .get();
+  } catch (e) {
+    console.error("[bookingWaitlist] pointer_pack_query_failed", {
+      siteId: p.siteId,
+      dateYmd: p.rootSlot.dateYmd,
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return { notifiedCount: 0, sendFailed: false };
+  }
+
+  const sortedDocs = [...activeSnap.docs].sort((a, b) => {
+    const da = a.data() as BookingWaitlistEntry;
+    const dbEntry = b.data() as BookingWaitlistEntry;
+    const wa = waitlistWorkerPreferenceRank(da, p.rootSlot);
+    const wb = waitlistWorkerPreferenceRank(dbEntry, p.rootSlot);
+    if (wa !== wb) return wa - wb;
+    const ta = firestoreTsMs(a.data().createdAt);
+    const tb = firestoreTsMs(b.data().createdAt);
+    if (ta !== tb) return ta - tb;
+    const qa = typeof da.queuePositionForDay === "number" ? da.queuePositionForDay : 1e9;
+    const qb = typeof dbEntry.queuePositionForDay === "number" ? dbEntry.queuePositionForDay : 1e9;
+    if (qa !== qb) return qa - qb;
+    return a.id.localeCompare(b.id);
+  });
+
+  while (notifiedCount < MAX_PACK_OFFERS_PER_RUN) {
+    const remMin = remainingPrimaryGapMinutesFromPointer(p.rootSlot, pointerMs, p.siteTz);
+    if (remMin <= MIN_PACK_SEGMENT_MIN) break;
+
+    const ptrYmd = formatInTimeZone(pointerMs, p.siteTz, "yyyy-MM-dd");
+    const ptrHHmm = formatInTimeZone(pointerMs, p.siteTz, "HH:mm");
+
+    let advanced = false;
+
+    for (const doc of sortedDocs) {
+      if (p.skipLocal.has(doc.id)) continue;
+      const data = doc.data() as BookingWaitlistEntry;
+      const phone = String(data.customerPhoneE164 ?? "").trim();
+      if (phone && phonesPackedThisWave.has(phone)) continue;
+
+      const remainderSlot: FreedBookingSlot = {
+        ...p.rootSlot,
+        dateYmd: ptrYmd,
+        timeHHmm: ptrHHmm,
+        primaryDurationMin: remMin,
+        waitMinutes: 0,
+        followUpDurationMin: 0,
+        followUpWorkerId: null,
+        followUpWorkerName: null,
+        followUpServiceName: null,
+      };
+
+      if (!waitlistEntryFitsFreedStructure(data, remainderSlot)) continue;
+
+      const matchSlice = buildEntryAnchoredCapacityAtPointer(p.rootSlot, ptrYmd, ptrHHmm, data);
+      const effectiveBucket = getTimePreferenceBucketForSlot(matchSlice.dateYmd, matchSlice.timeHHmm, p.siteTz);
+      const matchOpts: WaitlistSlotMatchOptions =
+        p.horizonBucketsEffective != null && p.horizonBucketsEffective.size > 0
+          ? {
+              matchAnyService: p.matchAnyService,
+              horizonBuckets: p.horizonBucketsEffective,
+              timeBucket: effectiveBucket,
+              strictOfferWall: p.strictOfferWall,
+            }
+          : { matchAnyService: p.matchAnyService, timeBucket: effectiveBucket, strictOfferWall: p.strictOfferWall };
+
+      if (!waitlistEntryMatchesFreedSlot(data, matchSlice, matchOpts)) continue;
+
+      const nextMs = nextPointerMsAfterPackedVisit(data, matchSlice, p.siteTz);
+      if (nextMs == null || nextMs > gapEndMs + 60_000) continue;
+
+      const mergedPrimaryBusy = await getMergedBusyForWorkerDay(matchSlice.dateYmd, matchSlice.workerId);
+      const primaryWid = matchSlice.workerId?.trim() || "";
+      const efEntry = Math.max(0, Math.round(Number(data.followUpDurationMin ?? 0)));
+      const fuWidResolved =
+        efEntry > 0
+          ? matchSlice.followUpWorkerId != null && String(matchSlice.followUpWorkerId).trim() !== ""
+            ? String(matchSlice.followUpWorkerId).trim()
+            : primaryWid
+          : "";
+      const mergedFuBusy: BusyIntervalMs[] | null =
+        efEntry > 0 && fuWidResolved && fuWidResolved !== primaryWid
+          ? await getMergedBusyForWorkerDay(matchSlice.dateYmd, fuWidResolved)
+          : null;
+
+      const hands = waitlistEntryHandsPhasesVsBusy(
+        data,
+        matchSlice,
+        p.siteTz,
+        mergedPrimaryBusy,
+        mergedFuBusy
+      );
+      if (!hands.ok) continue;
+
+      const lockId = waitlistSlotLockDocId(matchSlice.dateYmd, matchSlice.timeHHmm, matchSlice.workerId);
+      const acq = await tryAcquireWaitlistSlotOffer(p.db, p.siteId, lockId, {
+        lockDurationMs: WAITLIST_SLOT_LOCK_MS,
+        customerPhoneE164: data.customerPhoneE164,
+        entryId: doc.id,
+        bypassLock: p.bypassLock,
+      });
+      if (!acq.ok) continue;
+
+      const ep = Math.max(1, Math.round(Number(data.primaryDurationMin ?? 60)));
+      const slotStartMs = wallClockMs(matchSlice.dateYmd, matchSlice.timeHHmm, p.siteTz);
+      const startLabel =
+        slotStartMs != null ? formatInTimeZone(slotStartMs, p.siteTz, "HH:mm") : matchSlice.timeHHmm;
+      const endLabel =
+        slotStartMs != null ? formatInTimeZone(slotStartMs + ep * 60_000, p.siteTz, "HH:mm") : "?";
+      packingPlan.push(
+        `${data.customerName.trim() || doc.id} assigned ${startLabel}–${endLabel} (${ep}m primary)`
+      );
+
+      const sendRes = await deliverWaitlistPackOffer({
+        db: p.db,
+        siteId: p.siteId,
+        col: p.col,
+        salonName: p.salonName,
+        packRound: p.packRound,
+        matchProbe: "horizon_pointer_pack",
+        docId: doc.id,
+        data,
+        capacitySlice: matchSlice,
+        lockId,
+        entryIdsNotified: p.entryIdsNotified,
+        skipLocal: p.skipLocal,
+        skipPhonesThisGap: p.skipPhonesThisGap,
+        segments: p.segments,
+        siteTz: p.siteTz,
+      });
+
+      if (sendRes === "send_failed") {
+        return { notifiedCount, sendFailed: true };
+      }
+
+      if (phone) phonesPackedThisWave.add(phone);
+      notifiedCount++;
+      pointerMs = nextMs;
+      advanced = true;
+      break;
+    }
+
+    if (!advanced) break;
+  }
+
+  const consumedWallMin = Math.round((pointerMs - gapStartMs) / 60_000);
+  if (consumedWallMin > horizonRootPrimaryMin + 2) {
+    console.warn("[bookingWaitlist] packing_safety_exceeded", {
+      siteId: p.siteId,
+      horizonRootPrimaryMin,
+      consumedWallMin,
+      gapEndMs,
+      pointerMs,
+    });
+  }
+
+  const planSummary =
+    packingPlan.length > 0
+      ? `${packingPlan.join(" | ")} — primary column used ${consumedWallMin}m / ${horizonRootPrimaryMin}m`
+      : "no assignments (no one fit at advancing pointer)";
+
+  console.log("[bookingWaitlist] packing_plan", {
+    siteId: p.siteId,
+    dateYmd: p.rootSlot.dateYmd,
+    horizonRootPrimaryMin,
+    gapStart: formatInTimeZone(gapStartMs, p.siteTz, "yyyy-MM-dd HH:mm"),
+    gapEnd: formatInTimeZone(gapEndMs, p.siteTz, "yyyy-MM-dd HH:mm"),
+    finalPointer: formatInTimeZone(pointerMs, p.siteTz, "yyyy-MM-dd HH:mm"),
+    consumedWallMin,
+    assignments: packingPlan,
+    offersSent: notifiedCount,
+  });
+  console.log(`[bookingWaitlist] packing_plan_summary ${planSummary}`);
+
+  return { notifiedCount, sendFailed: false };
+}
+
 /**
  * Next matching waitlist row(s) for this freed slot; sends WhatsApp and sets `pending_offer`.
  * Greedy pack: after each successful offer, subtracts occupied wall time and keeps matching until
@@ -716,31 +1154,67 @@ export async function triggerWaitlistMatchForFreedSlot(
       nowMs: Date.now(),
     };
 
+    let pointerStructuralNotified = false;
     if (!structuralAttempted) {
       structuralAttempted = true;
-      const probes = expandFreedSlotToMatchSlices(rootSlot, siteTz);
-      found = await findFirstMatchFromProbes(
+      const pointerRes = await runHorizonPointerPackWave({
         db,
         siteId,
         col,
+        rootSlot,
         siteTz,
+        salonName,
         skipLocal,
         skipPhonesThisGap,
         matchAnyService,
         bypassLock,
-        probes,
         horizonBucketsEffective,
         strictOfferWall,
         bookingSettings,
-        dayDocsCache
-      );
-      if (!found.ok) {
-        lastNoMatchLog = {
-          sliceAttempts: found.sliceAttempts,
-          probesTried: found.probesTried,
-          context: "structural",
+        dayDocsCache,
+        segments,
+        entryIdsNotified,
+        packRound,
+      });
+      if (pointerRes.sendFailed) {
+        return {
+          notified: entryIdsNotified.length > 0,
+          entryId: entryIdsNotified[0],
+          entryIds: entryIdsNotified.length ? entryIdsNotified : undefined,
+          reason: "send_failed",
         };
       }
+      if (pointerRes.notifiedCount > 0) {
+        pointerStructuralNotified = true;
+      } else {
+        const probes = expandFreedSlotToMatchSlices(rootSlot, siteTz);
+        found = await findFirstMatchFromProbes(
+          db,
+          siteId,
+          col,
+          siteTz,
+          skipLocal,
+          skipPhonesThisGap,
+          matchAnyService,
+          bypassLock,
+          probes,
+          horizonBucketsEffective,
+          strictOfferWall,
+          bookingSettings,
+          dayDocsCache
+        );
+        if (!found.ok) {
+          lastNoMatchLog = {
+            sliceAttempts: found.sliceAttempts,
+            probesTried: found.probesTried,
+            context: "structural",
+          };
+        }
+      }
+    }
+
+    if (pointerStructuralNotified) {
+      continue;
     }
 
     if (!found || !found.ok) {
@@ -782,74 +1256,24 @@ export async function triggerWaitlistMatchForFreedSlot(
       break;
     }
 
-    const offer = waitlistOfferFromEntryAgainstCapacity(found.data, found.capacitySlice);
-    const lockId = found.lockId;
-
-    const now = admin.firestore.Timestamp.now();
-    const expires = admin.firestore.Timestamp.fromMillis(Date.now() + WAITLIST_OFFER_TTL_MS);
-    const offerWebConfirmToken = randomBytes(18).toString("hex");
-
-    await col.doc(found.docId).update({
-      status: "pending_offer",
-      offer,
-      offerSentAt: now,
-      offerExpiresAt: expires,
-      offerWebConfirmToken,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    const deliverRes = await deliverWaitlistPackOffer({
+      db,
+      siteId,
+      col,
+      salonName,
+      packRound,
+      matchProbe: found.matchProbe,
+      docId: found.docId,
+      data: found.data,
+      capacitySlice: found.capacitySlice,
+      lockId: found.lockId,
+      entryIdsNotified,
+      skipLocal,
+      skipPhonesThisGap,
+      segments,
+      siteTz,
     });
-
-    await expireStalePendingOffersForPhone(db, siteId, found.data.customerPhoneE164, found.docId);
-
-    const dateLabel = formatHeDate(offer.dateYmd);
-    const firstName = found.data.customerName.trim().split(/\s+/)[0] || "שלום";
-    const timeDisp = (() => {
-      const t = offer.timeHHmm.trim();
-      return t.length >= 5 ? t.slice(0, 5) : t;
-    })();
-
-    const logBody =
-      `שלום ${firstName}! התפנה תור ל${salonName} בתאריך ${dateLabel} בשעה ${timeDisp}. האם תרצו לשריין אותו?\n(הודעה זו בתוקף לשעתיים בלבד)`;
-
-    try {
-      await sendWhatsApp({
-        toE164: found.data.customerPhoneE164,
-        body: logBody,
-        siteId,
-        template: {
-          name: "booking_waitlist_slot_offer",
-          language: "he",
-          variables: {
-            "1": firstName,
-            "2": salonName,
-            "3": dateLabel,
-            "4": timeDisp,
-          },
-        },
-        meta: {
-          automation: "booking_waitlist_slot_offer",
-          waitlistEntryId: found.docId,
-          templateName: "booking_waitlist_slot_offer",
-        },
-        usageCategory: "service",
-      });
-    } catch (e) {
-      console.error("[bookingWaitlist] send failed, reverting entry", e);
-      await rollbackWaitlistOfferAcquire(
-        db,
-        siteId,
-        lockId,
-        found.data.customerPhoneE164,
-        found.docId
-      );
-      const back = revertWaitingStatusFromEntry(found.data);
-      await col.doc(found.docId).update({
-        status: back,
-        offer: admin.firestore.FieldValue.delete(),
-        offerSentAt: admin.firestore.FieldValue.delete(),
-        offerExpiresAt: admin.firestore.FieldValue.delete(),
-        offerWebConfirmToken: admin.firestore.FieldValue.delete(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+    if (deliverRes === "send_failed") {
       return {
         notified: entryIdsNotified.length > 0,
         entryId: entryIdsNotified[0],
@@ -857,32 +1281,6 @@ export async function triggerWaitlistMatchForFreedSlot(
         reason: "send_failed",
       };
     }
-
-    const appBase = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "");
-    if (appBase) {
-      console.log("[bookingWaitlist] offer_web_url", {
-        siteId,
-        waitlistEntryId: found.docId,
-        url: `${appBase}/site/${encodeURIComponent(siteId)}/waitlist-offer/${encodeURIComponent(found.docId)}?t=${encodeURIComponent(offerWebConfirmToken)}`,
-      });
-    }
-
-    console.log("[bookingWaitlist] slot_offer_sent", {
-      siteId,
-      waitlistEntryId: found.docId,
-      packRound,
-      matchProbe: found.matchProbe,
-      dateYmd: offer.dateYmd,
-      timeHHmm: offer.timeHHmm,
-    });
-
-    entryIdsNotified.push(found.docId);
-    skipLocal.add(found.docId);
-    const offeredPhone = String(found.data.customerPhoneE164 ?? "").trim();
-    if (offeredPhone) skipPhonesThisGap.add(offeredPhone);
-
-    const occ = wallOccupanciesFromEntryAndCapacity(found.data, found.capacitySlice, siteTz);
-    segments = applyWallOccupanciesToAtomicSegments(segments, occ, siteTz, MIN_PACK_SEGMENT_MIN);
   }
 
   if (entryIdsNotified.length === 0) {
@@ -903,7 +1301,7 @@ export async function triggerWaitlistMatchForFreedSlot(
           ? rootSlot.primaryDurationMin
           : undefined,
       horizonBucketsTried: horizonBucketsEffective ? [...horizonBucketsEffective].sort() : undefined,
-      packMode: "greedy_segments",
+      packMode: "horizon_pointer_pack_then_probe_then_segments",
       lastProbeContext: lastNoMatchLog?.context,
       probesTried: lastNoMatchLog?.probesTried,
       sliceAttempts: lastNoMatchLog?.sliceAttempts.length ? lastNoMatchLog.sliceAttempts : undefined,
