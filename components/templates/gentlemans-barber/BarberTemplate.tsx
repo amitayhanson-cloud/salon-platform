@@ -230,6 +230,8 @@ export type BarberTemplateProps = {
   siteId?: string;
   config?: SiteConfig | null;
   services?: SiteService[];
+  /** Hide fixed nav header (e.g. builder live preview). */
+  hideHeader?: boolean;
 };
 
 function formatBarberServicePrice(s: SiteService): string {
@@ -248,6 +250,7 @@ export function BarberTemplate({
   siteId,
   config,
   services = [],
+  hideHeader = false,
 }: BarberTemplateProps = {}) {
   const brandName = config?.salonName?.trim() || "מועדון הג׳נטלמן";
   const bookHref =
@@ -256,6 +259,13 @@ export function BarberTemplate({
       : "#waitlist";
 
   const displayServices = services.filter((s) => s.enabled !== false);
+
+  const heroTagline =
+    config?.content?.hero?.tagline?.trim() || "מאז 2019 · טיפוח פרימיום לגבר";
+  const heroTitleCustom = config?.content?.hero?.title?.trim();
+  const heroSubtitle =
+    config?.content?.hero?.subtitle?.trim() ||
+    "מסורת לצד דיוק. חוויית תספורת וגילוח באווירה יוקרתית ומוקפדת.";
 
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -274,62 +284,64 @@ export function BarberTemplate({
         lang="he"
         style={barberCssVarsFromConfig(config ?? defaultSiteConfig)}
       >
-        <header className="gbc-glass fixed left-0 right-0 top-0 z-50">
-          <div className="mx-auto flex max-w-[1400px] items-center justify-between px-6 py-4">
-            <a href="#" className="gbc-font-heading text-xl font-bold tracking-wide text-[hsl(var(--primary))]">
-              {brandName}
-            </a>
-
-            <nav className="hidden items-center gap-8 md:flex">
-              {NAV_LINKS.map((l) => (
-                <a
-                  key={l.href}
-                  href={l.href}
-                  className="text-sm font-medium tracking-wide text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--primary))]"
-                >
-                  {l.label}
-                </a>
-              ))}
-              <a
-                href={bookHref}
-                className="gbc-btn-primary rounded-sm px-5 py-2 text-sm font-semibold transition-all"
-              >
-                הזמינו תור
+        {!hideHeader ? (
+          <header className="gbc-glass fixed left-0 right-0 top-0 z-50">
+            <div className="mx-auto flex max-w-[1400px] items-center justify-between px-6 py-4">
+              <a href="#" className="gbc-font-heading text-xl font-bold tracking-wide text-[hsl(var(--primary))]">
+                {brandName}
               </a>
-            </nav>
 
-            <button
-              type="button"
-              className="text-[hsl(var(--foreground))] md:hidden"
-              aria-label="תפריט"
-              onClick={() => setMobileOpen((o) => !o)}
-            >
-              {mobileOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
-          </div>
-
-          {mobileOpen ? (
-            <nav className="gbc-glass flex flex-col gap-4 border-t border-[hsl(var(--border)/0.5)] px-6 pb-6 pt-2 md:hidden">
-              {NAV_LINKS.map((l) => (
+              <nav className="hidden items-center gap-8 md:flex">
+                {NAV_LINKS.map((l) => (
+                  <a
+                    key={l.href}
+                    href={l.href}
+                    className="text-sm font-medium tracking-wide text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--primary))]"
+                  >
+                    {l.label}
+                  </a>
+                ))}
                 <a
-                  key={l.href}
-                  href={l.href}
-                  className="text-sm font-medium text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--primary))]"
+                  href={bookHref}
+                  className="gbc-btn-primary rounded-sm px-5 py-2 text-sm font-semibold transition-all"
+                >
+                  הזמינו תור
+                </a>
+              </nav>
+
+              <button
+                type="button"
+                className="text-[hsl(var(--foreground))] md:hidden"
+                aria-label="תפריט"
+                onClick={() => setMobileOpen((o) => !o)}
+              >
+                {mobileOpen ? <X size={24} /> : <Menu size={24} />}
+              </button>
+            </div>
+
+            {mobileOpen ? (
+              <nav className="gbc-glass flex flex-col gap-4 border-t border-[hsl(var(--border)/0.5)] px-6 pb-6 pt-2 md:hidden">
+                {NAV_LINKS.map((l) => (
+                  <a
+                    key={l.href}
+                    href={l.href}
+                    className="text-sm font-medium text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--primary))]"
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    {l.label}
+                  </a>
+                ))}
+                <a
+                  href={bookHref}
+                  className="gbc-btn-primary rounded-sm px-5 py-2 text-center text-sm font-semibold"
                   onClick={() => setMobileOpen(false)}
                 >
-                  {l.label}
+                  הזמינו תור
                 </a>
-              ))}
-              <a
-                href={bookHref}
-                className="gbc-btn-primary rounded-sm px-5 py-2 text-center text-sm font-semibold"
-                onClick={() => setMobileOpen(false)}
-              >
-                הזמינו תור
-              </a>
-            </nav>
-          ) : null}
-        </header>
+              </nav>
+            ) : null}
+          </header>
+        ) : null}
 
         <main>
           <section className="relative flex min-h-screen items-center justify-center overflow-hidden">
@@ -344,15 +356,21 @@ export function BarberTemplate({
 
             <div className="relative z-10 mx-auto max-w-3xl px-6 text-center">
               <p className="mb-4 text-sm font-medium tracking-wide text-[hsl(var(--primary))]">
-                מאז 2019 · טיפוח פרימיום לגבר
+                {heroTagline}
               </p>
-              <h1 className="gbc-font-heading text-4xl font-bold leading-tight text-[hsl(var(--foreground))] sm:text-5xl md:text-6xl lg:text-7xl">
-                מספרה שמכבדת
-                <br />
-                <span className="gbc-text-gold-gradient">את הגבר המודרני</span>
-              </h1>
+              {heroTitleCustom ? (
+                <h1 className="gbc-font-heading text-4xl font-bold leading-tight text-[hsl(var(--foreground))] sm:text-5xl md:text-6xl lg:text-7xl">
+                  {heroTitleCustom}
+                </h1>
+              ) : (
+                <h1 className="gbc-font-heading text-4xl font-bold leading-tight text-[hsl(var(--foreground))] sm:text-5xl md:text-6xl lg:text-7xl">
+                  מספרה שמכבדת
+                  <br />
+                  <span className="gbc-text-gold-gradient">את הגבר המודרני</span>
+                </h1>
+              )}
               <p className="mx-auto mt-6 max-w-lg text-base text-[hsl(var(--muted-foreground))] sm:text-lg">
-                מסורת לצד דיוק. חוויית תספורת וגילוח באווירה יוקרתית ומוקפדת.
+                {heroSubtitle}
               </p>
               <a
                 href="#services"

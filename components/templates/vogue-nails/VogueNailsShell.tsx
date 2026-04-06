@@ -192,9 +192,16 @@ export type VogueNailsShellProps = {
   siteId: string;
   config: SiteConfig;
   services: SiteService[];
+  /** Hide fixed nav header (e.g. builder live preview). */
+  hideHeader?: boolean;
 };
 
-export function VogueNailsShell({ siteId, config, services }: VogueNailsShellProps) {
+export function VogueNailsShell({
+  siteId,
+  config,
+  services,
+  hideHeader = false,
+}: VogueNailsShellProps) {
   const brandName = config.salonName?.trim() || "הסטודיו שלכם";
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -295,70 +302,72 @@ export function VogueNailsShell({ siteId, config, services }: VogueNailsShellPro
         lang="he"
         style={vogueNailsCssVarsFromConfig(config)}
       >
-        <header
-          className={`fixed left-0 right-0 top-0 z-50 transition-all duration-500 ${
-            scrolled ? "vvn-glass shadow-lg" : "bg-transparent"
-          }`}
-        >
-          <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-            <button
-              type="button"
-              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-              className="vvn-font-serif text-2xl tracking-wide text-[hsl(var(--foreground))]"
-            >
-              {brandName}
-            </button>
-
-            <nav className="hidden items-center gap-8 md:flex">
-              {navLinks.map((l) => (
-                <button
-                  key={l.href}
-                  type="button"
-                  onClick={() => scrollTo(l.href)}
-                  className="text-sm font-medium tracking-wide text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--primary))]"
-                >
-                  {l.label}
-                </button>
-              ))}
-              <a
-                href={bookHref}
-                className="rounded-full bg-[hsl(var(--cta))] px-5 py-2 text-sm font-medium text-[hsl(var(--cta-foreground))] transition-opacity hover:opacity-90"
+        {!hideHeader ? (
+          <header
+            className={`fixed left-0 right-0 top-0 z-50 transition-all duration-500 ${
+              scrolled ? "vvn-glass shadow-lg" : "bg-transparent"
+            }`}
+          >
+            <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+              <button
+                type="button"
+                onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+                className="vvn-font-serif text-2xl tracking-wide text-[hsl(var(--foreground))]"
               >
-                הזמנת תור
-              </a>
-            </nav>
+                {brandName}
+              </button>
 
-            <button
-              type="button"
-              className="text-[hsl(var(--foreground))] md:hidden"
-              aria-label="תפריט"
-              onClick={() => setMenuOpen((o) => !o)}
-            >
-              {menuOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
-          </div>
-
-          {menuOpen ? (
-            <nav className="vvn-glass flex flex-col gap-4 border-t border-[hsl(var(--border)/0.5)] px-6 py-6 md:hidden">
-              {navLinks.map((l) => (
-                <button
-                  key={l.href}
-                  type="button"
-                  onClick={() => scrollTo(l.href)}
-                  className="text-right text-base text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--primary))]"
+              <nav className="hidden items-center gap-8 md:flex">
+                {navLinks.map((l) => (
+                  <button
+                    key={l.href}
+                    type="button"
+                    onClick={() => scrollTo(l.href)}
+                    className="text-sm font-medium tracking-wide text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--primary))]"
+                  >
+                    {l.label}
+                  </button>
+                ))}
+                <a
+                  href={bookHref}
+                  className="rounded-full bg-[hsl(var(--cta))] px-5 py-2 text-sm font-medium text-[hsl(var(--cta-foreground))] transition-opacity hover:opacity-90"
                 >
-                  {l.label}
-                </button>
-              ))}
-              <a
-                href={bookHref}
-                className="rounded-full bg-[hsl(var(--cta))] px-5 py-3 text-center text-sm font-medium text-[hsl(var(--cta-foreground))]"
+                  הזמנת תור
+                </a>
+              </nav>
+
+              <button
+                type="button"
+                className="text-[hsl(var(--foreground))] md:hidden"
+                aria-label="תפריט"
+                onClick={() => setMenuOpen((o) => !o)}
               >
-                הזמנת תור
-              </a>
-            </nav>
-          ) : null}
-        </header>
+                {menuOpen ? <X size={24} /> : <Menu size={24} />}
+              </button>
+            </div>
+
+            {menuOpen ? (
+              <nav className="vvn-glass flex flex-col gap-4 border-t border-[hsl(var(--border)/0.5)] px-6 py-6 md:hidden">
+                {navLinks.map((l) => (
+                  <button
+                    key={l.href}
+                    type="button"
+                    onClick={() => scrollTo(l.href)}
+                    className="text-right text-base text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--primary))]"
+                  >
+                    {l.label}
+                  </button>
+                ))}
+                <a
+                  href={bookHref}
+                  className="rounded-full bg-[hsl(var(--cta))] px-5 py-3 text-center text-sm font-medium text-[hsl(var(--cta-foreground))]"
+                >
+                  הזמנת תור
+                </a>
+              </nav>
+            ) : null}
+          </header>
+        ) : null}
 
         <main>
           {/* Hero */}

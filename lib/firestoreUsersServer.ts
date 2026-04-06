@@ -4,6 +4,7 @@
  */
 
 import { getAdminDb } from "@/lib/firebaseAdmin";
+import { normalizeOwnedSiteIds } from "@/lib/normalizeUserOwnedSites";
 
 const USERS_COLLECTION = "users";
 
@@ -12,6 +13,7 @@ export type ServerUserDoc = {
   email: string;
   name?: string;
   siteId: string | null;
+  ownedSiteIds: string[];
   primarySlug?: string | null;
   createdAt: Date;
   updatedAt?: Date;
@@ -37,11 +39,13 @@ export async function getServerUserDocument(uid: string): Promise<ServerUserDoc 
     if (!snap.exists) return null;
     const data = snap.data();
     if (!data) return null;
+    const siteId = typeof data.siteId === "string" && data.siteId ? data.siteId : null;
     return {
       id: snap.id,
       email: typeof data.email === "string" ? data.email : "",
       name: typeof data.name === "string" ? data.name : undefined,
-      siteId: typeof data.siteId === "string" && data.siteId ? data.siteId : null,
+      siteId,
+      ownedSiteIds: normalizeOwnedSiteIds(data.ownedSiteIds, siteId),
       primarySlug: typeof data.primarySlug === "string" && data.primarySlug ? data.primarySlug : null,
       createdAt: toDate(data.createdAt),
       updatedAt: data.updatedAt != null ? toDate(data.updatedAt) : undefined,
@@ -55,12 +59,22 @@ export async function getServerUserDocument(uid: string): Promise<ServerUserDoc 
 const WEBSITES_COLLECTION = "websites";
 
 /**
- * Update user's siteId using Admin SDK. Use in API routes only.
+ * Set primary siteId and merge into ownedSiteIds (multi-site safe). Use in API routes only.
  */
 export async function updateUserSiteIdServer(uid: string, siteId: string): Promise<void> {
   const db = getAdminDb();
   const ref = db.collection(USERS_COLLECTION).doc(uid);
-  await ref.set({ siteId, updatedAt: new Date() }, { merge: true });
+  const snap = await ref.get();
+  const prev = snap.data() ?? {};
+  const prevSiteId = typeof prev.siteId === "string" && prev.siteId ? prev.siteId : null;
+  const prevOwned = Array.isArray(prev.ownedSiteIds)
+    ? prev.ownedSiteIds.filter((x: unknown): x is string => typeof x === "string")
+    : [];
+  const mergedOwned = [...new Set([...prevOwned, ...(prevSiteId ? [prevSiteId] : []), siteId])];
+  await ref.set(
+    { siteId, ownedSiteIds: mergedOwned, updatedAt: new Date() },
+    { merge: true }
+  );
 }
 
 /**

@@ -27,6 +27,11 @@ const nextConfig: NextConfig = {
         hostname: "v0.dev",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+        pathname: "/**",
+      },
     ],
   },
   async headers() {

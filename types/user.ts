@@ -9,7 +9,9 @@ export type User = {
   phone?: string | null;
   /** Set for new phone+OTP signups; Google/email users may omit (legacy). */
   primaryLoginMethod?: "phone" | "email" | "google";
-  siteId: string | null; // Reference to the user's site (null = no site yet, needs wizard)
+  siteId: string | null; // Primary / last-used site (null = no site yet, needs wizard)
+  /** All sites this user owns; merged with siteId when reading if the array was missing. */
+  ownedSiteIds?: string[];
   primarySlug?: string | null; // Tenant subdomain; prefer for dashboard links
   /** Saved from builder step "מה המטרה העיקרית של האתר" before site is created */
   onboardingMainGoals?: MainGoal[];

@@ -5,8 +5,16 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthProvider";
 import CalenoLoading from "@/components/CalenoLoading";
+import { getDashboardUrl, getPublicLandingPageUrlForSiteClient } from "@/lib/url";
 
 type TenantMe = { slug: string | null; publicUrl: string | null; siteId: string | null };
+
+type UserSiteRow = {
+  siteId: string;
+  slug: string | null;
+  salonName: string;
+  isPrimary: boolean;
+};
 
 export default function AccountPage() {
   const router = useRouter();
@@ -19,6 +27,31 @@ export default function AccountPage() {
   const [checkResult, setCheckResult] = useState<{ available: boolean; reason?: string } | null>(null);
   const [tenantMessage, setTenantMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [changeSuccessUrl, setChangeSuccessUrl] = useState<string | null>(null);
+  const [mySites, setMySites] = useState<UserSiteRow[]>([]);
+  const [mySitesLoading, setMySitesLoading] = useState(true);
+
+  const fetchMySites = useCallback(async () => {
+    if (!firebaseUser) {
+      setMySitesLoading(false);
+      return;
+    }
+    try {
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch("/api/user/sites", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { sites?: UserSiteRow[] };
+        setMySites(Array.isArray(data.sites) ? data.sites : []);
+      } else {
+        setMySites([]);
+      }
+    } catch {
+      setMySites([]);
+    } finally {
+      setMySitesLoading(false);
+    }
+  }, [firebaseUser]);
 
   const fetchTenantMe = useCallback(async () => {
     if (!firebaseUser) {
@@ -50,8 +83,11 @@ export default function AccountPage() {
   }, [user, loading, router]);
 
   useEffect(() => {
-    if (firebaseUser && user) fetchTenantMe();
-  }, [firebaseUser, user, fetchTenantMe]);
+    if (firebaseUser && user) {
+      fetchTenantMe();
+      fetchMySites();
+    }
+  }, [firebaseUser, user, fetchTenantMe, fetchMySites]);
 
   const handleLogout = () => {
     logout();
@@ -116,6 +152,7 @@ export default function AccountPage() {
         setTenantSlug("");
         setCheckResult(null);
         fetchTenantMe();
+        fetchMySites();
       } else {
         setTenantMessage({ type: "err", text: (data.error as string) || "שגיאה." });
       }
@@ -161,14 +198,77 @@ export default function AccountPage() {
             </div>
 
             <div className="pt-6 border-t border-slate-200">
-              <h3 className="text-lg font-semibold text-slate-900 mb-4">
-                אזור החשבון
-              </h3>
-              <p className="text-slate-600 text-sm mb-4">
-                כאן תוכלו לראות את האתרים שיצרתם, הגדרות, חשבוניות ועוד.
-                <br />
-                (תכונות נוספות יגיעו בהמשך)
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">האתרים שלי</h3>
+              <p className="text-slate-600 text-sm mb-4 leading-relaxed">
+                כל האתרים המקושרים לחשבון שלכם. אפשר לפתוח ניהול, לצפות באתר הציבורי, או ליצור
+                אתר נוסף (למשל סניף שני או מותג נפרד).
               </p>
+              {mySitesLoading ? (
+                <p className="text-slate-500 text-sm">טוען רשימת אתרים…</p>
+              ) : mySites.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 p-4 text-sm text-slate-600">
+                  <p className="mb-3">עדיין אין אתר משויך לחשבון.</p>
+                  <Link
+                    href="/builder"
+                    className="inline-flex items-center rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700"
+                  >
+                    צרו אתר חדש
+                  </Link>
+                </div>
+              ) : (
+                <ul className="space-y-3">
+                  {mySites.map((s) => {
+                    const adminHref = getDashboardUrl({ slug: s.slug, siteId: s.siteId });
+                    const publicHref = getPublicLandingPageUrlForSiteClient(s.siteId, s.slug);
+                    return (
+                      <li
+                        key={s.siteId}
+                        className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-4 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div>
+                          <p className="font-semibold text-slate-900">
+                            {s.salonName}
+                            {s.isPrimary ? (
+                              <span className="mr-2 text-xs font-normal text-sky-700">(אתר ראשי)</span>
+                            ) : null}
+                          </p>
+                          {s.slug ? (
+                            <p className="text-xs text-slate-500 mt-0.5" dir="ltr">
+                              {s.slug}.caleno.co
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Link
+                            href={adminHref}
+                            className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
+                          >
+                            ניהול
+                          </Link>
+                          <a
+                            href={publicHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-50"
+                          >
+                            אתר ציבורי
+                          </a>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {!mySitesLoading && mySites.length > 0 && (
+                <div className="mt-4">
+                  <Link
+                    href="/builder"
+                    className="inline-flex items-center text-sm font-semibold text-sky-700 hover:text-sky-900 hover:underline"
+                  >
+                    + אתר חדש
+                  </Link>
+                </div>
+              )}
             </div>
 
             <div className="pt-6 border-t border-slate-200">

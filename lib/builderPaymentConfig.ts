@@ -47,10 +47,19 @@ export function getPaddleApiBaseUrl(): string {
     : "https://sandbox-api.paddle.com";
 }
 
-/** When true, POST /api/onboarding/complete is blocked unless ALLOW_ONBOARDING_WITHOUT_PAYMENT=true */
+/**
+ * When true, `POST /api/onboarding/complete` returns 402 and users must pay via checkout +
+ * `complete-from-session`. Opt-in only: set `REQUIRE_ONBOARDING_PAYMENT=true` and configure
+ * Paddle or Stripe. Having payment keys in env alone does not block onboarding.
+ *
+ * Legacy escape hatch: `ALLOW_ONBOARDING_WITHOUT_PAYMENT=true` still forces enforcement off.
+ */
 export function isPaidOnboardingEnforced(): boolean {
-  return (
-    getBuilderCheckoutProvider() !== null &&
-    process.env.ALLOW_ONBOARDING_WITHOUT_PAYMENT !== "true"
-  );
+  if (process.env.ALLOW_ONBOARDING_WITHOUT_PAYMENT === "true") {
+    return false;
+  }
+  if (process.env.REQUIRE_ONBOARDING_PAYMENT !== "true") {
+    return false;
+  }
+  return getBuilderCheckoutProvider() !== null;
 }

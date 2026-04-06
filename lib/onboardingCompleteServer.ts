@@ -77,6 +77,14 @@ export async function runOnboardingComplete(
   const userRef = db.collection(USERS_COLLECTION).doc(input.uid);
   const now = new Date();
 
+  const userSnap = await userRef.get();
+  const uData = userSnap.data() ?? {};
+  const prevSiteId = typeof uData.siteId === "string" && uData.siteId ? uData.siteId : null;
+  const prevOwned = Array.isArray(uData.ownedSiteIds)
+    ? uData.ownedSiteIds.filter((x: unknown): x is string => typeof x === "string")
+    : [];
+  const mergedOwned = [...new Set([...prevOwned, ...(prevSiteId ? [prevSiteId] : []), siteId])];
+
   let finalConfig: SiteConfig = { ...config, slug };
   try {
     const templateDefaults = await getTemplateConfigDefaults(DEFAULT_HAIR_TEMPLATE_KEY);
@@ -121,6 +129,8 @@ export async function runOnboardingComplete(
   });
   batch.update(userRef, {
     siteId,
+    primarySlug: slug,
+    ownedSiteIds: mergedOwned,
     updatedAt: now,
   });
 

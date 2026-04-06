@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAdminAuth } from "@/lib/firebaseAdmin";
 import { getServerUserDocument } from "@/lib/firestoreUsersServer";
 import { getTenantForUid } from "@/lib/getTenantForUid";
+import { normalizeOwnedSiteIds } from "@/lib/normalizeUserOwnedSites";
 import { getSitePublicUrl } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
@@ -62,17 +63,29 @@ export async function GET(request: Request) {
       );
     }
 
+    const requestHost = request.headers.get("host") ?? "";
+    const hostLower = requestHost.split(":")[0].toLowerCase();
+    const isDevLocalhost =
+      hostLower === "localhost" ||
+      hostLower === "127.0.0.1" ||
+      hostLower === "0.0.0.0";
+    const protocol = request.url.startsWith("https") ? "https" : "http";
+
+    const owned = normalizeOwnedSiteIds(userDoc.ownedSiteIds, userDoc.siteId);
+    if (owned.length > 1) {
+      const accountUrl = isDevLocalhost
+        ? `${protocol}://${requestHost}/account`
+        : new URL("/account", rootOrigin).toString();
+      if (process.env.NODE_ENV === "development") {
+        console.log("[dashboard-redirect] uid=%s multi-site -> account (%s sites)", uid, owned.length);
+      }
+      return NextResponse.json({ url: accountUrl }, { headers: noCacheHeaders });
+    }
+
     // Single source of truth: getTenantForUid validates ownership (no fallbacks)
     const tenant = await getTenantForUid(uid);
 
     if (tenant) {
-      const requestHost = request.headers.get("host") ?? "";
-      const hostLower = requestHost.split(":")[0].toLowerCase();
-      const isDevLocalhost =
-        hostLower === "localhost" ||
-        hostLower === "127.0.0.1" ||
-        hostLower === "0.0.0.0";
-
       let targetUrl: string;
       if (isDevLocalhost) {
         // Stay on same origin in dev: Firebase Auth state is per-origin.
@@ -96,12 +109,6 @@ export async function GET(request: Request) {
       return NextResponse.json({ url: targetUrl }, { headers: noCacheHeaders });
     }
 
-    const requestHost = request.headers.get("host") ?? "";
-    const hostLower = requestHost.split(":")[0].toLowerCase();
-    const isDevLocalhost =
-      hostLower === "localhost" ||
-      hostLower === "127.0.0.1" ||
-      hostLower === "0.0.0.0";
     const builderUrl = isDevLocalhost
       ? `${request.url.startsWith("https") ? "https" : "http"}://${requestHost}/builder`
       : new URL("/builder", rootOrigin).toString();

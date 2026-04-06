@@ -1,46 +1,17 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import dynamic from "next/dynamic";
 import Image from "next/image";
-import { Check, X } from "lucide-react";
+import { useCallback, useState } from "react";
+import { Check } from "lucide-react";
 import type { PublicSiteTemplateId } from "@/types/siteConfig";
 import { BUILDER_PUBLIC_TEMPLATES } from "@/components/templates/builderPublicTemplates";
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
+import { LivePreviewModal } from "@/components/builder/LivePreviewModal";
+import { PhoneMockupFrame } from "@/components/builder/PhoneMockupFrame";
 import { cn } from "@/lib/utils";
 
-const HairLuxuryBuilderPreview = dynamic(
-  () => import("@/components/templates/previews/HairLuxuryBuilderPreview"),
-  { ssr: false, loading: () => <PreviewLoading /> }
-);
-const GentlemansBarberBuilderPreview = dynamic(
-  () => import("@/components/templates/previews/GentlemansBarberBuilderPreview"),
-  { ssr: false, loading: () => <PreviewLoading /> }
-);
-const VogueNailsBuilderPreview = dynamic(
-  () => import("@/components/templates/previews/VogueNailsBuilderPreview"),
-  { ssr: false, loading: () => <PreviewLoading /> }
-);
-
-function PreviewLoading() {
-  return (
-    <div className="flex min-h-[40vh] items-center justify-center rounded-xl border border-caleno-border bg-slate-50">
-      <p className="text-sm text-caleno-deep/80">טוען תצוגה מקדימה…</p>
-    </div>
-  );
-}
-
-function PreviewBody({ id }: { id: PublicSiteTemplateId }) {
-  switch (id) {
-    case "hair-luxury":
-      return <HairLuxuryBuilderPreview />;
-    case "gentlemans-barber":
-      return <GentlemansBarberBuilderPreview />;
-    case "vogue-nails":
-      return <VogueNailsBuilderPreview />;
-    default:
-      return <HairLuxuryBuilderPreview />;
-  }
+function builderTemplatePreviewIframeSrc(id: PublicSiteTemplateId): string {
+  return `/preview/builder-template/${id}`;
 }
 
 export type BuilderTemplateSelectorProps = {
@@ -56,129 +27,107 @@ export function BuilderTemplateSelector({
   const closePreview = useCallback(() => setPreviewId(null), []);
 
   return (
-    <div className="space-y-6">
+    <>
+      {/* Mobile: RTL horizontal carousel (~85vw + peek). Desktop+: grid. */}
       <div
-        className="rounded-xl border border-caleno-border/80 bg-gradient-to-br from-[#F8FCFD] to-white p-4 text-right shadow-[0_8px_30px_-18px_rgba(15,23,42,0.12)] ring-1 ring-black/[0.03] sm:p-5"
         dir="rtl"
+        className={cn(
+          "flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]",
+          "sm:grid sm:grid-cols-2 sm:gap-4 sm:snap-none sm:overflow-visible sm:pb-0 lg:grid-cols-3"
+        )}
       >
-        <p className="text-sm font-medium leading-relaxed text-caleno-ink">
-          בחרו סגנון שמתאים לכם! אל דאגה — אפשר לשנות לגמרי צבעים, טקסטים ותמונות אחר כך
-          מלוח הבקרה. זה רק נקודת התחלה.
-        </p>
-        <p
-          className="mt-3 text-xs leading-relaxed text-[#64748B]"
-          dir="ltr"
-          lang="en"
-        >
-          Pick a vibe that fits your style! Don&apos;t worry—you can fully customize all
-          colors, text, and images later from your Admin Dashboard. This is just your
-          starting point.
-        </p>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {BUILDER_PUBLIC_TEMPLATES.map((t) => {
           const selected = selectedId === t.id;
           return (
             <Card
               key={t.id}
               className={cn(
-                "relative gap-0 overflow-hidden border py-0 shadow-[0_10px_40px_-24px_rgba(15,23,42,0.25)] transition-[box-shadow,border-color,transform] duration-200",
+                "relative w-[68vw] min-w-[68vw] max-w-[68vw] shrink-0 snap-center snap-always overflow-hidden border-0 py-0 shadow-[0_10px_40px_-24px_rgba(15,23,42,0.25)] transition-[box-shadow,transform] duration-200",
+                "sm:w-auto sm:min-w-0 sm:max-w-none",
                 selected
-                  ? "border-caleno-deep ring-2 ring-caleno-deep/25"
-                  : "border-caleno-border hover:border-caleno-deep/35 hover:shadow-[0_14px_44px_-20px_rgba(15,23,42,0.2)]"
+                  ? "ring-2 ring-caleno-deep shadow-[0_0_0_3px_rgba(30,111,124,0.22),0_16px_48px_-20px_rgba(30,111,124,0.35)]"
+                  : "ring-1 ring-black/[0.06] hover:shadow-[0_14px_44px_-20px_rgba(15,23,42,0.2)]"
               )}
             >
               {selected && (
                 <div
-                  className="absolute left-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-caleno-deep text-white shadow-md"
+                  className="absolute start-2 top-2 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-caleno-deep text-white shadow-[0_4px_14px_rgba(30,111,124,0.55)] ring-2 ring-white/90 sm:start-3 sm:top-3 sm:h-12 sm:w-12"
                   aria-hidden
                 >
-                  <Check className="h-4 w-4 stroke-[2.5]" />
+                  <Check className="h-5 w-5 stroke-[2.5] sm:h-7 sm:w-7" />
                 </div>
               )}
-              <CardContent className="space-y-0 p-0">
-                <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
-                  <Image
-                    src={t.thumbnailSrc}
-                    alt=""
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent" />
-                  <div className="absolute bottom-0 right-0 left-0 p-3 text-right text-white">
-                    <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-white/85">
+              <div
+                className={cn(
+                  "relative aspect-[3/2] w-full overflow-hidden bg-slate-100 sm:aspect-[16/11]",
+                  selected && "ring-2 ring-inset ring-caleno-deep"
+                )}
+              >
+                <Image
+                  src={t.thumbnailSrc}
+                  alt={t.nameHe}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 639px) 68vw, (max-width: 1023px) 45vw, 33vw"
+                  loading="lazy"
+                />
+                <div
+                  className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 from-[18%] to-transparent sm:from-25%"
+                  aria-hidden
+                />
+                <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1 p-2 pt-7 text-right sm:gap-2.5 sm:p-3.5 sm:pt-12">
+                  <div className="space-y-0 sm:space-y-0.5">
+                    <p className="text-[0.55rem] font-semibold uppercase tracking-wider text-white/80 sm:text-[0.65rem]">
                       {t.nameEn}
                     </p>
-                    <p className="text-base font-bold leading-tight">{t.nameHe}</p>
+                    <p className="text-sm font-bold leading-tight text-white sm:text-lg">
+                      {t.nameHe}
+                    </p>
+                    <p className="line-clamp-2 text-[0.65rem] leading-snug text-white/88 sm:line-clamp-none sm:text-xs sm:leading-relaxed">
+                      {t.taglineHe}
+                    </p>
+                  </div>
+                  <div className="flex flex-row gap-1.5 sm:gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onSelect(t.id)}
+                      className={cn(
+                        "min-h-8 flex-1 rounded-lg px-1.5 py-1 text-center text-[0.65rem] font-semibold shadow-sm transition-colors sm:min-h-10 sm:rounded-xl sm:px-2 sm:py-2 sm:text-sm",
+                        selected
+                          ? "bg-caleno-deep text-white"
+                          : "bg-white/95 text-caleno-ink hover:bg-white"
+                      )}
+                    >
+                      {selected ? "נבחר" : "בחר"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewId(t.id)}
+                      className="min-h-8 flex-1 rounded-lg border border-white/40 bg-white/15 px-1.5 py-1 text-center text-[0.65rem] font-semibold text-white shadow-sm backdrop-blur-md transition-colors hover:bg-white/25 sm:min-h-10 sm:rounded-xl sm:px-2 sm:py-2 sm:text-sm"
+                    >
+                      תצוגה חיה
+                    </button>
                   </div>
                 </div>
-                <div className="space-y-1 px-4 pb-3 pt-3 text-right">
-                  <p className="text-xs leading-relaxed text-[#64748B]">{t.taglineHe}</p>
-                </div>
-              </CardContent>
-              <CardFooter className="flex flex-col gap-2 border-t border-caleno-border/60 bg-[#FAFBFC] px-4 py-3 sm:flex-row sm:justify-stretch">
-                <button
-                  type="button"
-                  onClick={() => setPreviewId(t.id)}
-                  className="w-full rounded-lg border border-caleno-border bg-white px-3 py-2 text-sm font-medium text-caleno-ink shadow-sm transition-colors hover:border-caleno-deep/40 hover:bg-[rgba(30,111,124,0.06)]"
-                >
-                  תצוגה חיה
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onSelect(t.id)}
-                  className={cn(
-                    "w-full rounded-lg px-3 py-2 text-sm font-semibold shadow-sm transition-colors",
-                    selected
-                      ? "bg-caleno-deep text-white"
-                      : "bg-caleno-ink text-white hover:bg-[#1E293B]"
-                  )}
-                >
-                  {selected ? "נבחר" : "בחר"}
-                </button>
-              </CardFooter>
+              </div>
             </Card>
           );
         })}
       </div>
 
       {previewId ? (
-        <div
-          className="fixed inset-0 z-[100] flex flex-col bg-black/55 p-3 backdrop-blur-sm sm:p-5"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="builder-template-preview-title"
-          onClick={closePreview}
+        <LivePreviewModal
+          open
+          onClose={closePreview}
+          titleId="builder-template-preview-title"
+          title={`תצוגה חיה — ${BUILDER_PUBLIC_TEMPLATES.find((x) => x.id === previewId)?.nameHe ?? ""}`}
         >
-          <div
-            className="mx-auto flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-white shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-caleno-border bg-white px-4 py-3">
-              <h2
-                id="builder-template-preview-title"
-                className="text-right text-sm font-semibold text-caleno-ink sm:text-base"
-              >
-                תצוגה חיה —{" "}
-                {BUILDER_PUBLIC_TEMPLATES.find((x) => x.id === previewId)?.nameHe}
-              </h2>
-              <button
-                type="button"
-                onClick={closePreview}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-caleno-border text-caleno-ink transition-colors hover:bg-slate-50"
-                aria-label="סגור תצוגה"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-auto bg-slate-100/90 p-3 sm:p-4">
-              <PreviewBody id={previewId} />
-            </div>
-          </div>
-        </div>
+          <PhoneMockupFrame
+            iframeSrc={builderTemplatePreviewIframeSrc(previewId)}
+            iframeTitle={`תצוגה חיה — ${BUILDER_PUBLIC_TEMPLATES.find((x) => x.id === previewId)?.nameHe ?? ""}`}
+          />
+        </LivePreviewModal>
       ) : null}
-    </div>
+    </>
   );
 }

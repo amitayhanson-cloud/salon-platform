@@ -9,6 +9,7 @@ import { PRICING_TIERS } from "@/lib/landingContent";
 import { convertSalonBookingStateToBookingSettings } from "@/lib/firestoreBookingSettings";
 import { cn } from "@/lib/utils";
 import { getSitePublicUrl } from "@/lib/tenant";
+import { liquidGlassPrimaryBrandClass } from "@/components/auth/V0AuthShell";
 
 type PlanId = "essential" | "plus";
 
@@ -99,11 +100,11 @@ export function BuilderCheckoutStep({
         </div>
       )}
 
-      <div className="rounded-2xl border border-caleno-border bg-white/95 p-6 shadow-[0_24px_80px_-32px_rgba(15,69,80,0.35)] ring-1 ring-black/5 backdrop-blur-sm sm:p-8">
-        <h2 className="text-right text-xl font-bold text-caleno-ink sm:text-2xl">
+      <div className="rounded-2xl border border-white/60 bg-white/35 p-6 shadow-[0_16px_48px_-20px_rgba(7,18,25,0.12)] backdrop-blur-md sm:p-8">
+        <h2 className="text-right font-sans text-xl font-bold text-[#071219] sm:text-2xl">
           סיכום והשקה
         </h2>
-        <p className="mt-2 text-right text-sm leading-relaxed text-[#64748B]">
+        <p className="mt-2 text-right font-sans text-sm leading-relaxed text-[#417374]">
           {paymentEnforced
             ? checkoutProvider === "paddle"
               ? "אחרי אישור התשלום ב-Paddle ניצור עבורכם את האתר, הקישור והפאנל — בלי תשלום מאושר לא נשמר כלום בשרת."
@@ -113,12 +114,12 @@ export function BuilderCheckoutStep({
             : "במצב זה אפשר להשלים בלי תשלום (ללא ספק תשלום מוגדר או מצב פיתוח)."}
         </p>
 
-        <div className="mt-6 rounded-xl border border-caleno-border bg-caleno-off/40 px-4 py-3 text-right">
-          <p className="text-sm font-semibold text-caleno-ink">{salonName}</p>
-          <p className="mt-1 break-all text-xs text-[#64748B] dir-ltr text-left">{previewUrl}</p>
+        <div className="mt-6 rounded-xl border border-white/55 bg-white/40 px-4 py-3 text-right backdrop-blur-sm">
+          <p className="font-sans text-sm font-semibold text-[#071219]">{salonName}</p>
+          <p className="mt-1 break-all text-left font-sans text-xs text-[#417374] dir-ltr">{previewUrl}</p>
         </div>
 
-        <h3 className="mt-8 text-right text-base font-semibold text-caleno-ink">
+        <h3 className="mt-8 text-right font-sans text-base font-semibold text-[#071219]">
           בחרו מנוי
         </h3>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -131,21 +132,21 @@ export function BuilderCheckoutStep({
                 type="button"
                 onClick={() => setPlan(id as PlanId)}
                 className={cn(
-                  "rounded-2xl border p-4 text-right transition-all",
+                  "rounded-2xl border p-4 text-right transition-all backdrop-blur-sm",
                   selected
-                    ? "border-caleno-deep bg-caleno-off/50 ring-2 ring-caleno-deep/30"
-                    : "border-caleno-border bg-white hover:border-caleno-deep/40"
+                    ? "border-[#4e979f] bg-white/55 ring-2 ring-[#7ac7d4]/35"
+                    : "border-white/55 bg-white/30 hover:border-[#4e979f]/50 hover:bg-white/45"
                 )}
               >
-                <p className="font-semibold text-caleno-ink">{tier.name}</p>
-                <p className="mt-1 text-lg font-bold text-caleno-deep">
+                <p className="font-sans font-semibold text-[#071219]">{tier.name}</p>
+                <p className="mt-1 font-sans text-lg font-bold text-[#417374]">
                   {tier.price}
-                  <span className="text-sm font-medium text-[#64748B]">{tier.period}</span>
+                  <span className="text-sm font-medium text-[#417374]/80">{tier.period}</span>
                 </p>
                 <ul className="mt-3 space-y-1.5">
                   {tier.features.slice(0, 3).map((f, i) => (
-                    <li key={i} className="flex items-start gap-2 text-xs text-[#64748B]">
-                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-caleno-brand" />
+                    <li key={i} className="flex items-start gap-2 font-sans text-xs text-[#417374]">
+                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#4e979f]" />
                       <span>{f}</span>
                     </li>
                   ))}
@@ -162,7 +163,7 @@ export function BuilderCheckoutStep({
         )}
 
         {paymentConfigLoading && (
-          <p className="mt-6 text-center text-sm text-[#64748B]">טוען הגדרות תשלום…</p>
+          <p className="mt-6 text-center font-sans text-sm text-[#417374]">טוען הגדרות תשלום…</p>
         )}
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-end">
@@ -171,7 +172,7 @@ export function BuilderCheckoutStep({
               type="button"
               onClick={() => void startCheckout()}
               disabled={isSaving || paymentConfigLoading}
-              className="rounded-full bg-caleno-ink px-8 py-3 text-center text-sm font-semibold text-white shadow-md transition hover:bg-[#1E293B] disabled:opacity-50"
+              className={cn(liquidGlassPrimaryBrandClass, "rounded-xl px-8 disabled:opacity-50")}
             >
               {isSaving ? "פותח דף תשלום…" : "המשך לתשלום מאובטח"}
             </button>
@@ -179,9 +180,9 @@ export function BuilderCheckoutStep({
           {paymentEnforced && !checkoutReady && !paymentConfigLoading && (
             <p className="text-right text-sm text-red-700">
               {checkoutProvider === "paddle"
-                ? "תשלום נדרש אך Paddle לא הוגדר במלואו. הוסיפו PADDLE_API_KEY ו-PADDLE_PRICE_CALENO_BASIC (מזהה מחיר pri_ מהקטלוג), או ALLOW_ONBOARDING_WITHOUT_PAYMENT=true לפיתוח."
+                ? "תשלום נדרש אך Paddle לא הוגדר במלואו. הוסיפו PADDLE_API_KEY ו-PADDLE_PRICE_CALENO_BASIC (מזהה מחיר pri_ מהקטלוג), או בטלו REQUIRE_ONBOARDING_PAYMENT."
                 : checkoutProvider === "stripe"
-                  ? "תשלום נדרש אך Stripe לא הוגדר בשרת. הוסיפו STRIPE_SECRET_KEY ו-STRIPE_PRICE_CALENO_BASIC או ALLOW_ONBOARDING_WITHOUT_PAYMENT=true לפיתוח."
+                  ? "תשלום נדרש אך Stripe לא הוגדר בשרת. הוסיפו STRIPE_SECRET_KEY ו-STRIPE_PRICE_CALENO_BASIC או בטלו REQUIRE_ONBOARDING_PAYMENT."
                   : "תשלום נדרש אך לא הוגדר ספק תשלום בשרת."}
             </p>
           )}
@@ -190,7 +191,7 @@ export function BuilderCheckoutStep({
               type="button"
               onClick={() => void onDevComplete()}
               disabled={isSaving}
-              className="rounded-full bg-caleno-deep px-8 py-3 text-center text-sm font-semibold text-white shadow-md transition hover:bg-caleno-600 disabled:opacity-50"
+              className={cn(liquidGlassPrimaryBrandClass, "rounded-xl px-8 disabled:opacity-50")}
             >
               {isSaving ? "יוצר את האתר…" : "השלם וצור את האתר"}
             </button>

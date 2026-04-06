@@ -11,6 +11,7 @@ import {
 } from "firebase/firestore";
 import type { User, Website, SetupStatus } from "@/types/user";
 import type { MainGoal } from "@/types/siteConfig";
+import { normalizeOwnedSiteIds } from "@/lib/normalizeUserOwnedSites";
 
 const MAIN_GOAL_VALUES = new Set<string>([
   "new_clients",
@@ -100,13 +101,15 @@ export async function getUserDocument(userId: string): Promise<User | null> {
   const plm = data.primaryLoginMethod;
   const primaryLoginMethod =
     plm === "phone" || plm === "email" || plm === "google" ? plm : undefined;
+  const siteId = data.siteId || null;
   return {
     id: userSnap.id,
     email: data.email ?? "",
     name: data.name,
     phone: typeof data.phone === "string" && data.phone ? data.phone : null,
     primaryLoginMethod,
-    siteId: data.siteId || null,
+    siteId,
+    ownedSiteIds: normalizeOwnedSiteIds(data.ownedSiteIds, siteId),
     primarySlug: typeof data.primarySlug === "string" && data.primarySlug ? data.primarySlug : null,
     onboardingMainGoals: parseOnboardingMainGoals(data.onboardingMainGoals),
     onboardingSiteDisplayPhone:
@@ -148,23 +151,31 @@ export async function updateUserProfile(
   await setDoc(userRef, payload, { merge: true });
 }
 
-// Update user's siteId
+// Update user's primary siteId and merge into ownedSiteIds (multi-site safe)
 export async function updateUserSiteId(
   userId: string,
   siteId: string
 ): Promise<void> {
-  const db = getDb(); // Always get a fresh, valid Firestore instance
+  const db = getDb();
   const userRef = doc(db, USERS_COLLECTION, userId);
+  const snap = await getDoc(userRef);
+  const prev = snap.exists() ? snap.data() : {};
+  const prevSiteId = typeof prev?.siteId === "string" && prev.siteId ? prev.siteId : null;
+  const prevOwned = Array.isArray(prev?.ownedSiteIds)
+    ? prev.ownedSiteIds.filter((x: unknown): x is string => typeof x === "string")
+    : [];
+  const mergedOwned = [...new Set([...prevOwned, ...(prevSiteId ? [prevSiteId] : []), siteId])];
   await setDoc(
     userRef,
     {
       siteId,
+      ownedSiteIds: mergedOwned,
       updatedAt: Timestamp.now(),
     },
     { merge: true }
   );
-  
-  console.log(`[updateUserSiteId] Updated users/${userId}.siteId = ${siteId}`);
+
+  console.log(`[updateUserSiteId] Updated users/${userId}.siteId = ${siteId}, owned count=${mergedOwned.length}`);
 }
 
 // Alias for backward compatibility (used by create-website route)

@@ -33,7 +33,9 @@ export default function MainLayoutClient({
         {children}
         <PublicCookieBanner />
       </>
-    ) : pathname === "/builder" || pathname?.startsWith("/builder/") ? (
+    ) : pathname === "/builder" ||
+      pathname?.startsWith("/builder/") ||
+      pathname?.startsWith("/preview/builder-template") ? (
       <>{children}</>
     ) : pathname === "/privacy" ||
       pathname === "/terms" ||

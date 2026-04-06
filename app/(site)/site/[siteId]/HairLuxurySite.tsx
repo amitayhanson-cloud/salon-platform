@@ -200,6 +200,8 @@ export default function HairLuxurySite({
   services,
   visibleProducts = [],
   editorMode = false,
+  /** Hide fixed header (e.g. builder live preview phone frame). */
+  hideHeader = false,
 }: {
   config: SiteConfig;
   template: TemplateDefinition;
@@ -208,6 +210,7 @@ export default function HairLuxurySite({
   /** Catalog items visible on the public site (isVisible, realtime) */
   visibleProducts?: Product[];
   editorMode?: boolean;
+  hideHeader?: boolean;
 }) {
   // Public site - no admin access, no auth needed (editorMode true only inside visual editor)
 
@@ -257,6 +260,7 @@ export default function HairLuxurySite({
   };
 
   const currentYear = new Date().getFullYear();
+  const sectionScrollMtClass = hideHeader ? "scroll-mt-6" : "scroll-mt-[5.75rem]";
 
   const content = config.content ?? ({} as SiteContent);
   const c = (section: keyof SiteContent, key: string) =>
@@ -326,37 +330,38 @@ export default function HairLuxurySite({
           data-edit-label="תמונת הירו"
         />
 
-        {/* Header over hero: fixed on live site (viewport); absolute in editor so preview stays inside the scroll pane */}
-        <div
-          data-edit-id="header"
-          data-edit-type="section"
-          data-edit-label="כותרת עליונה"
-          className={`${editorMode ? "absolute" : "fixed"} top-0 left-0 right-0 z-[100] flex w-full justify-center bg-transparent pt-3 px-3 sm:pt-4 sm:px-4 pointer-events-none`}
-        >
-          <div className="pointer-events-auto w-full flex justify-center max-w-[100vw]">
-            <SalonHeader
-              salonName={headerSalonDisplayName(config.salonName, content.header?.brandName)}
-              siteId={siteId}
-              slug={config.slug ?? null}
-              bookingEnabled={bookingEnabled(config)}
-              scrollToSection={scrollToSection}
-              logoUrl={config.branding?.logoUrl ?? null}
-              logoAlt={config.branding?.logoAlt}
-              editorMode={editorMode}
-              headerBg={config.sectionStyles?.header?.bg ?? undefined}
-              headerText={getSectionColorResolved(config, "header", "text")}
-              headerLink={getSectionColorResolved(config, "header", "link")}
-              headerCtaBg={getSectionColorResolved(config, "header", "primaryBtnBg")}
-              headerCtaText={getSectionColorResolved(config, "header", "primaryBtnText")}
-              contentHeader={content.header}
-              showShopLink={config.showProductsSection === true}
-              shopHref={getSiteUrl(config.slug ?? null, siteId, "/shop")}
-            />
+        {!hideHeader ? (
+          <div
+            data-edit-id="header"
+            data-edit-type="section"
+            data-edit-label="כותרת עליונה"
+            className={`${editorMode ? "absolute" : "fixed"} top-0 left-0 right-0 z-[100] flex w-full justify-center bg-transparent pt-3 px-3 sm:pt-4 sm:px-4 pointer-events-none`}
+          >
+            <div className="pointer-events-auto w-full flex justify-center max-w-[100vw]">
+              <SalonHeader
+                salonName={headerSalonDisplayName(config.salonName, content.header?.brandName)}
+                siteId={siteId}
+                slug={config.slug ?? null}
+                bookingEnabled={bookingEnabled(config)}
+                scrollToSection={scrollToSection}
+                logoUrl={config.branding?.logoUrl ?? null}
+                logoAlt={config.branding?.logoAlt}
+                editorMode={editorMode}
+                headerBg={config.sectionStyles?.header?.bg ?? undefined}
+                headerText={getSectionColorResolved(config, "header", "text")}
+                headerLink={getSectionColorResolved(config, "header", "link")}
+                headerCtaBg={getSectionColorResolved(config, "header", "primaryBtnBg")}
+                headerCtaText={getSectionColorResolved(config, "header", "primaryBtnText")}
+                contentHeader={content.header}
+                showShopLink={config.showProductsSection === true}
+                shopHref={getSiteUrl(config.slug ?? null, siteId, "/shop")}
+              />
+            </div>
           </div>
-        </div>
+        ) : null}
 
         <motion.div
-          className="relative z-10 w-full max-w-3xl mx-auto text-center px-4 sm:px-6 pt-24 sm:pt-28 pb-12 sm:pb-16"
+          className={`relative z-10 w-full max-w-3xl mx-auto text-center px-4 sm:px-6 pb-12 sm:pb-16 ${hideHeader ? "pt-12 sm:pt-16" : "pt-24 sm:pt-28"}`}
           initial="hidden"
           animate="visible"
           variants={{
@@ -494,7 +499,7 @@ export default function HairLuxurySite({
       {/* About Section: section-scoped colors */}
       <section
         id="about-section"
-        className="scroll-mt-[5.75rem] py-16 lg:py-24"
+        className={`${sectionScrollMtClass} py-16 lg:py-24`}
         style={{
           backgroundColor: getSectionColorResolved(config, "about", "bg"),
           ["--about-titleText" as string]: getSectionColorResolved(config, "about", "titleText"),
@@ -577,7 +582,7 @@ export default function HairLuxurySite({
       <section
         id="services-section"
         dir="rtl"
-        className="scroll-mt-[5.75rem] py-16 lg:py-24"
+        className={`${sectionScrollMtClass} py-16 lg:py-24`}
         style={{
           backgroundColor: getSectionColorResolved(config, "services", "bg"),
           ["--services-titleText" as string]: getSectionColorResolved(config, "services", "titleText"),
@@ -635,7 +640,7 @@ export default function HairLuxurySite({
       {/* Gallery Section - section-scoped colors */}
       <section
         id="gallery-section"
-        className="scroll-mt-[5.75rem] py-16 lg:py-24"
+        className={`${sectionScrollMtClass} py-16 lg:py-24`}
         data-edit-id="gallery"
         data-edit-type="section"
         data-edit-kind="gallery"
@@ -803,7 +808,7 @@ export default function HairLuxurySite({
       {/* Contact / Map Section - section-scoped colors */}
       <section
         id="contact-section"
-        className="scroll-mt-[5.75rem] py-16 lg:py-24"
+        className={`${sectionScrollMtClass} py-16 lg:py-24`}
         data-edit-id="map"
         data-edit-type="section"
         data-edit-label="מפה וקשר"

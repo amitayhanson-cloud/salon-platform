@@ -6,25 +6,34 @@ import { useState, useEffect, useRef, useCallback } from "react";
 export const dynamic = "force-dynamic";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  V0AuthShell,
+  liquidGlassPrimaryBrandClass,
+  liquidGlassSocialButtonClass,
+  v0GlassBuilderCardClassName,
+  v0GlassCardStyle,
+  v0InputGlassClass,
+  v0SelectGlassClass,
+} from "@/components/auth/V0AuthShell";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { cn } from "@/lib/utils";
 import type { MainGoal, SiteConfig } from "@/types/siteConfig";
 import { defaultSiteConfig } from "@/types/siteConfig";
 import type { SalonBookingState } from "@/types/booking";
 import { defaultBookingState } from "@/types/booking";
 import { HAIR_HERO_IMAGES, HAIR_ABOUT_IMAGES } from "@/lib/hairImages";
 import { validateTenantSlug, getSitePublicUrl } from "@/lib/tenant";
-import { getDashboardUrl } from "@/lib/url";
 import { AdminBookingTab } from "@/components/admin/AdminBookingTab";
 import { convertSalonBookingStateToBookingSettings } from "@/lib/firestoreBookingSettings";
 import { isSalonBookingHoursValidForWizard } from "@/lib/openingHoursValidation";
 import { BuilderBotCoach } from "@/components/builder/BuilderBotCoach";
-import { BuilderCheckoutStep } from "@/components/builder/BuilderCheckoutStep";
-import { BuilderTemplateSelector } from "@/components/builder/BuilderTemplateSelector";
+import { PublicSiteTemplatePickerForm } from "@/components/builder/PublicSiteTemplatePickerForm";
+import { PUBLIC_TEMPLATE_SALON_TYPE } from "@/components/templates/builderPublicTemplates";
 
 /*
  * Manual test steps (signup wizard + subdomain):
- * 1. Sign up through wizard; pick template; at subdomain step enter slug "testamitay", check availability, continue and complete.
+ * 1. Sign up through wizard; pick template; at subdomain step enter slug "testamitay", check availability; finish hours step → site created (no payment step).
  * 2. Firestore: tenants/testamitay exists with correct siteId; sites/<siteId> has slug "testamitay"; users/<uid>.siteId set.
  * 3. Slug availability: GET /api/tenants/check-slug?slug=… returns 200 { available: true|false }.
  * 4. Open https://testamitay.caleno.co/admin (or localhost /admin?tenant=testamitay); should load and prompt login if needed.
@@ -33,7 +42,7 @@ import { BuilderTemplateSelector } from "@/components/builder/BuilderTemplateSel
 // Reusable component for the "editable later" hint
 function EditableLaterHint() {
   return (
-    <p className="text-sm text-caleno-600/85 text-right mt-1 mb-4 leading-relaxed">
+    <p className="mb-4 mt-1 text-right font-sans text-sm leading-relaxed text-[#417374]/90">
       אפשר לשנות הכל אחר כך בפאנל הניהול.
     </p>
   );
@@ -48,58 +57,40 @@ function DomainHintArrow() {
   return (
     <>
       {/* Desktop hint: bubble above + arrow pointing down */}
-      <div className="hidden sm:block absolute -top-20 left-0 z-[5] pointer-events-none">
-        <div className="relative rounded-xl border border-slate-200 bg-white/95 px-4 py-3 shadow-sm">
-          <p className="text-xs font-semibold text-slate-900">דומיין</p>
-          <p className="mt-1 text-xs leading-relaxed text-slate-600">
+      <div className="pointer-events-none absolute -top-20 left-0 z-[5] hidden sm:block">
+        <div className="relative rounded-xl border border-white/70 bg-white/55 px-4 py-3 shadow-[0_8px_24px_-12px_rgba(7,18,25,0.12)] backdrop-blur-md">
+          <p className="text-xs font-semibold text-[#071219]">דומיין</p>
+          <p className="mt-1 text-xs leading-relaxed text-[#417374]">
             זו הכתובת של האתר בשורת הכתובת בדפדפן.
           </p>
-          <div className="absolute -bottom-2 left-6 h-4 w-4 rotate-45 border-l border-b border-slate-200 bg-white/95" />
+          <div className="absolute -bottom-2 left-6 h-4 w-4 rotate-45 border-b border-l border-white/70 bg-white/55" />
         </div>
       </div>
 
       {/* Mobile hint: bubble below + arrow pointing up */}
-      <div className="sm:hidden absolute -bottom-20 left-1/2 -translate-x-1/2 z-[5] pointer-events-none">
-        <div className="relative rounded-xl border border-slate-200 bg-white/95 px-4 py-3 shadow-sm">
-          <p className="text-xs font-semibold text-slate-900">דומיין</p>
-          <p className="mt-1 text-xs leading-relaxed text-slate-600">הכתובת של האתר. בחרו שם שיופיע לפני ‎.caleno.co</p>
-          <div className="absolute -top-2 left-1/2 -translate-x-1/2 h-4 w-4 rotate-45 border-l border-t border-slate-200 bg-white/95" />
+      <div className="pointer-events-none absolute -bottom-20 left-1/2 z-[5] -translate-x-1/2 sm:hidden">
+        <div className="relative rounded-xl border border-white/70 bg-white/55 px-4 py-3 shadow-[0_8px_24px_-12px_rgba(7,18,25,0.12)] backdrop-blur-md">
+          <p className="text-xs font-semibold text-[#071219]">דומיין</p>
+          <p className="mt-1 text-xs leading-relaxed text-[#417374]">
+            הכתובת של האתר. בחרו שם שיופיע לפני ‎.caleno.co
+          </p>
+          <div className="absolute -top-2 left-1/2 h-4 w-4 -translate-x-1/2 rotate-45 border-l border-t border-white/70 bg-white/55" />
         </div>
       </div>
     </>
   );
 }
 
-/** Same subtle wash as tenant admin + signup (radial teal + soft blobs). */
-function BuilderCalenoBackground() {
-  return (
-    <>
-      <div
-        aria-hidden
-        className="fixed inset-0 -z-10"
-        style={{
-          backgroundImage:
-            "radial-gradient(ellipse 100% 100% at 50% 50%, #cceef1 0%, #e6f5f7 25%, #f0f9fa 50%, #f8fcfd 75%, #ffffff 100%)",
-        }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none fixed -top-24 -left-24 -z-10 h-80 w-80 rounded-full bg-caleno-200/35 blur-3xl"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none fixed -bottom-32 -right-20 -z-10 h-72 w-72 rounded-full bg-caleno-brand/20 blur-3xl"
-      />
-    </>
-  );
-}
+/** Same wordmark as landing v2 (`components/landing-v2/header.tsx`). */
+const BUILDER_LOGO_PRIMARY = "/images/newlandinglogo.svg";
+const BUILDER_LOGO_FALLBACK = "/images/new_landing_caleno_logo1.svg";
 
 export default function BuilderPage() {
   const router = useRouter();
   const pathname = usePathname();
   const { user, firebaseUser, authReady, loading: authLoading } = useAuth();
   
-  // Redirect guard: prevent users with site from accessing builder
+  // Redirect guard: require login. Users with existing site(s) may still use /builder to add another site.
   const didRedirect = useRef(false);
   
   useEffect(() => {
@@ -140,49 +131,10 @@ export default function BuilderPage() {
       return;
     }
 
-    // Check if user has a siteId
-    const checkSiteId = async () => {
-      try {
-        const { getUserDocument } = await import("@/lib/firestoreUsers");
-        const userDoc = await getUserDocument(user.id);
-        
-        if (userDoc?.siteId) {
-          const url = getDashboardUrl({
-            slug: userDoc.primarySlug ?? null,
-            siteId: userDoc.siteId,
-          });
-          const isFullUrl = url.startsWith("http");
-          if (!isFullUrl && pathname === url) {
-            if (process.env.NODE_ENV === "development") {
-              console.log(`[BUILDER GUARD] Already on ${url}, skipping redirect`);
-            }
-            return;
-          }
-          if (!didRedirect.current) {
-            didRedirect.current = true;
-            if (process.env.NODE_ENV === "development") {
-              console.log(`[BUILDER GUARD] authReady=true, uid=${user.id}, siteId=${userDoc.siteId} -> redirect to ${url}`);
-            }
-            if (isFullUrl) {
-              window.location.href = url;
-            } else {
-              router.replace(url);
-            }
-          }
-          return;
-        }
-
-        // User exists but no siteId - allow builder access
-        if (process.env.NODE_ENV === "development") {
-          console.log(`[BUILDER GUARD] authReady=true, uid=${user.id}, no siteId -> allow builder`);
-        }
-        didRedirect.current = false; // Reset flag if no siteId
-      } catch (error) {
-        console.error("[BUILDER GUARD] Error checking siteId:", error);
-      }
-    };
-
-    checkSiteId();
+    didRedirect.current = false;
+    if (process.env.NODE_ENV === "development") {
+      console.log(`[BUILDER GUARD] authReady=true, uid=${user.id} -> allow builder (incl. additional site)`);
+    }
   }, [user, authReady, authLoading, router, pathname]);
   
   const [config, setConfig] = useState<SiteConfig>(() => {
@@ -220,18 +172,8 @@ export default function BuilderPage() {
   const [botStepsSpeechCompleted, setBotStepsSpeechCompleted] = useState<
     Set<number>
   >(() => new Set());
-  /** Stripe checkout required before site creation (from GET /api/onboarding/payment-config) */
-  const [paymentEnforced, setPaymentEnforced] = useState(false);
-  const [checkoutProvider, setCheckoutProvider] = useState<
-    "paddle" | "stripe" | null
-  >(null);
-  const [paddleConfigured, setPaddleConfigured] = useState(false);
-  const [stripeConfigured, setStripeConfigured] = useState(false);
-  const [paymentConfigLoading, setPaymentConfigLoading] = useState(true);
-  const [checkoutMessage, setCheckoutMessage] = useState<string | null>(null);
-  const checkoutReturnHandledRef = useRef(false);
-
-  const totalSteps = 8;
+  const [builderLogoSrc, setBuilderLogoSrc] = useState(BUILDER_LOGO_PRIMARY);
+  const totalSteps = 7;
 
   useEffect(() => {
     const prev = prevBuilderStepRef.current;
@@ -245,37 +187,6 @@ export default function BuilderPage() {
   useEffect(() => {
     setBuilderFormVisible(false);
   }, [step]);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/onboarding/payment-config")
-      .then((r) => (r.ok ? r.json() : null))
-      .then(
-        (data: {
-          paymentEnforced?: boolean;
-          provider?: "paddle" | "stripe" | null;
-          paddleConfigured?: boolean;
-          stripeConfigured?: boolean;
-        } | null) => {
-          if (cancelled || !data) return;
-          setPaymentEnforced(Boolean(data.paymentEnforced));
-          setCheckoutProvider(
-            data.provider === "paddle" || data.provider === "stripe"
-              ? data.provider
-              : null
-          );
-          setPaddleConfigured(Boolean(data.paddleConfigured));
-          setStripeConfigured(Boolean(data.stripeConfigured));
-        }
-      )
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setPaymentConfigLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const handleBuilderBotSpeechComplete = useCallback(() => {
     setBuilderFormVisible(true);
@@ -398,8 +309,6 @@ export default function BuilderPage() {
       }
       case 7:
         return isSalonBookingHoursValidForWizard(bookingState);
-      case 8:
-        return true;
       default:
         return false;
     }
@@ -428,18 +337,6 @@ export default function BuilderPage() {
     }
     setShowStepValidationHint(false);
     handleNext();
-  };
-
-  /** From opening-hours step → payment step (does not create site yet). */
-  const tryGoToPaymentStep = () => {
-    if (step !== 7) return;
-    if (!isStepValid()) {
-      setShowStepValidationHint(true);
-      return;
-    }
-    setShowStepValidationHint(false);
-    setCheckoutMessage(null);
-    setStep(8);
   };
 
   const handleNext = () => {
@@ -491,10 +388,7 @@ export default function BuilderPage() {
   };
 
   const handleBack = () => {
-    if (step > 1) {
-      if (step === 8) setCheckoutMessage(null);
-      setStep(step - 1);
-    }
+    if (step > 1) setStep(step - 1);
   };
 
   const applyPostOnboardingSuccess = useCallback(
@@ -540,23 +434,6 @@ export default function BuilderPage() {
     setSaveError(null);
 
     try {
-      const { getUserDocument } = await import("@/lib/firestoreUsers");
-      const userDoc = await getUserDocument(user.id);
-
-      if (userDoc?.siteId) {
-        setIsSaving(false);
-        const url = getDashboardUrl({
-          slug: userDoc.primarySlug ?? null,
-          siteId: userDoc.siteId,
-        });
-        if (url.startsWith("http")) {
-          window.location.href = url;
-        } else {
-          router.replace(url);
-        }
-        return;
-      }
-
       const bookingSettings = convertSalonBookingStateToBookingSettings(bookingState);
       const token = await firebaseUser.getIdToken();
       const res = await fetch("/api/onboarding/complete", {
@@ -597,91 +474,16 @@ export default function BuilderPage() {
     }
   };
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("checkout") !== "cancel") return;
-    setCheckoutMessage("התשלום בוטל. אפשר לנסות שוב למטה.");
-    setStep(8);
-    window.history.replaceState({}, "", "/builder");
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !firebaseUser) return;
-    const params = new URLSearchParams(window.location.search);
-    const ptxn = params.get("_ptxn");
-    const sessionId = params.get("session_id");
-    const stripeOk =
-      params.get("checkout") === "success" &&
-      typeof sessionId === "string" &&
-      sessionId.startsWith("cs_");
-    const paddleOk = typeof ptxn === "string" && ptxn.startsWith("txn_");
-
-    if (!stripeOk && !paddleOk) return;
-    if (checkoutReturnHandledRef.current) return;
-    checkoutReturnHandledRef.current = true;
-
-    const body = paddleOk
-      ? { transactionId: ptxn }
-      : { sessionId: sessionId! };
-
-    let cancelled = false;
-    (async () => {
-      setIsSaving(true);
-      setSaveError(null);
-      try {
-        const token = await firebaseUser.getIdToken();
-        const res = await fetch("/api/onboarding/complete-from-session", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(body),
-        });
-        const data = (await res.json().catch(() => ({}))) as {
-          success?: boolean;
-          error?: string;
-          siteId?: string;
-          publicUrl?: string;
-          slug?: string;
-          alreadyCompleted?: boolean;
-        };
-        if (cancelled) return;
-        if (data.alreadyCompleted && data.siteId) {
-          window.history.replaceState({}, "", "/builder");
-          router.replace("/account");
-          setIsSaving(false);
-          return;
-        }
-        if (
-          !res.ok ||
-          !data.success ||
-          !data.siteId ||
-          !data.publicUrl ||
-          !data.slug
-        ) {
-          setSaveError(data.error || "לא ניתן להשלים את ההרשמה לאחר התשלום");
-          setIsSaving(false);
-          checkoutReturnHandledRef.current = false;
-          setStep(8);
-          return;
-        }
-        window.history.replaceState({}, "", "/builder");
-        await applyPostOnboardingSuccess(data.siteId, data.slug, data.publicUrl);
-      } catch (e) {
-        if (cancelled) return;
-        setSaveError(e instanceof Error ? e.message : "שגיאה");
-        setIsSaving(false);
-        checkoutReturnHandledRef.current = false;
-        setStep(8);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [firebaseUser, router, applyPostOnboardingSuccess]);
+  /** From opening-hours step → create site (no separate payment step for now). */
+  const tryFinishWizard = () => {
+    if (step !== 7) return;
+    if (!isStepValid()) {
+      setShowStepValidationHint(true);
+      return;
+    }
+    setShowStepValidationHint(false);
+    void handleFinish();
+  };
 
   const toggleMainGoal = (goal: MainGoal) => {
     setConfig((prev) => {
@@ -716,142 +518,71 @@ export default function BuilderPage() {
   // Show loading while auth initializes
   if (!authReady || authLoading) {
     return (
-      <div className="relative min-h-screen w-full overflow-x-hidden" dir="rtl">
-        <BuilderCalenoBackground />
-        <div className="relative z-10 flex min-h-screen items-center justify-center">
-          <div className="text-center">
-            <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-caleno-deep" />
-            <p className="text-caleno-deep">טוען...</p>
+      <div dir="rtl" lang="he" className="min-h-screen">
+        <V0AuthShell>
+          <div className="flex min-h-[60vh] flex-col items-center justify-center px-4">
+            <div
+              className="h-12 w-12 animate-spin rounded-full border-2 border-[#417374]/25 border-t-[#4e979f]"
+              aria-hidden
+            />
+            <p className="mt-4 font-sans text-sm font-medium text-[#417374]">טוען…</p>
           </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Show loading if redirecting
-  if (user && user.siteId && didRedirect.current) {
-    return (
-      <div className="relative min-h-screen w-full overflow-x-hidden" dir="rtl">
-        <BuilderCalenoBackground />
-        <div className="relative z-10 flex min-h-screen items-center justify-center">
-          <div className="text-center">
-            <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-caleno-deep" />
-            <p className="text-caleno-deep">מעביר...</p>
-          </div>
-        </div>
+        </V0AuthShell>
       </div>
     );
   }
 
   return (
-    <div className="relative min-h-screen w-full overflow-x-hidden" dir="rtl">
-      <BuilderCalenoBackground />
-      <div className="relative z-10 py-8">
-        <div
-          className={`container mx-auto px-4 ${step === 8 ? "max-w-4xl" : "max-w-2xl"}`}
-        >
-          {/* Caleno branding */}
-          <div className="flex flex-col items-center pt-4 pb-6">
+    <div dir="rtl" lang="he" className="min-h-screen">
+      <V0AuthShell>
+        <div className="flex w-full flex-col items-center px-4 py-4 sm:px-6 sm:py-8">
+          <div className="mb-3 flex flex-col items-center pt-1 sm:mb-6 sm:pt-2">
             <Link
               href="/"
-              className="inline-flex items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-caleno-deep focus-visible:ring-offset-2 rounded"
+              className="inline-flex items-center rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4e979f]/50 focus-visible:ring-offset-2"
               aria-label="Caleno – דף הבית"
             >
-              <span className="relative block h-10 w-36 sm:h-11 sm:w-44">
-                <Image
-                  src="/brand/caleno logo/caleno_logo_new.png"
-                  alt="Caleno"
-                  fill
-                  className="object-contain object-center"
-                  priority
-                  sizes="176px"
-                />
-              </span>
+              <img
+                src={builderLogoSrc}
+                alt="Caleno"
+                className="h-9 w-auto max-w-[min(200px,55vw)] object-contain object-center drop-shadow-[0_1px_2px_rgba(15,23,42,0.06)] sm:h-10 sm:max-w-[min(220px,50vw)]"
+                width={220}
+                height={48}
+                decoding="async"
+                fetchPriority="high"
+                loading="eager"
+                onError={() =>
+                  setBuilderLogoSrc((s) =>
+                    s === BUILDER_LOGO_FALLBACK ? s : BUILDER_LOGO_FALLBACK
+                  )
+                }
+              />
             </Link>
-            <p className="mt-2 text-sm font-medium text-caleno-deep">
-              {step === 8 ? "תשלום והשקת האתר" : "בונה את העסק שלך"}
+            <p className="mt-2 font-sans text-sm font-medium text-[#417374]">
+              בונה את העסק שלך
             </p>
           </div>
 
-        {step === 8 ? (
-          <div className="mb-20 space-y-8">
-            <div className="text-right">
-              <span className="text-sm font-medium text-caleno-deep/90">
-                שלב אחרון · תשלום
-              </span>
-              <div className="mt-2 h-2 w-full rounded-full bg-caleno-border">
-                <div
-                  className="h-2 rounded-full bg-caleno-deep transition-all duration-300"
-                  style={{ width: "100%" }}
-                />
-              </div>
-            </div>
-
-            <BuilderBotCoach
-              key={step}
-              step={step}
-              instantSpeech={botStepsSpeechCompleted.has(step)}
-              onSpeakingComplete={handleBuilderBotSpeechComplete}
-            />
-
-            <div
-              className={builderFormFadeClass}
-              aria-hidden={!builderFormVisible}
-            >
-              {firebaseUser ? (
-                <BuilderCheckoutStep
-                  salonName={config.salonName}
-                  slug={wizardSlug.trim().toLowerCase()}
-                  config={config}
-                  bookingState={bookingState}
-                  paymentEnforced={paymentEnforced}
-                  checkoutProvider={checkoutProvider}
-                  paddleConfigured={paddleConfigured}
-                  stripeConfigured={stripeConfigured}
-                  paymentConfigLoading={paymentConfigLoading}
-                  firebaseUser={firebaseUser}
-                  onDevComplete={async () => {
-                    await handleFinish();
-                  }}
-                  isSaving={isSaving}
-                  setIsSaving={setIsSaving}
-                  saveError={saveError}
-                  setSaveError={setSaveError}
-                  checkoutMessage={checkoutMessage}
-                />
-              ) : null}
-            </div>
-
-            <div className="flex justify-between gap-4 border-t border-caleno-border/50 pt-8">
-              <button
-                type="button"
-                onClick={handleBack}
-                className="rounded-lg border border-caleno-border px-6 py-3 font-medium text-caleno-ink transition-colors hover:bg-[rgba(15,23,42,0.04)]"
-              >
-                חזור לשעות פעילות
-              </button>
-            </div>
-          </div>
-        ) : (
-        <div className="rounded-xl border border-caleno-border bg-white p-6 shadow-sm sm:p-8 mb-16 text-right ring-1 ring-black/5">
+        <Card className={v0GlassBuilderCardClassName()} style={v0GlassCardStyle()}>
+        <CardContent className="mb-8 px-4 pb-8 pt-4 text-right sm:mb-12 sm:px-8 sm:pb-10 sm:pt-8">
           {/* Step indicator */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-caleno-deep/90">
+          <div className="mb-4 sm:mb-8">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="font-sans text-sm font-medium text-[#417374]">
                 שלב {step} מתוך {totalSteps}
               </span>
               <Link
                 href="/"
-                className="text-sm text-caleno-deep transition-colors hover:text-caleno-ink"
+                className="font-sans text-sm text-[#417374] underline-offset-2 transition-colors hover:text-[#3c7a8d] hover:underline"
               >
                 חזרה לדף הבית
               </Link>
             </div>
-            <div className="w-full rounded-full h-2 bg-caleno-border">
+            <div className="h-2 w-full rounded-full border border-white/50 bg-white/40">
               <div
-                className="h-2 rounded-full bg-caleno-deep transition-all duration-300"
+                className="h-full rounded-full bg-[#417374] transition-all duration-300"
                 style={{ width: `${(step / totalSteps) * 100}%` }}
-              ></div>
+              />
             </div>
           </div>
 
@@ -874,7 +605,7 @@ export default function BuilderPage() {
               <div>
                 <label
                   htmlFor="salonName"
-                  className="block text-sm font-medium text-[#64748B] mb-2"
+                  className="mb-2 block font-sans text-sm font-medium text-[#071219]"
                 >
                   איך קוראים לעסק? *
                 </label>
@@ -883,14 +614,14 @@ export default function BuilderPage() {
                   id="salonName"
                   value={config.salonName}
                   onChange={(e) => updateConfig({ salonName: e.target.value })}
-                  className="w-full rounded-lg border border-caleno-border px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
+                  className={cn(v0InputGlassClass, "w-full text-right")}
                   placeholder="הזן את שם הסלון"
                 />
               </div>
               <div>
                 <label
                   htmlFor="salonType"
-                  className="block text-sm font-medium text-[#64748B] mb-2"
+                  className="mb-2 block font-sans text-sm font-medium text-[#071219]"
                 >
                   איזה סוג סלון? *
                 </label>
@@ -904,7 +635,7 @@ export default function BuilderPage() {
                       })
                     }
                     disabled={templatesLoading}
-                    className="w-full rounded-lg border border-caleno-border bg-white px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
+                    className={cn(v0SelectGlassClass, "w-full text-right disabled:opacity-50")}
                   >
                     {templatesLoading && (
                       <option value={config.salonType}>טוען תבניות...</option>
@@ -925,9 +656,14 @@ export default function BuilderPage() {
 
           {/* Step 2 - Public site template */}
           {step === 2 && (
-            <BuilderTemplateSelector
+            <PublicSiteTemplatePickerForm
               selectedId={config.publicSiteTemplateId ?? "hair-luxury"}
-              onSelect={(id) => updateConfig({ publicSiteTemplateId: id })}
+              onSelect={(id) =>
+                updateConfig({
+                  publicSiteTemplateId: id,
+                  salonType: PUBLIC_TEMPLATE_SALON_TYPE[id],
+                })
+              }
             />
           )}
 
@@ -937,13 +673,13 @@ export default function BuilderPage() {
               <div>
                 <label
                   htmlFor="wizardSlug"
-                  className="block text-sm font-medium text-[#64748B] mb-2"
+                  className="mb-2 block font-sans text-sm font-medium text-[#071219]"
                 >
                   איך תרצו שהקישור ייראה? *
                 </label>
                 <div className="flex flex-wrap items-stretch gap-2">
                   <div
-                    className="relative flex min-w-[200px] flex-1 items-stretch overflow-hidden rounded-lg border border-caleno-border bg-white shadow-sm transition-[box-shadow,border-color] focus-within:border-caleno-deep focus-within:ring-[3px] focus-within:ring-[rgba(30,111,124,0.15)]"
+                    className="relative flex min-w-[200px] flex-1 items-stretch overflow-hidden rounded-xl border border-white/55 bg-white/45 shadow-[0_1px_2px_rgba(7,18,25,0.06)] backdrop-blur-sm transition-[box-shadow,border-color] focus-within:border-[#4e979f] focus-within:ring-2 focus-within:ring-[#7ac7d4]/40"
                     dir="ltr"
                   >
                     <DomainHintArrow />
@@ -959,7 +695,7 @@ export default function BuilderPage() {
                         setWizardSlug(normalized);
                         setSlugAvailable(null);
                       }}
-                      className="min-w-0 flex-1 border-0 bg-transparent px-3 py-2 text-left text-base text-caleno-ink placeholder:text-[#94A3B8] focus:outline-none focus:ring-0"
+                      className="min-w-0 flex-1 border-0 bg-transparent px-3 py-2.5 text-left font-sans text-base text-[#071219] placeholder:text-[#417374]/45 focus:outline-none focus:ring-0"
                       placeholder="mysalon"
                       maxLength={30}
                       spellCheck={false}
@@ -967,7 +703,7 @@ export default function BuilderPage() {
                       autoCorrect="off"
                     />
                     <span
-                      className="flex shrink-0 select-none items-center border-l border-caleno-border bg-[#F8FAFC] px-3 py-2 text-sm font-medium tabular-nums text-[#64748B]"
+                      className="flex shrink-0 select-none items-center border-l border-white/55 bg-white/35 px-3 py-2 font-sans text-sm font-medium tabular-nums text-[#417374]"
                       aria-hidden
                     >
                       .caleno.co
@@ -977,28 +713,31 @@ export default function BuilderPage() {
                     type="button"
                     onClick={() => checkSlugAvailability(wizardSlug.trim().toLowerCase())}
                     disabled={slugCheckLoading || !wizardSlug.trim()}
-                    className="rounded-lg bg-caleno-ink px-4 py-2 text-sm font-medium text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={cn(
+                      liquidGlassPrimaryBrandClass,
+                      "w-auto min-w-0 px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-45"
+                    )}
                   >
                     {slugCheckLoading ? "בודק..." : "בדוק זמינות"}
                   </button>
                 </div>
                 {wizardSlug.trim() && (
                   <div
-                    className="mt-4 rounded-xl border-2 border-[#1E6F7C]/25 bg-gradient-to-br from-[#E8F6F8]/90 to-white p-4 shadow-[0_8px_24px_-12px_rgba(30,111,124,0.35)]"
+                    className="mt-4 rounded-xl border border-white/65 bg-white/40 p-4 shadow-[0_8px_32px_-12px_rgba(7,18,25,0.12)] backdrop-blur-md"
                     role="status"
                     aria-live="polite"
                   >
-                    <p className="text-right text-xs font-bold uppercase tracking-wide text-[#1E6F7C] mb-1.5">
+                    <p className="mb-1.5 text-right font-sans text-xs font-bold uppercase tracking-wide text-[#417374]">
                       תצוגה מקדימה
                     </p>
-                    <p className="text-right text-sm font-semibold text-caleno-ink mb-3 leading-snug">
+                    <p className="mb-3 text-right font-sans text-sm font-semibold leading-snug text-[#071219]">
                       כך ייראה הקישור המלא — מה שלקוחות יראו בדפדפן
                     </p>
                     <div
                       dir="ltr"
-                      className="rounded-lg border border-[#1E6F7C]/20 bg-white px-3 py-3 sm:px-4 text-left shadow-inner"
+                      className="rounded-lg border border-white/60 bg-white/55 px-3 py-3 text-left shadow-inner backdrop-blur-sm sm:px-4"
                     >
-                      <span className="font-mono text-[0.95rem] sm:text-base font-medium text-[#0F172A] break-all [word-break:break-word] leading-relaxed">
+                      <span className="break-all font-mono text-[0.95rem] font-medium leading-relaxed text-[#071219] [word-break:break-word] sm:text-base">
                         {getSitePublicUrl(wizardSlug.trim().toLowerCase(), "")}
                       </span>
                     </div>
@@ -1018,7 +757,7 @@ export default function BuilderPage() {
                 {slugAvailable === false && (
                   <p className="text-sm text-red-600 mt-1 text-right">הקישור תפוס או לא תקין</p>
                 )}
-                <p className="text-xs text-[#64748B] mt-1 text-right">
+                <p className="mt-1 text-right font-sans text-xs text-[#417374]/90">
                   3–30 תווים, אותיות באנגלית, ספרות ומקף. לא להתחיל או לסיים במקף.
                 </p>
               </div>
@@ -1032,7 +771,7 @@ export default function BuilderPage() {
               <div>
                 <label
                   htmlFor="address"
-                  className="block text-sm font-medium text-[#64748B] mb-2"
+                  className="mb-2 block font-sans text-sm font-medium text-[#071219]"
                 >
                   מה השם בגוגל מפות? *
                 </label>
@@ -1041,11 +780,11 @@ export default function BuilderPage() {
                   id="address"
                   value={config.address || ""}
                   onChange={(e) => updateConfig({ address: e.target.value })}
-                  className="w-full rounded-lg border border-caleno-border px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
+                  className={cn(v0InputGlassClass, "w-full text-right")}
                   placeholder="למשל: שם הסלון כפי שמופיע בגוגל מפות"
                   required
                 />
-                <p className="text-xs text-caleno-600/90 mt-1.5 text-right leading-relaxed">
+                <p className="mt-1.5 text-right font-sans text-xs leading-relaxed text-[#417374]/90">
                   טיפ קטן: בדיוק כמו בגוגל — ככה המפה והביקורות יתחברו יפה.
                 </p>
               </div>
@@ -1059,15 +798,15 @@ export default function BuilderPage() {
                 {(Object.keys(mainGoalLabels) as MainGoal[]).map((goal) => (
                   <label
                     key={goal}
-                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-caleno-border p-4 transition-colors hover:border-caleno-deep/40 hover:bg-[rgba(30,111,124,0.04)]"
+                    className="flex cursor-pointer items-center gap-3 rounded-xl border border-white/55 bg-white/35 p-4 backdrop-blur-sm transition-colors hover:border-[#4e979f]/50 hover:bg-white/50"
                   >
                     <input
                       type="checkbox"
                       checked={config.mainGoals.includes(goal)}
                       onChange={() => toggleMainGoal(goal)}
-                      className="h-4 w-4 rounded text-caleno-deep focus:ring-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
+                      className="h-4 w-4 rounded border-white/60 text-[#417374] focus:ring-2 focus:ring-[#7ac7d4]/40"
                     />
-                    <span className="text-[#0F172A]">{mainGoalLabels[goal]}</span>
+                    <span className="font-sans text-[#071219]">{mainGoalLabels[goal]}</span>
                   </label>
                 ))}
               </div>
@@ -1084,7 +823,7 @@ export default function BuilderPage() {
                 <div>
                   <label
                     htmlFor="phoneNumber"
-                    className="block text-sm font-medium text-[#64748B] mb-1"
+                    className="mb-1 block font-sans text-sm font-medium text-[#071219]"
                   >
                     מספר טלפון להצגה באתר
                   </label>
@@ -1093,7 +832,7 @@ export default function BuilderPage() {
                     id="phoneNumber"
                     value={config.phoneNumber || ""}
                     onChange={(e) => updateConfig({ phoneNumber: e.target.value })}
-                    className="w-full rounded-lg border border-caleno-border px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
+                    className={cn(v0InputGlassClass, "w-full text-right")}
                     placeholder="למשל: 050-1234567"
                   />
                 </div>
@@ -1101,7 +840,7 @@ export default function BuilderPage() {
                 <div>
                   <label
                     htmlFor="whatsappNumber"
-                    className="block text-sm font-medium text-[#64748B] mb-1"
+                    className="mb-1 block font-sans text-sm font-medium text-[#071219]"
                   >
                     מספר וואטסאפ
                   </label>
@@ -1110,7 +849,7 @@ export default function BuilderPage() {
                     id="whatsappNumber"
                     value={config.whatsappNumber || ""}
                     onChange={(e) => updateConfig({ whatsappNumber: e.target.value })}
-                    className="w-full rounded-lg border border-caleno-border px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
+                    className={cn(v0InputGlassClass, "w-full text-right")}
                     placeholder="למשל: 050-1234567"
                   />
                 </div>
@@ -1118,7 +857,7 @@ export default function BuilderPage() {
                 <div>
                   <label
                     htmlFor="instagramHandle"
-                    className="block text-sm font-medium text-[#64748B] mb-1"
+                    className="mb-1 block font-sans text-sm font-medium text-[#071219]"
                   >
                     אינסטגרם
                   </label>
@@ -1127,7 +866,7 @@ export default function BuilderPage() {
                     id="instagramHandle"
                     value={config.instagramHandle || ""}
                     onChange={(e) => updateConfig({ instagramHandle: e.target.value })}
-                    className="w-full rounded-lg border border-caleno-border px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
+                    className={cn(v0InputGlassClass, "w-full text-right")}
                     placeholder="למשל: salon_beauty"
                   />
                 </div>
@@ -1135,7 +874,7 @@ export default function BuilderPage() {
                 <div>
                   <label
                     htmlFor="facebookPage"
-                    className="block text-sm font-medium text-[#64748B] mb-1"
+                    className="mb-1 block font-sans text-sm font-medium text-[#071219]"
                   >
                     עמוד פייסבוק
                   </label>
@@ -1144,7 +883,7 @@ export default function BuilderPage() {
                     id="facebookPage"
                     value={config.facebookPage || ""}
                     onChange={(e) => updateConfig({ facebookPage: e.target.value })}
-                    className="w-full rounded-lg border border-caleno-border px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
+                    className={cn(v0InputGlassClass, "w-full text-right")}
                     placeholder="למשל: https://facebook.com/your-salon"
                   />
                 </div>
@@ -1152,7 +891,7 @@ export default function BuilderPage() {
                 <div>
                   <label
                     htmlFor="contactEmail"
-                    className="block text-sm font-medium text-[#64748B] mb-1"
+                    className="mb-1 block font-sans text-sm font-medium text-[#071219]"
                   >
                     אימייל לקבלת פניות מהטופס
                   </label>
@@ -1161,7 +900,7 @@ export default function BuilderPage() {
                     id="contactEmail"
                     value={config.contactEmail || ""}
                     onChange={(e) => updateConfig({ contactEmail: e.target.value })}
-                    className="w-full rounded-lg border border-caleno-border px-3 py-2 text-right focus:outline-none focus:border-caleno-deep focus:ring-[3px] focus:ring-[rgba(30,111,124,0.15)]"
+                    className={cn(v0InputGlassClass, "w-full text-right")}
                     placeholder="name@example.com"
                   />
                 </div>
@@ -1174,7 +913,7 @@ export default function BuilderPage() {
           {step === 7 && (
             <div className="space-y-4">
               <EditableLaterHint />
-              <div className="rounded-lg border border-caleno-border bg-slate-50/50 p-3 sm:p-4">
+              <div className="rounded-xl border border-white/55 bg-white/35 p-3 backdrop-blur-sm sm:p-4">
                 <AdminBookingTab
                   embedded
                   state={bookingState}
@@ -1188,15 +927,15 @@ export default function BuilderPage() {
 
           {/* Save error message */}
           {saveError && (
-            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-right">
-              <p className="text-sm text-red-700">{saveError}</p>
+            <div className="mt-4 rounded-xl border border-red-200/80 bg-red-50/90 p-3 text-right backdrop-blur-sm">
+              <p className="font-sans text-sm text-red-800">{saveError}</p>
             </div>
           )}
 
           {/* Validation error — only after user clicked המשך / finish while step invalid */}
           {showStepValidationHint && !isStepValid() && (
-            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-right">
-              <p className="text-sm text-red-700">
+            <div className="mt-4 rounded-xl border border-red-200/80 bg-red-50/90 p-3 text-right backdrop-blur-sm">
+              <p className="font-sans text-sm text-red-800">
                 עוד רגע — נשלים את השדות החובה ואז נמשיך יחד.
               </p>
             </div>
@@ -1204,12 +943,15 @@ export default function BuilderPage() {
           </div>
 
           {/* Navigation: חזור תמיד; המשך / סיום אחרי סיום דיבור הבוט */}
-          <div className="mt-8 pt-6 border-t border-caleno-border flex justify-between gap-4">
+          <div className="mt-8 flex justify-between gap-4 border-t border-white/55 pt-6">
             <button
               type="button"
               onClick={handleBack}
               disabled={step === 1}
-              className="rounded-lg border border-caleno-border px-6 py-3 font-medium text-caleno-ink transition-colors hover:bg-[rgba(15,23,42,0.04)] disabled:cursor-not-allowed disabled:opacity-50"
+              className={cn(
+                liquidGlassSocialButtonClass,
+                "w-auto min-w-0 px-6 disabled:cursor-not-allowed disabled:opacity-45"
+              )}
             >
               חזור
             </button>
@@ -1218,27 +960,30 @@ export default function BuilderPage() {
                 <button
                   type="button"
                   onClick={tryAdvanceStep}
-                  className="rounded-lg bg-caleno-ink px-6 py-3 font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md"
+                  className={cn(liquidGlassPrimaryBrandClass, "w-auto min-w-[8.5rem] px-6")}
                 >
                   המשך
                 </button>
               ) : (
                 <button
                   type="button"
-                  onClick={tryGoToPaymentStep}
+                  onClick={tryFinishWizard}
                   disabled={isSaving}
-                  className="rounded-lg bg-caleno-ink px-6 py-3 font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#1E293B] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
+                  className={cn(
+                    liquidGlassPrimaryBrandClass,
+                    "w-auto min-w-0 px-5 disabled:cursor-not-allowed disabled:opacity-45"
+                  )}
                 >
-                  המשך לתשלום והשקה
+                  {isSaving ? "יוצר את האתר…" : "סיום ויצירת האתר"}
                 </button>
               )}
             </div>
           </div>
 
+        </CardContent>
+        </Card>
         </div>
-        )}
-        </div>
-      </div>
+      </V0AuthShell>
     </div>
   );
 }

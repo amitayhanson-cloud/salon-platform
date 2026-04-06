@@ -30,17 +30,18 @@ async function finalizeFromPending(uid: string) {
   const db = getAdminDb();
   const userSnap = await db.collection("users").doc(uid).get();
   const userData = userSnap.data() as { siteId?: string } | undefined;
-  if (userData?.siteId) {
-    return NextResponse.json({
-      success: true,
-      alreadyCompleted: true,
-      siteId: userData.siteId,
-    });
-  }
 
   const pendingRef = db.collection(PENDING_COLLECTION).doc(uid);
   const pendingSnap = await pendingRef.get();
+
   if (!pendingSnap.exists) {
+    if (userData?.siteId) {
+      return NextResponse.json({
+        success: true,
+        alreadyCompleted: true,
+        siteId: userData.siteId,
+      });
+    }
     return NextResponse.json(
       {
         success: false,

@@ -57,7 +57,7 @@ function heMessageForPhoneOtpError(code: string | undefined): string {
     case "code_invalid":
       return "הקוד שגוי או שפג תוקפו. נסה שוב או שלח קוד חדש.";
     case "phone_already_registered":
-      return "מספר זה כבר רשום. התחבר עם אותו מספר.";
+      return "מספר זה כבר רשום — התחברו עם אותו מספר. מחשבון המשתמש אפשר לנהל את האתרים או ליצור אתר נוסף.";
     case "phone_not_registered":
       return "לא נמצא חשבון עם מספר זה. הירשם תחילה.";
     case "invalid_name":

@@ -112,22 +112,6 @@ body:has([data-admin-modal-overlay]) .admin-layout-header-root {
   }
 }
 
-/* Builder wizard – Caleno mascot gentle float */
-@keyframes caleno-builder-bot-float {
-  0%,
-  100% {
-    transform: translateY(0) scale(1);
-  }
-  50% {
-    transform: translateY(-6px) scale(1.03);
-  }
-}
-
-.caleno-builder-bot-float {
-  animation: caleno-builder-bot-float 3.2s ease-in-out infinite;
-  will-change: transform;
-}
-
 /* ========== Caleno loading animation (site-wide) ========== */
 .caleno-loader-container {
   text-align: center;

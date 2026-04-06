@@ -20,9 +20,11 @@ import { AdminPageHero } from "@/components/admin/AdminPageHero";
 import { AdminCard } from "@/components/admin/AdminCard";
 import { useUnsavedChanges } from "@/components/admin/UnsavedChangesContext";
 import { useMobileImmersiveSiteEditor } from "@/components/admin/MobileImmersiveSiteEditorContext";
+import { AdminPublicTemplatePicker } from "@/components/admin/AdminPublicTemplatePicker";
 
 const SITE_PAGE_TABS_DESKTOP = [
   { key: "basic", label: "מידע בסיסי" },
+  { key: "template", label: "תבנית אתר" },
   { key: "contact", label: "פרטי יצירת קשר" },
   { key: "reviews", label: "ביקורות" },
   { key: "faq", label: "FAQ" },
@@ -32,6 +34,7 @@ const SITE_PAGE_TABS_DESKTOP = [
 
 const SITE_PAGE_TABS_MOBILE = [
   { key: "basic", label: "מידע בסיסי" },
+  { key: "template", label: "תבנית אתר" },
   { key: "contact", label: "פרטי יצירת קשר" },
   { key: "reviews", label: "ביקורות" },
   { key: "faq", label: "FAQ" },
@@ -305,7 +308,7 @@ export default function AdminSitePage() {
         <div className="shrink-0 mb-4">
           <AdminPageHero
             title="אתר"
-            subtitle="לוגו, מיתוג, ביקורות, FAQ, שעות פעילות ועיצוב האתר"
+            subtitle="תבנית דף הנחיתה, לוגו, מיתוג, ביקורות, FAQ, שעות פעילות ועיצוב האתר"
           />
         </div>
       )}
@@ -349,6 +352,21 @@ export default function AdminSitePage() {
                       siteConfig={siteConfig}
                       onChange={handleConfigChange}
                       renderSections={["basic", "location", "specialNote"]}
+                    />
+                  </section>
+                </div>
+
+                {/* תבנית אתר */}
+                <div
+                  role="tabpanel"
+                  aria-hidden={activeSiteTab !== "template"}
+                  className={activeSiteTab === "template" ? "block" : "hidden"}
+                >
+                  <section className={sectionCardClass}>
+                    <h2 className={sectionTitleClass}>תבנית אתר</h2>
+                    <AdminPublicTemplatePicker
+                      siteConfig={siteConfig}
+                      onApplyTemplate={(patch) => handleConfigChange(patch)}
                     />
                   </section>
                 </div>

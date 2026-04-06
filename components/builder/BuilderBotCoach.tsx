@@ -1,40 +1,41 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getBuilderBotLines } from "./builderBotSpeech";
 
-const BOT_IMAGE_SRC = "/brand/caleno logo/Untitled design (1).png";
-
-export function BuilderBotCoach({
-  step,
-  instantSpeech = false,
-  onSpeakingComplete,
-}: {
+type BuilderBotCoachProps = {
   step: number;
   /** When true, show full text at once (e.g. user already saw this step’s typing animation). */
   instantSpeech?: boolean;
-  /** Fires once per step when the typewriter has finished all lines (or at once if instantSpeech). */
+  /** Fires once when the typewriter has finished all lines (or at once if instantSpeech). */
   onSpeakingComplete?: () => void;
-}) {
+};
+
+export function BuilderBotCoach(props: BuilderBotCoachProps) {
+  return (
+    <BuilderBotCoachInner
+      key={`${props.step}-${props.instantSpeech ? 1 : 0}`}
+      {...props}
+    />
+  );
+}
+
+function BuilderBotCoachInner({
+  step,
+  instantSpeech = false,
+  onSpeakingComplete,
+}: BuilderBotCoachProps) {
   const completedForStepRef = useRef<number | null>(null);
   const lines = useMemo(() => getBuilderBotLines(step), [step]);
   const [lineIndex, setLineIndex] = useState(0);
   const [charIndex, setCharIndex] = useState(0);
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(instantSpeech);
 
   useEffect(() => {
-    completedForStepRef.current = null;
-    setLineIndex(0);
-    setCharIndex(0);
-    if (instantSpeech) {
-      setReady(true);
-      return;
-    }
-    setReady(false);
+    if (instantSpeech) return;
     const t = window.setTimeout(() => setReady(true), 300);
     return () => window.clearTimeout(t);
-  }, [step, instantSpeech]);
+  }, [instantSpeech]);
 
   useEffect(() => {
     if (instantSpeech || !ready || lines.length === 0) return;
@@ -78,7 +79,6 @@ export function BuilderBotCoach({
       lineIndex === lines.length - 1 &&
       charIndex >= lastLine.length;
 
-  // Require `ready` (typed mode) so we never fire complete on stale isDone from the previous step.
   useEffect(() => {
     if (lines.length === 0) return;
     if (instantSpeech) {
@@ -94,34 +94,22 @@ export function BuilderBotCoach({
   }, [instantSpeech, ready, isDone, step, lines.length, onSpeakingComplete]);
 
   return (
-    <div className="mb-8 flex flex-row items-start gap-3 sm:mb-10 sm:gap-4" dir="rtl">
-      <div className="caleno-builder-bot-float relative h-[84px] w-[84px] shrink-0 sm:h-[100px] sm:w-[100px]">
-        <Image
-          src={BOT_IMAGE_SRC}
-          alt="בוט Caleno"
-          fill
-          className="object-contain drop-shadow-[0_6px_16px_rgba(30,111,124,0.2)]"
-          sizes="100px"
-          priority={step === 1}
-        />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div
-          className="rounded-2xl rounded-tr-md border border-caleno-200/90 bg-gradient-to-br from-caleno-50 via-white to-caleno-50/40 px-4 py-3.5 shadow-[0_4px_20px_-8px_rgba(30,111,124,0.18)] sm:px-5 sm:py-4"
-          aria-live="polite"
-          aria-atomic="true"
-        >
-          <p className="whitespace-pre-wrap text-right text-[15px] font-medium leading-[1.65] text-caleno-ink sm:text-[17px]">
-            {shown}
-            {!instantSpeech && !isDone && (
-              <span
-                className="mr-1 inline-block h-[1.05em] w-0.5 animate-pulse rounded-sm bg-caleno-deep align-middle"
-                style={{ verticalAlign: "-0.12em" }}
-                aria-hidden
-              />
-            )}
-          </p>
-        </div>
+    <div className="mb-4 sm:mb-10" dir="rtl">
+      <div
+        className="rounded-xl border border-white/70 bg-white/45 px-3 py-2 shadow-[0_8px_32px_-12px_rgba(7,18,25,0.12)] backdrop-blur-md sm:rounded-2xl sm:px-5 sm:py-4"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        <p className="whitespace-pre-wrap text-right font-sans text-[13px] font-medium leading-snug text-[#071219] sm:text-[17px] sm:leading-[1.65]">
+          {shown}
+          {!instantSpeech && !isDone && (
+            <span
+              className="me-1 inline-block h-[1.05em] w-0.5 animate-pulse rounded-sm bg-[#4e979f] align-middle"
+              style={{ verticalAlign: "-0.12em" }}
+              aria-hidden
+            />
+          )}
+        </p>
       </div>
     </div>
   );

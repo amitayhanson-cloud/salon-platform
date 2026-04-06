@@ -5,6 +5,7 @@
  */
 
 import { getUserDocument, createUserDocument } from "./firestoreUsers";
+import { normalizeOwnedSiteIds } from "./normalizeUserOwnedSites";
 
 export type RouteAfterAuthResult = {
   path: string;
@@ -37,7 +38,13 @@ export async function routeAfterAuth(userId: string): Promise<RouteAfterAuthResu
 
     const siteId = userDoc?.siteId ?? null;
     const slug = userDoc?.primarySlug ?? null;
-    const path = siteId ? `/site/${siteId}/admin` : "/builder";
+    const owned = normalizeOwnedSiteIds(userDoc?.ownedSiteIds, siteId);
+    const path =
+      owned.length > 1
+        ? "/account"
+        : siteId
+          ? `/site/${siteId}/admin`
+          : "/builder";
 
     if (process.env.NODE_ENV === "development") {
       console.log(`[routeAfterAuth] uid=${userId}, siteId=${siteId ?? "null"}, slug=${slug ?? "null"} -> path=${path}`);

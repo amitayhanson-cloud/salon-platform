@@ -15,8 +15,8 @@ type Body = {
 
 /**
  * POST /api/onboarding/complete
- * Creates site + tenant + user update. When Stripe checkout is configured for onboarding,
- * this route is disabled unless ALLOW_ONBOARDING_WITHOUT_PAYMENT=true (local dev).
+ * Creates site + tenant + user update. Payment is enforced only when
+ * REQUIRE_ONBOARDING_PAYMENT=true and a checkout provider is configured.
  */
 export async function POST(request: NextRequest) {
   try {

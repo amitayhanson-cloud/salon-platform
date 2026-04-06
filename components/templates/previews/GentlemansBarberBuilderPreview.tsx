@@ -1,26 +1,23 @@
 "use client";
 
 import { BarberTemplate } from "@/components/templates/gentlemans-barber/BarberTemplate";
-import { defaultSiteConfig } from "@/types/siteConfig";
-import type { SiteService } from "@/types/siteConfig";
+import {
+  BUILDER_BARBER_PREVIEW_SERVICES,
+  getGentlemansBarberBuilderPreviewConfig,
+} from "@/lib/builderTemplatePreviewDefaults";
 
-const PREVIEW_SERVICES: SiteService[] = [
-  { id: "b1", name: "תספורת חתימה", duration: 60, price: "₪240", enabled: true, sortOrder: 0 },
-  { id: "b2", name: "גילוח מסורתי", duration: 45, price: "₪185", enabled: true, sortOrder: 1 },
-];
-
+/**
+ * Barber template preview — root `.gents-barber-root` and scoped CSS ship inside {@link BarberTemplate}.
+ */
 export default function GentlemansBarberBuilderPreview() {
+  const config = getGentlemansBarberBuilderPreviewConfig();
   return (
-    <div className="max-h-[min(85vh,860px)] overflow-y-auto overflow-x-hidden rounded-xl border border-slate-200/80 bg-[#1a1a1a] shadow-inner">
+    <div className="gents-barber-builder-preview min-h-0 w-full min-w-0 bg-[#1a1a1a]">
       <BarberTemplate
         siteId="builder-preview"
-        config={{
-          ...defaultSiteConfig,
-          salonName: "מועדון הג׳נטלמן · תצוגה",
-          salonType: "barber",
-          publicSiteTemplateId: "gentlemans-barber",
-        }}
-        services={PREVIEW_SERVICES}
+        config={config}
+        services={BUILDER_BARBER_PREVIEW_SERVICES}
+        hideHeader
       />
     </div>
   );

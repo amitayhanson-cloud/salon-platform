@@ -83,6 +83,15 @@ export function v0GlassCardClassName() {
   return "relative z-10 w-full max-w-[420px] gap-0 rounded-[28px] border-0 py-0 shadow-none";
 }
 
+/** Wider glass panel for onboarding builder (template grid, forms). */
+export function v0GlassBuilderCardClassName(options?: { checkout?: boolean }) {
+  const max = options?.checkout ? "max-w-4xl" : "max-w-3xl";
+  return `relative z-10 w-full ${max} gap-0 rounded-[28px] border-0 py-0 shadow-none`;
+}
+
+/** Native `<select>` matching {@link v0InputGlassClass}. */
+export const v0SelectGlassClass = `${v0InputGlassClass} cursor-pointer appearance-auto py-2.5`;
+
 export function v0GlassCardStyle(): CSSProperties {
   return {
     background: "rgba(255, 255, 255, 0.5)",

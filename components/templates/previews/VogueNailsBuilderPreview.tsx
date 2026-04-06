@@ -1,43 +1,23 @@
 "use client";
 
 import { VogueNailsShell } from "@/components/templates/vogue-nails/VogueNailsShell";
-import { defaultSiteConfig } from "@/types/siteConfig";
-import type { SiteService } from "@/types/siteConfig";
+import {
+  BUILDER_VOGUE_PREVIEW_SERVICES,
+  getVogueNailsBuilderPreviewConfig,
+} from "@/lib/builderTemplatePreviewDefaults";
 
-const PREVIEW_SERVICES: SiteService[] = [
-  {
-    id: "vn1",
-    name: "לק ג׳ל",
-    description: "טיפוח ידיים, גזירת קוטיקולה ולק ג׳ל עמיד.",
-    duration: 60,
-    price: "₪180",
-    enabled: true,
-    sortOrder: 0,
-  },
-  {
-    id: "vn2",
-    name: "פדיקור ספא",
-    description: "פדיקור מלא עם שיוף, לחות ועיסוי קצר.",
-    duration: 75,
-    price: "₪220",
-    enabled: true,
-    sortOrder: 1,
-  },
-];
-
+/**
+ * Vogue nails preview — root `.vogue-nails-root` and scoped CSS ship inside {@link VogueNailsShell}.
+ */
 export default function VogueNailsBuilderPreview() {
+  const config = getVogueNailsBuilderPreviewConfig();
   return (
-    <div className="max-h-[min(85vh,860px)] overflow-y-auto overflow-x-hidden rounded-xl border border-rose-100 bg-white shadow-inner">
+    <div className="vogue-nails-builder-preview min-h-0 w-full min-w-0 bg-[hsl(55,80%,96%)]">
       <VogueNailsShell
         siteId="builder-preview"
-        config={{
-          ...defaultSiteConfig,
-          salonName: "סלון תצוגה",
-          publicSiteTemplateId: "vogue-nails",
-          address: "תל אביב",
-          bookingOption: "booking_system",
-        }}
-        services={PREVIEW_SERVICES}
+        config={config}
+        services={BUILDER_VOGUE_PREVIEW_SERVICES}
+        hideHeader
       />
     </div>
   );
