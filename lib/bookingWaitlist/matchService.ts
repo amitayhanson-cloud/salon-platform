@@ -752,6 +752,148 @@ export function explainWaitlistEntryMismatch(
   return "ok";
 }
 
+/** Step size when sliding an offer start along a freed segment (aligns with common booking grids). */
+export const WAITLIST_SLIDE_STEP_MIN = 15;
+
+/**
+ * UTC window [startMs, endExclusiveMs) where this capacity slice is free on the worker column
+ * (from slice start through {@link segmentDurationMin} wall minutes).
+ */
+export function segmentWallWindowUtcMs(
+  seg: FreedBookingSlot,
+  siteTz: string
+): { startMs: number; endExclusiveMs: number } | null {
+  const hm = normalizeHHmm(seg.timeHHmm);
+  try {
+    const startMs = fromZonedTime(`${seg.dateYmd}T${hm}:00`, siteTz).getTime();
+    const durMin = segmentDurationMin(seg);
+    const endWall = addWallMinutesInTimezone(seg.dateYmd, hm, durMin, siteTz);
+    if (!endWall) return null;
+    const endHm = normalizeHHmm(endWall.timeHHmm);
+    const endExclusiveMs = fromZonedTime(`${endWall.dateYmd}T${endHm}:00`, siteTz).getTime();
+    if (!(endExclusiveMs > startMs)) return null;
+    return { startMs, endExclusiveMs };
+  } catch {
+    return null;
+  }
+}
+
+/** Wall minutes from primary start through end of follow-up (primary + wait + follow-up). */
+export function entryWallSpanMinutesFromPrimaryStart(
+  entry: Pick<BookingWaitlistEntry, "primaryDurationMin" | "waitMinutes" | "followUpDurationMin">
+): number {
+  const ep = Math.max(1, Math.round(Number(entry.primaryDurationMin ?? 60)));
+  const ew = Math.max(0, Math.round(Number(entry.waitMinutes ?? 0)));
+  const ef = Math.max(0, Math.round(Number(entry.followUpDurationMin ?? 0)));
+  return ep + ew + ef;
+}
+
+export function strictOfferRejectReasonAllowsSlide(reason: string): boolean {
+  return reason === "outside_preferred_time_bucket" || reason === "outside_salon_hours";
+}
+
+/**
+ * Earliest wall start (step {@link WAITLIST_SLIDE_STEP_MIN}) within the gap such that the entry's full
+ * footprint fits inside the window and {@link waitlistOfferStartRespectsPrefsAndSalon} passes for primary start.
+ */
+export function findEarliestSlottedStartForEntryInWallWindow(
+  entry: Pick<
+    BookingWaitlistEntry,
+    "timePreference" | "primaryDurationMin" | "waitMinutes" | "followUpDurationMin"
+  >,
+  window: { startMs: number; endExclusiveMs: number },
+  siteTz: string,
+  getSalonDayForYmd: (ymd: string) => Pick<DayHours, "enabled" | "start" | "end">,
+  nowMs: number
+): { dateYmd: string; timeHHmm: string } | null {
+  const spanMin = entryWallSpanMinutesFromPrimaryStart(entry);
+  const spanMs = spanMin * 60_000;
+  if (window.endExclusiveMs - window.startMs < spanMs) return null;
+
+  const stepMs = WAITLIST_SLIDE_STEP_MIN * 60_000;
+  for (let t = window.startMs; t + spanMs <= window.endExclusiveMs; t += stepMs) {
+    const dateYmd = formatInTimeZone(t, siteTz, "yyyy-MM-dd");
+    const hmRaw = formatInTimeZone(t, siteTz, "HH:mm");
+    const timeHHmm = hmRaw.length >= 5 ? hmRaw.slice(0, 5) : hmRaw;
+    const salonDay = getSalonDayForYmd(dateYmd);
+    const r = waitlistOfferStartRespectsPrefsAndSalon(
+      entry.timePreference,
+      dateYmd,
+      timeHHmm,
+      siteTz,
+      salonDay,
+      nowMs
+    );
+    if (!r.ok) continue;
+
+    const footprintEnd = addWallMinutesInTimezone(dateYmd, timeHHmm, spanMin, siteTz);
+    if (!footprintEnd) continue;
+    try {
+      const endMsExclusive = fromZonedTime(
+        `${footprintEnd.dateYmd}T${normalizeHHmm(footprintEnd.timeHHmm)}:00`,
+        siteTz
+      ).getTime();
+      if (endMsExclusive > window.endExclusiveMs) continue;
+    } catch {
+      continue;
+    }
+
+    return { dateYmd, timeHHmm };
+  }
+  return null;
+}
+
+/**
+ * If the only mismatch is strict offer time (bucket / salon hours at segment start), try sliding the offer
+ * forward inside the same freed segment so prefs and footprint still fit.
+ */
+export function trySlideWaitlistCapacitySliceForStrictTime(
+  entry: Pick<
+    BookingWaitlistEntry,
+    | "serviceTypeId"
+    | "serviceId"
+    | "serviceName"
+    | "preferredDateYmd"
+    | "preferredWorkerId"
+    | "primaryDurationMin"
+    | "waitMinutes"
+    | "followUpDurationMin"
+    | "timePreference"
+  >,
+  slice: FreedBookingSlot,
+  matchOpts: WaitlistSlotMatchOptions,
+  siteTz: string,
+  getSalonDayForYmd: (ymd: string) => Pick<DayHours, "enabled" | "start" | "end">,
+  nowMs: number
+): FreedBookingSlot | null {
+  if (!matchOpts.strictOfferWall) return null;
+  const expl = explainWaitlistEntryMismatch(entry, slice, matchOpts);
+  if (!expl.startsWith("strict_offer_time ")) return null;
+  const subReason = expl.slice("strict_offer_time ".length).trim();
+  if (!strictOfferRejectReasonAllowsSlide(subReason)) return null;
+
+  const win = segmentWallWindowUtcMs(slice, siteTz);
+  if (!win) return null;
+
+  const slid = findEarliestSlottedStartForEntryInWallWindow(entry, win, siteTz, getSalonDayForYmd, nowMs);
+  if (!slid) return null;
+
+  const slidSlice: FreedBookingSlot = {
+    ...slice,
+    dateYmd: slid.dateYmd,
+    timeHHmm: slid.timeHHmm,
+  };
+
+  const bucket = getTimePreferenceBucketForSlot(slid.dateYmd, slid.timeHHmm, siteTz);
+  const slidOpts: WaitlistSlotMatchOptions = {
+    ...matchOpts,
+    timeBucket: bucket,
+  };
+
+  if (!waitlistEntryMatchesFreedSlot(entry, slidSlice, slidOpts)) return null;
+  return slidSlice;
+}
+
 /** Lower = earlier in queue when sorting (best match first). */
 export function waitlistWorkerPreferenceRank(
   entry: Pick<BookingWaitlistEntry, "preferredWorkerId">,

@@ -7,7 +7,7 @@
 import { randomBytes } from "node:crypto";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import admin from "firebase-admin";
-import type { CollectionReference, Firestore, QueryDocumentSnapshot } from "firebase-admin/firestore";
+import type { CollectionReference, Firestore } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebaseAdmin";
 import { sendWhatsApp } from "@/lib/whatsapp/send";
 import type { BookingWaitlistEntry } from "@/types/bookingWaitlist";
@@ -39,11 +39,16 @@ import {
   type FreedSlotMatchProbe,
   type BusyIntervalMs,
   type WaitlistSlotMatchOptions,
+  trySlideWaitlistCapacitySliceForStrictTime,
 } from "./matchService";
 import { fetchBookingSettingsAdmin } from "./bookingSettingsAdmin";
 import { getJsDow, getDayConfig } from "@/lib/scheduleDayMapping";
-import type { DayHours } from "@/types/bookingSettings";
-import { normalizeBookingTimeHHmm } from "./bookingDocToFreedSlot";
+import type { BookingSettings, DayHours } from "@/types/bookingSettings";
+import {
+  fetchSiteDayBookingDocsAdmin,
+  mergeBusyWithSalonBreaks,
+  workerPhaseBusyIntervalsUtcMsForDay,
+} from "./adminWorkerDayBusy";
 import { WAITLIST_PENDING_OFFER_STATUSES, WAITLIST_WAITING_STATUSES } from "./waitlistStatus";
 import { getTimePreferenceBucketForSlot } from "./timeBuckets";
 import {
@@ -173,69 +178,6 @@ function revertWaitingStatusFromEntry(entry: BookingWaitlistEntry): "waiting" | 
   return entry.status === "notified" || entry.status === "active" ? "active" : "waiting";
 }
 
-function bookingDocToBusyInterval(
-  data: Record<string, unknown>,
-  expectedDateYmd: string,
-  siteTz: string
-): BusyIntervalMs | null {
-  if (data.isArchived === true) return null;
-  const st = String(data.status ?? "").toLowerCase();
-  if (st === "cancelled" || st === "canceled") return null;
-
-  const sa = data.startAt as { toMillis?: () => number } | undefined;
-  if (sa && typeof sa.toMillis === "function") {
-    const s = sa.toMillis();
-    const ea = data.endAt as { toMillis?: () => number } | undefined;
-    const e =
-      ea && typeof ea.toMillis === "function"
-        ? ea.toMillis()
-        : s + Math.max(1, Math.round(Number(data.durationMin ?? 60))) * 60_000;
-    return { startMs: s, endMsExclusive: Math.max(s + 60_000, e) };
-  }
-
-  const dateStr = String(data.dateISO ?? data.date ?? "").slice(0, 10);
-  const tm = normalizeBookingTimeHHmm(data.timeHHmm ?? data.time);
-  if (!tm || dateStr !== expectedDateYmd) return null;
-  try {
-    const hm = tm.length >= 5 ? tm.slice(0, 5) : tm;
-    const s = fromZonedTime(`${dateStr}T${hm}:00`, siteTz).getTime();
-    const dur = typeof data.durationMin === "number" ? Math.max(1, Math.round(data.durationMin)) : 60;
-    return { startMs: s, endMsExclusive: s + dur * 60_000 };
-  } catch {
-    return null;
-  }
-}
-
-async function fetchWorkerDayBusyIntervalsAdmin(
-  db: Firestore,
-  siteId: string,
-  workerId: string,
-  dateYmd: string,
-  siteTz: string
-): Promise<BusyIntervalMs[]> {
-  const col = db.collection("sites").doc(siteId).collection("bookings");
-  const wid = workerId.trim();
-
-  const mapDocs = (docs: QueryDocumentSnapshot[]) =>
-    docs
-      .map((d) => bookingDocToBusyInterval(d.data() as Record<string, unknown>, dateYmd, siteTz))
-      .filter((x): x is BusyIntervalMs => x != null);
-
-  try {
-    const snap = await col.where("date", "==", dateYmd).where("workerId", "==", wid).limit(250).get();
-    return mapDocs(snap.docs);
-  } catch {
-    try {
-      const snap = await col.where("dateISO", "==", dateYmd).where("workerId", "==", wid).limit(250).get();
-      return mapDocs(snap.docs);
-    } catch {
-      const snap = await col.where("date", "==", dateYmd).limit(300).get();
-      const docs = snap.docs.filter((d) => String((d.data() as { workerId?: string }).workerId ?? "").trim() === wid);
-      return mapDocs(docs);
-    }
-  }
-}
-
 async function expireStalePendingOffersForPhone(
   db: Firestore,
   siteId: string,
@@ -266,7 +208,8 @@ async function resolveHorizonRootSlot(
   slot: FreedBookingSlot,
   siteTz: string,
   skipHorizon: boolean,
-  salonDayForClip: Pick<DayHours, "enabled" | "start" | "end"> | null
+  salonDayForClip: Pick<DayHours, "enabled" | "start" | "end" | "breaks"> | null,
+  dayDocsCache: Map<string, Array<{ id: string; data: Record<string, unknown> }>>
 ): Promise<{
   rootSlot: FreedBookingSlot;
   horizonBuckets: ReadonlySet<Exclude<TimePreferenceValue, "anytime">> | null;
@@ -275,12 +218,18 @@ async function resolveHorizonRootSlot(
     return { rootSlot: slot, horizonBuckets: null };
   }
   try {
-    const busyRaw = await fetchWorkerDayBusyIntervalsAdmin(
-      db,
-      siteId,
-      slot.workerId.trim(),
+    let dayDocs = dayDocsCache.get(slot.dateYmd);
+    if (!dayDocs) {
+      dayDocs = await fetchSiteDayBookingDocsAdmin(db, siteId, slot.dateYmd);
+      dayDocsCache.set(slot.dateYmd, dayDocs);
+    }
+    const wid = slot.workerId.trim();
+    const busyPhase = workerPhaseBusyIntervalsUtcMsForDay(dayDocs, wid, slot.dateYmd, siteTz);
+    const busyRaw = mergeBusyWithSalonBreaks(
+      busyPhase,
       slot.dateYmd,
-      siteTz
+      siteTz,
+      salonDayForClip ?? {}
     );
     const dayBounds = siteDayWallBoundsUtcMs(slot.dateYmd, siteTz);
     const window = cancellationFootprintWindowUtcMs(slot, siteTz);
@@ -296,14 +245,14 @@ async function resolveHorizonRootSlot(
           ? String(slot.followUpWorkerId).trim()
           : pWid;
       if (fuWid && fuWid !== pWid) {
-        const fuBusyRaw = await fetchWorkerDayBusyIntervalsAdmin(
-          db,
-          siteId,
-          fuWid,
+        const fuBusyPhase = workerPhaseBusyIntervalsUtcMsForDay(dayDocs, fuWid, slot.dateYmd, siteTz);
+        const fuBusyRaw = mergeBusyWithSalonBreaks(
+          fuBusyPhase,
           slot.dateYmd,
-          siteTz
+          siteTz,
+          salonDayForClip ?? {}
         );
-        const fuBusy = mergeBusyIntervalsMs(fuBusyRaw);
+        const fuBusy = fuBusyRaw;
         const fuWin = cancellationFollowUpHandsWindowUtcMs(slot, siteTz);
         if (fuWin && mergedBusyOverlapsOpenInterval(fuBusy, fuWin.startMs, fuWin.endExclusiveMs)) {
           return { rootSlot: slot, horizonBuckets: null };
@@ -413,13 +362,29 @@ async function findFirstMatchFromProbes(
   bypassLock: boolean,
   probes: FreedSlotMatchProbe[],
   horizonBucketsEffective: ReadonlySet<Exclude<TimePreferenceValue, "anytime">> | null,
-  strictOfferWall: NonNullable<WaitlistSlotMatchOptions["strictOfferWall"]>
+  strictOfferWall: NonNullable<WaitlistSlotMatchOptions["strictOfferWall"]>,
+  bookingSettings: BookingSettings,
+  dayDocsCache: Map<string, Array<{ id: string; data: Record<string, unknown> }>>
 ): Promise<FindMatchFromProbesResult> {
   const sliceAttempts: SliceAttemptLog[] = [];
   const probesTried = probes.map((p) => p.label);
   let anySlotLocked = false;
   const rawCountByYmd = new Map<string, number>();
   const mergedBusyCache = new Map<string, BusyIntervalMs[]>();
+  const dayHoursByYmd = new Map<string, DayHours>();
+
+  function salonDayForBookingDate(dateYmd: string): DayHours {
+    const cached = dayHoursByYmd.get(dateYmd);
+    if (cached) return cached;
+    const ref = fromZonedTime(`${dateYmd}T12:00:00`, siteTz);
+    const jsD = getJsDow(ref, siteTz);
+    const base = getDayConfig(bookingSettings, jsD) ?? { enabled: true, start: "09:00", end: "18:00" };
+    const key = String(jsD) as keyof BookingSettings["days"];
+    const raw = bookingSettings.days?.[key];
+    const next: DayHours = { ...base, breaks: raw?.breaks };
+    dayHoursByYmd.set(dateYmd, next);
+    return next;
+  }
 
   async function getMergedBusyForWorkerDay(
     dateYmd: string,
@@ -430,8 +395,13 @@ async function findFirstMatchFromProbes(
     const key = `${dateYmd}|${w}`;
     const hit = mergedBusyCache.get(key);
     if (hit) return hit;
-    const raw = await fetchWorkerDayBusyIntervalsAdmin(db, siteId, w, dateYmd, siteTz);
-    const merged = mergeBusyIntervalsMs(raw);
+    let docs = dayDocsCache.get(dateYmd);
+    if (!docs) {
+      docs = await fetchSiteDayBookingDocsAdmin(db, siteId, dateYmd);
+      dayDocsCache.set(dateYmd, docs);
+    }
+    const phaseBusy = workerPhaseBusyIntervalsUtcMsForDay(docs, w, dateYmd, siteTz);
+    const merged = mergeBusyWithSalonBreaks(phaseBusy, dateYmd, siteTz, salonDayForBookingDate(dateYmd));
     mergedBusyCache.set(key, merged);
     return merged;
   }
@@ -439,7 +409,6 @@ async function findFirstMatchFromProbes(
   probeLoop: for (const probe of probes) {
     const slice = probe.slot;
     const bucket = getTimePreferenceBucketForSlot(slice.dateYmd, slice.timeHHmm, siteTz);
-    const lockId = waitlistSlotLockDocId(slice.dateYmd, slice.timeHHmm, slice.workerId);
     const statusIn = [...WAITLIST_WAITING_STATUSES].join(", ");
 
     if (TEMP_DEBUG_WAITLIST_MATCH) {
@@ -514,47 +483,81 @@ async function findFirstMatchFromProbes(
     let firstFilterRejectExplain: string | null = null;
     const acquireSkips: Array<{ entryId: string; reason: string }> = [];
 
+    const getSalonDayForYmd = (ymd: string) => {
+      const ref = fromZonedTime(`${ymd}T12:00:00`, siteTz);
+      const jsDow = getJsDow(ref, siteTz);
+      return getDayConfig(bookingSettings, jsDow) ?? { enabled: true, start: "09:00", end: "18:00" };
+    };
+
     for (const doc of sortedDocs) {
       if (skipLocal.has(doc.id)) continue;
       const data = doc.data() as BookingWaitlistEntry;
       const phone = String(data.customerPhoneE164 ?? "").trim();
       if (phone && skipPhones.has(phone)) continue;
+
+      let matchSlice = slice;
+      let activeMatchOpts = matchOpts;
+      let effectiveBucket = bucket;
+
       if (!waitlistEntryMatchesFreedSlot(data, slice, matchOpts)) {
-        if (firstFilterRejectExplain === null) {
-          firstFilterRejectExplain = explainWaitlistEntryMismatch(data, slice, matchOpts);
+        const slidSlice = trySlideWaitlistCapacitySliceForStrictTime(
+          data,
+          slice,
+          matchOpts,
+          siteTz,
+          getSalonDayForYmd,
+          strictOfferWall.nowMs
+        );
+        if (!slidSlice) {
+          if (firstFilterRejectExplain === null) {
+            firstFilterRejectExplain = explainWaitlistEntryMismatch(data, slice, matchOpts);
+          }
+          if (TEMP_DEBUG_WAITLIST_MATCH) {
+            logDebugWaitlistPerPersonReject({
+              customerName: data.customerName,
+              docId: doc.id,
+              entryStatus: data.status,
+              kind: "filter",
+              entry: data,
+              slice,
+              matchOpts,
+              slotBucket: bucket,
+            });
+          }
+          continue;
         }
         if (TEMP_DEBUG_WAITLIST_MATCH) {
-          logDebugWaitlistPerPersonReject({
-            customerName: data.customerName,
-            docId: doc.id,
-            entryStatus: data.status,
-            kind: "filter",
-            entry: data,
-            slice,
-            matchOpts,
-            slotBucket: bucket,
-          });
+          console.log(
+            `[bookingWaitlist] DEBUG slide_offer_start segment_start=${slice.dateYmd}T${slice.timeHHmm} -> offer_start=${slidSlice.dateYmd}T${slidSlice.timeHHmm}`
+          );
         }
-        continue;
+        matchSlice = slidSlice;
+        effectiveBucket = getTimePreferenceBucketForSlot(slidSlice.dateYmd, slidSlice.timeHHmm, siteTz);
+        activeMatchOpts = {
+          ...matchOpts,
+          timeBucket: effectiveBucket,
+        };
       }
 
+      const lockId = waitlistSlotLockDocId(matchSlice.dateYmd, matchSlice.timeHHmm, matchSlice.workerId);
+
       const efEntry = Math.max(0, Math.round(Number(data.followUpDurationMin ?? 0)));
-      const mergedPrimaryBusy = await getMergedBusyForWorkerDay(slice.dateYmd, slice.workerId);
-      const primaryWid = slice.workerId?.trim() || "";
+      const mergedPrimaryBusy = await getMergedBusyForWorkerDay(matchSlice.dateYmd, matchSlice.workerId);
+      const primaryWid = matchSlice.workerId?.trim() || "";
       const fuWidResolved =
         efEntry > 0
-          ? slice.followUpWorkerId != null && String(slice.followUpWorkerId).trim() !== ""
-            ? String(slice.followUpWorkerId).trim()
+          ? matchSlice.followUpWorkerId != null && String(matchSlice.followUpWorkerId).trim() !== ""
+            ? String(matchSlice.followUpWorkerId).trim()
             : primaryWid
           : "";
       const mergedFuBusy: BusyIntervalMs[] | null =
         efEntry > 0 && fuWidResolved && fuWidResolved !== primaryWid
-          ? await getMergedBusyForWorkerDay(slice.dateYmd, fuWidResolved)
+          ? await getMergedBusyForWorkerDay(matchSlice.dateYmd, fuWidResolved)
           : null;
 
       const hands = waitlistEntryHandsPhasesVsBusy(
         data,
-        slice,
+        matchSlice,
         siteTz,
         mergedPrimaryBusy,
         mergedFuBusy
@@ -592,9 +595,9 @@ async function findFirstMatchFromProbes(
             entryStatus: data.status,
             kind: "acquire",
             entry: data,
-            slice,
-            matchOpts,
-            slotBucket: bucket,
+            slice: matchSlice,
+            matchOpts: activeMatchOpts,
+            slotBucket: effectiveBucket,
             acquireReason: acq.reason,
           });
         }
@@ -622,7 +625,7 @@ async function findFirstMatchFromProbes(
         ok: true,
         docId: doc.id,
         data,
-        capacitySlice: slice,
+        capacitySlice: matchSlice,
         matchProbe: probe.label,
         lockId,
       };
@@ -672,8 +675,14 @@ export async function triggerWaitlistMatchForFreedSlot(
   const bookingSettings = await fetchBookingSettingsAdmin(db, siteId);
   const refNoon = fromZonedTime(`${slot.dateYmd}T12:00:00`, siteTz);
   const jsDow = getJsDow(refNoon, siteTz);
-  const salonDayForSlot =
-    getDayConfig(bookingSettings, jsDow) ?? { enabled: true, start: "09:00", end: "18:00" };
+  const dayKey = String(jsDow) as keyof BookingSettings["days"];
+  const rawSlotDay = bookingSettings.days?.[dayKey];
+  const salonDayForSlot: DayHours = {
+    ...(getDayConfig(bookingSettings, jsDow) ?? { enabled: true, start: "09:00", end: "18:00" }),
+    breaks: rawSlotDay?.breaks,
+  };
+
+  const dayDocsCache = new Map<string, Array<{ id: string; data: Record<string, unknown> }>>();
 
   const { rootSlot, horizonBuckets } = await resolveHorizonRootSlot(
     db,
@@ -681,7 +690,8 @@ export async function triggerWaitlistMatchForFreedSlot(
     slot,
     siteTz,
     options?.skipHorizonScan === true,
-    salonDayForSlot
+    salonDayForSlot,
+    dayDocsCache
   );
   const horizonBucketsEffective =
     horizonBuckets != null && horizonBuckets.size > 0 ? horizonBuckets : null;
@@ -720,7 +730,9 @@ export async function triggerWaitlistMatchForFreedSlot(
         bypassLock,
         probes,
         horizonBucketsEffective,
-        strictOfferWall
+        strictOfferWall,
+        bookingSettings,
+        dayDocsCache
       );
       if (!found.ok) {
         lastNoMatchLog = {
@@ -749,7 +761,9 @@ export async function triggerWaitlistMatchForFreedSlot(
           bypassLock,
           expandFreedSlotToMatchSlices(seg, siteTz),
           horizonBucketsEffective,
-          strictOfferWall
+          strictOfferWall,
+          bookingSettings,
+          dayDocsCache
         );
         if (segTry.ok) {
           found = segTry;
